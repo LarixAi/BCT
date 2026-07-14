@@ -1,0 +1,41 @@
+---
+description: Veyvio Driver phone brand — colours, naming, chrome, navigation
+globs: Veyvio Driver /**/*.{ts,tsx,css,md},docs/brand/veyvio-driver*
+alwaysApply: false
+---
+
+# Veyvio Driver brand (agent guidance)
+
+Full spec: `docs/brand/veyvio-driver-brand-foundation.md`  
+Tokens: `docs/brand/veyvio-driver-design-tokens.md`  
+Phone surfaces: `docs/brand/veyvio-driver-phone-surfaces.md`
+
+## Naming
+- Product is **Veyvio Driver** (never "Driver App", "Depot Driver", etc.)
+- Parent brand: **Veyvio**
+- Titles: `Screen — Veyvio Driver` via `driverPageTitle()`
+
+## Central idea
+Operational confidence in the field — next action clear, vehicle readiness honest, Home always reachable.
+
+## Voice
+- Clear, calm, operational — transport supervisor on a busy shift
+- Lead with meaning: blockers and vehicle/stop specifics
+- Avoid rideshare gig chrome and API jargon
+
+## Visual identity
+- **Veyvio Midnight** `#0B1526` — chrome, splash, primary fill
+- **Driver Blue** `#2F6BFF` — primary Driver accent, active nav, rails (not Yard Teal)
+- **Driver Sky** `#8EC5FF` — DRIVER sublabel on dark
+- Status colours shared with platform; never status by colour alone
+
+## Phone chrome
+- Lockup: **VEYVIO** (white) / **DRIVER** (Sky), sizes in `brand-lockup.ts`
+- Main bottom nav always: Home · Trips · Checks · Messages · More
+- Duty context = top `DutySubnav`, not a second bottom tab bar that hides Home
+- Full-bleed only for journey open/end and `/nav`
+
+## Copy constants
+- Promise: `Move smarter. Operate safer.`
+- Campaign: `Know your vehicle before you move.`
+- Source: `src/components/brand/brand-copy.ts`

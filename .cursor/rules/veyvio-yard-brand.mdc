@@ -1,0 +1,55 @@
+---
+description: Veyvio Yard brand voice, UX principles, and visual identity for UI/copy work
+alwaysApply: true
+---
+
+# Veyvio Yard brand (agent guidance)
+
+Full spec: `docs/brand/veyvio-yard-brand-foundation.md`
+
+## Naming
+- Product is **Veyvio Yard** (never "Yard Manager App", "Veyvio Depot App", etc.)
+- Parent brand: **Veyvio** — connected transport operations platform
+
+## Central idea
+**Operational confidence** — every screen reduces uncertainty; statuses are unambiguous; actions create trustworthy records.
+
+## Voice (UI copy)
+- Clear, calm, direct, operational — like a strong transport supervisor on a busy shift
+- Lead with operational meaning: "Vehicle marked VOR" not "Status successfully updated"
+- Explain blockers: "Rear light check is still incomplete" not "Unable to complete"
+- Use specific vehicle info: reg, bay, defect type
+- Stay calm for serious events: "Vehicle cannot enter service. A safety-critical defect is open."
+- Avoid: entity updated, mutation failed, API unavailable — translate to operational language
+
+## UX principles (priority order)
+1. **Status before statistics** — attention/exceptions before charts on home
+2. **Exceptions before routine** — vehicles needing action above clean fleet
+3. **Evidence before assumption** — damage/VOR/RTS decisions show evidence links
+4. **One clear primary action** per screen
+5. **Large practical controls** — outdoor, gloves, time pressure
+6. **Offline/sync visible** — users always know sync state
+7. **Never hide safety-critical** info until resolved
+8. **Separate observation from approval** — recorder ≠ approver for RTS
+
+## Home screen
+- No generic "Welcome back" — operational headline first (e.g. "Three vehicles need attention before service")
+- Then: critical actions, checks due, availability, movements, defects, equipment exceptions
+
+## Visual identity (target)
+- **Yard Teal** `#12A89D` — primary Yard actions, active nav (not decorative orange)
+- **Veyvio Midnight** `#0B1526` — headers, splash, premium chrome
+- **Veyvio Blue** `#2F6BFF` — platform/links
+- Status: Ready `#178C4B`, Attention `#D97706`, Critical `#D92D20`, VOR `#B42318`
+- **Never status by colour alone** — always label + icon/context
+- Product typeface: **Inter**; marketing: **Manrope**
+- Registrations: bold, high visibility, tabular nums
+
+## Personality
+Calm, decisive, observant, dependable, practical, human — not corporate, not alarmist, not form-filler generic.
+
+## Pillars
+Visibility · Readiness · Accountability · Confidence
+
+## Five yard questions the product answers
+Where? · Condition? · Safe & ready? · Equipment? · What needs attention before move?

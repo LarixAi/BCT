@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 24" fill="none" role="img" aria-label="Veyvio Driver">
+  <text
+    x="0"
+    y="11"
+    fill="#FFFFFF"
+    font-family="Inter, Arial, Helvetica, sans-serif"
+    font-weight="800"
+    font-size="11"
+    letter-spacing="-0.02em"
+  >VEYVIO</text>
+  <text
+    x="0"
+    y="22"
+    fill="#8EC5FF"
+    font-family="Inter, Arial, Helvetica, sans-serif"
+    font-weight="600"
+    font-size="8"
+    letter-spacing="0.2em"
+  >DRIVER</text>
+</svg>

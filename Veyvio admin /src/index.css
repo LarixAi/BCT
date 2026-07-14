@@ -1,0 +1,78 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-command-50: #f0f4ff;
+  --color-command-100: #e0e9ff;
+  --color-command-500: #3b5bdb;
+  --color-command-600: #2f4ac0;
+  --color-command-700: #243a96;
+  --color-command-900: #1a2b5c;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* Live map markers */
+.live-vehicle-marker {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.live-vehicle-marker span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+}
+
+.live-vehicle-marker span.live {
+  background: #059669;
+}
+
+.live-vehicle-marker.map-pin span.live {
+  background: #ea580c;
+}
+
+.live-vehicle-marker.map-pin.selected span.live {
+  background: #c2410c;
+  width: 16px;
+  height: 16px;
+}
+
+.live-vehicle-marker span.stale {
+  background: #d97706;
+}
+
+.live-vehicle-marker.selected span {
+  width: 18px;
+  height: 18px;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}
+
+.veyvio-map-container .maplibregl-map,
+.veyvio-map-container .maplibregl-canvas-container,
+.veyvio-map-container canvas.maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}

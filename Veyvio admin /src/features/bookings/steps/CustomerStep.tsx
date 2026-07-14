@@ -1,0 +1,104 @@
+import { useQuery } from '@tanstack/react-query'
+import { SectionCard } from '@/components/ui'
+import { CUSTOMER_TYPE_LABELS } from '@/lib/bookings/constants'
+import type { BookingDraft, CustomerBookingContext } from '@/lib/bookings/types'
+import { api } from '@/lib/api/client'
+
+export function CustomerStep({
+  draft,
+  onChange,
+}: {
+  draft: BookingDraft
+  onChange: (patch: Partial<BookingDraft>) => void
+}) {
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => api.getCustomers(),
+  })
+
+  const { data: context } = useQuery({
+    queryKey: ['customer-booking-context', draft.customerId],
+    queryFn: () => api.getCustomerBookingContext(draft.customerId!),
+    enabled: !!draft.customerId,
+  })
+
+  function selectCustomer(customerId: string, name: string) {
+    onChange({ customerId, customerName: name })
+  }
+
+  return (
+    <div className="space-y-4">
+      <SectionCard title="Select customer" description="Search existing customers or link a new account">
+        <input
+          type="search"
+          placeholder="Search customers…"
+          className="mb-3 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+        />
+        <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+          {customers.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                onClick={() => selectCustomer(c.id, c.name)}
+                className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${
+                  draft.customerId === c.id ? 'bg-command-50 ring-2 ring-inset ring-command-500' : ''
+                }`}
+              >
+                <p className="font-medium text-slate-900">{c.name}</p>
+                <p className="text-xs capitalize text-slate-500">{c.status ?? 'active'}</p>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
+
+      {context && <CustomerContextPanel context={context} />}
+    </div>
+  )
+}
+
+function CustomerContextPanel({ context }: { context: CustomerBookingContext }) {
+  return (
+    <SectionCard title="Customer account" description="Contract rules load automatically — do not re-enter on every booking">
+      <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-slate-500">Type</dt>
+          <dd className="font-medium capitalize">{CUSTOMER_TYPE_LABELS[context.customerType] ?? context.customerType}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-500">Account</dt>
+          <dd className="font-medium capitalize">{context.accountStatus}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-500">Billing</dt>
+          <dd className="font-medium">{context.billingArrangement}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-500">Credit</dt>
+          <dd className="font-medium capitalize">{context.creditStatus}</dd>
+        </div>
+      </dl>
+
+      {context.activeContracts.length > 0 && (
+        <div className="mt-4 rounded-lg bg-command-50 p-3 text-sm">
+          <p className="font-semibold text-command-900">{context.activeContracts[0]!.name}</p>
+          <p className="text-command-800">Ref: {context.activeContracts[0]!.ref}</p>
+          {context.contractRules && (
+            <ul className="mt-2 list-inside list-disc text-command-800">
+              <li>Wheelchair journeys {context.contractRules.wheelchairAllowed ? 'allowed' : 'not included'}</li>
+              <li>{context.contractRules.invoiceTerms} invoice terms</li>
+              <li>PA {context.contractRules.passengerAssistantIncluded ? 'included when required' : 'extra charge'}</li>
+              <li>Cancellation: {context.contractRules.cancellationRules}</li>
+            </ul>
+          )}
+        </div>
+      )}
+
+      {context.outstandingIssues.length > 0 && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {context.outstandingIssues.join(' · ')}
+        </p>
+      )}
+    </SectionCard>
+  )
+}
