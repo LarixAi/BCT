@@ -17,6 +17,11 @@ import { isOnline } from "@/platform/device/connectivity";
 import { useSyncStore } from "@/platform/sync/outbox";
 import type { VehicleHandbackRecord } from "@veyvio/ops";
 import { dispatchOperationalCommand } from "@/domain/ops/dispatch-operational-command";
+import {
+  custodyEndsAfterJourney,
+  getActiveJourneyId,
+  getNextJourney,
+} from "@/domain/journey/active-journey";
 
 interface OpenJourneyDraft {
   odometer: string;
@@ -31,6 +36,8 @@ interface EndJourneyDraft extends OpenJourneyDraft {
 interface DriverStore {
   duties: DutySummary[];
   activeDutyId: string | null;
+  /** Preferred active journey for the active duty (lifecycle — not runs[0]). */
+  activeJourneyId: string | null;
   dutyDetails: Record<string, DutyDetail>;
   openJourneyDrafts: Record<string, OpenJourneyDraft>;
   endJourneyDrafts: Record<string, EndJourneyDraft>;
@@ -44,6 +51,7 @@ interface DriverStore {
   hydrateFromBootstrap: (payload: BootstrapPayload) => void;
   loadDuty: (dutyId: string) => Promise<DutyDetail>;
   setActiveDuty: (dutyId: string | null) => void;
+  setActiveJourney: (journeyId: string | null) => void;
   setDrivingSafetyMode: (enabled: boolean) => void;
   /** Optimistic client projection only — never writes the mock server Map. */
   updateDutyDetail: (duty: DutyDetail) => void;
@@ -55,8 +63,10 @@ interface DriverStore {
   getTripDetail: (assignmentId: string) => TripDetail | null;
   setOpenJourneyDraft: (dutyId: string, draft: OpenJourneyDraft) => void;
   setEndJourneyDraft: (dutyId: string, draft: EndJourneyDraft) => void;
-  completeOpenJourney: (dutyId: string) => Promise<void>;
-  completeEndJourney: (dutyId: string) => Promise<void>;
+  completeOpenJourney: (dutyId: string, journeyId?: string) => Promise<void>;
+  /** Ends the active journey. Handback only when custody genuinely ends. */
+  completeEndJourney: (dutyId: string, options?: { withHandback?: boolean }) => Promise<void>;
+  submitVehicleHandback: (dutyId: string, handback: VehicleHandbackRecord) => Promise<void>;
 }
 
 function syncFromStore(): DriverHomeSummary["sync"] {
@@ -71,6 +81,7 @@ function syncFromStore(): DriverHomeSummary["sync"] {
 export const useDriverStore = create<DriverStore>((set, get) => ({
   duties: [],
   activeDutyId: null,
+  activeJourneyId: null,
   dutyDetails: {},
   openJourneyDrafts: {},
   endJourneyDrafts: {},
@@ -113,7 +124,13 @@ export const useDriverStore = create<DriverStore>((set, get) => ({
     }
   },
 
-  setActiveDuty: (dutyId) => set({ activeDutyId: dutyId }),
+  setActiveDuty: (dutyId) =>
+    set((s) => ({
+      activeDutyId: dutyId,
+      activeJourneyId: dutyId ? s.activeJourneyId : null,
+    })),
+
+  setActiveJourney: (journeyId) => set({ activeJourneyId: journeyId }),
 
   setDrivingSafetyMode: (enabled) => set({ drivingSafetyMode: enabled }),
 
@@ -169,12 +186,13 @@ export const useDriverStore = create<DriverStore>((set, get) => ({
       endJourneyDrafts: { ...s.endJourneyDrafts, [dutyId]: draft },
     })),
 
-  completeOpenJourney: async (dutyId) => {
+  completeOpenJourney: async (dutyId, journeyIdArg) => {
     const existing = get().getDuty(dutyId);
     if (!existing?.clockedInAt) {
       throw new Error("Clock into the duty before opening a journey.");
     }
-    const journeyId = existing.primaryJourneyId ?? existing.runs[0]?.id;
+    const journeyId =
+      journeyIdArg ?? getActiveJourneyId(existing, get().activeJourneyId ?? existing.activeJourneyId);
     await dispatchOperationalCommand({
       type: "journey.start",
       payload: { dutyId, journeyId },
@@ -184,15 +202,36 @@ export const useDriverStore = create<DriverStore>((set, get) => ({
     if (duty.lifecycleStatus !== "in_progress") {
       throw new Error("Journey could not be opened. Check your connection and try again.");
     }
-    set({ homeSummary: buildActiveJourneyHomeSummary(), activeDutyId: dutyId });
+    set({
+      homeSummary: buildActiveJourneyHomeSummary(),
+      activeDutyId: dutyId,
+      activeJourneyId: journeyId,
+    });
   },
 
-  completeEndJourney: async (dutyId) => {
+  completeEndJourney: async (dutyId, options) => {
     const existing = get().getDuty(dutyId);
-    const journeyId = existing?.primaryJourneyId ?? existing?.runs[0]?.id;
+    if (!existing) return;
+    const journeyId = getActiveJourneyId(existing, get().activeJourneyId ?? existing.activeJourneyId);
     const draft = get().endJourneyDrafts[dutyId];
-    const vehicleId = existing?.vehicle?.id;
-    if (draft?.handback && vehicleId) {
+    const vehicleId = existing.vehicle?.id;
+    const endsCustody =
+      Boolean(options?.withHandback) && custodyEndsAfterJourney(existing, journeyId);
+
+    await dispatchOperationalCommand({
+      type: "journey.complete",
+      payload: {
+        dutyId,
+        journeyId,
+        vehicleId,
+        handoverNote: draft?.handoverNote,
+        odometer: draft?.odometer,
+        fuelLevel: draft?.fuelLevel,
+      },
+      idempotencyKey: `journey.${dutyId}.${journeyId}.complete`,
+    });
+
+    if (endsCustody && draft?.handback && vehicleId) {
       await dispatchOperationalCommand({
         type: "vehicle.handback",
         payload: {
@@ -204,23 +243,32 @@ export const useDriverStore = create<DriverStore>((set, get) => ({
         idempotencyKey: `vehicle.handback.${dutyId}.${draft.handback.id}`,
       });
     }
+
+    const duty = await get().loadDuty(dutyId);
+    const next = getNextJourney(duty);
+    set({
+      homeSummary: next
+        ? buildActiveJourneyHomeSummary()
+        : buildMockHomeSummary({ sync: syncFromStore() }),
+      activeDutyId: dutyId,
+      activeJourneyId: next ? (next.journeyId ?? next.id) : null,
+    });
+  },
+
+  submitVehicleHandback: async (dutyId, handback) => {
+    const existing = get().getDuty(dutyId);
+    const vehicleId = existing?.vehicle?.id;
+    if (!vehicleId) throw new Error("No vehicle on this duty to hand back.");
     await dispatchOperationalCommand({
-      type: "journey.complete",
+      type: "vehicle.handback",
       payload: {
         dutyId,
-        journeyId,
         vehicleId,
-        handback: draft?.handback,
-        handoverNote: draft?.handoverNote,
-        odometer: draft?.odometer,
-        fuelLevel: draft?.fuelLevel,
+        assignmentId: handback.assignmentId,
+        handback,
       },
-      idempotencyKey: `journey.${dutyId}.${journeyId}.complete`,
+      idempotencyKey: `vehicle.handback.${dutyId}.${handback.id}`,
     });
     await get().loadDuty(dutyId);
-    set(() => ({
-      homeSummary: buildMockHomeSummary({ sync: syncFromStore() }),
-      activeDutyId: null,
-    }));
   },
 }));

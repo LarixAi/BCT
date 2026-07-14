@@ -1,14 +1,22 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   PICKUP_OUTCOME_LABELS,
   pickupRequiresReason,
+  pickupAllowsRouteAdvance,
+  pickupHoldsForOperations,
+  pickupWaitingOnPassenger,
   type PassengerPickupOutcome,
 } from "@veyvio/ops";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NavShell } from "@/components/driver/journey/NavShell";
-import { getHeadingStop, nextPassengerDetail } from "@/domain/journey/journey-helpers";
+import {
+  getHeadingStop,
+  inferStopKind,
+  nextPassengerDetail,
+  resolveJourneyIdForCommands,
+} from "@/domain/journey/journey-helpers";
 import { getProfileForStop } from "@/domain/passenger/passenger-pickup";
 import { PassengerPickupBrief } from "@/components/driver/passengers/PassengerPickupBrief";
 import { formatTime } from "@/lib/utils";
@@ -16,6 +24,7 @@ import { useDriverStore } from "@/store/driver";
 import { enqueueDriverMutation } from "@/platform/driver/enqueue-driver-mutation";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
 import { useNavigationStore } from "@/store/navigation";
+import { callOperations, emergencyTelHref, operationsTelHref } from "@/platform/ops-contacts";
 
 const PICKUP_OPTIONS: PassengerPickupOutcome[] = [
   "boarded",
@@ -38,27 +47,72 @@ function NavArrivePage() {
   const loadDuty = useDriverStore((s) => s.loadDuty);
   const duty = useDriverStore((s) => s.getDuty(dutyId));
   const stop = duty ? getHeadingStop(duty) : null;
+  const stopKind = stop ? inferStopKind(stop) : null;
   const pickupProfile = duty ? getProfileForStop(stop) : null;
   const [outcome, setOutcome] = useState<PassengerPickupOutcome>("boarded");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [opsHold, setOpsHold] = useState(false);
+  const [opsCallReason, setOpsCallReason] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (stopKind === "passenger_dropoff") {
+      void navigate({ to: "/duties/$dutyId/nav/dropoff", params: { dutyId } });
+    }
+  }, [stopKind, dutyId, navigate]);
+
+  if (stop && stopKind && stopKind !== "passenger_pickup" && stopKind !== "passenger_dropoff") {
+    return (
+      <NavShell
+        dutyId={dutyId}
+        eta="Stop"
+        nextStop={stop.name}
+        footer={
+          <div className="space-y-3 text-center">
+            <Badge variant="default">Operational stop</Badge>
+            <h1 className="font-display text-xl font-extrabold">{stop.name}</h1>
+            <p className="text-sm text-muted">
+              This stop is not a passenger pickup. Confirm arrival and continue when safe.
+            </p>
+            <Button
+              size="lg"
+              className="h-12 w-full font-bold uppercase tracking-widest"
+              onClick={() => void navigate({ to: "/duties/$dutyId/nav/depart", params: { dutyId } })}
+            >
+              Continue
+            </Button>
+            <Link
+              to="/duties/$dutyId/journey/active"
+              params={{ dutyId }}
+              className="block text-xs font-bold uppercase tracking-widest text-muted"
+            >
+              Back to journey
+            </Link>
+          </div>
+        }
+      />
+    );
+  }
 
   async function confirm() {
     if (!stop || !duty) return;
     if (pickupRequiresReason(outcome) && !notes.trim()) return;
+    const pickupTask = stop.passengerTasks.find((t) => t.type === "pickup");
+    if (!pickupTask && !pickupProfile) {
+      return;
+    }
     setSaving(true);
     try {
-      const passengerId =
-        stop.passengerTasks.find((t) => t.type === "pickup")?.passengerId ??
-        pickupProfile?.id ??
-        "unknown";
+      const passengerId = pickupTask?.passengerId ?? pickupProfile?.id;
+      if (!passengerId) return;
       await enqueueDriverMutation(
         "passenger.outcome",
         {
           dutyId,
           stopId: stop.id,
-          journeyId: duty.primaryJourneyId ?? duty.runs[0]?.id,
+          journeyId: resolveJourneyIdForCommands(duty),
           passengerId,
+          taskId: pickupTask?.id,
           type: "pickup",
           pickupOutcome: outcome,
           notes: notes.trim() || undefined,
@@ -67,7 +121,6 @@ function NavArrivePage() {
         },
         `pax.${stop.id}.${passengerId}.${outcome}.${Date.now()}`,
       );
-      // Pull completed stop + next approaching into the store, then refresh nav route target
       await loadDuty(dutyId);
       useNavigationStore.getState().clearRoute(dutyId);
       const refreshed = useDriverStore.getState().getDuty(dutyId);
@@ -75,17 +128,69 @@ function NavArrivePage() {
         void useNavigationStore.getState().loadRoute(dutyId, refreshed);
       }
 
-      if (outcome === "boarded" || outcome === "no_show" || outcome === "transport_not_required") {
-        void navigate({ to: "/duties/$dutyId/nav/depart", params: { dutyId } });
-      } else if (outcome === "not_ready") {
-        // Stay on arrive — still waiting for this passenger
+      if (pickupWaitingOnPassenger(outcome)) {
         return;
-      } else {
+      }
+      if (pickupHoldsForOperations(outcome)) {
+        setOpsHold(true);
+        return;
+      }
+      if (pickupAllowsRouteAdvance(outcome)) {
         void navigate({ to: "/duties/$dutyId/nav/depart", params: { dutyId } });
       }
     } finally {
       setSaving(false);
     }
+  }
+
+  if (opsHold || stop?.status === "waiting_for_operations") {
+    const opsHref = operationsTelHref();
+    return (
+      <NavShell
+        dutyId={dutyId}
+        eta="Hold"
+        nextStop={stop?.name ?? "Stop"}
+        footer={
+          <div className="space-y-3 text-center">
+            <Badge variant="warn">Waiting for Operations</Badge>
+            <h1 className="font-display text-xl font-extrabold">Do not continue yet</h1>
+            <p className="text-sm text-muted">
+              This pickup outcome needs Operations before you depart or move to the next stop.
+            </p>
+            {opsHref ? (
+              <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
+                <a href={opsHref}>Call Operations</a>
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                className="h-12 w-full font-bold uppercase tracking-widest"
+                onClick={() => {
+                  const result = callOperations();
+                  if (!result.started) setOpsCallReason(result.reason ?? "Unavailable");
+                }}
+              >
+                Call Operations
+              </Button>
+            )}
+            {opsCallReason ? <p className="text-xs text-warn">{opsCallReason}</p> : null}
+            <a
+              href={emergencyTelHref()}
+              className="block rounded-md border border-vor/30 bg-vor/10 p-3 text-sm font-bold text-vor"
+            >
+              Call 999 if anyone is in immediate danger
+            </a>
+            <Link
+              to="/duties/$dutyId/journey/active"
+              params={{ dutyId }}
+              className="block text-xs font-bold uppercase tracking-widest text-muted"
+            >
+              Back to journey
+            </Link>
+          </div>
+        }
+      />
+    );
   }
 
   return (

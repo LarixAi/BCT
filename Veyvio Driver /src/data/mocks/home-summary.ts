@@ -171,6 +171,19 @@ export function buildActiveJourneyHomeSummary(): DriverHomeSummary {
   });
 }
 
+/** Home projection while a duty break is open. */
+export function buildOnBreakHomeSummary(dutyId = "duty_1"): DriverHomeSummary {
+  const base = buildActiveJourneyHomeSummary();
+  return {
+    ...base,
+    operationalState: "on_break",
+    duty: { ...base.duty, dutyId },
+    activeTrip: base.activeTrip
+      ? { ...base.activeTrip, dutyId, phase: "en_route_pickup" }
+      : undefined,
+  };
+}
+
 /** QA: simulate failed sync without polluting the default demo. */
 export function buildSyncFailedHomeSummary(): DriverHomeSummary {
   return buildMockHomeSummary({

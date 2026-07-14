@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useDriverStore } from "@/store/driver";
 import { driverCopy } from "@/copy/driver-messages";
-import { canClockInDuty } from "@/domain/duty/duty-state-machine";
+import { canClockInDuty, canCompleteDuty } from "@/domain/duty/duty-state-machine";
+import { getActiveJourney } from "@/domain/journey/journey-helpers";
 import { getDriverEligibilityDecision, eligibilityGateCopy } from "@/domain/duty/driver-eligibility";
 import { buildDutyPrepSteps, canShowAcknowledgeCard } from "@/domain/duty/duty-prep-steps";
 import { DutyPrepChecklist } from "@/components/driver/duty/DutyPrepChecklist";
@@ -37,8 +38,9 @@ function DutyPage() {
     return <p className="text-sm text-muted">Loading duty…</p>;
   }
 
-  const activeRun = duty.runs[0];
+  const activeRun = getActiveJourney(duty, duty.activeJourneyId);
   const nextStop = activeRun?.stops.find((s) => s.status !== "completed" && s.status !== "skipped");
+  const completeGate = canCompleteDuty(duty);
   const passengerIds = uniquePassengerIdsFromDuty(duty.runs);
   const checkCleared = duty.vehicleCheck.status === "cleared" && duty.vehicleCheck.canStartDuty;
   const eligibility = getDriverEligibilityDecision();
@@ -285,18 +287,30 @@ function DutyPage() {
       )}
 
       {duty.lifecycleStatus === "in_progress" && (
-        <Button
-          variant="outline"
-          className="w-full"
-          disabled={acting === "complete"}
-          onClick={() =>
-            runAction("complete", () =>
-              enqueueDriverMutation("duty.complete", { dutyId }, `duty.${dutyId}.complete`),
-            )
-          }
-        >
-          {driverCopy.buttons.completeDuty}
-        </Button>
+        <div className="space-y-2">
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={acting === "complete" || !completeGate.allowed}
+            onClick={() =>
+              runAction("complete", () =>
+                enqueueDriverMutation("duty.complete", { dutyId }, `duty.${dutyId}.complete`),
+              )
+            }
+          >
+            {driverCopy.buttons.completeDuty}
+          </Button>
+          {!completeGate.allowed ? (
+            <div className="rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-sm text-warn">
+              <p className="font-bold">Cannot complete duty yet</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {completeGate.blockers.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       )}
     </div>
   );

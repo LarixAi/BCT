@@ -1,10 +1,38 @@
-import type { DutyDetail, DutyStop } from "@/types/duty";
+import type { DutyDetail, DutyStop, StopKind } from "@/types/duty";
 import type { TripStop } from "@/types/trips";
 import { dutyStopsToTripStops } from "@/domain/journey/open-journey-helpers";
 import { getPassengerProfile } from "@/domain/passenger/passenger-profiles";
+import { getActiveJourney, getActiveJourneyId } from "@/domain/journey/active-journey";
 
+export {
+  getActiveJourney,
+  getActiveJourneyId,
+  getNextJourney,
+  hasRemainingJourneys,
+  custodyEndsAfterJourney,
+  resolveJourneyRun,
+  journeyKey,
+  getActiveStop,
+} from "@/domain/journey/active-journey";
+
+/** @deprecated Prefer getActiveJourney — kept for call-site migration. */
 export function getActiveRun(duty: DutyDetail) {
-  return duty.runs.find((r) => r.status === "active") ?? duty.runs[0];
+  return getActiveJourney(duty);
+}
+
+export function inferStopKind(stop: DutyStop): StopKind {
+  if (stop.kind) return stop.kind;
+  const hasPickup = stop.passengerTasks.some((t) => t.type === "pickup");
+  const hasDropoff = stop.passengerTasks.some((t) => t.type === "dropoff");
+  if (hasPickup && !hasDropoff) return "passenger_pickup";
+  if (hasDropoff && !hasPickup) return "passenger_dropoff";
+  if (hasPickup && hasDropoff) return "passenger_pickup";
+  const name = stop.name.toLowerCase();
+  if (name.includes("depot") && name.includes("return")) return "depot_return";
+  if (name.includes("depot")) return "depot_departure";
+  if (name.includes("break")) return "driver_break";
+  if (name.includes("fuel")) return "fuel_stop";
+  return "operational_waypoint";
 }
 
 export function getCurrentStopIndex(stops: DutyStop[]): number {
@@ -15,7 +43,7 @@ export function getCurrentStopIndex(stops: DutyStop[]): number {
 }
 
 export function stopsWithProgress(duty: DutyDetail): TripStop[] {
-  const run = getActiveRun(duty);
+  const run = getActiveJourney(duty);
   if (!run) return [];
 
   const base = dutyStopsToTripStops({ ...duty, runs: [run] });
@@ -29,13 +57,13 @@ export function stopsWithProgress(duty: DutyDetail): TripStop[] {
 }
 
 export function getHeadingStop(duty: DutyDetail): DutyStop | null {
-  const run = getActiveRun(duty);
+  const run = getActiveJourney(duty, duty.activeJourneyId);
   if (!run) return null;
   return run.stops.find((s) => s.status !== "completed" && s.status !== "skipped") ?? null;
 }
 
 export function stopProgressLabel(duty: DutyDetail): string {
-  const run = getActiveRun(duty);
+  const run = getActiveJourney(duty, duty.activeJourneyId);
   if (!run) return "";
   const current = getCurrentStopIndex(run.stops);
   return `Stop ${current + 1} of ${run.stops.length}`;
@@ -58,4 +86,8 @@ export function nextPassengerDetail(stop: DutyStop | null): string | null {
   if (profile?.journeySummary) parts.push(profile.journeySummary);
   else if (task.accessibilityNotes) parts.push(task.accessibilityNotes.replace(/—.*/, "").trim());
   return parts.join(" · ");
+}
+
+export function resolveJourneyIdForCommands(duty: DutyDetail): string {
+  return getActiveJourneyId(duty, duty.activeJourneyId);
 }

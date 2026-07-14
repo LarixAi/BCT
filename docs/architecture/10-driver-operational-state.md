@@ -40,6 +40,15 @@ UI interaction
 
 Zustand remains the **projection container** (selectors + event projection + outbox status). It is not a domain engine and must not expose arbitrary entity patch APIs to screens.
 
+## Lifecycle invariants (audit — Jul 2026)
+
+See also [11-driver-terminology.md](./11-driver-terminology.md).
+
+1. **Journey complete ≠ handback** — `journey.complete` never implies custody close when another journey remains.  
+2. **Duty complete is gated** — `duty.complete` only when journeys, passenger tasks, handback, and critical sync rules pass.  
+3. **Exception outcomes hold the stop** — serious pickup/drop-off outcomes → `waiting_for_operations`; do not auto-depart.  
+4. **Active journey is explicit** — store/projection carries `activeJourneyId`; UI must not use `runs[0]` as the live journey.
+
 ## Why this is P0
 
 Complex live transitions already depend on this substrate:

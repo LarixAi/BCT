@@ -80,3 +80,41 @@ export function pickupRequiresReason(outcome: PassengerPickupOutcome): boolean {
 export function dropoffRequiresReason(outcome: PassengerDropoffOutcome): boolean {
   return outcome !== "handed_over" && outcome !== "independent_drop_off";
 }
+
+/** Passenger still preparing — stay on stop, not an Ops hold. */
+export function pickupWaitingOnPassenger(outcome: PassengerPickupOutcome): boolean {
+  return outcome === "not_ready";
+}
+
+/**
+ * Serious pickup outcomes — stop waits for Operations; driver must not continue the route.
+ */
+export function pickupHoldsForOperations(outcome: PassengerPickupOutcome): boolean {
+  return (
+    outcome === "refused" ||
+    outcome === "unreachable" ||
+    outcome === "unsafe_to_board" ||
+    outcome === "wrong_location"
+  );
+}
+
+export function pickupAllowsRouteAdvance(outcome: PassengerPickupOutcome): boolean {
+  return outcome === "boarded" || outcome === "no_show" || outcome === "transport_not_required" || outcome === "cancelled";
+}
+
+/**
+ * Drop-off outcomes that must not treat the passenger as safely handed over / continue route.
+ * `authorised_person_absent` must never count as a successful handover.
+ */
+export function dropoffHoldsForOperations(outcome: PassengerDropoffOutcome): boolean {
+  return (
+    outcome === "authorised_person_absent" ||
+    outcome === "drop_off_refused" ||
+    outcome === "safeguarding_escalation" ||
+    outcome === "handover_delayed"
+  );
+}
+
+export function dropoffAllowsRouteAdvance(outcome: PassengerDropoffOutcome): boolean {
+  return outcome === "handed_over" || outcome === "independent_drop_off" || outcome === "alternative_drop_off_authorised";
+}

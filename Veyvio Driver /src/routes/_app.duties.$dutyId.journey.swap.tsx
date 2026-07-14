@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDriverStore } from "@/store/driver";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
+import { canSeedOperationalDemo } from "@/platform/dev/dev-guards";
+import { resolveJourneyIdForCommands } from "@/domain/journey/journey-helpers";
 
 const STEP_COPY: Record<VehicleSwapStatus, { title: string; detail: string }> = {
   requested: {
@@ -90,7 +92,7 @@ function JourneySwapPage() {
     if (!duty?.vehicle) return;
     const request = createSwapRequest({
       dutyId,
-      journeyId: duty.primaryJourneyId ?? duty.runs[0]?.id ?? dutyId,
+      journeyId: resolveJourneyIdForCommands(duty),
       fromVehicleId: duty.vehicle.id,
       fromRegistration: duty.vehicle.registrationNumber,
       reason: "Vehicle marked VOR during journey",
@@ -169,7 +171,7 @@ function JourneySwapPage() {
 
       {error && <p className="text-sm text-vor">{error}</p>}
 
-      {swap.status === "awaiting_ops" && (
+      {canSeedOperationalDemo() && swap.status === "awaiting_ops" && (
         <Button
           size="lg"
           className="h-12 w-full font-bold uppercase tracking-widest"
@@ -184,7 +186,7 @@ function JourneySwapPage() {
         </Button>
       )}
 
-      {swap.status === "replacement_identified" && (
+      {canSeedOperationalDemo() && swap.status === "replacement_identified" && (
         <Button
           size="lg"
           className="h-12 w-full font-bold uppercase tracking-widest"
@@ -243,13 +245,15 @@ function JourneySwapPage() {
           <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
             <Link to="/checks">Complete vehicle check</Link>
           </Button>
-          <Button
-            variant="outline"
-            className="h-12 w-full font-bold uppercase tracking-widest"
-            onClick={() => advance("resumed")}
-          >
-            Mark check complete (demo)
-          </Button>
+          {canSeedOperationalDemo() ? (
+            <Button
+              variant="outline"
+              className="h-12 w-full font-bold uppercase tracking-widest"
+              onClick={() => advance("resumed")}
+            >
+              Mark check complete (demo)
+            </Button>
+          ) : null}
         </div>
       )}
 

@@ -46,19 +46,29 @@ export function DutyStatusCard({ summary }: { summary: DriverHomeSummary }) {
       )}
 
       <div className="mt-4 flex flex-col gap-2">
-        {primary && (
-          primary.href ? (
-            <Button asChild className="h-12 w-full bg-accent font-bold uppercase tracking-widest text-white hover:bg-accent/90">
+        {primary &&
+          (primary.href ? (
+            <Button
+              asChild
+              className="h-12 w-full bg-accent font-bold uppercase tracking-widest text-white hover:bg-accent/90"
+            >
               <Link to={primary.href}>{primary.label}</Link>
             </Button>
           ) : (
-            <Button className="h-12 w-full bg-accent font-bold uppercase tracking-widest text-white hover:bg-accent/90">
-              {primary.label}
-            </Button>
-          )
-        )}
+            <>
+              <Button
+                className="h-12 w-full bg-accent font-bold uppercase tracking-widest text-white opacity-60"
+                disabled
+              >
+                {primary.label}
+              </Button>
+              {primary.disabledReason ? (
+                <p className="text-center text-xs text-muted">{primary.disabledReason}</p>
+              ) : null}
+            </>
+          ))}
         <Button asChild variant="outline" className="h-11 w-full">
-          <Link to="/trips">View today&apos;s schedule</Link>
+          <Link to="/trips">View today&apos;s duties</Link>
         </Button>
       </div>
     </HomeCard>

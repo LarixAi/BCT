@@ -45,7 +45,13 @@ function HomePage() {
         onAcknowledge={acknowledgeNotice}
       />
     ) : null,
-    end_of_duty: <EndOfDutyCard />,
+    end_of_duty: (
+      <EndOfDutyCard
+        dutyId={
+          homeSummary.activeTrip?.dutyId ?? homeSummary.nextTrip?.dutyId ?? homeSummary.duty.dutyId
+        }
+      />
+    ),
   };
 
   return (

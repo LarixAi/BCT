@@ -31,7 +31,7 @@ export function BottomNav() {
         <NavTab to="/" label="Home" icon={<Home className="size-5" />} active={isHomeRoute(pathname)} />
         <NavTab
           to="/trips"
-          label="Trips"
+          label="Duties"
           icon={<Map className="size-5" />}
           active={isTripsNavActive(pathname)}
         />

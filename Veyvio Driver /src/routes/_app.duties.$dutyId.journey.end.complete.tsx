@@ -3,6 +3,7 @@ import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JourneyFlowShell } from "@/components/driver/journey/JourneyFlowShell";
 import { useDriverStore } from "@/store/driver";
+import { getNextJourney } from "@/domain/journey/journey-helpers";
 
 export const Route = createFileRoute("/_app/duties/$dutyId/journey/end/complete")({
   head: () => ({ meta: [{ title: "Journey complete — Veyvio Driver" }] }),
@@ -12,8 +13,12 @@ export const Route = createFileRoute("/_app/duties/$dutyId/journey/end/complete"
 function EndJourneyCompletePage() {
   const { dutyId } = Route.useParams();
   const duty = useDriverStore((s) => s.getDuty(dutyId));
+  const setActiveJourney = useDriverStore((s) => s.setActiveJourney);
 
   if (!duty) return null;
+
+  const next = getNextJourney(duty);
+  const handbackDone = Boolean(duty.vehicleHandback?.completedAt);
 
   return (
     <JourneyFlowShell
@@ -21,8 +26,8 @@ function EndJourneyCompletePage() {
       step={3}
       total={3}
       routeLabel={duty.routeName}
-      backTo="/trips"
-      backLabel="Trips"
+      backTo={`/duties/${dutyId}`}
+      backLabel="Duty"
     >
       <div className="flex min-h-[360px] flex-col items-center justify-center text-center animate-in-up">
         <div className="grid size-12 place-items-center rounded-full bg-ok/10 text-ok">
@@ -30,22 +35,45 @@ function EndJourneyCompletePage() {
         </div>
         <h1 className="mt-4 font-display text-2xl font-extrabold tracking-tight">Journey complete</h1>
         <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted">
-          {duty.routeName} closed. Record synced to operations and yard.
+          {next
+            ? "This journey is closed. Start the next journey when you are ready — vehicle custody stays with you."
+            : handbackDone
+              ? "Journey closed and vehicle handed back. Finish any end-of-duty steps, then complete the duty."
+              : "Journey closed. Complete vehicle handback when custody ends, then complete the duty."}
         </p>
         <section className="mt-6 w-full rounded-xl border border-border bg-card p-4 text-left text-sm">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Summary</p>
           <p className="mt-2 leading-relaxed">
-            {duty.vehicle?.registrationNumber} · {duty.passengerCount} passengers · On time
+            {duty.vehicle?.registrationNumber} · {duty.reference}
           </p>
+          {next ? (
+            <p className="mt-2 text-muted">Next: {next.name}</p>
+          ) : null}
         </section>
-        <Button asChild size="lg" className="mt-6 h-12 w-full font-bold uppercase tracking-widest">
-          <Link to="/trips">Back to trips</Link>
+
+        {next ? (
+          <Button asChild size="lg" className="mt-6 h-12 w-full font-bold uppercase tracking-widest">
+            <Link
+              to={`/duties/${dutyId}/journey/open`}
+              onClick={() => setActiveJourney(next.journeyId ?? next.id)}
+            >
+              Start next journey
+            </Link>
+          </Button>
+        ) : null}
+
+        <Button asChild size="lg" className="mt-3 h-12 w-full font-bold uppercase tracking-widest" variant={next ? "outline" : "default"}>
+          <Link to={`/duties/${dutyId}`}>Duty overview</Link>
         </Button>
-        <Button asChild variant="ghost" className="mt-2 w-full">
-          <Link to={`/duties/${dutyId}/journey/return`}>Return to depot</Link>
-        </Button>
+
+        {!next && !handbackDone ? (
+          <Button asChild variant="ghost" className="mt-2 w-full">
+            <Link to={`/duties/${dutyId}/journey/return`}>Return to depot</Link>
+          </Button>
+        ) : null}
+
         <Button asChild variant="ghost" className="mt-1 w-full text-muted">
-          <Link to="/trips">View trip history</Link>
+          <Link to="/">Home</Link>
         </Button>
       </div>
     </JourneyFlowShell>

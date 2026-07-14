@@ -1,8 +1,17 @@
 import type { DutyDetail, DutySummary, VehicleSummary } from "@/types/duty";
 import type { OutboxMutation } from "@/types/sync";
-import { assertDutyTransition } from "@/domain/duty/duty-state-machine";
+import { assertDutyTransition, canCompleteDuty } from "@/domain/duty/duty-state-machine";
 import { DRIVER_VEHICLE_CHECK_ITEMS } from "@/types/duty";
-import { SCHOOL_MORNING_JOURNEY, readinessCoversVehicle, type VehicleReadiness } from "@veyvio/ops";
+import {
+  SCHOOL_MORNING_JOURNEY,
+  readinessCoversVehicle,
+  pickupHoldsForOperations,
+  dropoffHoldsForOperations,
+  type PassengerPickupOutcome,
+  type PassengerDropoffOutcome,
+  type VehicleReadiness,
+} from "@veyvio/ops";
+import { resolveJourneyRun, journeyKey } from "@/domain/journey/active-journey";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -48,6 +57,7 @@ export function setVehicleReadiness(readiness: VehicleReadiness): void {
 function buildMorningRun() {
   return {
     id: SCHOOL_MORNING_JOURNEY.runId,
+    journeyId: SCHOOL_MORNING_JOURNEY.journeyId,
     name: SCHOOL_MORNING_JOURNEY.displayName,
     status: "scheduled" as const,
     stops: [
@@ -60,6 +70,7 @@ function buildMorningRun() {
         longitude: -0.279,
         plannedArrival: "06:45",
         status: "scheduled" as const,
+        kind: "depot_departure" as const,
         passengerTasks: [],
       },
       {
@@ -71,6 +82,7 @@ function buildMorningRun() {
         longitude: -0.29,
         plannedArrival: "07:12",
         status: "scheduled" as const,
+        kind: "passenger_pickup" as const,
         passengerTasks: [
           {
             id: "pt_1",
@@ -94,6 +106,7 @@ function buildMorningRun() {
         longitude: -0.28,
         plannedArrival: "07:45",
         status: "scheduled" as const,
+        kind: "passenger_dropoff" as const,
         passengerTasks: [
           {
             id: "pt_1_drop",
@@ -112,9 +125,34 @@ function buildMorningRun() {
   };
 }
 
+/** Second journey on the same duty — depot return after morning school work. */
+function buildDepotReturnRun() {
+  return {
+    id: "run_school_am_return",
+    journeyId: "journey_school_am_return",
+    name: "Return to depot",
+    status: "scheduled" as const,
+    stops: [
+      {
+        id: "stop_return_depot",
+        stopOrder: 1,
+        name: "Depot return",
+        address: "Unit 12, Wembley Industrial Estate, London HA9 0AA",
+        latitude: 51.556,
+        longitude: -0.279,
+        plannedArrival: "08:15",
+        status: "scheduled" as const,
+        kind: "depot_return" as const,
+        passengerTasks: [],
+      },
+    ],
+  };
+}
+
 function buildCommunityRun() {
   return {
     id: "run_community",
+    journeyId: "journey_community_7",
     name: "Community Route 7 — Afternoon",
     status: "scheduled" as const,
     stops: [
@@ -274,6 +312,8 @@ function createInitialDutyStore(): Map<string, DutyDetail> {
         reference: "MON-SCH-104-AM",
         vehicle: VEHICLE_LK23,
         primaryJourneyId: SCHOOL_MORNING_JOURNEY.journeyId,
+        activeJourneyId: SCHOOL_MORNING_JOURNEY.journeyId,
+        runs: [buildMorningRun(), buildDepotReturnRun()],
       }),
     ],
     [
@@ -493,29 +533,40 @@ export function mutateMockDuty(mutation: OutboxMutation): void {
         duty.lifecycleStatus = "in_progress";
         duty.startedAt = new Date().toISOString();
       }
+      // Mark any previously active journey paused if starting another
+      for (const r of duty.runs) {
+        if (r.status === "active") r.status = "paused";
+      }
       const run =
-        duty.runs.find((r) => r.id === journeyId) ??
-        duty.runs.find((r) => r.id === SCHOOL_MORNING_JOURNEY.runId) ??
-        duty.runs[0];
+        resolveJourneyRun(duty, journeyId) ??
+        duty.runs.find((r) => r.status === "scheduled" || r.status === "paused");
       if (run) {
         run.status = "active";
-        if (run.stops[0]) run.stops[0].status = "completed";
-        if (run.stops[1]) run.stops[1].status = "approaching";
+        duty.activeJourneyId = journeyKey(run);
+        const first = run.stops[0];
+        if (first?.kind === "depot_departure" || first?.passengerTasks.length === 0) {
+          if (first) first.status = "completed";
+          if (run.stops[1]) run.stops[1].status = "approaching";
+        } else if (first) {
+          first.status = "approaching";
+        }
       }
       break;
     }
     case "journey.complete": {
       const journeyId = payload.journeyId as string | undefined;
-      for (const run of duty.runs) {
-        if (!journeyId || run.id === journeyId || run.id === SCHOOL_MORNING_JOURNEY.runId) {
-          run.status = "completed";
+      const run = resolveJourneyRun(duty, journeyId);
+      if (run) {
+        run.status = "completed";
+        for (const stop of run.stops) {
+          if (stop.status !== "skipped" && stop.status !== "waiting_for_operations") {
+            stop.status = "completed";
+          }
         }
       }
-      const allDone = duty.runs.every((r) => r.status === "completed");
-      if (allDone) {
-        // Do not auto-complete duty — handback / completeDuty is separate
-        duty.lifecycleStatus = "in_progress";
-      }
+      const next = duty.runs.find((r) => r.status === "scheduled" || r.status === "paused");
+      duty.activeJourneyId = next ? journeyKey(next) : undefined;
+      // Never auto-complete duty or force handback here
       break;
     }
     case "vehicle.handback": {
@@ -576,8 +627,20 @@ export function mutateMockDuty(mutation: OutboxMutation): void {
         "dropped_off",
         "handed_over",
       ]);
-      // Outcomes that leave the stop open (driver still waiting)
-      const keepStopOpen = new Set(["not_ready"]);
+      const legType = payload.type as "pickup" | "dropoff" | undefined;
+      const holdForOps =
+        (pickupOutcome
+          ? pickupHoldsForOperations(pickupOutcome as PassengerPickupOutcome)
+          : false) ||
+        (dropoffOutcome
+          ? dropoffHoldsForOperations(dropoffOutcome as PassengerDropoffOutcome)
+          : false) ||
+        (legType === "pickup"
+          ? pickupHoldsForOperations(outcome as PassengerPickupOutcome)
+          : false) ||
+        (legType === "dropoff"
+          ? dropoffHoldsForOperations(outcome as PassengerDropoffOutcome)
+          : false);
 
       for (const run of duty.runs) {
         for (const stop of run.stops) {
@@ -588,10 +651,15 @@ export function mutateMockDuty(mutation: OutboxMutation): void {
             : stop.passengerTasks.find((t) => t.passengerId === passengerId);
           if (task) task.status = mapped;
 
-          if (keepStopOpen.has(outcome)) {
+          if (outcome === "not_ready" || outcome === "handover_delayed") {
             if (stop.status === "scheduled" || stop.status === "approaching") {
               stop.status = "arrived";
             }
+            continue;
+          }
+
+          if (holdForOps) {
+            stop.status = "waiting_for_operations";
             continue;
           }
 
@@ -628,10 +696,64 @@ export function mutateMockDuty(mutation: OutboxMutation): void {
     case "incident.report": {
       break;
     }
+    case "journey.break.start": {
+      const journeyId = (payload.journeyId as string | undefined) ?? duty.activeJourneyId ?? "";
+      const run = resolveJourneyRun(duty, journeyId);
+      if (run && run.status === "active") run.status = "paused";
+      duty.activeBreak = {
+        startedAt: (payload.startedAt as string | undefined) ?? new Date().toISOString(),
+        journeyId,
+        locationLabel: payload.locationLabel as string | undefined,
+        minMinutes: (payload.minMinutes as number | undefined) ?? 30,
+      };
+      break;
+    }
+    case "journey.break.end": {
+      const journeyId = duty.activeBreak?.journeyId ?? (payload.journeyId as string | undefined);
+      const run = resolveJourneyRun(duty, journeyId);
+      if (run && run.status === "paused") run.status = "active";
+      duty.activeBreak = undefined;
+      break;
+    }
+    case "journey.note.add": {
+      const note = {
+        id: (payload.noteId as string | undefined) ?? `note_${Date.now()}`,
+        body: String(payload.body ?? "").trim(),
+        journeyId: String(payload.journeyId ?? duty.activeJourneyId ?? ""),
+        stopId: payload.stopId as string | undefined,
+        recordedAt: (payload.recordedAt as string | undefined) ?? new Date().toISOString(),
+        recordedBy: (payload.recordedBy as string | undefined) ?? "driver",
+      };
+      if (!note.body) throw new Error("Journey note cannot be empty.");
+      duty.journeyNotes = [...(duty.journeyNotes ?? []), note];
+      break;
+    }
+    case "delay.report": {
+      const delay = {
+        id: (payload.delayId as string | undefined) ?? `delay_${Date.now()}`,
+        journeyId: String(payload.journeyId ?? duty.activeJourneyId ?? ""),
+        stopId: payload.stopId as string | undefined,
+        reason: String(payload.reason ?? "other"),
+        estimatedMinutes: Number(payload.estimatedMinutes ?? payload.expectedDelayMinutes ?? 0),
+        note: payload.note as string | undefined,
+        recordedAt: (payload.recordedAt as string | undefined) ?? new Date().toISOString(),
+        assistanceRequired: Boolean(payload.assistanceRequired),
+      };
+      duty.delayReports = [...(duty.delayReports ?? []), delay];
+      break;
+    }
     case "duty.complete": {
+      const gate = canCompleteDuty(duty);
+      if (!gate.allowed) {
+        throw new Error(gate.blockers[0] ?? "Duty cannot be completed yet.");
+      }
+      assertDutyTransition(duty.lifecycleStatus, "completed");
       duty.lifecycleStatus = "completed";
       duty.completedAt = new Date().toISOString();
-      if (duty.runs[0]) duty.runs[0].status = "completed";
+      if (duty.clockedInAt && !duty.clockedOutAt) {
+        duty.clockedOutAt = duty.completedAt;
+      }
+      for (const run of duty.runs) run.status = "completed";
       break;
     }
   }

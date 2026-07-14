@@ -118,15 +118,21 @@ export function buildJourneyReadiness(
 }
 
 export function dutyStopsToTripStops(duty: DutyDetail): TripStop[] {
-  const run = duty.runs[0];
+  const run =
+    duty.runs.find((r) => r.status === "active") ??
+    duty.runs.find((r) => r.journeyId === duty.activeJourneyId || r.id === duty.activeJourneyId) ??
+    duty.runs.find((r) => r.status === "scheduled") ??
+    duty.runs[0];
   if (!run) return [];
 
   return run.stops.map((stop, index) => {
     const hasPickup = stop.passengerTasks.some((t) => t.type === "pickup");
     const hasDropoff = stop.passengerTasks.some((t) => t.type === "dropoff");
-    let type: TripStop["type"] = "pickup";
-    if (index === 0 || (!hasPickup && !hasDropoff)) type = "depot";
+    let type: TripStop["type"] = "depot";
+    if (hasPickup && !hasDropoff) type = "pickup";
     else if (hasDropoff && !hasPickup) type = "dropoff";
+    else if (hasPickup && hasDropoff) type = "pickup";
+    else if (index === 0) type = "depot";
 
     return {
       id: stop.id,
@@ -137,7 +143,7 @@ export function dutyStopsToTripStops(duty: DutyDetail): TripStop[] {
       status:
         stop.status === "completed"
           ? "completed"
-          : stop.status === "arrived" || stop.status === "in_progress"
+          : stop.status === "arrived" || stop.status === "in_progress" || stop.status === "waiting_for_operations"
             ? "arrived"
             : "pending",
       type,
@@ -146,7 +152,10 @@ export function dutyStopsToTripStops(duty: DutyDetail): TripStop[] {
 }
 
 export function firstPickupStop(duty: DutyDetail) {
-  const run = duty.runs[0];
+  const run =
+    duty.runs.find((r) => r.status === "active") ??
+    duty.runs.find((r) => r.journeyId === duty.activeJourneyId || r.id === duty.activeJourneyId) ??
+    duty.runs[0];
   if (!run) return null;
-  return run.stops.find((s) => s.passengerTasks.some((t) => t.type === "pickup")) ?? run.stops[1] ?? null;
+  return run.stops.find((s) => s.passengerTasks.some((t) => t.type === "pickup")) ?? null;
 }

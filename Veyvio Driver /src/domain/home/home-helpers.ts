@@ -143,35 +143,49 @@ export function dutyStatusHeadline(summary: DriverHomeSummary): string {
   }
 }
 
-export function dutyPrimaryAction(summary: DriverHomeSummary): { label: string; href?: string } | null {
+export function dutyPrimaryAction(
+  summary: DriverHomeSummary,
+): { label: string; href?: string; disabledReason?: string } | null {
+  const dutyId =
+    summary.activeTrip?.dutyId ?? summary.nextTrip?.dutyId ?? summary.duty.dutyId ?? undefined;
+
   switch (summary.operationalState) {
     case "no_duty_scheduled":
-      return { label: "Contact operations" };
+      return { label: "Contact Operations", href: "/more/support" };
     case "duty_scheduled_not_started":
-      return { label: "Start duty", href: summary.duty.dutyId ? `/duties/${summary.duty.dutyId}` : undefined };
+      return { label: "Open duty", href: dutyId ? `/duties/${dutyId}` : undefined, disabledReason: dutyId ? undefined : "No duty assigned" };
     case "vehicle_check_required":
-      return { label: "Start vehicle check", href: summary.duty.dutyId ? `/duties/${summary.duty.dutyId}` : undefined };
+      return { label: "Start vehicle check", href: "/checks" };
     case "ready_for_work":
     case "journey_assigned":
       return {
-        label: "Open Duty Hub",
-        href: summary.nextTrip ? `/duties/${summary.nextTrip.dutyId}` : summary.duty.dutyId ? `/duties/${summary.duty.dutyId}` : undefined,
+        label: "Open duty",
+        href: dutyId ? `/duties/${dutyId}` : undefined,
+        disabledReason: dutyId ? undefined : "No duty assigned",
       };
     case "journey_active":
       return {
         label: "Continue journey",
-        href: summary.activeTrip
-          ? `/duties/${summary.activeTrip.dutyId}/journey/active`
-          : summary.duty.dutyId
-            ? `/duties/${summary.duty.dutyId}/journey/active`
-            : undefined,
+        href: dutyId ? `/duties/${dutyId}/journey/active` : undefined,
+        disabledReason: dutyId ? undefined : "No active journey",
       };
     case "on_break":
-      return { label: "End break" };
+      return {
+        label: "End break",
+        href: dutyId ? `/duties/${dutyId}/journey/break` : undefined,
+        disabledReason: dutyId ? undefined : "No active duty for this break",
+      };
     case "end_of_duty_required":
-      return { label: "Begin end-of-duty checks" };
+      return {
+        label: "Begin end-of-duty checks",
+        href: dutyId ? `/duties/${dutyId}/journey/end` : undefined,
+        disabledReason: dutyId ? undefined : "No duty to close",
+      };
     case "operationally_blocked":
-      return { label: "View details" };
+      return {
+        label: "View blocked details",
+        href: dutyId ? `/duties/${dutyId}` : "/more/support",
+      };
     default:
       return null;
   }

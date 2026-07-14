@@ -12,7 +12,7 @@ export function DutySubnav({ dutyId }: { dutyId: string }) {
 
   const base = `/duties/${dutyId}`;
   const items = [
-    { label: "Hub", to: base, active: pathname === base || pathname === `${base}/` },
+    { label: "Duty", to: base, active: pathname === base || pathname === `${base}/` },
     {
       label: "Journey",
       to: `${base}/journey/active`,

@@ -4,6 +4,7 @@ import { NavShell } from "@/components/driver/journey/NavShell";
 import { getActiveRun, getCurrentStopIndex } from "@/domain/journey/journey-helpers";
 import { formatTime } from "@/lib/utils";
 import { useDriverStore } from "@/store/driver";
+import { canSeedOperationalDemo } from "@/platform/dev/dev-guards";
 
 export const Route = createFileRoute("/_app/duties/$dutyId/nav/stops")({
   head: () => ({ meta: [{ title: "Stop list — Veyvio Driver" }] }),
@@ -55,9 +56,14 @@ function NavStopsPage() {
             </div>
           );
         })}
-        <Link to={`/duties/${dutyId}/nav/arrive`} className="block pt-2 text-center text-xs font-bold uppercase tracking-widest text-link">
-          Simulate arrival at stop
-        </Link>
+        {canSeedOperationalDemo() ? (
+          <Link
+            to={`/duties/${dutyId}/nav/arrive`}
+            className="block pt-2 text-center text-xs font-bold uppercase tracking-widest text-link"
+          >
+            Simulate arrival at stop
+          </Link>
+        ) : null}
       </div>
     </NavShell>
   );

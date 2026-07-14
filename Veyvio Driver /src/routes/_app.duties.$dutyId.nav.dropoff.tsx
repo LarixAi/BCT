@@ -3,17 +3,21 @@ import { useState } from "react";
 import {
   DROPOFF_OUTCOME_LABELS,
   dropoffRequiresReason,
+  dropoffAllowsRouteAdvance,
+  dropoffHoldsForOperations,
   type PassengerDropoffOutcome,
 } from "@veyvio/ops";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NavShell } from "@/components/driver/journey/NavShell";
-import { getHeadingStop } from "@/domain/journey/journey-helpers";
+import { getHeadingStop, resolveJourneyIdForCommands } from "@/domain/journey/journey-helpers";
 import { formatTime } from "@/lib/utils";
 import { useDriverStore } from "@/store/driver";
 import { dispatchOperationalCommand } from "@/domain/ops/dispatch-operational-command";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
 import { useNavigationStore } from "@/store/navigation";
+import { Link } from "@tanstack/react-router";
+import { callOperations, emergencyTelHref, operationsTelHref } from "@/platform/ops-contacts";
 
 const DROPOFF_OPTIONS: PassengerDropoffOutcome[] = [
   "handed_over",
@@ -40,6 +44,8 @@ function NavDropoffPage() {
   const [outcome, setOutcome] = useState<PassengerDropoffOutcome>("handed_over");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [opsHold, setOpsHold] = useState(false);
+  const [opsCallReason, setOpsCallReason] = useState<string | null>(null);
 
   async function confirm() {
     if (!stop || !duty || !dropoffTask) return;
@@ -51,7 +57,7 @@ function NavDropoffPage() {
         payload: {
           dutyId,
           stopId: stop.id,
-          journeyId: duty.primaryJourneyId ?? duty.runs[0]?.id,
+          journeyId: resolveJourneyIdForCommands(duty),
           passengerId: dropoffTask.passengerId,
           taskId: dropoffTask.id,
           type: "dropoff",
@@ -69,13 +75,67 @@ function NavDropoffPage() {
         void useNavigationStore.getState().loadRoute(dutyId, refreshed);
       }
 
-      if (outcome === "handover_delayed") {
+      if (dropoffHoldsForOperations(outcome)) {
+        setOpsHold(true);
         return;
       }
-      void navigate({ to: "/duties/$dutyId/nav/depart", params: { dutyId } });
+      if (dropoffAllowsRouteAdvance(outcome)) {
+        void navigate({ to: "/duties/$dutyId/nav/depart", params: { dutyId } });
+      }
     } finally {
       setSaving(false);
     }
+  }
+
+  if (opsHold || stop?.status === "waiting_for_operations") {
+    const opsHref = operationsTelHref();
+    return (
+      <NavShell
+        dutyId={dutyId}
+        eta="Hold"
+        nextStop={stop?.name ?? "Drop off"}
+        footer={
+          <div className="space-y-3 text-center">
+            <Badge variant="warn">Waiting for Operations</Badge>
+            <h1 className="font-display text-xl font-extrabold">Do not continue yet</h1>
+            <p className="text-sm text-muted">
+              This drop-off is not a completed handover. Stay with the passenger until Operations
+              authorises the next step.
+            </p>
+            {opsHref ? (
+              <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
+                <a href={opsHref}>Call Operations</a>
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                className="h-12 w-full font-bold uppercase tracking-widest"
+                onClick={() => {
+                  const result = callOperations();
+                  if (!result.started) setOpsCallReason(result.reason ?? "Unavailable");
+                }}
+              >
+                Call Operations
+              </Button>
+            )}
+            {opsCallReason ? <p className="text-xs text-warn">{opsCallReason}</p> : null}
+            <a
+              href={emergencyTelHref()}
+              className="block rounded-md border border-vor/30 bg-vor/10 p-3 text-sm font-bold text-vor"
+            >
+              Call 999 if anyone is in immediate danger
+            </a>
+            <Link
+              to="/duties/$dutyId/journey/active"
+              params={{ dutyId }}
+              className="block text-xs font-bold uppercase tracking-widest text-muted"
+            >
+              Back to journey
+            </Link>
+          </div>
+        }
+      />
+    );
   }
 
   return (

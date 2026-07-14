@@ -5,6 +5,7 @@ import {
   getConversationDetail,
 } from "@/data/mocks/messages-inbox";
 import { isOnline } from "@/platform/device/connectivity";
+import { loadPersistedMessages, persistMessages } from "@/platform/messages/messages-persistence";
 
 interface MessagesStore {
   inbox: MessagesInboxPayload;
@@ -14,6 +15,7 @@ interface MessagesStore {
   getConversation: (id: string) => ConversationDetail | null;
   acknowledgeUrgent: () => void;
   acknowledgeConversation: (conversationId: string, messageId?: string) => void;
+  /** Read ≠ acknowledged — clears unread only. */
   markConversationRead: (conversationId: string) => void;
   markAllRead: () => void;
   sendMessage: (conversationId: string, body: string) => MessageItem;
@@ -29,11 +31,30 @@ function recalcUnread(inbox: MessagesInboxPayload): number {
   return inbox.conversations.reduce((sum, c) => sum + c.unreadCount, 0);
 }
 
-export const useMessagesStore = create<MessagesStore>((set, get) => ({
-  inbox: buildMockMessagesInbox(),
-  conversationDetails: {},
+function persist(get: () => MessagesStore) {
+  const s = get();
+  persistMessages({ inbox: s.inbox, conversationDetails: s.conversationDetails });
+}
 
-  hydrateInbox: (payload) => set({ inbox: payload }),
+const persisted = loadPersistedMessages();
+
+export const useMessagesStore = create<MessagesStore>((set, get) => ({
+  inbox: persisted?.inbox ?? buildMockMessagesInbox(),
+  conversationDetails: persisted?.conversationDetails ?? {},
+
+  hydrateInbox: (payload) => {
+    const existing = loadPersistedMessages();
+    // Prefer persisted offline drafts/messages when present
+    if (existing?.inbox) {
+      set({
+        inbox: existing.inbox,
+        conversationDetails: existing.conversationDetails ?? {},
+      });
+      return;
+    }
+    set({ inbox: payload });
+    persist(get);
+  },
 
   getConversation: (id) => {
     const cached = get().conversationDetails[id];
@@ -41,6 +62,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const detail = getConversationDetail(id);
     if (detail) {
       set((s) => ({ conversationDetails: { ...s.conversationDetails, [id]: detail } }));
+      persist(get);
     }
     return detail;
   },
@@ -50,11 +72,20 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       if (!s.inbox.urgent) return s;
       const urgent = { ...s.inbox.urgent, acknowledged: true };
       const conversations = s.inbox.conversations.map((c) =>
-        c.id === urgent.conversationId ? { ...c, acknowledged: true, requiresAcknowledgement: false } : c,
+        c.id === urgent.conversationId
+          ? { ...c, acknowledged: true, requiresAcknowledgement: false }
+          : c,
       );
-      return {
-        inbox: { ...s.inbox, urgent: undefined, conversations, unreadTotal: recalcUnread({ ...s.inbox, conversations }) },
+      const next = {
+        inbox: {
+          ...s.inbox,
+          urgent: undefined,
+          conversations,
+          unreadTotal: recalcUnread({ ...s.inbox, conversations }),
+        },
       };
+      queueMicrotask(() => persist(get));
+      return next;
     }),
 
   acknowledgeConversation: (conversationId, messageId) =>
@@ -72,15 +103,14 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
 
       const conversations = s.inbox.conversations.map((c) =>
         c.id === conversationId
-          ? { ...c, acknowledged: true, requiresAcknowledgement: false, unreadCount: 0 }
+          ? { ...c, acknowledged: true, requiresAcknowledgement: false }
           : c,
       );
 
       const urgent =
-        s.inbox.urgent?.conversationId === conversationId
-          ? undefined
-          : s.inbox.urgent;
+        s.inbox.urgent?.conversationId === conversationId ? undefined : s.inbox.urgent;
 
+      queueMicrotask(() => persist(get));
       return {
         inbox: {
           ...s.inbox,
@@ -95,7 +125,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
                 ...detail,
                 acknowledged: true,
                 requiresAcknowledgement: false,
-                unreadCount: 0,
                 messages: updatedMessages ?? detail.messages,
               },
             }
@@ -108,6 +137,8 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       const conversations = s.inbox.conversations.map((c) =>
         c.id === conversationId ? { ...c, unreadCount: 0 } : c,
       );
+      // Do not clear requiresAcknowledgement / urgent — read ≠ acknowledged
+      queueMicrotask(() => persist(get));
       return {
         inbox: {
           ...s.inbox,
@@ -118,14 +149,17 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     }),
 
   markAllRead: () =>
-    set((s) => ({
-      inbox: {
-        ...s.inbox,
-        urgent: s.inbox.urgent ? { ...s.inbox.urgent, acknowledged: true } : undefined,
-        conversations: s.inbox.conversations.map((c) => ({ ...c, unreadCount: 0 })),
-        unreadTotal: 0,
-      },
-    })),
+    set((s) => {
+      queueMicrotask(() => persist(get));
+      return {
+        inbox: {
+          ...s.inbox,
+          // Keep urgent banner until explicit acknowledge
+          conversations: s.inbox.conversations.map((c) => ({ ...c, unreadCount: 0 })),
+          unreadTotal: 0,
+        },
+      };
+    }),
 
   sendMessage: (conversationId, body) => {
     const msg: MessageItem = {
@@ -143,6 +177,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     set((s) => {
       const detail = s.conversationDetails[conversationId] ?? getConversationDetail(conversationId);
       if (!detail) return s;
+      queueMicrotask(() => persist(get));
       return {
         conversationDetails: {
           ...s.conversationDetails,

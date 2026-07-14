@@ -1,4 +1,4 @@
-// Transport hierarchy: Duty → Run → Trip → Stop → PassengerTask
+// Transport hierarchy: Duty → Journey (Run) → Route → Stop → Passenger task
 
 export type DutyLifecycleStatus =
   | "published"
@@ -13,7 +13,25 @@ export type DutyLifecycleStatus =
 
 export type RunStatus = "scheduled" | "active" | "paused" | "completed";
 
-export type StopStatus = "scheduled" | "approaching" | "arrived" | "in_progress" | "completed" | "skipped";
+export type StopStatus =
+  | "scheduled"
+  | "approaching"
+  | "arrived"
+  | "in_progress"
+  | "waiting_for_operations"
+  | "completed"
+  | "skipped";
+
+/** Driver-facing stop workflow type — never default unknown stops to passenger pickup. */
+export type StopKind =
+  | "depot_departure"
+  | "passenger_pickup"
+  | "passenger_dropoff"
+  | "operational_waypoint"
+  | "driver_break"
+  | "fuel_stop"
+  | "vehicle_change"
+  | "depot_return";
 
 export type PassengerTaskStatus =
   | "scheduled"
@@ -68,11 +86,14 @@ export interface DutyStop {
   plannedArrival: string;
   plannedDeparture?: string;
   status: StopStatus;
+  kind?: StopKind;
   passengerTasks: PassengerTask[];
 }
 
 export interface DutyRun {
   id: string;
+  /** Canonical journey id for Driver ops (may differ from scheduling run id). */
+  journeyId?: string;
   name: string;
   status: RunStatus;
   stops: DutyStop[];
@@ -108,8 +129,11 @@ export interface DutyDetail extends DutySummary {
   /** Set by duty.clock_in — required before journey.start */
   clockedInAt?: string;
   fitForDutyDeclaredAt?: string;
-  /** Canonical journey for the primary run on this duty */
+  /** Canonical journey for the primary / first run on this duty */
   primaryJourneyId?: string;
+  /** Currently active journey for this duty (lifecycle — not assumed runs[0]) */
+  activeJourneyId?: string;
+  clockedOutAt?: string;
   startedAt?: string;
   completedAt?: string;
   /** Set after vehicle.handback command */
@@ -118,6 +142,31 @@ export interface DutyDetail extends DutySummary {
     locationOrBay: string;
     custodyAction: string;
   };
+  /** Persisted break — startedAt drives elapsed time (not a render clock). */
+  activeBreak?: {
+    startedAt: string;
+    journeyId: string;
+    locationLabel?: string;
+    minMinutes?: number;
+  };
+  journeyNotes?: Array<{
+    id: string;
+    body: string;
+    journeyId: string;
+    stopId?: string;
+    recordedAt: string;
+    recordedBy: string;
+  }>;
+  delayReports?: Array<{
+    id: string;
+    journeyId: string;
+    stopId?: string;
+    reason: string;
+    estimatedMinutes: number;
+    note?: string;
+    recordedAt: string;
+    assistanceRequired?: boolean;
+  }>;
 }
 
 /** @deprecated Independent inline checklist removed — open canonical /checks session instead. */

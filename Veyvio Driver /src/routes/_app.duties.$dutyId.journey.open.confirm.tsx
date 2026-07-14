@@ -37,7 +37,10 @@ function OpenJourneyConfirmPage() {
 
         <section className="rounded-xl border border-border bg-card p-4">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Route</p>
-          <p className="mt-1 font-display text-lg font-extrabold">{duty.runs[0]?.name ?? duty.routeName}</p>
+          <p className="mt-1 font-display text-lg font-extrabold">
+            {duty.runs.find((r) => r.status === "scheduled" || r.status === "paused" || r.status === "active")?.name ??
+              duty.routeName}
+          </p>
           <p className="mt-0.5 text-xs text-muted">
             {duty.passengerCount} passengers · {formatTime(duty.startTime)}–{formatTime(duty.endTime)}
           </p>

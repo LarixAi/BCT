@@ -12,6 +12,9 @@ export type PlatformEventName =
   | "stop.arrived"
   | "passenger.outcome_recorded"
   | "delay.reported"
+  | "journey.break_started"
+  | "journey.break_ended"
+  | "journey.note_added"
   | "incident.initial_submitted"
   | "vehicle_swap.requested"
   | "vehicle_swap.completed"
@@ -48,6 +51,9 @@ const EVENT_CONSUMERS: Record<PlatformEventName, PlatformEventConsumer[]> = {
   "stop.arrived": ["live_ops", "trips"],
   "passenger.outcome_recorded": ["trips", "live_ops", "audit"],
   "delay.reported": ["exceptions", "dispatch", "live_ops"],
+  "journey.break_started": ["live_ops", "drivers", "audit"],
+  "journey.break_ended": ["live_ops", "drivers", "audit"],
+  "journey.note_added": ["live_ops", "audit"],
   "incident.initial_submitted": ["incidents", "live_ops", "audit"],
   "vehicle_swap.requested": ["dispatch", "yard", "audit"],
   "vehicle_swap.completed": ["vehicles", "trips", "audit"],

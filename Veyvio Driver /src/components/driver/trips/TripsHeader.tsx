@@ -11,7 +11,7 @@ export function TripsHeader({ summary }: { summary: Pick<DriverHomeSummary, "syn
     <header className="animate-in-up space-y-2 border-b border-border pb-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Trips</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Duties</p>
           <h1 className="font-display text-2xl font-extrabold tracking-tight">{today}</h1>
         </div>
         <div className="flex flex-col items-end gap-1">

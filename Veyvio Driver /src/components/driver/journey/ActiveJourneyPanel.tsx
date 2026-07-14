@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TripRouteTimeline } from "@/components/driver/trips/TripRouteTimeline";
 import {
+  getActiveJourney,
   getHeadingStop,
   journeyStartedLabel,
   nextPassengerDetail,
@@ -29,7 +30,9 @@ export function ActiveJourneyPanel({ duty, dutyId }: { duty: DutyDetail; dutyId:
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Active journey</p>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight">{duty.runs[0]?.name ?? duty.routeName}</h1>
+          <h1 className="font-display text-2xl font-extrabold tracking-tight">
+            {getActiveJourney(duty, duty.activeJourneyId)?.name ?? duty.routeName}
+          </h1>
           <p className="mt-1 text-sm text-muted" suppressHydrationWarning>
             {mounted ? journeyStartedLabel(duty) : "In service"} · {stopProgressLabel(duty)}
           </p>

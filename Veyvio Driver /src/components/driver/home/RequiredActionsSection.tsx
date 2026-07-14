@@ -59,17 +59,18 @@ export function RequiredActionsSection({ actions }: { actions: DriverRequiredAct
                     <Link to={action.href}>{action.actionLabel}</Link>
                   </Button>
                 ) : (
-                  <Button
-                    variant={
-                      action.priority === "work_blocking" || action.priority === "safety_critical"
-                        ? "default"
-                        : "outline"
-                    }
-                    size="sm"
-                    className="mt-2"
-                  >
-                    {action.actionLabel}
-                  </Button>
+                  <div className="mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="opacity-60"
+                      disabled
+                      title="This action is not available yet"
+                    >
+                      {action.actionLabel}
+                    </Button>
+                    <p className="mt-1 text-[10px] text-muted">Unavailable — no destination yet</p>
+                  </div>
                 )}
               </div>
             </div>

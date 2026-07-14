@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useDriverStore } from "@/store/driver";
 import { formatTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { getActiveJourney } from "@/domain/journey/journey-helpers";
 
 export const Route = createFileRoute("/_app/duties/$dutyId/run")({
   head: () => ({ meta: [{ title: "Route — Veyvio Driver" }] }),
@@ -11,7 +12,7 @@ export const Route = createFileRoute("/_app/duties/$dutyId/run")({
 function DutyRunPage() {
   const { dutyId } = Route.useParams();
   const duty = useDriverStore((s) => s.getDuty(dutyId));
-  const stops = duty?.runs[0]?.stops ?? [];
+  const stops = duty ? (getActiveJourney(duty, duty.activeJourneyId)?.stops ?? []) : [];
 
   return (
     <div className="animate-in-up space-y-4">

@@ -69,6 +69,10 @@ export class MockCommandTransport implements CommandTransport {
       command.commandType === "duty.clock_in" ||
       command.commandType === "journey.start" ||
       command.commandType === "journey.complete" ||
+      command.commandType === "journey.break.start" ||
+      command.commandType === "journey.break.end" ||
+      command.commandType === "journey.note.add" ||
+      command.commandType === "delay.report" ||
       command.commandType === "vehicle.handback" ||
       command.commandType === "passenger.outcome" ||
       command.commandType === "stop.arrive" ||

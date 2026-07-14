@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { VehicleMismatchScreen } from "@/components/driver/checks/BodyworkReview";
 import { useVehicleCheckStore } from "@/store/vehicle-check";
+import { canSeedOperationalDemo } from "@/platform/dev/dev-guards";
 
 export const Route = createFileRoute("/_app/checks/verify")({
   head: () => ({ meta: [{ title: "Verify vehicle — Veyvio Driver" }] }),
@@ -81,15 +82,17 @@ function VerifyVehiclePage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className={`grid gap-2 ${canSeedOperationalDemo() ? "grid-cols-2" : "grid-cols-1"}`}>
         <Button variant="outline" className="h-20 flex-col gap-1" onClick={handleScanMatch}>
           <QrCode className="size-6" />
           Scan QR code
         </Button>
-        <Button variant="outline" className="h-20 flex-col gap-1" onClick={handleScanMismatch}>
-          <QrCode className="size-6" />
-          Demo mismatch
-        </Button>
+        {canSeedOperationalDemo() ? (
+          <Button variant="outline" className="h-20 flex-col gap-1" onClick={handleScanMismatch}>
+            <QrCode className="size-6" />
+            Demo mismatch
+          </Button>
+        ) : null}
       </div>
 
       <div className="space-y-3">
