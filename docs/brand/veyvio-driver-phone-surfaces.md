@@ -11,7 +11,7 @@ Inventory of where the phone brand must appear. Use with [veyvio-driver-brand-fo
 | App chrome | `AppChromeHeader` | Thick Driver Blue rail, lockup, depot, sync |
 | Bottom nav | `BottomNav` | Midnight bar; active = Driver Blue fill + rail |
 | Duty strip | `DutySubnav` | Under chrome; not a second bottom tab bar |
-| Home | Home route | Ops headline first; product chip may say Veyvio Driver |
+| Home | `HomeHeader` on `/` | Midnight brand band + blue rail + VEYVIO/DRIVER + campaign; **ops headline below** (never “Welcome back”) |
 | About | More → About | `About — Veyvio Driver`, campaign + promise |
 | Map nav header | `NavShell` | Product line on Midnight journey chrome |
 | Browser titles | route `head` | `… — Veyvio Driver` via `driverPageTitle()` |
