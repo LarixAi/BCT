@@ -1,5 +1,6 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { DefectReportForm } from "@/components/driver/checks/DefectReportForm";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { applyCheckSubmissionToDriverState } from "@/domain/vehicle-check/complete-check-flow";
 import { useVehicleCheckStore } from "@/store/vehicle-check";
 
@@ -36,41 +37,46 @@ function DefectPage() {
   }
 
   return (
-    <div className="animate-in-up space-y-4">
-      <Link to={search.returnTo} className="text-sm text-link">
-        ← Back
-      </Link>
-      <DefectReportForm
-        vehicleRegistration={checksHome.vehicle.registration}
-        component={search.component}
-        position={search.position}
-        onSubmit={(data) => {
-          const itemId = search.itemId ?? `duty_defect_${Date.now()}`;
-          addDefect({
-            id: `def_${Date.now()}`,
-            itemId,
-            sectionId: search.sectionId ?? "duty",
-            component: search.component,
-            position: search.position,
-            description: data.description,
-            timing: data.timing,
-            driverAssessment: data.assessment,
-            severity: data.severity,
-            photoTaken: data.photoTaken,
-            synced: false,
-          });
-          if (search.itemId) {
-            setItemResult(search.itemId, "defect");
-          }
-          if (data.severity === "safety_critical") {
-            submitSafetyCriticalResult();
-          } else if (search.returnTo === "/checks/walkaround") {
-            void navigate({ to: "/checks/walkaround" });
-          } else {
-            void navigate({ to: "/checks" });
-          }
-        }}
-      />
-    </div>
+    <FocusedPageShell
+      title="Report defect"
+      backTo={search.returnTo}
+      backLabel="Back"
+      eyebrow="Walkaround"
+      subtitle={search.component}
+    >
+      <div className="animate-in-up">
+        <DefectReportForm
+          vehicleRegistration={checksHome.vehicle.registration}
+          component={search.component}
+          position={search.position}
+          onSubmit={(data) => {
+            const itemId = search.itemId ?? `duty_defect_${Date.now()}`;
+            addDefect({
+              id: `def_${Date.now()}`,
+              itemId,
+              sectionId: search.sectionId ?? "duty",
+              component: search.component,
+              position: search.position,
+              description: data.description,
+              timing: data.timing,
+              driverAssessment: data.assessment,
+              severity: data.severity,
+              photoTaken: data.photoTaken,
+              synced: false,
+            });
+            if (search.itemId) {
+              setItemResult(search.itemId, "defect");
+            }
+            if (data.severity === "safety_critical") {
+              submitSafetyCriticalResult();
+            } else if (search.returnTo === "/checks/walkaround") {
+              void navigate({ to: "/checks/walkaround" });
+            } else {
+              void navigate({ to: "/checks" });
+            }
+          }}
+        />
+      </div>
+    </FocusedPageShell>
   );
 }

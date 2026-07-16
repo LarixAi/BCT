@@ -314,6 +314,14 @@ function createInitialDutyStore(): Map<string, DutyDetail> {
         primaryJourneyId: SCHOOL_MORNING_JOURNEY.journeyId,
         activeJourneyId: SCHOOL_MORNING_JOURNEY.journeyId,
         runs: [buildMorningRun(), buildDepotReturnRun()],
+        vehicleCheck: {
+          status: "not_started",
+          canStartDuty: false,
+          pendingManagerAdvice: false,
+          checklist: Object.fromEntries(DRIVER_VEHICLE_CHECK_ITEMS.map((i) => [i.id, "unset"])),
+          vehicleId: VEHICLE_LK23.id,
+          assignmentId: "asgn_school_am",
+        },
       }),
     ],
     [

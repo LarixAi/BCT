@@ -1,15 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo } from "react";
-import { ChecksHeader } from "@/components/driver/checks/ChecksHeader";
-import { AssignedVehicleCard } from "@/components/driver/checks/AssignedVehicleCard";
-import { KnownIssuesCard } from "@/components/driver/checks/KnownIssuesCard";
-import { ChecksHomeActions } from "@/components/driver/checks/ChecksHomeActions";
+import { useEffect, useMemo } from "react";
+import { ChecksWorkspaceScreen } from "@/components/driver/checks/ChecksWorkspaceScreen";
 import {
   buildHeldChecksHome,
   buildInProgressChecksHome,
   buildReadyChecksHome,
 } from "@/data/mocks/vehicle-check";
-import { useDriverStore } from "@/store/driver";
+import { reconcileReleasedCheckToDriver } from "@/domain/vehicle-check/complete-check-flow";
 import { useVehicleCheckStore } from "@/store/vehicle-check";
 import { resolveDemoParam } from "@/platform/dev/dev-guards";
 
@@ -27,8 +24,8 @@ function ChecksHomePage() {
   const { demo: rawDemo } = Route.useSearch();
   const demo = resolveDemoParam(rawDemo) ?? "normal";
   const navigate = useNavigate();
-  const homeSummary = useDriverStore((s) => s.homeSummary);
   const storeHome = useVehicleCheckStore((s) => s.checksHome);
+  const activeSession = useVehicleCheckStore((s) => s.activeSession);
   const startCheck = useVehicleCheckStore((s) => s.startCheck);
   const ensureDemoSession = useVehicleCheckStore((s) => s.ensureDemoSession);
 
@@ -39,9 +36,17 @@ function ChecksHomePage() {
     return storeHome;
   }, [demo, storeHome]);
 
+  // Checks can show "released" from persist while Duties/home still require a check
+  useEffect(() => {
+    reconcileReleasedCheckToDriver(checksHome, activeSession);
+  }, [checksHome, activeSession]);
+
   function handleContinueCheck() {
     ensureDemoSession();
-    void navigate({ to: "/checks/walkaround" });
+    void navigate({
+      to: "/checks/walkaround",
+      search: { section: undefined, item: undefined, step: undefined },
+    });
   }
 
   function handleStartCheck() {
@@ -50,15 +55,10 @@ function ChecksHomePage() {
   }
 
   return (
-    <div className="animate-in-up space-y-4">
-      <ChecksHeader sync={homeSummary.sync} />
-      <AssignedVehicleCard home={checksHome} />
-      <KnownIssuesCard issues={checksHome.knownIssues} />
-      <ChecksHomeActions
-        home={checksHome}
-        onStartCheck={handleStartCheck}
-        onContinueCheck={demo === "in_progress" ? handleContinueCheck : undefined}
-      />
-    </div>
+    <ChecksWorkspaceScreen
+      home={checksHome}
+      onStartCheck={handleStartCheck}
+      onContinueCheck={demo === "in_progress" ? handleContinueCheck : undefined}
+    />
   );
 }

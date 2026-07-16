@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { Phone } from "lucide-react";
 import {
   ConversationContextCard,
-  ConversationScreenHeader,
 } from "@/components/driver/messages/ConversationContextCard";
 import { MessageBubble } from "@/components/driver/messages/MessageBubble";
 import { QuickReplies } from "@/components/driver/messages/QuickReplies";
 import { DrivingSafetyNotice, MessageComposer } from "@/components/driver/messages/MessageComposer";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { quickRepliesForContext } from "@/domain/messages/message-helpers";
 import { useMessagesStore } from "@/store/messages";
 import { useDriverStore } from "@/store/driver";
@@ -44,7 +45,11 @@ function ConversationPage() {
   }, [conversation]);
 
   if (!conversation) {
-    return <p className="text-sm text-muted">Conversation not found.</p>;
+    return (
+      <FocusedPageShell title="Conversation" backTo="/messages" backLabel="Messages" eyebrow="Messages">
+        <p className="text-sm text-muted">Conversation not found.</p>
+      </FocusedPageShell>
+    );
   }
 
   const needsAck = conversation.messages.some((m) => m.requiresAcknowledgement && !m.acknowledged);
@@ -71,46 +76,54 @@ function ConversationPage() {
   }
 
   return (
-    <div className="animate-in-up flex min-h-[70vh] flex-col space-y-4 pb-28">
-      <ConversationScreenHeader
-        senderLabel={conversation.senderLabel}
-        subject={conversation.subject}
-        onCall={() => undefined}
-      />
+    <FocusedPageShell
+      title={conversation.senderLabel}
+      backTo="/messages"
+      backLabel="Messages"
+      eyebrow="Messages"
+      subtitle={conversation.subject}
+    >
+      <div className="animate-in-up flex min-h-[60vh] flex-col space-y-4">
+        <div className="flex justify-end">
+          <Button variant="outline" size="icon" onClick={() => undefined} aria-label="Call office">
+            <Phone className="size-4" />
+          </Button>
+        </div>
 
-      <ConversationContextCard context={conversation.context} />
+        <ConversationContextCard context={conversation.context} />
 
-      {drivingSafetyMode && <DrivingSafetyNotice />}
+        {drivingSafetyMode && <DrivingSafetyNotice />}
 
-      <div className="flex-1 space-y-3">
-        {conversation.messages.map((message) => (
-          <MessageBubble key={message.id} message={message} hidePreview={drivingSafetyMode} />
-        ))}
+        <div className="flex-1 space-y-3">
+          {conversation.messages.map((message) => (
+            <MessageBubble key={message.id} message={message} hidePreview={drivingSafetyMode} />
+          ))}
+        </div>
+
+        {needsAck && !drivingSafetyMode && (
+          <Button
+            className="w-full"
+            onClick={() => {
+              acknowledgeConversation(conversationId);
+              setLocalDetail(getConversation(conversationId));
+            }}
+          >
+            Acknowledge
+          </Button>
+        )}
+
+        {conversation.allowReply && (
+          <>
+            <QuickReplies replies={quickReplies} onSelect={handleQuickReply} disabled={drivingSafetyMode} />
+            <MessageComposer
+              value={draft}
+              onChange={setDraft}
+              onSend={() => handleSend(draft)}
+              disabled={drivingSafetyMode}
+            />
+          </>
+        )}
       </div>
-
-      {needsAck && !drivingSafetyMode && (
-        <Button
-          className="w-full"
-          onClick={() => {
-            acknowledgeConversation(conversationId);
-            setLocalDetail(getConversation(conversationId));
-          }}
-        >
-          Acknowledge
-        </Button>
-      )}
-
-      {conversation.allowReply && (
-        <>
-          <QuickReplies replies={quickReplies} onSelect={handleQuickReply} disabled={drivingSafetyMode} />
-          <MessageComposer
-            value={draft}
-            onChange={setDraft}
-            onSend={() => handleSend(draft)}
-            disabled={drivingSafetyMode}
-          />
-        </>
-      )}
-    </div>
+    </FocusedPageShell>
   );
 }

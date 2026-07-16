@@ -1,11 +1,16 @@
 import type { DutyDetail } from "@/types/duty";
 import type { JourneyRoute } from "@/domain/journey/turn-by-turn-types";
-import { buildJourneyMapStops, estimateDriverPosition } from "@/domain/journey/journey-map";
+import {
+  buildJourneyMapStops,
+  estimateDriverPosition,
+  resolveDriverPosition,
+} from "@/domain/journey/journey-map";
 import { buildStopFingerprint } from "@/domain/journey/navigation-fingerprint";
 import type { NavigationRouteFilter } from "@/types/driver-filters";
 import { osrmExcludeForRouteFilter } from "@/types/driver-filters";
 import { getHeadingStop } from "@/domain/journey/journey-helpers";
 import { parseOsrmRoute, type OsrmRouteResponse } from "@/domain/journey/osrm-instructions";
+import { useVehicleMotionStore } from "@/store/vehicle-motion";
 
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 
@@ -96,7 +101,8 @@ export async function fetchJourneyRoute(
   const stops = buildJourneyMapStops(duty);
   const heading = getHeadingStop(duty);
   const destinationName = heading?.name.split("—")[0]?.trim() ?? "Next stop";
-  const driverPosition = estimateDriverPosition(stops);
+  const live = useVehicleMotionStore.getState().lastPosition;
+  const driverPosition = resolveDriverPosition(estimateDriverPosition(stops), live);
 
   const remainingStops = stops.filter((stop) => stop.status === "current" || stop.status === "upcoming");
   const waypoints: Waypoint[] = [];

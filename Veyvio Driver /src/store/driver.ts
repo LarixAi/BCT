@@ -12,7 +12,7 @@ import { useMoreStore } from "@/store/more";
 import { useMessagesStore } from "@/store/messages";
 import { buildMockDriverMore } from "@/data/mocks/driver-more";
 import { fetchDutyDetail } from "@/platform/api/driver-api";
-import { getMockDutyDetail } from "@/data/mocks/duties";
+import { getMockDutyDetail, syncMockDutyDetail } from "@/data/mocks/duties";
 import { isOnline } from "@/platform/device/connectivity";
 import { useSyncStore } from "@/platform/sync/outbox";
 import type { VehicleHandbackRecord } from "@veyvio/ops";
@@ -22,6 +22,29 @@ import {
   getActiveJourneyId,
   getNextJourney,
 } from "@/domain/journey/active-journey";
+
+/** Prefer whichever duty projection is further through prep / live service. */
+function prepProgressScore(duty: DutyDetail): number {
+  let score = 0;
+  if (["acknowledged", "ready", "in_progress", "completed"].includes(duty.lifecycleStatus)) {
+    score += 1;
+  }
+  if (duty.vehicleVerified) score += 2;
+  if (duty.vehicleCheck.status === "cleared" && duty.vehicleCheck.canStartDuty) score += 4;
+  if (duty.clockedInAt) score += 8;
+  if (duty.lifecycleStatus === "in_progress") score += 16;
+  if (duty.lifecycleStatus === "completed") score += 32;
+  return score;
+}
+
+function pickFresherDuty(
+  a: DutyDetail | null | undefined,
+  b: DutyDetail | null | undefined,
+): DutyDetail | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return prepProgressScore(a) >= prepProgressScore(b) ? a : b;
+}
 
 interface OpenJourneyDraft {
   odometer: string;
@@ -111,8 +134,13 @@ export const useDriverStore = create<DriverStore>((set, get) => ({
   loadDuty: async (dutyId) => {
     set({ loading: true, error: null });
     try {
-      const cached = get().dutyDetails[dutyId] ?? getMockDutyDetail(dutyId);
-      const duty = cached ?? (await fetchDutyDetail(dutyId));
+      const fromMock = getMockDutyDetail(dutyId);
+      const fromStore = get().dutyDetails[dutyId];
+      const raw =
+        pickFresherDuty(fromMock, fromStore) ?? (await fetchDutyDetail(dutyId));
+      const duty = structuredClone(raw);
+      // Keep Map aligned with the fresher projection so later reads cannot rewind clock-in / prep
+      syncMockDutyDetail(duty);
       set((s) => ({
         dutyDetails: { ...s.dutyDetails, [dutyId]: duty },
         loading: false,
@@ -135,9 +163,11 @@ export const useDriverStore = create<DriverStore>((set, get) => ({
   setDrivingSafetyMode: (enabled) => set({ drivingSafetyMode: enabled }),
 
   updateDutyDetail: (duty) => {
-    // Optimistic / UI projection only — mock Map is written solely by CommandTransport
+    // Keep mock Map aligned so later loadDuty does not rewind optimistic prep / check clears
+    const next = structuredClone(duty);
+    syncMockDutyDetail(next);
     set((s) => ({
-      dutyDetails: { ...s.dutyDetails, [duty.id]: duty },
+      dutyDetails: { ...s.dutyDetails, [duty.id]: next },
       duties: s.duties.map((d) =>
         d.id === duty.id ? { ...d, lifecycleStatus: duty.lifecycleStatus } : d,
       ),
@@ -145,15 +175,21 @@ export const useDriverStore = create<DriverStore>((set, get) => ({
   },
 
   projectDuty: (duty) => {
+    // Prefer the further-ahead of transport projection vs current prep (never rewind clock-in)
+    const current = get().dutyDetails[duty.id] ?? getMockDutyDetail(duty.id);
+    const chosen = pickFresherDuty(duty, current) ?? duty;
+    const next = structuredClone(chosen);
+    syncMockDutyDetail(next);
     set((s) => ({
-      dutyDetails: { ...s.dutyDetails, [duty.id]: duty },
+      dutyDetails: { ...s.dutyDetails, [duty.id]: next },
       duties: s.duties.map((d) =>
-        d.id === duty.id ? { ...d, lifecycleStatus: duty.lifecycleStatus } : d,
+        d.id === duty.id ? { ...d, lifecycleStatus: next.lifecycleStatus } : d,
       ),
     }));
   },
 
-  getDuty: (dutyId) => get().dutyDetails[dutyId] ?? getMockDutyDetail(dutyId),
+  getDuty: (dutyId) =>
+    pickFresherDuty(get().dutyDetails[dutyId], getMockDutyDetail(dutyId)),
 
   acknowledgeOperationalNotice: () =>
     set((s) => ({
@@ -187,10 +223,57 @@ export const useDriverStore = create<DriverStore>((set, get) => ({
     })),
 
   completeOpenJourney: async (dutyId, journeyIdArg) => {
-    const existing = get().getDuty(dutyId);
-    if (!existing?.clockedInAt) {
+    // Heal: stale Zustand can lose clockedInAt / release while mock (or prior UI) still has them
+    let existing = get().getDuty(dutyId);
+    if (!existing) {
+      throw new Error("Duty could not be loaded. Return to Duties and try again.");
+    }
+
+    const mock = getMockDutyDetail(dutyId);
+    let healed = { ...existing };
+    let dirty = false;
+
+    if (!healed.clockedInAt && (mock?.clockedInAt || healed.fitForDutyDeclaredAt)) {
+      healed = {
+        ...healed,
+        clockedInAt: mock?.clockedInAt ?? healed.fitForDutyDeclaredAt,
+        fitForDutyDeclaredAt:
+          healed.fitForDutyDeclaredAt ?? mock?.fitForDutyDeclaredAt ?? mock?.clockedInAt,
+      };
+      dirty = true;
+    }
+
+    if (
+      !(healed.vehicleCheck.canStartDuty && healed.vehicleCheck.status === "cleared") &&
+      mock?.vehicleCheck.canStartDuty
+    ) {
+      healed = {
+        ...healed,
+        vehicleVerified: true,
+        vehicleCheck: {
+          ...healed.vehicleCheck,
+          ...mock.vehicleCheck,
+          canStartDuty: true,
+          status: mock.vehicleCheck.status === "cleared" ? "cleared" : healed.vehicleCheck.status,
+        },
+      };
+      dirty = true;
+    }
+
+    if (dirty) {
+      get().updateDutyDetail(healed);
+      existing = healed;
+    }
+
+    if (!existing.clockedInAt) {
       throw new Error("Clock into the duty before opening a journey.");
     }
+    if (!existing.vehicleCheck.canStartDuty) {
+      throw new Error(
+        "Finish the vehicle check for this assignment before opening the journey.",
+      );
+    }
+
     const journeyId =
       journeyIdArg ?? getActiveJourneyId(existing, get().activeJourneyId ?? existing.activeJourneyId);
     await dispatchOperationalCommand({
@@ -200,7 +283,9 @@ export const useDriverStore = create<DriverStore>((set, get) => ({
     });
     const duty = await get().loadDuty(dutyId);
     if (duty.lifecycleStatus !== "in_progress") {
-      throw new Error("Journey could not be opened. Check your connection and try again.");
+      throw new Error(
+        "Journey could not be opened. Return to Duties, confirm prep is complete, then try again.",
+      );
     }
     set({
       homeSummary: buildActiveJourneyHomeSummary(),

@@ -153,14 +153,18 @@ export function dutyPrimaryAction(
     case "no_duty_scheduled":
       return { label: "Contact Operations", href: "/more/support" };
     case "duty_scheduled_not_started":
-      return { label: "Open duty", href: dutyId ? `/duties/${dutyId}` : undefined, disabledReason: dutyId ? undefined : "No duty assigned" };
+      return {
+        label: "Open duty",
+        href: dutyId ? `/trips?dutyId=${dutyId}` : undefined,
+        disabledReason: dutyId ? undefined : "No duty assigned",
+      };
     case "vehicle_check_required":
       return { label: "Start vehicle check", href: "/checks" };
     case "ready_for_work":
     case "journey_assigned":
       return {
         label: "Open duty",
-        href: dutyId ? `/duties/${dutyId}` : undefined,
+        href: dutyId ? `/trips?dutyId=${dutyId}` : undefined,
         disabledReason: dutyId ? undefined : "No duty assigned",
       };
     case "journey_active":
@@ -184,7 +188,7 @@ export function dutyPrimaryAction(
     case "operationally_blocked":
       return {
         label: "View blocked details",
-        href: dutyId ? `/duties/${dutyId}` : "/more/support",
+        href: dutyId ? `/trips?dutyId=${dutyId}` : "/more/support",
       };
     default:
       return null;

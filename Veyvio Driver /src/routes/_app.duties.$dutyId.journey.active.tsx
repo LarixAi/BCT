@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { ActiveJourneyPanel } from "@/components/driver/journey/ActiveJourneyPanel";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { seedActiveDutyDemo } from "@/platform/dev/seed-active-duty";
 import { canSeedOperationalDemo, resolveDemoParam } from "@/platform/dev/dev-guards";
 import { useDriverStore } from "@/store/driver";
@@ -27,7 +28,13 @@ function ActiveJourneyPage() {
   const { dutyId } = Route.useParams();
   const duty = useDriverStore((s) => s.getDuty(dutyId));
 
-  if (!duty) return <p className="text-sm text-muted">Loading journey…</p>;
+  if (!duty) {
+    return (
+      <FocusedPageShell title="Active journey" backTo="/trips" backLabel="Duties">
+        <p className="text-sm text-muted">Loading journey…</p>
+      </FocusedPageShell>
+    );
+  }
 
   return <ActiveJourneyPanel duty={duty} dutyId={dutyId} />;
 }

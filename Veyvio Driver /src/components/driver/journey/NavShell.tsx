@@ -1,11 +1,16 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Navigation } from "lucide-react";
+import { Home, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useJourneyNavigation } from "@/features/navigation/use-journey-navigation";
+import { useDriverStore } from "@/store/driver";
+import { shouldShowVehicleCheckRequiredStrip } from "@/domain/home/vehicle-check-status-strip";
 import { JourneyMap } from "./JourneyMap";
-import { JourneyHelpLauncher } from "./JourneyHelpLauncher";
 
+/**
+ * Splash MapNav language: full-bleed map · Midnight locator pill · floating Home/Safety ·
+ * duty overlay stacked under chrome · directions sheet · no BottomNav.
+ */
 export function NavShell({
   dutyId,
   eta,
@@ -22,9 +27,7 @@ export function NavShell({
   nextStop: string;
   mapHighlight?: "current" | "diversion" | "off-route";
   mapClassName?: string;
-  /** Floating guidance UI over the map (Waze / Google Maps style). */
   mapOverlay?: ReactNode;
-  /** Bottom sheet for directions list and trip summary. */
   mapBottomSheet?: ReactNode;
   children?: ReactNode;
   footer?: ReactNode;
@@ -33,37 +36,13 @@ export function NavShell({
   const headerEta = navigation.etaLabel ?? eta;
   const headerStop = navigation.route?.destinationName ?? nextStop;
   const guidanceMode = Boolean(mapOverlay || mapBottomSheet);
+  const stripActive = shouldShowVehicleCheckRequiredStrip(
+    useDriverStore((s) => s.homeSummary),
+  );
 
   return (
-    <div className="min-h-dvh bg-secondary">
-      <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-background">
-        <header className="sticky top-0 z-40 shrink-0 border-b border-white/10 bg-accent pt-safe text-white">
-          <div
-            className="h-0.5 w-full bg-gradient-to-r from-driver-blue via-driver-sky to-transparent"
-            aria-hidden
-          />
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
-            <Link
-              to={`/duties/${dutyId}/journey/active`}
-              className="inline-flex min-w-0 items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-white/55"
-            >
-              <ArrowLeft className="size-4 shrink-0" />
-              Journey
-            </Link>
-            <div className="min-w-0 flex-1 text-center">
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-driver-sky/80">
-                Veyvio Driver
-              </p>
-              <p className="truncate text-xs font-extrabold">{headerStop}</p>
-              <p className="text-[10px] text-driver-sky">
-                ETA {headerEta}
-                {navigation.etaClock ? ` · ${navigation.etaClock}` : ""}
-              </p>
-            </div>
-            <Navigation className="size-5 shrink-0 text-driver-sky" aria-hidden />
-          </div>
-        </header>
-
+    <div className="h-full min-h-0 bg-[#E8EEF4]">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-col overflow-hidden bg-[#E8EEF4]">
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div
             className={cn(
@@ -81,19 +60,69 @@ export function NavShell({
                 mapClassName,
               )}
             />
-            {mapOverlay}
+
+            {/* Chrome + duty overlay in normal flow so they cannot overlap */}
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col gap-3 px-4",
+                stripActive ? "pt-2" : "pt-safe",
+              )}
+            >
+              <div className="pointer-events-auto grid grid-cols-[54px_1fr_54px] items-center gap-3 pt-2.5">
+                <Link
+                  to="/duties/$dutyId/journey/active"
+                  params={{ dutyId }}
+                  search={{ demo: undefined }}
+                  className="grid size-[54px] place-items-center rounded-full bg-white text-accent shadow-[0_10px_28px_rgba(16,24,40,0.2)]"
+                  aria-label="Back to journey"
+                >
+                  <Home className="size-7" strokeWidth={2} />
+                </Link>
+                <div className="min-w-0 justify-self-center rounded-full bg-accent px-[18px] py-3 text-center text-white shadow-[0_10px_28px_rgba(16,24,40,0.22)]">
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.18em] text-driver-sky">
+                    Veyvio Driver
+                  </p>
+                  <p className="mt-0.5 truncate text-[15px] font-extrabold leading-tight">{headerStop}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-white/70">
+                    ETA {headerEta}
+                    {navigation.etaClock ? ` · ${navigation.etaClock}` : ""}
+                  </p>
+                </div>
+                <Link
+                  to="/duties/$dutyId/help"
+                  params={{ dutyId }}
+                  className="grid size-[54px] place-items-center rounded-full bg-white text-accent shadow-[0_10px_28px_rgba(16,24,40,0.2)]"
+                  aria-label="Safety help"
+                >
+                  <ShieldCheck className="size-7" strokeWidth={2} />
+                </Link>
+              </div>
+
+              {mapOverlay ? <div className="pointer-events-auto min-w-0">{mapOverlay}</div> : null}
+            </div>
+
             {mapBottomSheet}
           </div>
 
-          {children && <div className="flex-1 overflow-y-auto px-4 py-4">{children}</div>}
-          <JourneyHelpLauncher dutyId={dutyId} />
+          {children ? (
+            <div className="relative z-20 flex-1 overflow-y-auto rounded-t-[28px] border-t border-border bg-white/98 px-4 py-4 shadow-[0_-12px_38px_rgba(16,24,40,0.18)]">
+              <div className="mx-auto mb-3 h-1.5 w-[52px] rounded-full bg-[#D0D5DD]" aria-hidden />
+              {children}
+            </div>
+          ) : null}
         </div>
 
-        {footer && (
-          <footer className="shrink-0 rounded-t-2xl border-t border-border bg-card px-4 py-4 pb-safe shadow-[0_-10px_32px_rgba(11,21,38,0.08)]">
+        {footer ? (
+          <footer
+            className="relative z-20 shrink-0 rounded-t-[28px] border-t border-border bg-white px-4 pt-4 shadow-[0_-12px_38px_rgba(16,24,40,0.12)]"
+            style={{
+              paddingBottom: "max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem))",
+            }}
+          >
+            <div className="mx-auto mb-3 h-1.5 w-[52px] rounded-full bg-[#D0D5DD]" aria-hidden />
             {footer}
           </footer>
-        )}
+        ) : null}
       </div>
     </div>
   );

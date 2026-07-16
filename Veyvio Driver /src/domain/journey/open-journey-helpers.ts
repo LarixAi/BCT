@@ -57,7 +57,7 @@ export function buildJourneyReadiness(
     label: "Duty clock-in",
     detail: clockedIn
       ? "Fit-for-duty declared · Clocked in"
-      : "Not clocked in · Complete clock-in on the Duty Hub first",
+      : "Not clocked in · Complete clock-in on Duties first",
     passed: clockedIn,
     blocker: !clockedIn,
   };
@@ -108,7 +108,7 @@ export function buildJourneyReadiness(
     blockDetail: !compliancePassed
       ? (eligibility.blockReason ?? eligibility.detail)
       : !clockedIn
-        ? "Journey start cannot clock you in. Return to the Duty Hub and complete fit-for-duty clock-in."
+        ? "Journey start cannot clock you in. Return to Duties and complete fit-for-duty clock-in."
         : !walkaroundPassed
           ? `${duty.vehicle?.registrationNumber ?? "This vehicle"} cannot enter service until its own walkaround is signed off.`
           : !noSafetyDefects

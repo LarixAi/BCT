@@ -33,6 +33,18 @@ function EndJourneyReadingsPage() {
       routeLabel={duty.routeName}
       backTo={`/duties/${dutyId}/journey/active`}
       backLabel="Back"
+      footer={
+        <Button
+          size="lg"
+          className="h-12 w-full font-bold uppercase tracking-widest"
+          onClick={() => {
+            setEndJourneyDraft(dutyId, { odometer, fuelLevel, handoverNote: "" });
+            void navigate({ to: `/duties/${dutyId}/journey/end/confirm` });
+          }}
+        >
+          Continue
+        </Button>
+      }
     >
       <div className="animate-in-up space-y-4">
         <header>
@@ -68,16 +80,6 @@ function EndJourneyReadingsPage() {
             <p className="mt-1">{draft.odometer} km · {draft.fuelLevel}</p>
           </div>
         )}
-        <Button
-          size="lg"
-          className="h-12 w-full font-bold uppercase tracking-widest"
-          onClick={() => {
-            setEndJourneyDraft(dutyId, { odometer, fuelLevel, handoverNote: "" });
-            void navigate({ to: `/duties/${dutyId}/journey/end/confirm` });
-          }}
-        >
-          Continue
-        </Button>
       </div>
     </JourneyFlowShell>
   );

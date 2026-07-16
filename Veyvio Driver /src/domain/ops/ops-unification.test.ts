@@ -61,7 +61,7 @@ describe("Driver operational state unification", () => {
     });
   });
 
-  it("updateDutyDetail does not write the mock Map — transport owns Map writes", () => {
+  it("updateDutyDetail keeps mock Map aligned so loadDuty cannot rewind prep", () => {
     const duty = getMockDutyDetail("duty_1")!;
     const patched = {
       ...duty,
@@ -70,9 +70,8 @@ describe("Driver operational state unification", () => {
     };
     useDriverStore.getState().updateDutyDetail(patched);
 
-    // Map still has original seed (not optimistically patched)
-    expect(getMockDutyDetail("duty_1")?.vehicleCheck.canStartDuty).toBe(false);
-    // Zustand projection has the optimistic value
+    // Optimistic projection + Map stay aligned for Duties sheet walkthrough
+    expect(getMockDutyDetail("duty_1")?.vehicleCheck.canStartDuty).toBe(true);
     expect(useDriverStore.getState().getDuty("duty_1")?.vehicleCheck.canStartDuty).toBe(true);
   });
 
@@ -150,6 +149,80 @@ describe("Driver operational state unification", () => {
     const fromMap = getMockDutyDetail("duty_1");
     expect(fromStore?.clockedInAt).toBeTruthy();
     expect(fromMap?.clockedInAt).toBe(fromStore?.clockedInAt);
+  });
+
+  it("getDuty prefers mock clock-in over a stale Zustand snapshot", () => {
+    const duty = getMockDutyDetail("duty_1")!;
+    const clockedAt = "2026-07-15T06:40:00.000Z";
+    syncMockDutyDetail({
+      ...duty,
+      lifecycleStatus: "ready",
+      vehicleVerified: true,
+      vehicleCheck: { ...duty.vehicleCheck, canStartDuty: true, status: "cleared" },
+      clockedInAt: clockedAt,
+      fitForDutyDeclaredAt: clockedAt,
+    });
+    // Stale store projection without clock-in (simulates a rewind from rejected sync)
+    useDriverStore.setState({
+      dutyDetails: {
+        duty_1: {
+          ...duty,
+          lifecycleStatus: "ready",
+          vehicleVerified: true,
+          vehicleCheck: { ...duty.vehicleCheck, canStartDuty: true, status: "cleared" },
+        },
+      },
+    });
+
+    expect(useDriverStore.getState().dutyDetails.duty_1?.clockedInAt).toBeUndefined();
+    expect(useDriverStore.getState().getDuty("duty_1")?.clockedInAt).toBe(clockedAt);
+  });
+
+  it("stale store does not wipe mock clock-in before journey.start merge", () => {
+    const duty = getMockDutyDetail("duty_1")!;
+    const clockedAt = "2026-07-15T06:41:00.000Z";
+    syncMockDutyDetail({
+      ...duty,
+      lifecycleStatus: "ready",
+      vehicleVerified: true,
+      vehicleCheck: {
+        ...duty.vehicleCheck,
+        canStartDuty: true,
+        status: "cleared",
+        vehicleId: duty.vehicle?.id,
+      },
+      clockedInAt: clockedAt,
+      fitForDutyDeclaredAt: clockedAt,
+    });
+    useDriverStore.setState({
+      dutyDetails: {
+        duty_1: {
+          ...duty,
+          lifecycleStatus: "ready",
+          vehicleVerified: true,
+          vehicleCheck: {
+            ...duty.vehicleCheck,
+            canStartDuty: true,
+            status: "cleared",
+            vehicleId: duty.vehicle?.id,
+          },
+        },
+      },
+    });
+
+    // Merge uses getDuty (fresher) — must not sync the stale store onto the Map
+    const live = useDriverStore.getState().getDuty("duty_1");
+    expect(live?.clockedInAt).toBe(clockedAt);
+    syncMockDutyDetail(live!);
+    expect(getMockDutyDetail("duty_1")?.clockedInAt).toBe(clockedAt);
+
+    mutateMockDuty(
+      mutation("journey.start", {
+        dutyId: "duty_1",
+        journeyId: duty.primaryJourneyId ?? duty.runs[0]?.id,
+      }),
+    );
+    expect(getMockDutyDetail("duty_1")?.lifecycleStatus).toBe("in_progress");
   });
 
   it("handback command projects custody close onto duty", () => {

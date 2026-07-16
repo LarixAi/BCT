@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDriverStore } from "@/store/driver";
+import { shouldShowVehicleCheckRequiredStrip } from "@/domain/home/vehicle-check-status-strip";
 
 type FlowKind = "open" | "end";
 
@@ -10,6 +11,10 @@ const titles: Record<FlowKind, string> = {
   end: "End journey",
 };
 
+/**
+ * Open/end journey wizard — full white page · ← back · step bar · content.
+ * Viewport-locked so primary actions never sit under the home indicator.
+ */
 export function JourneyFlowShell({
   kind,
   step,
@@ -17,6 +22,7 @@ export function JourneyFlowShell({
   routeLabel,
   backTo,
   backLabel = "Back",
+  footer,
   children,
 }: {
   kind: FlowKind;
@@ -25,38 +31,73 @@ export function JourneyFlowShell({
   routeLabel: string;
   backTo: string;
   backLabel?: string;
+  /** Sticky primary actions — kept above safe-area, outside the scroll region. */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
+  const homeSummary = useDriverStore((s) => s.homeSummary);
+  const stripActive = shouldShowVehicleCheckRequiredStrip(homeSummary);
+
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-40 bg-accent pt-safe text-white">
-        <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-3">
-          <Link
-            to={backTo}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-white/55"
-          >
-            <ArrowLeft className="size-4" />
-            {backLabel}
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col overflow-hidden bg-card text-foreground",
+        /* Strip owns top safe-area when active; otherwise pad for status bar. */
+        stripActive ? "pt-3" : "pt-safe",
+      )}
+    >
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-col px-5 pt-4">
+        <header className="shrink-0 pb-1">
+          <Link to={backTo} className="text-sm font-semibold text-muted">
+            ← {backLabel}
           </Link>
-          <div className="text-center">
-            <p className="text-[10px] font-extrabold tracking-wide">{titles[kind]}</p>
-            <p className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.14em] text-driver-sky">
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <div>
+              <h1 className="font-display text-[22px] font-extrabold tracking-tight text-foreground">
+                {titles[kind]}
+              </h1>
+              <p className="mt-1 text-sm text-muted">{routeLabel}</p>
+            </div>
+            <p className="shrink-0 text-[11px] font-extrabold uppercase tracking-[0.1em] text-muted">
               Step {step} of {total}
             </p>
           </div>
-          <p className="max-w-[72px] truncate text-right text-[9px] font-bold text-white/55">{routeLabel}</p>
+          <div className="mt-3 flex gap-1">
+            {Array.from({ length: total }, (_, i) => i + 1).map((i) => (
+              <div
+                key={i}
+                className={cn("h-1 flex-1 rounded-full", i <= step ? "bg-link" : "bg-border")}
+                aria-hidden
+              />
+            ))}
+          </div>
+        </header>
+
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto pt-5",
+            footer ? "pb-4" : undefined,
+          )}
+          style={
+            footer
+              ? undefined
+              : { paddingBottom: "max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem))" }
+          }
+        >
+          {children}
         </div>
-        <div className="mx-auto flex max-w-lg gap-1 px-4 pb-3">
-          {Array.from({ length: total }, (_, i) => i + 1).map((i) => (
-            <div
-              key={i}
-              className={cn("h-[3px] flex-1 rounded-sm", i <= step ? "bg-link" : "bg-white/15")}
-              aria-hidden
-            />
-          ))}
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-lg flex-1 px-4 py-5 pb-safe">{children}</main>
+
+        {footer ? (
+          <div
+            className="shrink-0 border-t border-border/60 bg-card pt-3"
+            style={{
+              paddingBottom: "max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem))",
+            }}
+          >
+            {footer}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

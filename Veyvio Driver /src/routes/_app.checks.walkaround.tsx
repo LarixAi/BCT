@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { CheckItemScreen } from "@/components/driver/checks/CheckItemScreen";
 import { SectionProgressList } from "@/components/driver/checks/SectionProgressList";
 import { BodyworkReview } from "@/components/driver/checks/BodyworkReview";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { overallProgress } from "@/domain/vehicle-check/check-helpers";
 import { getAllItems, getApplicableSections } from "@/domain/vehicle-check/check-template";
 import { useVehicleCheckStore } from "@/store/vehicle-check";
@@ -30,22 +31,26 @@ function WalkaroundPage() {
 
   if (!session) {
     return (
-      <div className="space-y-4">
-        <p className="text-sm text-muted">No check in progress.</p>
-        <Button asChild>
-          <Link to="/checks/verify">Start verification</Link>
-        </Button>
-      </div>
+      <FocusedPageShell title="Guided vehicle check" backTo="/checks" backLabel="Checks" eyebrow="Walkaround">
+        <div className="animate-in-up space-y-4">
+          <p className="text-sm text-muted">No check in progress.</p>
+          <Button asChild>
+            <Link to="/checks/verify">Start verification</Link>
+          </Button>
+        </div>
+      </FocusedPageShell>
     );
   }
 
   if (step === "bodywork") {
     return (
-      <div className="animate-in-up">
-        <Link to="/checks/walkaround" className="text-sm text-link">
-          ← Walkaround
-        </Link>
-        <div className="mt-4">
+      <FocusedPageShell
+        title="Bodywork review"
+        backTo="/checks/walkaround"
+        backLabel="Walkaround"
+        eyebrow="Walkaround"
+      >
+        <div className="animate-in-up">
           <BodyworkReview
             records={checksHome.knownIssues.bodyworkRecords}
             onNoNewDamage={() => {
@@ -64,7 +69,7 @@ function WalkaroundPage() {
             }}
           />
         </div>
-      </div>
+      </FocusedPageShell>
     );
   }
 
@@ -81,40 +86,39 @@ function WalkaroundPage() {
 
   if (!section && !item) {
     return (
-      <div className="animate-in-up space-y-4">
-        <header>
-          <Link to="/checks" className="text-sm text-link">
-            ← Checks
-          </Link>
-          <h1 className="mt-2 font-display text-xl font-extrabold">Guided vehicle check</h1>
-          <p className="text-sm text-muted">
-            {progress.answered} of {progress.total} items answered
-            {progress.defects > 0 ? ` · ${progress.defects} defect${progress.defects === 1 ? "" : "s"}` : ""}
-          </p>
-        </header>
+      <FocusedPageShell
+        title="Guided vehicle check"
+        backTo="/checks"
+        backLabel="Checks"
+        eyebrow="Walkaround"
+        subtitle={`${progress.answered} of ${progress.total} items answered${progress.defects > 0 ? ` · ${progress.defects} defect${progress.defects === 1 ? "" : "s"}` : ""}`}
+      >
+        <div className="animate-in-up space-y-4">
+          <SectionProgressList session={session} accessibilityCapable={accessible} />
 
-        <SectionProgressList session={session} accessibilityCapable={accessible} />
-
-        {progress.answered === progress.total && (
-          <Button
-            className="w-full"
-            onClick={() => void navigate({ to: "/checks/walkaround", search: { step: "bodywork" } })}
-          >
-            Continue to bodywork review
-          </Button>
-        )}
-      </div>
+          {progress.answered === progress.total && (
+            <Button
+              className="w-full"
+              onClick={() => void navigate({ to: "/checks/walkaround", search: { step: "bodywork" } })}
+            >
+              Continue to bodywork review
+            </Button>
+          )}
+        </div>
+      </FocusedPageShell>
     );
   }
 
   if (!currentItem) {
     return (
-      <div className="space-y-4">
-        <p className="text-sm text-muted">Section complete.</p>
-        <Button asChild>
-          <Link to="/checks/walkaround">Back to sections</Link>
-        </Button>
-      </div>
+      <FocusedPageShell title="Section complete" backTo="/checks/walkaround" backLabel="Sections" eyebrow="Walkaround">
+        <div className="space-y-4">
+          <p className="text-sm text-muted">Section complete.</p>
+          <Button asChild>
+            <Link to="/checks/walkaround">Back to sections</Link>
+          </Button>
+        </div>
+      </FocusedPageShell>
     );
   }
 
@@ -137,11 +141,13 @@ function WalkaroundPage() {
   }
 
   return (
-    <div className="animate-in-up">
-      <Link to="/checks/walkaround" className="text-sm text-link">
-        ← Sections
-      </Link>
-      <div className="mt-4">
+    <FocusedPageShell
+      title={currentItem.title}
+      backTo="/checks/walkaround"
+      backLabel="Sections"
+      eyebrow={sectionDef?.title ?? "Walkaround"}
+    >
+      <div className="animate-in-up">
         <CheckItemScreen
           item={currentItem}
           sectionIndex={sectionDef?.order ?? 0}
@@ -173,6 +179,6 @@ function WalkaroundPage() {
           }
         />
       </div>
-    </div>
+    </FocusedPageShell>
   );
 }

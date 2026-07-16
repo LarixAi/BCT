@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ReviewDeclaration } from "@/components/driver/checks/ReviewDeclaration";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { applyCheckSubmissionToDriverState } from "@/domain/vehicle-check/complete-check-flow";
 import { useVehicleCheckStore } from "@/store/vehicle-check";
 import { Button } from "@/components/ui/button";
@@ -20,12 +21,14 @@ function ReviewPage() {
 
   if (!session) {
     return (
-      <div className="space-y-4">
-        <p className="text-sm text-muted">No check to review.</p>
-        <Button asChild>
-          <Link to="/checks">Back to checks</Link>
-        </Button>
-      </div>
+      <FocusedPageShell title="Review check" backTo="/checks" backLabel="Checks" eyebrow="Walkaround">
+        <div className="space-y-4">
+          <p className="text-sm text-muted">No check to review.</p>
+          <Button asChild>
+            <Link to="/checks">Back to checks</Link>
+          </Button>
+        </div>
+      </FocusedPageShell>
     );
   }
 
@@ -46,11 +49,13 @@ function ReviewPage() {
   }
 
   return (
-    <div className="animate-in-up">
-      <Link to="/checks/walkaround" className="text-sm text-link">
-        ← Walkaround
-      </Link>
-      <div className="mt-4">
+    <FocusedPageShell
+      title="Review and declare"
+      backTo="/checks/walkaround"
+      backLabel="Walkaround"
+      eyebrow="Walkaround"
+    >
+      <div className="animate-in-up">
         {submitError && (
           <p className="mb-4 rounded-md border border-vor/30 bg-vor/10 p-3 text-sm text-vor">{submitError}</p>
         )}
@@ -60,6 +65,6 @@ function ReviewPage() {
           onSubmit={handleSubmit}
         />
       </div>
-    </div>
+    </FocusedPageShell>
   );
 }

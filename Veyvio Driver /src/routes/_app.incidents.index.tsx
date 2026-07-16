@@ -18,7 +18,7 @@ function IncidentsIndexPage() {
       </p>
       <Link
         to="/incidents/report"
-        className="flex h-12 items-center justify-center rounded-xl bg-accent text-sm font-bold uppercase tracking-widest text-white"
+        className="flex min-h-[52px] items-center justify-center rounded-[14px] bg-primary text-sm font-extrabold text-primary-foreground shadow"
       >
         Report incident
       </Link>

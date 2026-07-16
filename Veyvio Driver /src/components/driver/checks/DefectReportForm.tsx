@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { EvidenceCaptureControl } from "@/components/driver/media/EvidenceCaptureControl";
 import type { DefectTiming, DriverSafetyAssessment, DefectSeverity } from "@/types/vehicle-check";
 
 export function DefectReportForm({
@@ -25,7 +25,7 @@ export function DefectReportForm({
   const [description, setDescription] = useState("");
   const [timing, setTiming] = useState<DefectTiming>("before_duty");
   const [assessment, setAssessment] = useState<DriverSafetyAssessment>("unsure");
-  const [photoTaken, setPhotoTaken] = useState(false);
+  const [photo, setPhoto] = useState<File | null>(null);
 
   function severityFromAssessment(a: DriverSafetyAssessment): DefectSeverity {
     if (a === "unsafe") return "safety_critical";
@@ -44,14 +44,12 @@ export function DefectReportForm({
         </p>
       </header>
 
-      <button
-        type="button"
-        onClick={() => setPhotoTaken(true)}
-        className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-secondary/30 text-muted"
-      >
-        <Camera className="size-8" />
-        <span className="text-sm font-medium">{photoTaken ? "Photo captured" : "Take photo"}</span>
-      </button>
+      <EvidenceCaptureControl
+        label="Photograph the defect"
+        capturedLabel="Defect photo captured"
+        value={photo}
+        onChange={setPhoto}
+      />
 
       <div className="space-y-2">
         <Label htmlFor="defect-desc">What did you find?</Label>
@@ -115,7 +113,7 @@ export function DefectReportForm({
             timing,
             assessment,
             severity: severityFromAssessment(assessment),
-            photoTaken,
+            photoTaken: Boolean(photo),
           })
         }
       >

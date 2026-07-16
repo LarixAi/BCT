@@ -21,7 +21,7 @@ export function buildMockVehicleChecksHome(
     dutyId: "duty_1",
     dutyReference: "DUTY-1042",
     dutyLabel: "School AM 1042",
-    vehicleAssignmentId: "va_duty1_lk23",
+    vehicleAssignmentId: "asgn_school_am",
     knownIssues: {
       cosmeticDamageCount: 1,
       openSafetyDefectCount: 0,

@@ -47,7 +47,8 @@
 
 :root {
   --radius: 0.375rem;
-  --background: #f5f7fa;
+  /* Splash PAGE_BG — focused sheets sit on this canvas */
+  --background: #f4f6f8;
   --foreground: #101828;
   --surface: #ffffff;
   --ink: #101828;
@@ -76,6 +77,10 @@
   --vor: #b42318;
   --ok: #178c4b;
   --warn: #d97706;
+  /* Splash AccentButton / sheet contracts */
+  --driver-cta-height: 52px;
+  --driver-cta-radius: 14px;
+  --driver-sheet-radius: 22px;
 }
 
 .dark {
@@ -128,6 +133,11 @@
 
 @utility pb-safe {
   padding-bottom: max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 0px);
+}
+
+/* Primary CTAs — always clear home indicator / browser chrome (Tailwind arbitrary env() commas often fail). */
+@utility pb-cta-safe {
+  padding-bottom: max(1.5rem, calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 0.75rem));
 }
 
 @utility min-h-screen-safe {

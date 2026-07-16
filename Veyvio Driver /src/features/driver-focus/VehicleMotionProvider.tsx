@@ -1,7 +1,13 @@
 import { useEffect } from "react";
+import { useRouterState } from "@tanstack/react-router";
+import { isNavRoute } from "@/domain/driver/nav-routes";
 import { useDriverStore } from "@/store/driver";
 import { useVehicleMotionStore } from "@/store/vehicle-motion";
 
+/**
+ * Watches browser / Capacitor geolocation (including Chrome Sensors “Custom location”)
+ * while a journey is in progress or the driver is on a map-nav route.
+ */
 export function VehicleMotionProvider() {
   const setDrivingSafetyMode = useDriverStore((s) => s.setDrivingSafetyMode);
   const ingestPosition = useVehicleMotionStore((s) => s.ingestPosition);
@@ -11,13 +17,16 @@ export function VehicleMotionProvider() {
   const duty = useDriverStore((s) =>
     s.activeDutyId ? s.getDuty(s.activeDutyId) : null,
   );
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const onNavMap = isNavRoute(pathname);
 
   const trackingActive =
-    Boolean(activeDutyId) && duty?.lifecycleStatus === "in_progress";
+    onNavMap ||
+    (Boolean(activeDutyId) && duty?.lifecycleStatus === "in_progress");
 
   useEffect(() => {
     if (!trackingActive || typeof navigator === "undefined" || !navigator.geolocation) {
-      reset();
+      if (!trackingActive) reset();
       return;
     }
 
@@ -31,14 +40,13 @@ export function VehicleMotionProvider() {
         });
       },
       () => {
-        // GPS unavailable — driving safety mode stays off.
+        // GPS unavailable — map falls back to duty-stop estimate.
       },
       { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 },
     );
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
-      reset();
     };
   }, [trackingActive, ingestPosition, reset]);
 

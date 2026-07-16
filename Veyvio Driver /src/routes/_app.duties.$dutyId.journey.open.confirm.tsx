@@ -28,6 +28,15 @@ function OpenJourneyConfirmPage() {
       routeLabel={duty.routeName}
       backTo={`/duties/${dutyId}/journey/open`}
       backLabel="Back"
+      footer={
+        <Button
+          size="lg"
+          className="h-12 w-full font-bold uppercase tracking-widest"
+          onClick={() => void navigate({ to: "/duties/$dutyId/journey/open/readings", params: { dutyId } })}
+        >
+          Continue
+        </Button>
+      }
     >
       <div className="animate-in-up space-y-4">
         <header>
@@ -77,14 +86,6 @@ function OpenJourneyConfirmPage() {
             </div>
           )}
         </div>
-
-        <Button
-          size="lg"
-          className="h-12 w-full font-bold uppercase tracking-widest"
-          onClick={() => void navigate({ to: "/duties/$dutyId/journey/open/readings", params: { dutyId } })}
-        >
-          Continue
-        </Button>
       </div>
     </OpenJourneyShell>
   );

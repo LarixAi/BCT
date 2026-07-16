@@ -3,7 +3,8 @@ import { isActiveDutyRoute } from "@/domain/driver/nav-routes";
 
 /**
  * Duty context strip under the app chrome — not a second bottom tab bar.
- * Keeps Home reachable via main BottomNav while on a trip/duty.
+ * Keeps Home reachable via contextual chrome / journey controls while on a trip/duty.
+ * Primary BottomNav is hub-only and hidden on focused duty workflows.
  */
 export function DutySubnav({ dutyId }: { dutyId: string }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });

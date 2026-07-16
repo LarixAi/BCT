@@ -4,6 +4,7 @@ import { DELAY_REASON_LABELS, type DelayReason } from "@veyvio/ops";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { getHeadingStop, resolveJourneyIdForCommands } from "@/domain/journey/journey-helpers";
 import { formatTime } from "@/lib/utils";
 import { useDriverStore } from "@/store/driver";
@@ -37,7 +38,13 @@ function JourneyDelayPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!duty) return <p className="text-sm text-muted">Loading…</p>;
+  if (!duty) {
+    return (
+      <FocusedPageShell title="Report delay" backTo={`/duties/${dutyId}/journey/active`} backLabel="Journey">
+        <p className="text-sm text-muted">Loading…</p>
+      </FocusedPageShell>
+    );
+  }
 
   async function submit() {
     setSaving(true);
@@ -75,72 +82,73 @@ function JourneyDelayPage() {
     }
   }
 
+  const title = stop?.name.split("—")[0]?.trim() ?? duty.routeName;
+
   return (
-    <div className="animate-in-up space-y-4">
-      <header>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Report delay</p>
-        <h1 className="font-display text-xl font-extrabold">
-          {stop?.name.split("—")[0]?.trim() ?? duty.routeName}
-        </h1>
-        {stop ? (
-          <>
-            <p className="mt-1 text-sm text-muted">{stop.address}</p>
-            <p className="text-sm text-muted">Scheduled {formatTime(stop.plannedArrival)}</p>
-          </>
-        ) : (
-          <p className="mt-1 text-sm text-muted">No active stop — delay still records against this journey.</p>
-        )}
-      </header>
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Reason</p>
-        <div className="mt-2 space-y-2">
-          {REASONS.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setReason(r)}
-              className={`w-full rounded-md border px-3 py-3 text-left text-sm ${
-                reason === r ? "border-link bg-driver-blue-soft font-bold" : "border-border bg-card"
-              }`}
-            >
-              {DELAY_REASON_LABELS[r]}
-            </button>
-          ))}
+    <FocusedPageShell
+      title={title}
+      subtitle={
+        stop
+          ? `${stop.address} · Scheduled ${formatTime(stop.plannedArrival)}`
+          : "No active stop — delay still records against this journey."
+      }
+      backTo={`/duties/${dutyId}/journey/active`}
+      backLabel="Journey"
+      eyebrow="Report delay"
+      footer={
+        <div className="space-y-2">
+          <Button
+            size="lg"
+            className="h-12 w-full font-bold uppercase tracking-widest"
+            disabled={saving}
+            onClick={() => void submit()}
+          >
+            {saving ? "Sending…" : "Send delay to Operations"}
+          </Button>
+          <Button asChild variant="ghost" className="w-full text-muted">
+            <Link to={`/duties/${dutyId}/journey/active`}>Cancel</Link>
+          </Button>
         </div>
+      }
+    >
+      <div className="animate-in-up space-y-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Reason</p>
+          <div className="mt-2 space-y-2">
+            {REASONS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setReason(r)}
+                className={`w-full rounded-md border px-3 py-3 text-left text-sm ${
+                  reason === r ? "border-link bg-driver-blue-soft font-bold" : "border-border bg-card"
+                }`}
+              >
+                {DELAY_REASON_LABELS[r]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="delay-min">Estimated delay (minutes)</Label>
+          <Input id="delay-min" value={minutes} onChange={(e) => setMinutes(e.target.value)} className="h-12" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="delay-note">Note (optional)</Label>
+          <textarea
+            id="delay-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+            className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+          />
+        </div>
+        <label className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-3 text-sm">
+          <input type="checkbox" checked={assistance} onChange={(e) => setAssistance(e.target.checked)} />
+          Assistance required from Operations
+        </label>
+        {error ? <p className="text-sm text-vor">{error}</p> : null}
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="delay-min">Estimated delay (minutes)</Label>
-        <Input id="delay-min" value={minutes} onChange={(e) => setMinutes(e.target.value)} className="h-12" />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="delay-note">Note (optional)</Label>
-        <textarea
-          id="delay-note"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={2}
-          className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
-        />
-      </div>
-      <label className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-3 text-sm">
-        <input type="checkbox" checked={assistance} onChange={(e) => setAssistance(e.target.checked)} />
-        Assistance required from Operations
-      </label>
-      <p className="text-xs text-muted">
-        One delay.report command — used from Home, journey, and Messages shortcuts.
-      </p>
-      {error ? <p className="text-sm text-vor">{error}</p> : null}
-      <Button
-        size="lg"
-        className="h-12 w-full font-bold uppercase tracking-widest"
-        disabled={saving}
-        onClick={() => void submit()}
-      >
-        {saving ? "Sending…" : "Send delay to Operations"}
-      </Button>
-      <Button asChild variant="ghost" className="w-full">
-        <Link to={`/duties/${dutyId}/journey/active`}>Cancel</Link>
-      </Button>
-    </div>
+    </FocusedPageShell>
   );
 }

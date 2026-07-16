@@ -15,7 +15,7 @@ describe("assessSignOut", () => {
 
     expect(result.severity).toBe("blocked");
     expect(result.blockers.length).toBeGreaterThan(0);
-    expect(result.primaryAction?.href).toBe("/duties/duty_1");
+    expect(result.primaryAction?.href).toBe("/trips?dutyId=duty_1");
   });
 
   it("blocks sign out during vehicle check", () => {

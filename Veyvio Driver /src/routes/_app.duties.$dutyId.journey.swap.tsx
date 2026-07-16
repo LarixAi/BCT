@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   advanceSwap,
   createSwapRequest,
@@ -8,6 +8,7 @@ import {
 } from "@veyvio/ops";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { useDriverStore } from "@/store/driver";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
 import { canSeedOperationalDemo } from "@/platform/dev/dev-guards";
@@ -65,10 +66,15 @@ export const Route = createFileRoute("/_app/duties/$dutyId/journey/swap")({
   component: JourneySwapPage,
 });
 
+function SwapFooter({ children }: { children: ReactNode }) {
+  return <div className="space-y-2">{children}</div>;
+}
+
 function JourneySwapPage() {
   const { dutyId } = Route.useParams();
   const duty = useDriverStore((s) => s.getDuty(dutyId));
   const driverId = getSessionSnapshot().user?.id ?? "driver";
+  const journeyBack = `/duties/${dutyId}/journey/active`;
 
   const [swap, setSwap] = useState<VehicleSwapRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,64 +120,57 @@ function JourneySwapPage() {
   }
 
   if (!duty?.vehicle) {
-    return <p className="text-sm text-muted">No vehicle on this duty.</p>;
+    return (
+      <FocusedPageShell title="Vehicle swap" backTo={journeyBack} backLabel="Journey">
+        <p className="text-sm text-muted">No vehicle on this duty.</p>
+      </FocusedPageShell>
+    );
   }
 
   if (!swap) {
     return (
-      <div className="animate-in-up space-y-4">
-        <div className="rounded-md border border-warn/30 bg-warn/5 p-3">
-          <Badge variant="default" className="border-warn/40 bg-warn/10 text-warn">
-            Vehicle swap needed
-          </Badge>
-          <p className="mt-2 text-sm text-warn">
-            {duty.vehicle.registrationNumber} cannot continue. Request a controlled swap — Ops must approve a
-            replacement before you resume.
+      <FocusedPageShell
+        title="Vehicle swap needed"
+        subtitle={`${duty.vehicle.registrationNumber} cannot continue. Request a controlled swap — Ops must approve a replacement before you resume.`}
+        backTo={journeyBack}
+        backLabel="Journey"
+        eyebrow="Vehicle swap"
+        footer={
+          <SwapFooter>
+            <Button size="lg" className="h-12 w-full font-bold uppercase tracking-widest" onClick={startRequest}>
+              Request vehicle swap
+            </Button>
+            <Button asChild variant="ghost" className="w-full text-muted">
+              <Link to={journeyBack}>Back to journey</Link>
+            </Button>
+          </SwapFooter>
+        }
+      >
+        <div className="animate-in-up space-y-4">
+          <div className="rounded-md border border-warn/30 bg-warn/5 p-3">
+            <Badge variant="default" className="border-warn/40 bg-warn/10 text-warn">
+              Vehicle swap needed
+            </Badge>
+            <p className="mt-2 text-sm text-warn">
+              {duty.vehicle.registrationNumber} cannot continue. Request a controlled swap — Ops must approve a
+              replacement before you resume.
+            </p>
+          </div>
+          <p className="text-sm text-muted leading-relaxed">
+            Accepting a swap is not a one-tap continue. You will pause this journey, close the current vehicle,
+            verify the replacement, and complete a fresh walkaround.
           </p>
         </div>
-        <p className="text-sm text-muted leading-relaxed">
-          Accepting a swap is not a one-tap continue. You will pause this journey, close the current vehicle,
-          verify the replacement, and complete a fresh walkaround.
-        </p>
-        <Button size="lg" className="h-12 w-full font-bold uppercase tracking-widest" onClick={startRequest}>
-          Request vehicle swap
-        </Button>
-        <Button asChild variant="ghost" className="w-full">
-          <Link to={`/duties/${dutyId}/journey/active`}>Back to journey</Link>
-        </Button>
-      </div>
+      </FocusedPageShell>
     );
   }
 
   const copy = STEP_COPY[swap.status];
   const stepIndex = steps.indexOf(swap.status);
 
-  return (
-    <div className="animate-in-up space-y-4">
-      <header>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
-          Swap · step {Math.max(stepIndex, 0) + 1} of {steps.length}
-        </p>
-        <h1 className="font-display text-xl font-extrabold">{copy.title}</h1>
-        <p className="mt-1 text-sm text-muted">{copy.detail}</p>
-      </header>
-
-      <section className="rounded-xl border border-border bg-card p-4 text-sm space-y-2">
-        <p>
-          From <span className="font-mono font-bold">{swap.fromRegistration}</span>
-        </p>
-        {swap.replacementRegistration && (
-          <p>
-            To <span className="font-mono font-bold">{swap.replacementRegistration}</span>
-            {swap.assignmentVersion ? ` · assignment v${swap.assignmentVersion}` : ""}
-          </p>
-        )}
-        <p className="text-muted">{swap.reason}</p>
-      </section>
-
-      {error && <p className="text-sm text-vor">{error}</p>}
-
-      {canSeedOperationalDemo() && swap.status === "awaiting_ops" && (
+  const primaryAction = (() => {
+    if (canSeedOperationalDemo() && swap.status === "awaiting_ops") {
+      return (
         <Button
           size="lg"
           className="h-12 w-full font-bold uppercase tracking-widest"
@@ -184,9 +183,10 @@ function JourneySwapPage() {
         >
           Ops: identify replacement (demo)
         </Button>
-      )}
-
-      {canSeedOperationalDemo() && swap.status === "replacement_identified" && (
+      );
+    }
+    if (canSeedOperationalDemo() && swap.status === "replacement_identified") {
+      return (
         <Button
           size="lg"
           className="h-12 w-full font-bold uppercase tracking-widest"
@@ -202,15 +202,17 @@ function JourneySwapPage() {
         >
           Ops: approve replacement (demo)
         </Button>
-      )}
-
-      {swap.status === "approved" && (
+      );
+    }
+    if (swap.status === "approved") {
+      return (
         <Button size="lg" className="h-12 w-full font-bold uppercase tracking-widest" onClick={() => advance("paused")}>
           Pause journey on {swap.fromRegistration}
         </Button>
-      )}
-
-      {swap.status === "paused" && (
+      );
+    }
+    if (swap.status === "paused") {
+      return (
         <Button
           size="lg"
           className="h-12 w-full font-bold uppercase tracking-widest"
@@ -218,9 +220,10 @@ function JourneySwapPage() {
         >
           Close readings on old vehicle
         </Button>
-      )}
-
-      {swap.status === "old_vehicle_closed" && (
+      );
+    }
+    if (swap.status === "old_vehicle_closed") {
+      return (
         <Button
           size="lg"
           className="h-12 w-full font-bold uppercase tracking-widest"
@@ -228,9 +231,10 @@ function JourneySwapPage() {
         >
           Verify WX21 FYV assignment
         </Button>
-      )}
-
-      {swap.status === "replacement_verifying" && (
+      );
+    }
+    if (swap.status === "replacement_verifying") {
+      return (
         <Button
           size="lg"
           className="h-12 w-full font-bold uppercase tracking-widest"
@@ -238,10 +242,11 @@ function JourneySwapPage() {
         >
           Open walkaround for replacement
         </Button>
-      )}
-
-      {swap.status === "replacement_checking" && (
-        <div className="space-y-2">
+      );
+    }
+    if (swap.status === "replacement_checking") {
+      return (
+        <>
           <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
             <Link to="/checks">Complete vehicle check</Link>
           </Button>
@@ -254,18 +259,51 @@ function JourneySwapPage() {
               Mark check complete (demo)
             </Button>
           ) : null}
-        </div>
-      )}
-
-      {swap.status === "resumed" && (
+        </>
+      );
+    }
+    if (swap.status === "resumed") {
+      return (
         <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
-          <Link to={`/duties/${dutyId}/journey/active`}>Resume remaining journey</Link>
+          <Link to={journeyBack}>Resume remaining journey</Link>
         </Button>
-      )}
+      );
+    }
+    return null;
+  })();
 
-      <Button asChild variant="ghost" className="w-full">
-        <Link to={`/duties/${dutyId}/journey/active`}>Back to journey</Link>
-      </Button>
-    </div>
+  return (
+    <FocusedPageShell
+      title={copy.title}
+      subtitle={copy.detail}
+      backTo={journeyBack}
+      backLabel="Journey"
+      eyebrow={`Swap · step ${Math.max(stepIndex, 0) + 1} of ${steps.length}`}
+      footer={
+        <SwapFooter>
+          {primaryAction}
+          <Button asChild variant="ghost" className="w-full text-muted">
+            <Link to={journeyBack}>Back to journey</Link>
+          </Button>
+        </SwapFooter>
+      }
+    >
+      <div className="animate-in-up space-y-4">
+        <section className="rounded-xl border border-border bg-card p-4 text-sm space-y-2">
+          <p>
+            From <span className="font-mono font-bold">{swap.fromRegistration}</span>
+          </p>
+          {swap.replacementRegistration && (
+            <p>
+              To <span className="font-mono font-bold">{swap.replacementRegistration}</span>
+              {swap.assignmentVersion ? ` · assignment v${swap.assignmentVersion}` : ""}
+            </p>
+          )}
+          <p className="text-muted">{swap.reason}</p>
+        </section>
+
+        {error && <p className="text-sm text-vor">{error}</p>}
+      </div>
+    </FocusedPageShell>
   );
 }

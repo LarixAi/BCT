@@ -1,4 +1,5 @@
 import type { DutyDetail } from "@/types/duty";
+import { dutyVehicleCheckCleared } from "@/domain/duty/duty-check-release";
 
 export type DutyPrepStepId =
   | "acknowledge"
@@ -17,13 +18,11 @@ export interface DutyPrepStep {
 
 /** Ordered prep path: acknowledge → vehicle → check → clock-in → open journey. */
 export function buildDutyPrepSteps(duty: DutyDetail): DutyPrepStep[] {
-  const checkCleared =
-    duty.vehicleCheck.status === "cleared" && duty.vehicleCheck.canStartDuty;
-  const needsAck = ["published", "delivered", "viewed"].includes(duty.lifecycleStatus);
+  const checkCleared = dutyVehicleCheckCleared(duty);
   const ackDone = ["acknowledged", "ready", "in_progress", "completed"].includes(
     duty.lifecycleStatus,
   );
-  const vehicleDone = duty.vehicleVerified;
+  const vehicleDone = duty.vehicleVerified || checkCleared;
   const checkDone = checkCleared;
   const clockDone = Boolean(duty.clockedInAt);
   const journeyDone = duty.lifecycleStatus === "in_progress";

@@ -10,9 +10,15 @@ import { useSyncStore } from "@/platform/sync/outbox";
 
 const LOW_BATTERY_THRESHOLD = 15;
 
-export function AppOperationalBanners() {
+export function AppOperationalBanners({ flush = false }: { flush?: boolean }) {
   return (
-    <div className="mx-auto max-w-lg space-y-2 px-4 pt-2 empty:hidden">
+    <div
+      className={
+        flush
+          ? "space-y-2 empty:hidden"
+          : "mx-auto max-w-lg space-y-2 px-4 pt-2 empty:hidden"
+      }
+    >
       <BatteryLowBanner />
       <TripRecoveryBanner />
       <SyncNoticeBanner />

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { buildJourneyMapStops, estimateDriverPosition } from "@/domain/journey/journey-map";
+import {
+  buildJourneyMapStops,
+  estimateDriverPosition,
+  resolveDriverPosition,
+} from "@/domain/journey/journey-map";
 import { buildStopFingerprint } from "@/domain/journey/navigation-fingerprint";
 import { resolveCurrentStepIndex } from "@/domain/journey/osrm-instructions";
 import {
@@ -16,6 +20,7 @@ import {
   useNavigationStatus,
   useNavigationStore,
 } from "@/store/navigation";
+import { useVehicleMotionStore } from "@/store/vehicle-motion";
 
 export function useEnsureJourneyRoute(dutyId: string) {
   const duty = useDriverStore((state) => state.getDuty(dutyId));
@@ -44,10 +49,15 @@ export function useJourneyNavigation(dutyId: string) {
   const status = useNavigationStatus(dutyId);
   const loadRoute = useNavigationStore((state) => state.loadRoute);
 
+  const livePosition = useVehicleMotionStore((s) => s.lastPosition);
+
   const driverPosition = useMemo(() => {
-    if (!duty) return null;
-    return estimateDriverPosition(buildJourneyMapStops(duty));
-  }, [duty]);
+    if (!duty) return resolveDriverPosition(null, livePosition);
+    return resolveDriverPosition(
+      estimateDriverPosition(buildJourneyMapStops(duty)),
+      livePosition,
+    );
+  }, [duty, livePosition]);
 
   const currentStepIndex = useMemo(() => {
     if (!route) return 0;

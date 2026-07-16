@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { getHeadingStop, resolveJourneyIdForCommands } from "@/domain/journey/journey-helpers";
 import { formatTime } from "@/lib/utils";
 import { useDriverStore } from "@/store/driver";
@@ -41,7 +42,13 @@ function JourneyBreakPage() {
     return () => window.clearInterval(id);
   }, [duty?.activeBreak]);
 
-  if (!duty) return <p className="text-sm text-muted">Loading break…</p>;
+  if (!duty) {
+    return (
+      <FocusedPageShell title="Rest break" backTo={`/duties/${dutyId}/journey/active`} backLabel="Journey">
+        <p className="text-sm text-muted">Loading break…</p>
+      </FocusedPageShell>
+    );
+  }
 
   const breakState = duty.activeBreak;
   const minMinutes = breakState?.minMinutes ?? 30;
@@ -99,72 +106,79 @@ function JourneyBreakPage() {
   }
 
   return (
-    <div className="animate-in-up space-y-4">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Rest break</p>
-          <h1 className="font-display text-xl font-extrabold">
-            {breakState ? "Break in progress" : "Start rest break"}
-          </h1>
+    <FocusedPageShell
+      title={breakState ? "Break in progress" : "Start rest break"}
+      subtitle={
+        breakState
+          ? `On break · Company minimum ${minMinutes} min`
+          : "Confirm passengers are clear and the vehicle is secure first."
+      }
+      backTo={`/duties/${dutyId}/journey/active`}
+      backLabel="Journey"
+      eyebrow="Rest break"
+      footer={
+        <div className="space-y-2">
+          {breakState ? (
+            <Button
+              size="lg"
+              className="h-12 w-full font-bold uppercase tracking-widest"
+              disabled={acting !== null}
+              onClick={() => void endBreak()}
+            >
+              {acting === "end" ? "Ending break…" : "End break and resume"}
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              className="h-12 w-full font-bold uppercase tracking-widest"
+              disabled={acting !== null}
+              onClick={() => void startBreak()}
+            >
+              {acting === "start" ? "Starting…" : "Start break"}
+            </Button>
+          )}
+          <Button asChild variant="ghost" className="w-full text-muted">
+            <Link to={`/duties/${dutyId}/journey/active`}>Back to journey</Link>
+          </Button>
         </div>
+      }
+    >
+      <div className="animate-in-up space-y-4">
         {breakState ? (
-          <Badge variant="default" className="border-warn/40 bg-warn/10 text-warn">
-            On break
-          </Badge>
-        ) : null}
-      </header>
+          <section className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Break started</p>
+                <p className="mt-1 font-display text-3xl font-extrabold tabular-nums">{startedLabel}</p>
+              </div>
+              <Badge variant="default" className="border-warn/40 bg-warn/10 text-warn">
+                On break
+              </Badge>
+            </div>
+            <p className="mt-2 text-sm font-semibold">Elapsed {elapsedLabel(breakState.startedAt, tick)}</p>
+            <p className="mt-2 text-sm text-muted">
+              Company minimum {minMinutes} min
+              {next
+                ? ` · Next stop ${next.name.split("—")[0]?.trim()} at ${formatTime(next.plannedArrival)}`
+                : ""}
+            </p>
+            {breakState.locationLabel ? (
+              <p className="mt-2 text-xs text-muted">{breakState.locationLabel}</p>
+            ) : null}
+          </section>
+        ) : (
+          <section className="rounded-xl border border-border bg-card p-4 text-sm text-muted">
+            Confirm passengers are off the vehicle (or journey allows a break), the vehicle is secure, and
+            you are in a safe place before starting the timer. Elapsed time is saved to the duty record.
+          </section>
+        )}
 
-      {breakState ? (
-        <section className="rounded-xl border border-border bg-card p-4">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Break started</p>
-          <p className="mt-1 font-display text-3xl font-extrabold tabular-nums">{startedLabel}</p>
-          <p className="mt-2 text-sm font-semibold">Elapsed {elapsedLabel(breakState.startedAt, tick)}</p>
-          <p className="mt-2 text-sm text-muted">
-            Company minimum {minMinutes} min
-            {next
-              ? ` · Next stop ${next.name.split("—")[0]?.trim()} at ${formatTime(next.plannedArrival)}`
-              : ""}
-          </p>
-          {breakState.locationLabel ? (
-            <p className="mt-2 text-xs text-muted">{breakState.locationLabel}</p>
-          ) : null}
-        </section>
-      ) : (
-        <section className="rounded-xl border border-border bg-card p-4 text-sm text-muted">
-          Confirm passengers are off the vehicle (or journey allows a break), the vehicle is secure, and
-          you are in a safe place before starting the timer. Elapsed time is saved to the duty record.
-        </section>
-      )}
+        <div className="rounded-md border border-ok/30 bg-ok/5 p-3 text-sm text-ok">
+          Vehicle secure · {duty.vehicle?.registrationNumber ?? "No vehicle"}
+        </div>
 
-      <div className="rounded-md border border-ok/30 bg-ok/5 p-3 text-sm text-ok">
-        Vehicle secure · {duty.vehicle?.registrationNumber ?? "No vehicle"}
+        {error ? <p className="text-sm text-vor">{error}</p> : null}
       </div>
-
-      {error ? <p className="text-sm text-vor">{error}</p> : null}
-
-      {breakState ? (
-        <Button
-          size="lg"
-          className="h-12 w-full font-bold uppercase tracking-widest"
-          disabled={acting !== null}
-          onClick={() => void endBreak()}
-        >
-          {acting === "end" ? "Ending break…" : "End break and resume"}
-        </Button>
-      ) : (
-        <Button
-          size="lg"
-          className="h-12 w-full font-bold uppercase tracking-widest"
-          disabled={acting !== null}
-          onClick={() => void startBreak()}
-        >
-          {acting === "start" ? "Starting…" : "Start break"}
-        </Button>
-      )}
-
-      <Button asChild variant="ghost" className="w-full">
-        <Link to={`/duties/${dutyId}/journey/active`}>Back to journey</Link>
-      </Button>
-    </div>
+    </FocusedPageShell>
   );
 }

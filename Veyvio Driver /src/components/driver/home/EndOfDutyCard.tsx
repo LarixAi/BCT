@@ -65,7 +65,7 @@ export function BlockedCard({ summary }: { summary: DriverHomeSummary }) {
       <div className="mt-4 flex flex-col gap-2">
         {dutyId ? (
           <Button asChild variant="outline" className="h-11 w-full border-vor text-vor">
-            <Link to="/duties/$dutyId" params={{ dutyId }}>
+            <Link to="/trips" search={{ demo: "normal", dutyId }}>
               View blocked-duty details
             </Link>
           </Button>

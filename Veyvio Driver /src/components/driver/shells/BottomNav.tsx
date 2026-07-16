@@ -1,96 +1,97 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Home, Map, ClipboardCheck, MessageSquare, MoreHorizontal } from "lucide-react";
-import type { ReactNode } from "react";
-import {
-  isChecksNavActive,
-  isHomeRoute,
-  isMessagesNavActive,
-  isJourneyWizardRoute,
-  isMoreNavActive,
-  isNavRoute,
-  isTripsNavActive,
-} from "@/domain/driver/nav-routes";
 import { useUnreadMessageCount } from "@/store/messages";
+import { DRIVER_NAVIGATION_ITEMS } from "@/domain/driver/navigation-items";
+import {
+  getDriverPrimaryTab,
+  shouldShowDriverBottomNav,
+} from "@/domain/driver/navigation-policy";
+import { cn } from "@/lib/utils";
 
 /**
- * Always the same five destinations — never strand the driver on a duty-only bottom bar.
- * Duty hub / passengers / vehicle live in DutySubnav under the chrome header.
+ * Five-tab Driver hub navigation.
+ * Visibility is hub-only — see `shouldShowDriverBottomNav`.
+ *
+ * `docked` — sit in normal document flow (workspace hubs already flex a
+ * reserved row). Default is fixed overlay for padded list/home shells.
  */
-export function BottomNav() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+export function BottomNav({ docked = false }: { docked?: boolean } = {}) {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
   const unreadMessages = useUnreadMessageCount();
 
-  if (isJourneyWizardRoute(pathname) || isNavRoute(pathname)) return null;
+  if (!shouldShowDriverBottomNav(pathname)) {
+    return null;
+  }
+
+  const activeTab = getDriverPrimaryTab(pathname);
 
   return (
     <nav
       aria-label="Main navigation"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-accent text-white"
+      className={cn(
+        docked
+          ? "relative z-50 shrink-0"
+          : "fixed inset-x-0 bottom-0 z-50",
+        "border-t border-border/80 bg-white/95",
+        "shadow-[0_-10px_30px_rgba(11,21,38,0.07)] backdrop-blur-xl",
+      )}
     >
-      <div className="mx-auto flex max-w-lg items-end justify-around px-1 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-1.5">
-        <NavTab to="/" label="Home" icon={<Home className="size-5" />} active={isHomeRoute(pathname)} />
-        <NavTab
-          to="/trips"
-          label="Duties"
-          icon={<Map className="size-5" />}
-          active={isTripsNavActive(pathname)}
-        />
-        <NavTab
-          to="/checks"
-          label="Checks"
-          icon={<ClipboardCheck className="size-5" />}
-          active={isChecksNavActive(pathname)}
-        />
-        <NavTab
-          to="/messages"
-          label="Messages"
-          icon={<MessageSquare className="size-5" />}
-          active={isMessagesNavActive(pathname)}
-          badge={unreadMessages}
-        />
-        <NavTab
-          to="/more"
-          label="More"
-          icon={<MoreHorizontal className="size-5" />}
-          active={isMoreNavActive(pathname)}
-        />
+      <div
+        className={cn(
+          "mx-auto grid max-w-lg grid-cols-5 px-2 pt-1.5",
+          "pb-[max(env(safe-area-inset-bottom),0.65rem)]",
+        )}
+      >
+        {DRIVER_NAVIGATION_ITEMS.map((item) => {
+          const active = activeTab === item.id;
+          const badge = item.id === "messages" ? unreadMessages : 0;
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.id}
+              to={item.to}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "relative flex min-h-[60px] min-w-0 flex-col",
+                "items-center justify-center gap-1 rounded-xl px-1",
+                "text-[11px] font-semibold transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2",
+                "focus-visible:ring-link focus-visible:ring-offset-2",
+                active ? "text-link" : "text-muted hover:text-foreground",
+              )}
+            >
+              <span
+                className={cn(
+                  "relative grid size-8 place-items-center rounded-xl",
+                  "transition-colors",
+                  active && "bg-driver-blue-soft",
+                )}
+              >
+                <Icon className="size-[22px]" aria-hidden />
+                {badge > 0 ? (
+                  <span
+                    className={cn(
+                      "absolute -right-2 -top-1 grid min-w-5",
+                      "h-5 place-items-center rounded-full",
+                      "border-2 border-white bg-link px-1",
+                      "text-[10px] font-extrabold text-white",
+                    )}
+                    aria-label={`${badge} unread messages`}
+                  >
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                ) : null}
+              </span>
+              <span className="truncate">{item.label}</span>
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );
 }
 
-function NavTab({
-  to,
-  label,
-  icon,
-  active,
-  badge = 0,
-}: {
-  to: string;
-  label: string;
-  icon: ReactNode;
-  active: boolean;
-  badge?: number;
-}) {
-  return (
-    <Link
-      to={to}
-      className={`relative flex min-h-[52px] min-w-[56px] flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors ${
-        active ? "bg-link/20 text-link" : "text-white/60 hover:text-white"
-      }`}
-    >
-      {active ? (
-        <span className="absolute left-1/2 top-0.5 h-1 w-5 -translate-x-1/2 rounded-full bg-link" aria-hidden />
-      ) : null}
-      <span className="relative">
-        {icon}
-        {badge > 0 && (
-          <span className="absolute -right-2 -top-1 grid min-w-4 place-items-center rounded-full bg-ok px-1 text-[8px] font-bold text-accent">
-            {badge > 9 ? "9+" : badge}
-          </span>
-        )}
-      </span>
-      {label}
-    </Link>
-  );
-}
+/** @deprecated use BottomNav — same component */
+export const DriverBottomNav = BottomNav;

@@ -28,8 +28,41 @@ function EndJourneyCompletePage() {
       routeLabel={duty.routeName}
       backTo={`/duties/${dutyId}`}
       backLabel="Duty"
+      footer={
+        <div className="space-y-2">
+          {next ? (
+            <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
+              <Link
+                to={`/duties/${dutyId}/journey/open`}
+                onClick={() => setActiveJourney(next.journeyId ?? next.id)}
+              >
+                Start next journey
+              </Link>
+            </Button>
+          ) : null}
+
+          <Button
+            asChild
+            size="lg"
+            className="h-12 w-full font-bold uppercase tracking-widest"
+            variant={next ? "outline" : "default"}
+          >
+            <Link to={`/duties/${dutyId}`}>Duty overview</Link>
+          </Button>
+
+          {!next && !handbackDone ? (
+            <Button asChild variant="ghost" className="w-full">
+              <Link to={`/duties/${dutyId}/journey/return`}>Return to depot</Link>
+            </Button>
+          ) : null}
+
+          <Button asChild variant="ghost" className="w-full text-muted">
+            <Link to="/">Home</Link>
+          </Button>
+        </div>
+      }
     >
-      <div className="flex min-h-[360px] flex-col items-center justify-center text-center animate-in-up">
+      <div className="flex min-h-[240px] flex-col items-center justify-center text-center animate-in-up">
         <div className="grid size-12 place-items-center rounded-full bg-ok/10 text-ok">
           <CheckCircle2 className="size-7" strokeWidth={2.5} />
         </div>
@@ -50,31 +83,6 @@ function EndJourneyCompletePage() {
             <p className="mt-2 text-muted">Next: {next.name}</p>
           ) : null}
         </section>
-
-        {next ? (
-          <Button asChild size="lg" className="mt-6 h-12 w-full font-bold uppercase tracking-widest">
-            <Link
-              to={`/duties/${dutyId}/journey/open`}
-              onClick={() => setActiveJourney(next.journeyId ?? next.id)}
-            >
-              Start next journey
-            </Link>
-          </Button>
-        ) : null}
-
-        <Button asChild size="lg" className="mt-3 h-12 w-full font-bold uppercase tracking-widest" variant={next ? "outline" : "default"}>
-          <Link to={`/duties/${dutyId}`}>Duty overview</Link>
-        </Button>
-
-        {!next && !handbackDone ? (
-          <Button asChild variant="ghost" className="mt-2 w-full">
-            <Link to={`/duties/${dutyId}/journey/return`}>Return to depot</Link>
-          </Button>
-        ) : null}
-
-        <Button asChild variant="ghost" className="mt-1 w-full text-muted">
-          <Link to="/">Home</Link>
-        </Button>
       </div>
     </JourneyFlowShell>
   );

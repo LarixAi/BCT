@@ -99,6 +99,51 @@ function EndJourneyConfirmPage() {
       routeLabel={activeJourney?.name ?? duty.routeName}
       backTo={`/duties/${dutyId}/journey/end`}
       backLabel="Back"
+      footer={
+        <div className="space-y-2">
+          <Button
+            size="lg"
+            className="h-12 w-full font-bold uppercase tracking-widest"
+            disabled={!ready || submitting}
+            onClick={async () => {
+              setSubmitting(true);
+              try {
+                const completed: VehicleHandbackRecord | undefined = endsCustody
+                  ? {
+                      ...effectiveHandback,
+                      completedAt: new Date().toISOString(),
+                      completedBy: getSessionSnapshot().user?.id ?? "driver",
+                    }
+                  : undefined;
+                setEndJourneyDraft(dutyId, {
+                  odometer: draft?.odometer ?? "",
+                  fuelLevel: completed?.fuelOrChargeStatus ?? draft?.fuelLevel ?? "",
+                  handoverNote: note,
+                  handback: completed,
+                });
+                await useDriverStore.getState().completeEndJourney(dutyId, {
+                  withHandback: endsCustody,
+                });
+                void navigate({ to: "/duties/$dutyId/journey/end/complete", params: { dutyId } });
+              } finally {
+                setSubmitting(false);
+              }
+            }}
+          >
+            {endsCustody ? "Complete handback & end journey" : "End journey"}
+          </Button>
+          {!ready && blockers.length > 0 && (
+            <div className="rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-sm text-warn">
+              <p className="font-bold">Still needed</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {blockers.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      }
     >
       <div className="animate-in-up space-y-4">
         <header>
@@ -209,47 +254,6 @@ function EndJourneyConfirmPage() {
             placeholder="Anything Operations should know about this journey."
           />
         </div>
-        <Button
-          size="lg"
-          className="h-12 w-full font-bold uppercase tracking-widest"
-          disabled={!ready || submitting}
-          onClick={async () => {
-            setSubmitting(true);
-            try {
-              const completed: VehicleHandbackRecord | undefined = endsCustody
-                ? {
-                    ...effectiveHandback,
-                    completedAt: new Date().toISOString(),
-                    completedBy: getSessionSnapshot().user?.id ?? "driver",
-                  }
-                : undefined;
-              setEndJourneyDraft(dutyId, {
-                odometer: draft?.odometer ?? "",
-                fuelLevel: completed?.fuelOrChargeStatus ?? draft?.fuelLevel ?? "",
-                handoverNote: note,
-                handback: completed,
-              });
-              await useDriverStore.getState().completeEndJourney(dutyId, {
-                withHandback: endsCustody,
-              });
-              void navigate({ to: "/duties/$dutyId/journey/end/complete", params: { dutyId } });
-            } finally {
-              setSubmitting(false);
-            }
-          }}
-        >
-          {endsCustody ? "Complete handback & end journey" : "End journey"}
-        </Button>
-        {!ready && blockers.length > 0 && (
-          <div className="rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-sm text-warn">
-            <p className="font-bold">Still needed</p>
-            <ul className="mt-1 list-disc space-y-0.5 pl-4">
-              {blockers.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </JourneyFlowShell>
   );

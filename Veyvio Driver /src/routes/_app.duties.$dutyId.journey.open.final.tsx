@@ -50,6 +50,16 @@ function OpenJourneyFinalPage() {
       routeLabel={duty.routeName}
       backTo={`/duties/${dutyId}/journey/open/readings`}
       backLabel="Back"
+      footer={
+        <Button
+          size="lg"
+          className="h-12 w-full font-bold uppercase tracking-widest"
+          disabled={!confirmed || opening}
+          onClick={() => void handleOpen()}
+        >
+          {opening ? "Opening…" : "Open journey"}
+        </Button>
+      }
     >
       <div className="animate-in-up space-y-4">
         <header>
@@ -82,15 +92,6 @@ function OpenJourneyFinalPage() {
           />
           I confirm the vehicle is safe and ready for this journey.
         </label>
-
-        <Button
-          size="lg"
-          className="h-12 w-full font-bold uppercase tracking-widest"
-          disabled={!confirmed || opening}
-          onClick={() => void handleOpen()}
-        >
-          {opening ? "Opening…" : "Open journey"}
-        </Button>
       </div>
     </OpenJourneyShell>
   );

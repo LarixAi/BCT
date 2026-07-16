@@ -28,7 +28,32 @@ function OpenJourneyReadinessPage() {
 
   if (readiness.blocked) {
     return (
-      <OpenJourneyShell step={1} routeLabel={routeLabel} backTo={backTo} backLabel="Back to trip">
+      <OpenJourneyShell
+        step={1}
+        routeLabel={routeLabel}
+        backTo={backTo}
+        backLabel="Back to trip"
+        footer={
+          <div className="space-y-2">
+            <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
+              <Link to="/trips" search={{ demo: "normal", dutyId }}>
+                Open on Duties
+              </Link>
+            </Button>
+            <p className="text-center text-xs text-muted">
+              Finish prep on Duties: acknowledge, vehicle, check, then clock in.
+            </p>
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/checks" search={{ demo: "normal" }}>
+                Open vehicle check
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" className="w-full text-muted">
+              <Link to={backTo}>Back to trip</Link>
+            </Button>
+          </div>
+        }
+      >
         <div className="animate-in-up space-y-4">
           <header>
             <h1 className="font-display text-2xl font-extrabold tracking-tight">Journey cannot open yet</h1>
@@ -50,26 +75,27 @@ function OpenJourneyReadinessPage() {
               <ReadinessRow key={item.id} label={item.label} detail={item.detail} passed={item.passed} />
             ))}
           </div>
-
-          <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
-            <Link to={`/duties/${dutyId}`}>Go to Duty Hub</Link>
-          </Button>
-          <p className="text-center text-xs text-muted">
-            Finish prep on the Duty Hub: acknowledge, vehicle, check, then clock in.
-          </p>
-          <Button asChild variant="outline" className="w-full">
-            <Link to="/checks">Open vehicle check</Link>
-          </Button>
-          <Button asChild variant="ghost" className="w-full text-muted">
-            <Link to={backTo}>Back to trip</Link>
-          </Button>
         </div>
       </OpenJourneyShell>
     );
   }
 
   return (
-    <OpenJourneyShell step={1} routeLabel={routeLabel} backTo={backTo} backLabel="Back to trip">
+    <OpenJourneyShell
+      step={1}
+      routeLabel={routeLabel}
+      backTo={backTo}
+      backLabel="Back to trip"
+      footer={
+        <Button
+          size="lg"
+          className="h-12 w-full font-bold uppercase tracking-widest"
+          onClick={() => void navigate({ to: "/duties/$dutyId/journey/open/confirm", params: { dutyId } })}
+        >
+          Continue
+        </Button>
+      }
+    >
       <div className="animate-in-up space-y-4">
         <header>
           <h1 className="font-display text-2xl font-extrabold tracking-tight">Journey readiness</h1>
@@ -84,14 +110,6 @@ function OpenJourneyReadinessPage() {
             <ReadinessRow key={item.id} label={item.label} detail={item.detail} passed={item.passed} />
           ))}
         </div>
-
-        <Button
-          size="lg"
-          className="h-12 w-full font-bold uppercase tracking-widest"
-          onClick={() => void navigate({ to: "/duties/$dutyId/journey/open/confirm", params: { dutyId } })}
-        >
-          Continue
-        </Button>
       </div>
     </OpenJourneyShell>
   );

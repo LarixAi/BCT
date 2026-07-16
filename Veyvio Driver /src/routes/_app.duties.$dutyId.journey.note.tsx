@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { getHeadingStop, resolveJourneyIdForCommands } from "@/domain/journey/journey-helpers";
 import { formatTime } from "@/lib/utils";
 import { useDriverStore } from "@/store/driver";
@@ -23,7 +24,13 @@ function JourneyNotePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!duty) return null;
+  if (!duty) {
+    return (
+      <FocusedPageShell title="Journey note" backTo={`/duties/${dutyId}/journey/active`} backLabel="Journey">
+        <p className="text-sm text-muted">Loading…</p>
+      </FocusedPageShell>
+    );
+  }
 
   async function save() {
     const body = note.trim();
@@ -58,53 +65,60 @@ function JourneyNotePage() {
   }
 
   return (
-    <div className="animate-in-up space-y-4">
-      <header>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Journey note</p>
-        <h1 className="font-display text-xl font-extrabold">{duty.routeName}</h1>
-        <p className="mt-1 text-sm text-muted">Saved to the outbox and synced when online</p>
-      </header>
-      <div className="space-y-2">
-        <Label htmlFor="note">Note</Label>
-        <textarea
-          id="note"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={4}
-          className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
-          placeholder="What should Operations know about this journey?"
-        />
-      </div>
-      {stop && (
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Attach to stop</p>
-          <div className="mt-2 rounded-md border-2 border-link bg-driver-blue-soft p-3 text-sm font-semibold">
-            {stop.name.split("—")[0]?.trim()} · {formatTime(stop.plannedArrival)}
+    <FocusedPageShell
+      title={duty.routeName}
+      subtitle="Saved to the outbox and synced when online"
+      backTo={`/duties/${dutyId}/journey/active`}
+      backLabel="Journey"
+      eyebrow="Journey note"
+      footer={
+        <div className="space-y-2">
+          <Button
+            size="lg"
+            className="h-12 w-full font-bold uppercase tracking-widest"
+            disabled={saving || !note.trim()}
+            onClick={() => void save()}
+          >
+            {saving ? "Saving…" : "Save note"}
+          </Button>
+          <Button asChild variant="ghost" className="w-full text-muted">
+            <Link to={`/duties/${dutyId}/journey/active`}>Cancel</Link>
+          </Button>
+        </div>
+      }
+    >
+      <div className="animate-in-up space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="note">Note</Label>
+          <textarea
+            id="note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={4}
+            className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+            placeholder="What should Operations know about this journey?"
+          />
+        </div>
+        {stop && (
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Attach to stop</p>
+            <div className="mt-2 rounded-md border-2 border-link bg-driver-blue-soft p-3 text-sm font-semibold">
+              {stop.name.split("—")[0]?.trim()} · {formatTime(stop.plannedArrival)}
+            </div>
           </div>
-        </div>
-      )}
-      {duty.journeyNotes && duty.journeyNotes.length > 0 ? (
-        <div className="rounded-md border border-border bg-card p-3 text-sm">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Saved on this duty</p>
-          <ul className="mt-2 space-y-1 text-muted">
-            {duty.journeyNotes.slice(-3).map((n) => (
-              <li key={n.id}>· {n.body}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {error ? <p className="text-sm text-vor">{error}</p> : null}
-      <Button
-        size="lg"
-        className="h-12 w-full font-bold uppercase tracking-widest"
-        disabled={saving || !note.trim()}
-        onClick={() => void save()}
-      >
-        {saving ? "Saving…" : "Save note"}
-      </Button>
-      <Button asChild variant="ghost" className="w-full">
-        <Link to={`/duties/${dutyId}/journey/active`}>Cancel</Link>
-      </Button>
-    </div>
+        )}
+        {duty.journeyNotes && duty.journeyNotes.length > 0 ? (
+          <div className="rounded-md border border-border bg-card p-3 text-sm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Saved on this duty</p>
+            <ul className="mt-2 space-y-1 text-muted">
+              {duty.journeyNotes.slice(-3).map((n) => (
+                <li key={n.id}>· {n.body}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {error ? <p className="text-sm text-vor">{error}</p> : null}
+      </div>
+    </FocusedPageShell>
   );
 }

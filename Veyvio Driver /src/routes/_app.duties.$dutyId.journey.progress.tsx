@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { TripRouteTimeline } from "@/components/driver/trips/TripRouteTimeline";
 import { stopProgressLabel, stopsWithProgress } from "@/domain/journey/journey-helpers";
 import { useDriverStore } from "@/store/driver";
@@ -13,22 +14,39 @@ export const Route = createFileRoute("/_app/duties/$dutyId/journey/progress")({
 function JourneyProgressPage() {
   const { dutyId } = Route.useParams();
   const duty = useDriverStore((s) => s.getDuty(dutyId));
-  if (!duty) return null;
+
+  if (!duty) {
+    return (
+      <FocusedPageShell title="Stop progress" backTo={`/duties/${dutyId}/journey/active`} backLabel="Journey">
+        <p className="text-sm text-muted">Loading…</p>
+      </FocusedPageShell>
+    );
+  }
 
   return (
-    <div className="animate-in-up space-y-4">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Stop progress</p>
-          <h1 className="font-display text-xl font-extrabold">{duty.routeName} · {stopProgressLabel(duty)}</h1>
-          <p className="mt-1 text-sm text-muted">Depot start → depot return</p>
+    <FocusedPageShell
+      title={`${duty.routeName} · ${stopProgressLabel(duty)}`}
+      subtitle="Depot start → depot return"
+      backTo={`/duties/${dutyId}/journey/active`}
+      backLabel="Journey"
+      eyebrow="Stop progress"
+      footer={
+        <div className="space-y-2">
+          <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
+            <Link to={`/duties/${dutyId}/nav`}>Open navigation</Link>
+          </Button>
+          <Button asChild variant="ghost" className="w-full text-muted">
+            <Link to={`/duties/${dutyId}/journey/active`}>Back to journey</Link>
+          </Button>
         </div>
-        <Badge variant="ok">On time</Badge>
-      </header>
-      <TripRouteTimeline stops={stopsWithProgress(duty)} title="Full route with addresses" />
-      <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
-        <Link to={`/duties/${dutyId}/nav`}>Open navigation</Link>
-      </Button>
-    </div>
+      }
+    >
+      <div className="animate-in-up space-y-4">
+        <div className="flex justify-end">
+          <Badge variant="ok">On time</Badge>
+        </div>
+        <TripRouteTimeline stops={stopsWithProgress(duty)} title="Full route with addresses" />
+      </div>
+    </FocusedPageShell>
   );
 }

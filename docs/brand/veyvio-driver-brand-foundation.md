@@ -82,10 +82,10 @@ Use the campaign line on splash, welcome, about. Use the master promise on chrom
 
 | Role | Name | Hex | Use |
 |------|------|-----|-----|
-| Chrome / splash | Veyvio Midnight | `#0B1526` | Header, bottom nav, splash background, theme-color |
+| Chrome / splash | Veyvio Midnight | `#0B1526` | Header, splash background, theme-color |
 | Primary Driver accent | Driver Blue | `#2F6BFF` | Active tabs, rails, CTAs on brand surfaces, links |
 | Lockup sublabel | Driver Sky | `#8EC5FF` | `DRIVER` under `VEYVIO`, depots labels on dark |
-| Soft fill | Driver Blue soft | `#EFF6FF` | Selected cards, “heading to” panels |
+| Soft fill | Driver Blue soft | `#EFF6FF` | Selected cards, hub tab wells, “heading to” panels |
 | Page | Cool grey | `#F5F7FA` | In-app content background |
 | Ready | — | `#178C4B` | Cleared / ok |
 | Attention | — | `#D97706` | Due / warn |
@@ -130,12 +130,12 @@ Clear, calm, direct — like a strong transport supervisor on a busy shift.
 
 1. **Next action before noise** — one clear primary CTA
 2. **Status before statistics** — blockers and due work before dashboards
-3. **Home always reachable** — main bottom nav stays (Home · Trips · Checks · Messages · More); duty sections are a top strip, not a second bottom bar
+3. **Home always reachable on hubs** — light bottom nav on five primary hubs only (Home · Duties · Checks · Messages · More); hidden on focused workflows; duty sections are a top strip, not a second bottom bar
 4. **Evidence before assumption** — defects, delays, drop-offs leave a record
 5. **Large practical controls** — gloves, outdoor light, one-hand use
 6. **Offline / sync visible** — sync badge always honest
 7. **Safety-critical never buried**
-8. **Full-bleed only for focus flows** — open/end journey wizards and map nav hide chrome
+8. **Full-bleed only for focus flows** — open/end journey wizards and map nav hide chrome; hub canvases keep hub tabs
 
 ---
 
@@ -143,12 +143,14 @@ Clear, calm, direct — like a strong transport supervisor on a busy shift.
 
 | Layer | Role |
 |-------|------|
-| `AppChromeHeader` | Midnight bar, Driver Blue top rail, VEYVIO/DRIVER lockup, depot, sync |
-| `DutySubnav` | When on a duty: Hub / Journey / Route / Passengers / Vehicle / Help (+ Home shortcut) |
-| Main content | Max-width phone column |
-| `BottomNav` | Always the five main tabs (hidden only on nav / journey open|end) |
+| Hub shells | Home / More: Driver Blue status strip + quiet lockup (no Midnight chrome). Duties / Checks / Messages: full workspace canvas + adaptive sheet |
+| `AppChromeHeader` | Midnight + Driver Blue rail on **focused** routes only (settings detail, check wizards, duty hub chrome screens) |
+| `DutySubnav` | When on a duty detail: Duty / Journey / … under Midnight chrome (not a second bottom bar) |
+| Main content | Max-width phone column (hubs may be full-bleed) |
+| `BottomNav` | Light five-tab bar on **primary hubs only** (`/`, `/trips`, `/checks`, `/messages`, `/more`); label **Duties** (URL may stay `/trips`). Hidden on nested / focused workflows |
 
-Do **not** replace the main bottom bar with a duty-only tab set that strands the driver with no Home.
+Do **not** show hub tabs inside journey wizards, map nav, check flows, conversations, or More settings subpages — use contextual Back / Home instead.
+Do **not** replace the hub tab set with a duty-only bar that hides Home on primary hubs.
 
 ---
 
@@ -172,6 +174,9 @@ Cross-app events and ops commands stay shared; **brand chrome does not**.
 | Copy constants | `Veyvio Driver /src/components/brand/brand-copy.ts` |
 | Lockup sizes / hex | `Veyvio Driver /src/components/brand/brand-lockup.ts` |
 | Wordmark UI | `BrandWordmark` / `BrandWordmarkGraphic` / `SplashBrandMark` |
+| Hub nav policy | `Veyvio Driver /src/domain/driver/navigation-policy.ts` |
+| Phone surfaces inventory | [veyvio-driver-phone-surfaces.md](./veyvio-driver-phone-surfaces.md) |
+| Visual phone reference | [canvases/veyvio-driver-brand-phone.canvas.tsx](./canvases/veyvio-driver-brand-phone.canvas.tsx) |
 | CSS tokens | `Veyvio Driver /src/styles.css` |
 | Splash / Capacitor | `capacitor.config.ts` (`backgroundColor: #0B1526`) |
 | Shell | `AppShell`, `AppChromeHeader`, `BottomNav`, `DutySubnav` |

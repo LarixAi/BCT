@@ -17,7 +17,7 @@ const statusVariant: Record<string, "default" | "primary" | "ok" | "warn"> = {
 
 export function DutyCard({ duty }: { duty: DutySummary }) {
   return (
-    <Link to="/duties/$dutyId" params={{ dutyId: duty.id }}>
+    <Link to="/trips" search={{ demo: "normal", dutyId: duty.id }}>
       <Card className="transition-shadow hover:shadow-md">
         <CardHeader className="flex-row items-start justify-between gap-2 space-y-0">
           <div>

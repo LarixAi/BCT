@@ -1,27 +1,24 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { cn } from "@/lib/utils";
 
 export function MoreSubpageLayout({
   title,
   children,
   backTo = "/more",
+  eyebrow,
 }: {
   title: string;
   children: ReactNode;
   backTo?: string;
+  eyebrow?: string;
 }) {
   return (
-    <div className="animate-in-up space-y-4 pb-8">
-      <header>
-        <Link to={backTo} className="text-sm text-link">
-          ‹ More
-        </Link>
-        <h1 className="mt-2 font-display text-xl font-extrabold tracking-tight">{title}</h1>
-      </header>
-      {children}
-    </div>
+    <FocusedPageShell title={title} backTo={backTo} backLabel="More" eyebrow={eyebrow}>
+      <div className="animate-in-up space-y-4">{children}</div>
+    </FocusedPageShell>
   );
 }
 

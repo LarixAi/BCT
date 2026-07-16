@@ -20,8 +20,18 @@ function OpenJourneyCompletePage() {
     : new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   return (
-    <OpenJourneyShell step={4} routeLabel={duty.routeName} backTo="/" backLabel="Home">
-      <div className="flex min-h-[380px] animate-in-up flex-col items-center justify-center text-center">
+    <OpenJourneyShell
+      step={4}
+      routeLabel={duty.routeName}
+      backTo="/"
+      backLabel="Home"
+      footer={
+        <Button asChild size="lg" className="h-12 w-full font-bold uppercase tracking-widest">
+          <Link to={`/duties/${dutyId}/journey/active`}>Go to active journey</Link>
+        </Button>
+      }
+    >
+      <div className="flex min-h-[280px] animate-in-up flex-col items-center justify-center text-center">
         <div className="grid size-12 place-items-center rounded-full bg-ok/10 text-ok">
           <CheckCircle2 className="size-7" strokeWidth={2.5} />
         </div>
@@ -30,9 +40,6 @@ function OpenJourneyCompletePage() {
           {duty.routeName} is now in service on {duty.vehicle?.registrationNumber ?? "your vehicle"}. Your duty
           record started at {openedAt}.
         </p>
-        <Button asChild size="lg" className="mt-6 h-12 w-full font-bold uppercase tracking-widest">
-          <Link to={`/duties/${dutyId}/journey/active`}>Go to active journey</Link>
-        </Button>
       </div>
     </OpenJourneyShell>
   );

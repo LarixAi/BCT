@@ -38,6 +38,20 @@ function OpenJourneyReadingsPage() {
       routeLabel={duty.routeName}
       backTo={`/duties/${dutyId}/journey/open/confirm`}
       backLabel="Back"
+      footer={
+        <div className="space-y-2">
+          <Button
+            size="lg"
+            className="h-12 w-full font-bold uppercase tracking-widest"
+            onClick={() => continueToFinal(false)}
+          >
+            Continue
+          </Button>
+          <Button variant="ghost" className="w-full text-muted" onClick={() => continueToFinal(true)}>
+            Skip for now
+          </Button>
+        </div>
+      }
     >
       <div className="animate-in-up space-y-4">
         <header>
@@ -78,17 +92,6 @@ function OpenJourneyReadingsPage() {
         <div className="rounded-md border border-border bg-card p-3 text-sm text-muted">
           Last recorded: {duty.vehicle.mileage.toLocaleString()} km · Return to depot yesterday
         </div>
-
-        <Button
-          size="lg"
-          className="h-12 w-full font-bold uppercase tracking-widest"
-          onClick={() => continueToFinal(false)}
-        >
-          Continue
-        </Button>
-        <Button variant="ghost" className="w-full text-muted" onClick={() => continueToFinal(true)}>
-          Skip for now
-        </Button>
       </div>
     </OpenJourneyShell>
   );

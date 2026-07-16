@@ -38,6 +38,7 @@ import { Route as AppTripsAssignmentIdRouteImport } from './routes/_app.trips.$a
 import { Route as AppMoreTrainingRouteImport } from './routes/_app.more.training'
 import { Route as AppMoreSyncRouteImport } from './routes/_app.more.sync'
 import { Route as AppMoreSupportRouteImport } from './routes/_app.more.support'
+import { Route as AppMoreSettingsRouteImport } from './routes/_app.more.settings'
 import { Route as AppMoreSecurityRouteImport } from './routes/_app.more.security'
 import { Route as AppMoreReportProblemRouteImport } from './routes/_app.more.report-problem'
 import { Route as AppMoreProfileRouteImport } from './routes/_app.more.profile'
@@ -49,6 +50,7 @@ import { Route as AppMoreEmergencyContactRouteImport } from './routes/_app.more.
 import { Route as AppMoreDocumentsRouteImport } from './routes/_app.more.documents'
 import { Route as AppMoreDeclarationsRouteImport } from './routes/_app.more.declarations'
 import { Route as AppMoreCompanyRouteImport } from './routes/_app.more.company'
+import { Route as AppMoreAccountRouteImport } from './routes/_app.more.account'
 import { Route as AppMoreAccessibilityRouteImport } from './routes/_app.more.accessibility'
 import { Route as AppMoreAboutRouteImport } from './routes/_app.more.about'
 import { Route as AppMessagesSearchRouteImport } from './routes/_app.messages.search'
@@ -91,6 +93,7 @@ import { Route as AppDutiesDutyIdPassengersRouteImport } from './routes/_app.dut
 import { Route as AppDutiesDutyIdNavRouteImport } from './routes/_app.duties.$dutyId.nav'
 import { Route as AppDutiesDutyIdJourneyRouteImport } from './routes/_app.duties.$dutyId.journey'
 import { Route as AppDutiesDutyIdHelpRouteImport } from './routes/_app.duties.$dutyId.help'
+import { Route as AppDutiesDutyIdEligibilityRouteImport } from './routes/_app.duties.$dutyId.eligibility'
 import { Route as AppDutiesDutyIdPassengersIndexRouteImport } from './routes/_app.duties.$dutyId.passengers.index'
 import { Route as AppDutiesDutyIdNavIndexRouteImport } from './routes/_app.duties.$dutyId.nav.index'
 import { Route as AppDutiesDutyIdPassengersPassengerIdRouteImport } from './routes/_app.duties.$dutyId.passengers.$passengerId'
@@ -266,6 +269,11 @@ const AppMoreSupportRoute = AppMoreSupportRouteImport.update({
   path: '/support',
   getParentRoute: () => AppMoreRoute,
 } as any)
+const AppMoreSettingsRoute = AppMoreSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppMoreRoute,
+} as any)
 const AppMoreSecurityRoute = AppMoreSecurityRouteImport.update({
   id: '/security',
   path: '/security',
@@ -319,6 +327,11 @@ const AppMoreDeclarationsRoute = AppMoreDeclarationsRouteImport.update({
 const AppMoreCompanyRoute = AppMoreCompanyRouteImport.update({
   id: '/company',
   path: '/company',
+  getParentRoute: () => AppMoreRoute,
+} as any)
+const AppMoreAccountRoute = AppMoreAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => AppMoreRoute,
 } as any)
 const AppMoreAccessibilityRoute = AppMoreAccessibilityRouteImport.update({
@@ -547,6 +560,12 @@ const AppDutiesDutyIdHelpRoute = AppDutiesDutyIdHelpRouteImport.update({
   path: '/help',
   getParentRoute: () => AppDutiesDutyIdRoute,
 } as any)
+const AppDutiesDutyIdEligibilityRoute =
+  AppDutiesDutyIdEligibilityRouteImport.update({
+    id: '/eligibility',
+    path: '/eligibility',
+    getParentRoute: () => AppDutiesDutyIdRoute,
+  } as any)
 const AppDutiesDutyIdPassengersIndexRoute =
   AppDutiesDutyIdPassengersIndexRouteImport.update({
     id: '/',
@@ -754,6 +773,7 @@ export interface FileRoutesByFullPath {
   '/messages/search': typeof AppMessagesSearchRoute
   '/more/about': typeof AppMoreAboutRoute
   '/more/accessibility': typeof AppMoreAccessibilityRoute
+  '/more/account': typeof AppMoreAccountRoute
   '/more/company': typeof AppMoreCompanyRoute
   '/more/declarations': typeof AppMoreDeclarationsRouteWithChildren
   '/more/documents': typeof AppMoreDocumentsRouteWithChildren
@@ -765,6 +785,7 @@ export interface FileRoutesByFullPath {
   '/more/profile': typeof AppMoreProfileRoute
   '/more/report-problem': typeof AppMoreReportProblemRoute
   '/more/security': typeof AppMoreSecurityRouteWithChildren
+  '/more/settings': typeof AppMoreSettingsRoute
   '/more/support': typeof AppMoreSupportRoute
   '/more/sync': typeof AppMoreSyncRoute
   '/more/training': typeof AppMoreTrainingRouteWithChildren
@@ -779,6 +800,7 @@ export interface FileRoutesByFullPath {
   '/messages/': typeof AppMessagesIndexRoute
   '/more/': typeof AppMoreIndexRoute
   '/trips/': typeof AppTripsIndexRoute
+  '/duties/$dutyId/eligibility': typeof AppDutiesDutyIdEligibilityRoute
   '/duties/$dutyId/help': typeof AppDutiesDutyIdHelpRoute
   '/duties/$dutyId/journey': typeof AppDutiesDutyIdJourneyRouteWithChildren
   '/duties/$dutyId/nav': typeof AppDutiesDutyIdNavRouteWithChildren
@@ -860,6 +882,7 @@ export interface FileRoutesByTo {
   '/messages/search': typeof AppMessagesSearchRoute
   '/more/about': typeof AppMoreAboutRoute
   '/more/accessibility': typeof AppMoreAccessibilityRoute
+  '/more/account': typeof AppMoreAccountRoute
   '/more/company': typeof AppMoreCompanyRoute
   '/more/emergency-contact': typeof AppMoreEmergencyContactRoute
   '/more/focus-mode': typeof AppMoreFocusModeRoute
@@ -868,6 +891,7 @@ export interface FileRoutesByTo {
   '/more/offline-sync': typeof AppMoreOfflineSyncRoute
   '/more/profile': typeof AppMoreProfileRoute
   '/more/report-problem': typeof AppMoreReportProblemRoute
+  '/more/settings': typeof AppMoreSettingsRoute
   '/more/support': typeof AppMoreSupportRoute
   '/more/sync': typeof AppMoreSyncRoute
   '/trips/$assignmentId': typeof AppTripsAssignmentIdRoute
@@ -881,6 +905,7 @@ export interface FileRoutesByTo {
   '/messages': typeof AppMessagesIndexRoute
   '/more': typeof AppMoreIndexRoute
   '/trips': typeof AppTripsIndexRoute
+  '/duties/$dutyId/eligibility': typeof AppDutiesDutyIdEligibilityRoute
   '/duties/$dutyId/help': typeof AppDutiesDutyIdHelpRoute
   '/duties/$dutyId/journey': typeof AppDutiesDutyIdJourneyRouteWithChildren
   '/duties/$dutyId/run': typeof AppDutiesDutyIdRunRoute
@@ -967,6 +992,7 @@ export interface FileRoutesById {
   '/_app/messages/search': typeof AppMessagesSearchRoute
   '/_app/more/about': typeof AppMoreAboutRoute
   '/_app/more/accessibility': typeof AppMoreAccessibilityRoute
+  '/_app/more/account': typeof AppMoreAccountRoute
   '/_app/more/company': typeof AppMoreCompanyRoute
   '/_app/more/declarations': typeof AppMoreDeclarationsRouteWithChildren
   '/_app/more/documents': typeof AppMoreDocumentsRouteWithChildren
@@ -978,6 +1004,7 @@ export interface FileRoutesById {
   '/_app/more/profile': typeof AppMoreProfileRoute
   '/_app/more/report-problem': typeof AppMoreReportProblemRoute
   '/_app/more/security': typeof AppMoreSecurityRouteWithChildren
+  '/_app/more/settings': typeof AppMoreSettingsRoute
   '/_app/more/support': typeof AppMoreSupportRoute
   '/_app/more/sync': typeof AppMoreSyncRoute
   '/_app/more/training': typeof AppMoreTrainingRouteWithChildren
@@ -992,6 +1019,7 @@ export interface FileRoutesById {
   '/_app/messages/': typeof AppMessagesIndexRoute
   '/_app/more/': typeof AppMoreIndexRoute
   '/_app/trips/': typeof AppTripsIndexRoute
+  '/_app/duties/$dutyId/eligibility': typeof AppDutiesDutyIdEligibilityRoute
   '/_app/duties/$dutyId/help': typeof AppDutiesDutyIdHelpRoute
   '/_app/duties/$dutyId/journey': typeof AppDutiesDutyIdJourneyRouteWithChildren
   '/_app/duties/$dutyId/nav': typeof AppDutiesDutyIdNavRouteWithChildren
@@ -1081,6 +1109,7 @@ export interface FileRouteTypes {
     | '/messages/search'
     | '/more/about'
     | '/more/accessibility'
+    | '/more/account'
     | '/more/company'
     | '/more/declarations'
     | '/more/documents'
@@ -1092,6 +1121,7 @@ export interface FileRouteTypes {
     | '/more/profile'
     | '/more/report-problem'
     | '/more/security'
+    | '/more/settings'
     | '/more/support'
     | '/more/sync'
     | '/more/training'
@@ -1106,6 +1136,7 @@ export interface FileRouteTypes {
     | '/messages/'
     | '/more/'
     | '/trips/'
+    | '/duties/$dutyId/eligibility'
     | '/duties/$dutyId/help'
     | '/duties/$dutyId/journey'
     | '/duties/$dutyId/nav'
@@ -1187,6 +1218,7 @@ export interface FileRouteTypes {
     | '/messages/search'
     | '/more/about'
     | '/more/accessibility'
+    | '/more/account'
     | '/more/company'
     | '/more/emergency-contact'
     | '/more/focus-mode'
@@ -1195,6 +1227,7 @@ export interface FileRouteTypes {
     | '/more/offline-sync'
     | '/more/profile'
     | '/more/report-problem'
+    | '/more/settings'
     | '/more/support'
     | '/more/sync'
     | '/trips/$assignmentId'
@@ -1208,6 +1241,7 @@ export interface FileRouteTypes {
     | '/messages'
     | '/more'
     | '/trips'
+    | '/duties/$dutyId/eligibility'
     | '/duties/$dutyId/help'
     | '/duties/$dutyId/journey'
     | '/duties/$dutyId/run'
@@ -1293,6 +1327,7 @@ export interface FileRouteTypes {
     | '/_app/messages/search'
     | '/_app/more/about'
     | '/_app/more/accessibility'
+    | '/_app/more/account'
     | '/_app/more/company'
     | '/_app/more/declarations'
     | '/_app/more/documents'
@@ -1304,6 +1339,7 @@ export interface FileRouteTypes {
     | '/_app/more/profile'
     | '/_app/more/report-problem'
     | '/_app/more/security'
+    | '/_app/more/settings'
     | '/_app/more/support'
     | '/_app/more/sync'
     | '/_app/more/training'
@@ -1318,6 +1354,7 @@ export interface FileRouteTypes {
     | '/_app/messages/'
     | '/_app/more/'
     | '/_app/trips/'
+    | '/_app/duties/$dutyId/eligibility'
     | '/_app/duties/$dutyId/help'
     | '/_app/duties/$dutyId/journey'
     | '/_app/duties/$dutyId/nav'
@@ -1587,6 +1624,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMoreSupportRouteImport
       parentRoute: typeof AppMoreRoute
     }
+    '/_app/more/settings': {
+      id: '/_app/more/settings'
+      path: '/settings'
+      fullPath: '/more/settings'
+      preLoaderRoute: typeof AppMoreSettingsRouteImport
+      parentRoute: typeof AppMoreRoute
+    }
     '/_app/more/security': {
       id: '/_app/more/security'
       path: '/security'
@@ -1662,6 +1706,13 @@ declare module '@tanstack/react-router' {
       path: '/company'
       fullPath: '/more/company'
       preLoaderRoute: typeof AppMoreCompanyRouteImport
+      parentRoute: typeof AppMoreRoute
+    }
+    '/_app/more/account': {
+      id: '/_app/more/account'
+      path: '/account'
+      fullPath: '/more/account'
+      preLoaderRoute: typeof AppMoreAccountRouteImport
       parentRoute: typeof AppMoreRoute
     }
     '/_app/more/accessibility': {
@@ -1956,6 +2007,13 @@ declare module '@tanstack/react-router' {
       path: '/help'
       fullPath: '/duties/$dutyId/help'
       preLoaderRoute: typeof AppDutiesDutyIdHelpRouteImport
+      parentRoute: typeof AppDutiesDutyIdRoute
+    }
+    '/_app/duties/$dutyId/eligibility': {
+      id: '/_app/duties/$dutyId/eligibility'
+      path: '/eligibility'
+      fullPath: '/duties/$dutyId/eligibility'
+      preLoaderRoute: typeof AppDutiesDutyIdEligibilityRouteImport
       parentRoute: typeof AppDutiesDutyIdRoute
     }
     '/_app/duties/$dutyId/passengers/': {
@@ -2319,6 +2377,7 @@ const AppMoreTrainingRouteWithChildren = AppMoreTrainingRoute._addFileChildren(
 interface AppMoreRouteChildren {
   AppMoreAboutRoute: typeof AppMoreAboutRoute
   AppMoreAccessibilityRoute: typeof AppMoreAccessibilityRoute
+  AppMoreAccountRoute: typeof AppMoreAccountRoute
   AppMoreCompanyRoute: typeof AppMoreCompanyRoute
   AppMoreDeclarationsRoute: typeof AppMoreDeclarationsRouteWithChildren
   AppMoreDocumentsRoute: typeof AppMoreDocumentsRouteWithChildren
@@ -2330,6 +2389,7 @@ interface AppMoreRouteChildren {
   AppMoreProfileRoute: typeof AppMoreProfileRoute
   AppMoreReportProblemRoute: typeof AppMoreReportProblemRoute
   AppMoreSecurityRoute: typeof AppMoreSecurityRouteWithChildren
+  AppMoreSettingsRoute: typeof AppMoreSettingsRoute
   AppMoreSupportRoute: typeof AppMoreSupportRoute
   AppMoreSyncRoute: typeof AppMoreSyncRoute
   AppMoreTrainingRoute: typeof AppMoreTrainingRouteWithChildren
@@ -2339,6 +2399,7 @@ interface AppMoreRouteChildren {
 const AppMoreRouteChildren: AppMoreRouteChildren = {
   AppMoreAboutRoute: AppMoreAboutRoute,
   AppMoreAccessibilityRoute: AppMoreAccessibilityRoute,
+  AppMoreAccountRoute: AppMoreAccountRoute,
   AppMoreCompanyRoute: AppMoreCompanyRoute,
   AppMoreDeclarationsRoute: AppMoreDeclarationsRouteWithChildren,
   AppMoreDocumentsRoute: AppMoreDocumentsRouteWithChildren,
@@ -2350,6 +2411,7 @@ const AppMoreRouteChildren: AppMoreRouteChildren = {
   AppMoreProfileRoute: AppMoreProfileRoute,
   AppMoreReportProblemRoute: AppMoreReportProblemRoute,
   AppMoreSecurityRoute: AppMoreSecurityRouteWithChildren,
+  AppMoreSettingsRoute: AppMoreSettingsRoute,
   AppMoreSupportRoute: AppMoreSupportRoute,
   AppMoreSyncRoute: AppMoreSyncRoute,
   AppMoreTrainingRoute: AppMoreTrainingRouteWithChildren,
@@ -2518,6 +2580,7 @@ const AppDutiesDutyIdPassengersRouteWithChildren =
   )
 
 interface AppDutiesDutyIdRouteChildren {
+  AppDutiesDutyIdEligibilityRoute: typeof AppDutiesDutyIdEligibilityRoute
   AppDutiesDutyIdHelpRoute: typeof AppDutiesDutyIdHelpRoute
   AppDutiesDutyIdJourneyRoute: typeof AppDutiesDutyIdJourneyRouteWithChildren
   AppDutiesDutyIdNavRoute: typeof AppDutiesDutyIdNavRouteWithChildren
@@ -2528,6 +2591,7 @@ interface AppDutiesDutyIdRouteChildren {
 }
 
 const AppDutiesDutyIdRouteChildren: AppDutiesDutyIdRouteChildren = {
+  AppDutiesDutyIdEligibilityRoute: AppDutiesDutyIdEligibilityRoute,
   AppDutiesDutyIdHelpRoute: AppDutiesDutyIdHelpRoute,
   AppDutiesDutyIdJourneyRoute: AppDutiesDutyIdJourneyRouteWithChildren,
   AppDutiesDutyIdNavRoute: AppDutiesDutyIdNavRouteWithChildren,

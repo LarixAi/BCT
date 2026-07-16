@@ -9,9 +9,13 @@ Inventory of where the phone brand must appear. Use with [veyvio-driver-brand-fo
 | Splash | `SplashBrandMark`, `/splash` | Midnight, lockup + campaign line + soft blue glow |
 | Sign-in / public | `BrandPublicHeader` | Compact lockup + master promise |
 | App chrome | `AppChromeHeader` | Thick Driver Blue rail, lockup, depot, sync |
-| Bottom nav | `BottomNav` | Midnight bar; active = Driver Blue fill + rail |
+| Bottom nav | `BottomNav` | Light bar on **primary hubs only** (`/`, `/trips`, `/checks`, `/messages`, `/more`); active = Driver Blue soft fill; hidden on focused workflows |
 | Duty strip | `DutySubnav` | Under chrome; not a second bottom tab bar |
-| Home | `HomeHeader` on `/` | Midnight brand band + blue rail + VEYVIO/DRIVER + campaign; **ops headline below** (never “Welcome back”) |
+| Home | `CleanHomeScreen` on `/` | Status strip first (safe-area) → quiet lockup + utilities → headline → map → one CTA → flat Today rows |
+| Duties list | `DutiesWorkspaceScreen` on `/trips` | Full-bleed map workspace: floating Home/Safety + duty pill, adaptive bottom sheet, duties list overlay |
+| Checks | `ChecksWorkspaceScreen` on `/checks` | Full-bleed vehicle canvas + floating Home/Safety + reg pill, adaptive check sheet, previous-checks overlay |
+| Messages | `MessagesWorkspaceScreen` on `/messages` | Full-bleed thread canvas + floating Home/Safety + unread pill, adaptive message sheet, inbox overlay |
+| More | `MoreHub` on `/more` | Driver Blue profile strip, identity header, compliance attention, grouped settings rows (bottom nav kept) |
 | About | More → About | `About — Veyvio Driver`, campaign + promise |
 | Map nav header | `NavShell` | Product line on Midnight journey chrome |
 | Browser titles | route `head` | `… — Veyvio Driver` via `driverPageTitle()` |
@@ -23,8 +27,19 @@ Inventory of where the phone brand must appear. Use with [veyvio-driver-brand-fo
 |------|--------------|--------|
 | Open / end journey | `/journey/(open\|end)` | Wizard focus |
 | In-trip map nav | `/duties/*/nav…` | Driving focus |
+| Duties workspace | `/trips` | Map + adaptive sheet + hub tabs |
+| Checks workspace | `/checks` | Vehicle canvas + adaptive sheet + hub tabs |
+| Messages workspace | `/messages` | Thread canvas + adaptive sheet + hub tabs |
 
-Main tabs return when leaving these flows. Home stays reachable on all other duty screens.
+Home and More hub hide Midnight chrome but keep bottom nav (own status / profile strip).
+
+Hub tabs are **hidden** on focused routes (`/duties/*`, `/checks/*` wizards, `/messages/*` conversations, `/more/*` settings, incidents, auth).
+
+Main tabs return on the five primary hubs. Home stays reachable via hub tabs or workspace Home FABs.
+
+## Bottom navigation policy
+
+See `Veyvio Driver /src/domain/driver/navigation-policy.ts` and [prototypes/veyvio-driver-bottom-navigation.md](../prototypes/veyvio-driver-bottom-navigation.md).
 
 ## Assets
 

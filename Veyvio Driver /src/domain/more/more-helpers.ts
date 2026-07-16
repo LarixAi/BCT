@@ -138,7 +138,7 @@ export function buildMoreMenuSections(
       title: "",
       items: [
         { label: "Privacy and legal", href: "/more/legal" },
-        { label: "About Veyvio", href: "/more/about" },
+        { label: "About Veyvio Driver", href: "/more/about" },
       ],
     },
   ];

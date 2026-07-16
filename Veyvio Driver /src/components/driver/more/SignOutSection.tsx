@@ -2,8 +2,9 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getSignOutAssessment, performSignOut } from "@/platform/auth/sign-out";
+import { cn } from "@/lib/utils";
 
-export function SignOutSection() {
+export function SignOutSection({ variant = "default" }: { variant?: "default" | "hub" }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -21,10 +22,19 @@ export function SignOutSection() {
 
   if (!open) {
     return (
-      <section className="mt-8 border-t border-border pt-6">
-        <Button variant="outline" className="h-12 w-full font-semibold" onClick={() => setOpen(true)}>
+      <section className={cn(variant === "hub" ? "mt-2" : "mt-8 border-t border-border pt-6")}>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cn(
+            "w-full font-extrabold",
+            variant === "hub"
+              ? "min-h-[52px] rounded-[14px] border border-[rgba(217,45,32,0.25)] bg-white text-vor"
+              : "h-12 rounded-xl border border-border bg-card text-foreground",
+          )}
+        >
           Sign out
-        </Button>
+        </button>
       </section>
     );
   }
@@ -33,13 +43,15 @@ export function SignOutSection() {
   const warned = assessment?.severity === "warning";
 
   return (
-    <section className="mt-8 space-y-4 border-t border-border pt-6">
+    <section
+      className={cn("space-y-4", variant === "hub" ? "mt-2" : "mt-8 border-t border-border pt-6")}
+    >
       <div>
         <p className="text-sm font-bold">Sign out of Veyvio Driver</p>
         <p className="mt-1 text-xs text-muted">
           {blocked
             ? "Finish active work on this device before signing out."
-            : "You will need to sign in again to access duties and messages."}
+            : "Downloaded operational data will remain protected on this device. Unsynced changes must be sent before signing out."}
         </p>
       </div>
 

@@ -14,12 +14,13 @@ test.describe("Operational journey vertical slice", () => {
       timeout: 30_000,
     });
 
-    // Home primary CTA for next journey
-    await expect(page.getByRole("link", { name: /Prepare on Duty Hub/i })).toBeVisible();
+    // Home primary CTA for next journey → Duties workspace
+    await expect(page.getByRole("link", { name: /Open on Duties/i })).toBeVisible();
 
-    await page.goto("/duties/duty_1");
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/Acknowledge|Confirm vehicle|Walkaround|Clock in|Open journey/i).first()).toBeVisible();
+    await page.goto("/trips?demo=normal&dutyId=duty_1");
+    await expect(page.getByText(/Acknowledge duty|Confirm vehicle|Vehicle check|Clock in/i).first()).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Mid-journey fixture (DEV only) — assert store survives reload
     await page.goto("/duties/duty_1/journey/active?demo=active");

@@ -36,7 +36,7 @@ export function assessSignOut(ctx: SignOutContext): SignOutAssessment {
     blockers.push("Active duty is still open on this device.");
     primaryAction = {
       label: "Return to active duty",
-      href: ctx.activeDutyId ? `/duties/${ctx.activeDutyId}` : "/",
+      href: ctx.activeDutyId ? `/trips?dutyId=${ctx.activeDutyId}` : "/",
     };
   }
 

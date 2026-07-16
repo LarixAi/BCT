@@ -9,15 +9,13 @@ test.describe("Veyvio Driver brand on phone", () => {
     await expect(mainNav(page)).toBeVisible({ timeout: 30_000 });
   });
 
-  test("signed-in chrome shows wordmark, depot, and driver nav", async ({ page }) => {
-    const banner = page.getByRole("banner");
-    await expect(banner.getByText("VEYVIO")).toBeVisible();
-    await expect(banner.getByText("DRIVER", { exact: true })).toBeVisible();
-    await expect(banner.getByText("Depot", { exact: true })).toBeVisible();
+  test("home hub shows wordmark and primary driver tabs", async ({ page }) => {
+    await expect(page.getByText("VEYVIO").first()).toBeVisible();
+    await expect(page.getByText("DRIVER", { exact: true }).first()).toBeVisible();
 
     const nav = mainNav(page);
     await expect(nav.getByRole("link", { name: /Home/i })).toBeVisible();
-    await expect(nav.getByRole("link", { name: /Trips/i })).toBeVisible();
+    await expect(nav.getByRole("link", { name: /Duties/i })).toBeVisible();
     await expect(nav.getByRole("link", { name: /Checks/i })).toBeVisible();
     await expect(nav.getByRole("link", { name: /Messages/i })).toBeVisible();
     await expect(nav.getByRole("link", { name: /More/i })).toBeVisible();
@@ -36,6 +34,18 @@ test.describe("Veyvio Driver brand on phone", () => {
     expect(color).toBe("rgb(47, 107, 255)");
   });
 
+  test("bottom nav hides on focused settings detail", async ({ page }) => {
+    await mainNav(page).getByRole("link", { name: /More/i }).click();
+    await expect(page).toHaveURL(/\/more/);
+    await expect(mainNav(page)).toBeVisible();
+    await page.getByRole("main").getByRole("link", { name: /^Account$/i }).click();
+    await expect(page).toHaveURL(/\/more\/account/);
+    await expect(mainNav(page)).toHaveCount(0);
+    await page.getByRole("link", { name: /^Security$/i }).click();
+    await expect(page).toHaveURL(/\/more\/security/);
+    await expect(mainNav(page)).toHaveCount(0);
+  });
+
   test("work-blocking action uses midnight primary button", async ({ page }) => {
     const action = page
       .getByRole("main")
@@ -47,21 +57,31 @@ test.describe("Veyvio Driver brand on phone", () => {
     expect(bg).toBe("rgb(11, 21, 38)");
   });
 
-  test("trips tab shows schedule with route addresses", async ({ page }) => {
-    await mainNav(page).getByRole("link", { name: /Trips/i }).click();
+  test("duties tab opens workspace hub with navigation still visible", async ({ page }) => {
+    await mainNav(page).getByRole("link", { name: /Duties/i }).click();
     await expect(page).toHaveURL(/\/trips/);
-    await expect(page.getByRole("navigation", { name: "Trips schedule" })).toBeVisible();
-    const main = page.getByRole("main");
-    await expect(main.getByText("School Morning Run")).toBeVisible();
-    await expect(main.getByText("Start", { exact: true }).first()).toBeVisible();
-    await expect(main.getByText("End", { exact: true }).first()).toBeVisible();
+    await expect(mainNav(page)).toBeVisible();
+    await expect(mainNav(page).getByRole("link", { name: /Duties/i })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  test("home map opens duties workspace", async ({ page }) => {
+    await page.getByRole("link", { name: /open duties/i }).first().click();
+    await expect(page).toHaveURL(/\/trips/);
+    await expect(mainNav(page).getByRole("link", { name: /Duties/i })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   test("trip detail shows full route start to end", async ({ page }) => {
     await page.goto("/trips/asgn_school_am");
     await expect(page).toHaveURL(/\/trips\/asgn_school_am/);
+    await expect(mainNav(page)).toHaveCount(0);
     const main = page.getByRole("main");
-    await expect(main.getByRole("heading", { level: 1, name: "School Morning Run" })).toBeVisible({
+    await expect(main.getByRole("heading", { level: 1, name: /School Route 104/i })).toBeVisible({
       timeout: 10_000,
     });
     await expect(main.getByTestId("trip-full-route")).toBeVisible({ timeout: 10_000 });
@@ -73,8 +93,9 @@ test.describe("Veyvio Driver brand on phone", () => {
 
   test("about page shows branded wordmark on midnight", async ({ page }) => {
     await mainNav(page).getByRole("link", { name: /More/i }).click();
-    await page.getByRole("main").getByRole("link", { name: /About Veyvio/i }).click();
+    await page.getByRole("main").getByRole("link", { name: /About Veyvio Driver/i }).click();
     await expect(page).toHaveURL(/\/more\/about/);
+    await expect(mainNav(page)).toHaveCount(0);
     await expect(page.getByRole("main").getByText("VEYVIO").first()).toBeVisible();
     await expect(page.getByText("Move smarter. Operate safer.")).toBeVisible();
   });
@@ -99,6 +120,7 @@ test.describe("Veyvio Driver brand on phone", () => {
     });
     await expect(page.getByText("Pre-use walkaround incomplete")).toBeVisible();
     await expect(page.getByRole("link", { name: /Start walkaround/i })).toBeVisible();
+    await expect(mainNav(page)).toHaveCount(0);
   });
 
   test("check result shows ready for service after nil defects", async ({ page }) => {
@@ -107,6 +129,7 @@ test.describe("Veyvio Driver brand on phone", () => {
       timeout: 10_000,
     });
     await expect(page.getByRole("link", { name: /Open journey/i })).toBeVisible();
+    await expect(mainNav(page)).toHaveCount(0);
   });
 
   test("active journey and navigation pages render when duty in progress", async ({ page }) => {
@@ -116,6 +139,7 @@ test.describe("Veyvio Driver brand on phone", () => {
     await page.getByRole("link", { name: /Open navigation/i }).click();
     await expect(page).toHaveURL(/\/nav/);
     await expect(page.getByText(/Calculating road route|On route/i)).toBeVisible();
+    await expect(mainNav(page)).toHaveCount(0);
   });
 });
 
@@ -141,6 +165,7 @@ test.describe("Welcome, onboarding, and trip exceptions", () => {
     await expect(page.getByTestId("trips-history-page")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("heading", { name: "Trip history" })).toBeVisible();
     await expect(page.getByText("School Morning Run")).toBeVisible();
+    await expect(mainNav(page)).toHaveCount(0);
   });
 
   test("trip changed page shows operations update", async ({ page }) => {

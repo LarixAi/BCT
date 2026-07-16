@@ -42,8 +42,8 @@ function TripDetails({ trip, mode }: { trip: DriverTripSummary; mode: "next" | "
         </dl>
         <div className="mt-4 flex flex-col gap-2">
           <Button asChild className="h-12 w-full font-bold uppercase tracking-widest">
-            <Link to="/duties/$dutyId" params={{ dutyId }}>
-              Prepare on Duty Hub
+            <Link to="/trips" search={{ demo: "normal", dutyId }}>
+              Open on Duties
             </Link>
           </Button>
           <p className="text-center text-xs text-muted">

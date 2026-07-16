@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { useDriverStore } from "@/store/driver";
 
 export const Route = createFileRoute("/_app/duties/$dutyId/vehicle")({
@@ -9,6 +10,7 @@ export const Route = createFileRoute("/_app/duties/$dutyId/vehicle")({
 
 function DutyVehiclePage() {
   const { dutyId } = Route.useParams();
+  const navigate = useNavigate();
   const loadDuty = useDriverStore((s) => s.loadDuty);
   const duty = useDriverStore((s) => s.getDuty(dutyId));
 
@@ -17,18 +19,55 @@ function DutyVehiclePage() {
   }, [dutyId, loadDuty]);
 
   const vehicle = duty?.vehicle;
-  if (!vehicle) return <p className="text-sm text-muted">No vehicle assigned.</p>;
 
   return (
-    <div className="space-y-4 animate-in-up">
-      <h1 className="font-display text-xl font-extrabold">Vehicle</h1>
-      <dl className="space-y-2 text-sm">
-        <div><dt className="text-muted">Registration</dt><dd className="font-mono font-bold">{vehicle.registrationNumber}</dd></div>
-        <div><dt className="text-muted">Fleet</dt><dd>{vehicle.fleetNumber}</dd></div>
-        <div><dt className="text-muted">Make / model</dt><dd>{vehicle.make} {vehicle.model}</dd></div>
-        <div><dt className="text-muted">Capacity</dt><dd>{vehicle.seatingCapacity} seats · {vehicle.wheelchairCapacity} wheelchair</dd></div>
-        <div><dt className="text-muted">Mileage</dt><dd>{vehicle.mileage.toLocaleString()} mi</dd></div>
-      </dl>
-    </div>
+    <FocusedPageShell
+      title="Assigned vehicle"
+      backLabel="Duties"
+      onBack={() =>
+        void navigate({ to: "/trips", search: { demo: "normal", dutyId } })
+      }
+      eyebrow="Vehicle"
+      subtitle="Confirm this matches the vehicle in front of you."
+    >
+      {!vehicle ? (
+        <p className="text-sm text-muted">No vehicle assigned to this duty.</p>
+      ) : (
+        <dl className="animate-in-up space-y-4 rounded-[14px] border border-border bg-background p-4 text-sm">
+          <div>
+            <dt className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-muted">
+              Registration
+            </dt>
+            <dd className="mt-1 font-mono text-lg font-extrabold">{vehicle.registrationNumber}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-muted">Fleet</dt>
+            <dd className="mt-1 font-semibold">{vehicle.fleetNumber}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-muted">
+              Make / model
+            </dt>
+            <dd className="mt-1 font-semibold">
+              {vehicle.make} {vehicle.model}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-muted">
+              Capacity
+            </dt>
+            <dd className="mt-1 font-semibold">
+              {vehicle.seatingCapacity} seats · {vehicle.wheelchairCapacity} wheelchair
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-muted">
+              Mileage
+            </dt>
+            <dd className="mt-1 font-semibold tabular-nums">{vehicle.mileage.toLocaleString()} mi</dd>
+          </div>
+        </dl>
+      )}
+    </FocusedPageShell>
   );
 }

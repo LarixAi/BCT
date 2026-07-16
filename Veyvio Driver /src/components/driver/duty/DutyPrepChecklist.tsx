@@ -1,19 +1,35 @@
 import { cn } from "@/lib/utils";
 import type { DutyPrepStep } from "@/domain/duty/duty-prep-steps";
 
-export function DutyPrepChecklist({ steps }: { steps: DutyPrepStep[] }) {
+export function DutyPrepChecklist({
+  steps,
+  variant = "card",
+}: {
+  steps: DutyPrepStep[];
+  /** sheet — no outer card; fits Duties map bottom sheet */
+  variant?: "card" | "sheet";
+}) {
   return (
-    <section className="rounded-xl border border-border bg-card p-4">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Before this journey</p>
-      <ol className="mt-3 space-y-2">
+    <section
+      className={cn(
+        variant === "card" && "rounded-xl border border-border bg-card p-4",
+        variant === "sheet" && "pt-1",
+      )}
+    >
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
+        Before this journey
+      </p>
+      <ol className={cn("mt-3 space-y-2", variant === "sheet" && "space-y-1.5")}>
         {steps.map((step, index) => (
           <li
             key={step.id}
             className={cn(
               "flex gap-3 rounded-md border px-3 py-2.5",
+              variant === "sheet" && "rounded-xl px-3 py-2",
               step.current && "border-link bg-driver-blue-soft",
               step.done && !step.current && "border-ok/30 bg-ok/5",
               !step.done && !step.current && "border-border bg-background",
+              variant === "sheet" && !step.done && !step.current && "bg-[#F9FAFB]",
             )}
           >
             <span

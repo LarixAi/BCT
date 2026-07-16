@@ -4,6 +4,7 @@ import type { DriverDefectAssessment } from "@veyvio/ops";
 import { driverAssessmentToProvisionalOutcome } from "@veyvio/ops";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { FocusedPageShell } from "@/components/driver/shells/FocusedPageShell";
 import { useDriverStore } from "@/store/driver";
 import { enqueueDriverMutation } from "@/platform/driver/enqueue-driver-mutation";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
@@ -33,7 +34,13 @@ function JourneyDefectPage() {
   const [assessment, setAssessment] = useState<DriverDefectAssessment>("operational");
   const [submitting, setSubmitting] = useState(false);
 
-  if (!duty?.vehicle) return null;
+  if (!duty?.vehicle) {
+    return (
+      <FocusedPageShell title="Report defect" backTo={`/duties/${dutyId}/journey/active`} backLabel="Journey">
+        <p className="text-sm text-muted">Loading…</p>
+      </FocusedPageShell>
+    );
+  }
 
   const provisional = driverAssessmentToProvisionalOutcome(assessment);
 
@@ -62,74 +69,79 @@ function JourneyDefectPage() {
   }
 
   return (
-    <div className="animate-in-up space-y-4">
-      <header>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Report defect on journey</p>
-        <p className="mt-1 font-mono text-lg font-extrabold">{duty.vehicle.registrationNumber}</p>
-        <p className="text-sm text-muted">
-          Your assessment is provisional. Operations sets the final classification (held / VOR / released).
+    <FocusedPageShell
+      title={duty.vehicle.registrationNumber}
+      subtitle="Your assessment is provisional. Operations sets the final classification (held / VOR / released)."
+      backTo={`/duties/${dutyId}/journey/active`}
+      backLabel="Journey"
+      eyebrow="Report defect on journey"
+      footer={
+        <div className="space-y-2">
+          <Button
+            size="lg"
+            className="h-12 w-full font-bold uppercase tracking-widest"
+            disabled={submitting}
+            onClick={() => void submit()}
+          >
+            Submit defect report
+          </Button>
+          <Button asChild variant="ghost" className="w-full text-muted">
+            <Link to={`/duties/${dutyId}/journey/active`}>Cancel</Link>
+          </Button>
+        </div>
+      }
+    >
+      <div className="animate-in-up space-y-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Defect type</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {DEFECT_TYPES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-wide ${
+                  type === t ? "border-accent bg-accent text-white" : "border-border bg-card"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="desc">Description</Label>
+          <textarea
+            id="desc"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Your assessment</p>
+          <div className="mt-2 space-y-2">
+            {ASSESSMENTS.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => setAssessment(a.id)}
+                className={`w-full rounded-md border px-3 py-3 text-left ${
+                  assessment === a.id ? "border-link bg-driver-blue-soft" : "border-border bg-card"
+                }`}
+              >
+                <p className="text-sm font-bold">{a.label}</p>
+                <p className="text-xs text-muted">{a.hint}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted">
+          Provisional outcome: {provisional.replace(/_/g, " ")}. Final VOR/held status is set by Operations —
+          not this app alone.
         </p>
-      </header>
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Defect type</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {DEFECT_TYPES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setType(t)}
-              className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-wide ${
-                type === t ? "border-accent bg-accent text-white" : "border-border bg-card"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="desc">Description</Label>
-        <textarea
-          id="desc"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Your assessment</p>
-        <div className="mt-2 space-y-2">
-          {ASSESSMENTS.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => setAssessment(a.id)}
-              className={`w-full rounded-md border px-3 py-3 text-left ${
-                assessment === a.id ? "border-link bg-driver-blue-soft" : "border-border bg-card"
-              }`}
-            >
-              <p className="text-sm font-bold">{a.label}</p>
-              <p className="text-xs text-muted">{a.hint}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-      <p className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted">
-        Provisional outcome: {provisional.replace(/_/g, " ")}. Final VOR/held status is set by Operations —
-        not this app alone.
-      </p>
-      <Button
-        size="lg"
-        className="h-12 w-full font-bold uppercase tracking-widest"
-        disabled={submitting}
-        onClick={() => void submit()}
-      >
-        Submit defect report
-      </Button>
-      <Button asChild variant="ghost" className="w-full">
-        <Link to={`/duties/${dutyId}/journey/active`}>Cancel</Link>
-      </Button>
-    </div>
+    </FocusedPageShell>
   );
 }

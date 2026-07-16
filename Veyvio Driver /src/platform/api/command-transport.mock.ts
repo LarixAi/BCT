@@ -28,7 +28,8 @@ function delay(ms: number) {
  */
 function mergeLiveDutyIntoMock(dutyId: string | undefined) {
   if (!dutyId) return;
-  const live = useDriverStore.getState().dutyDetails[dutyId];
+  // Prefer fresher of Zustand vs Map so a stale store projection cannot wipe clock-in
+  const live = useDriverStore.getState().getDuty(dutyId);
   if (!live) return;
   syncMockDutyDetail(live);
 }

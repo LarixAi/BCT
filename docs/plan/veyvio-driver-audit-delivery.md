@@ -17,7 +17,7 @@
 | P1 durable break/note/delay outbox | Done (`journey.break.*`, `journey.note.add`, `delay.report`) |
 | P1 messages persist + read≠ack | Done (localStorage; mark-read does not acknowledge) |
 | P1 Home CTA honesty | Done (hrefs + disabled reasons) |
-| P2 Trips→Duties rename | Partial (tab + schedule header label; URL still `/trips`) |
+| P2 Trips→Duties rename | Done for tab label; URL still `/trips` |
 
 ## Goal
 
@@ -56,8 +56,8 @@ Internal IDs (`runId`, `assignmentId`, `tripId`) may remain; they must not appea
 
 | Issue | Where today |
 |-------|-------------|
-| Tab says Trips | `BottomNav.tsx` → `/trips` |
-| Duty strip = Hub/Journey/… | `DutySubnav.tsx` (audit’s “Next” already partially replaced by Hub) |
+| Tab label **Duties** (URL still `/trips`) | `BottomNav` / `navigation-items.ts` — P2 URL migration still open |
+| Duty strip = Duty/Journey/… | `DutySubnav.tsx` (audit’s “Next” already partially replaced by Hub) |
 | Journey end forces handback | `journey.end.confirm.tsx` + `completeEndJourney` dispatches `vehicle.handback` then `journey.complete` |
 | Duty complete while `in_progress` | `_app.duties.$dutyId.index.tsx` — no gate |
 | Exception outcomes advance route | `nav.arrive.tsx` / `nav.dropoff.tsx` → mostly `/nav/depart` |

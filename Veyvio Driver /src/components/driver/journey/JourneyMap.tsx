@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import type { DivIcon, Map as LeafletMap, Polyline } from "leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { DivIcon, Map as LeafletMap, Marker, Polyline } from "leaflet";
 import { cn } from "@/lib/utils";
 import {
   buildJourneyMapStops,
   estimateDriverPosition,
+  resolveDriverPosition,
   type JourneyMapStop,
 } from "@/domain/journey/journey-map";
 import { useEnsureJourneyRoute } from "@/features/navigation/use-journey-navigation";
@@ -11,6 +12,7 @@ import { useNavigationRoute } from "@/store/navigation";
 import { useDriverPreferencesStore } from "@/store/driver-preferences";
 import { mapThemeClass, mapTileLayerForFilter, type MapDisplayFilter } from "@/types/driver-filters";
 import { useDriverStore } from "@/store/driver";
+import { useVehicleMotionStore } from "@/store/vehicle-motion";
 import { JourneyMapPlaceholder } from "./JourneyMapPlaceholder";
 import { MapStatusOverlay } from "./MapStatusOverlay";
 
@@ -174,22 +176,37 @@ export function JourneyMap({
   highlight = "current",
   fullBleed = false,
   hideStatusOverlay = false,
+  /** Compact Home preview — real tiles/route, gesture-quiet so the page still scrolls */
+  preview = false,
   className,
 }: {
   dutyId: string;
   highlight?: "current" | "diversion" | "off-route";
   fullBleed?: boolean;
   hideStatusOverlay?: boolean;
+  preview?: boolean;
   className?: string;
 }) {
   const duty = useDriverStore((s) => s.getDuty(dutyId));
   useEnsureJourneyRoute(dutyId);
   const route = useNavigationRoute(dutyId);
   const mapDisplayFilter = useDriverPreferencesStore((s) => s.mapDisplayFilter);
+  const livePosition = useVehicleMotionStore((s) => s.lastPosition);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
+  const vehicleMarkerRef = useRef<Marker | null>(null);
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
+  const suppressOverlay = hideStatusOverlay || preview;
+
+  const driverPosition = useMemo(() => {
+    if (!duty) return resolveDriverPosition(null, livePosition);
+    return resolveDriverPosition(
+      estimateDriverPosition(buildJourneyMapStops(duty)),
+      livePosition,
+    );
+  }, [duty, livePosition]);
 
   useEffect(() => {
     if (!containerRef.current || !duty) return;
@@ -206,15 +223,23 @@ export function JourneyMap({
         if (cancelled || !containerRef.current) return;
 
         const L = leafletModule.default;
+        leafletRef.current = leafletModule;
 
         if (mapRef.current) {
           mapRef.current.remove();
           mapRef.current = null;
         }
+        vehicleMarkerRef.current = null;
 
         const map = L.map(containerRef.current, {
           zoomControl: false,
-          attributionControl: true,
+          attributionControl: !preview,
+          dragging: !preview,
+          touchZoom: !preview,
+          scrollWheelZoom: false,
+          doubleClickZoom: !preview,
+          boxZoom: false,
+          keyboard: false,
         });
 
         L.tileLayer(mapTileLayerForFilter(mapDisplayFilter).url, {
@@ -222,30 +247,32 @@ export function JourneyMap({
           attribution: mapTileLayerForFilter(mapDisplayFilter).attribution,
         }).addTo(map);
 
-        const driverPosition = estimateDriverPosition(stops);
+        const estimated = estimateDriverPosition(stops);
+        const position = resolveDriverPosition(estimated, livePosition);
 
         if (route?.geometry && route.geometry.length >= 2) {
-          addRoadRouteLayers(L, map, route.geometry, driverPosition, highlight, mapDisplayFilter);
+          addRoadRouteLayers(L, map, route.geometry, position, highlight, mapDisplayFilter);
         } else {
           addStraightRouteLayers(L, map, stops, highlight);
         }
 
         addStopMarkers(L, map, stops);
 
-        if (driverPosition) {
-          L.marker(driverPosition, {
+        if (position) {
+          const marker = L.marker(position, {
             icon: markerIcon(L, BRAND.link, 16, true),
             zIndexOffset: 1000,
             title: "Your vehicle",
           }).addTo(map);
+          vehicleMarkerRef.current = marker;
         }
 
         const boundsPoints: [number, number][] = route?.geometry?.length
           ? route.geometry
           : stops.map((stop) => [stop.lat, stop.lng]);
         const bounds = L.latLngBounds(boundsPoints);
-        if (driverPosition) bounds.extend(driverPosition);
-        map.fitBounds(bounds.pad(0.18));
+        if (position) bounds.extend(position);
+        map.fitBounds(bounds.pad(preview ? 0.12 : 0.18));
 
         mapRef.current = map;
 
@@ -260,13 +287,35 @@ export function JourneyMap({
 
     return () => {
       cancelled = true;
+      vehicleMarkerRef.current = null;
+      leafletRef.current = null;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
       setMapReady(false);
     };
-  }, [duty, dutyId, highlight, route?.geometry, route?.source, mapDisplayFilter]);
+    // Rebuild map when duty/route/theme change — live GPS updates the marker separately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- livePosition handled below
+  }, [duty, dutyId, highlight, preview, route?.geometry, route?.source, mapDisplayFilter]);
+
+  useEffect(() => {
+    if (!mapReady || !driverPosition) return;
+    const map = mapRef.current;
+    const L = leafletRef.current?.default;
+    if (!map || !L) return;
+
+    if (vehicleMarkerRef.current) {
+      vehicleMarkerRef.current.setLatLng(driverPosition);
+      return;
+    }
+
+    vehicleMarkerRef.current = L.marker(driverPosition, {
+      icon: markerIcon(L, BRAND.link, 16, true),
+      zIndexOffset: 1000,
+      title: "Your vehicle",
+    }).addTo(map);
+  }, [driverPosition, mapReady]);
 
   if (!duty || mapError) {
     return <JourneyMapPlaceholder highlight={highlight} fullBleed={fullBleed} className={className} />;
@@ -277,15 +326,21 @@ export function JourneyMap({
       className={cn(
         mapThemeClass(mapDisplayFilter),
         "relative overflow-hidden bg-secondary",
-        !fullBleed && "rounded-md",
+        !fullBleed && !preview && "rounded-md",
+        preview && "rounded-[inherit]",
         className,
       )}
     >
-      <div ref={containerRef} className="absolute inset-0 z-0 h-full w-full" aria-label="Route map" role="img" />
+      <div
+        ref={containerRef}
+        className={cn("absolute inset-0 z-0 h-full w-full", preview && "pointer-events-none")}
+        aria-label="Route map"
+        role="img"
+      />
       {!mapReady && (
         <JourneyMapPlaceholder highlight={highlight} fullBleed={fullBleed} className="absolute inset-0 z-[400]" />
       )}
-      {mapReady && !hideStatusOverlay && <MapStatusOverlay highlight={highlight} />}
+      {mapReady && !suppressOverlay && <MapStatusOverlay highlight={highlight} />}
     </div>
   );
 }
