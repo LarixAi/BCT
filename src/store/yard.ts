@@ -3,6 +3,7 @@ import { create } from "zustand";
 import * as fx from "@/data/fixtures";
 import type { BootstrapPayload } from "@/data/mocks/bootstrap";
 import { initialVehicleEquipment, initialDepotStock, type StockLine } from "@/data/equipment-fixtures";
+import { initialAdBlueRefills } from "@/data/adblue-fixtures";
 import { initialTasks } from "@/data/tasks-fixtures";
 import type { CompleteYardCheckInput, YardCheckResult } from "@/types/yard-check";
 import { computeOverallPassed, computeSafetyOutcome, severityForSection } from "@/domain/yard/check-outcome";
@@ -37,6 +38,8 @@ import { computeReadiness } from "@/lib/readiness";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
 import { getActorName } from "@/platform/yard/get-actor-name";
 import { enqueueYardMutation } from "@/platform/yard/enqueue-yard-mutation";
+import { createAdBlueRefillRecord } from "@/domain/fluids/adblue-refill";
+import type { AdBlueRefillInput, AdBlueRefillRecord } from "@/types/fluids";
 import type {
   Bay,
   Defect,
@@ -113,6 +116,7 @@ interface State {
   defects: Defect[];
   vorCases: VorCase[];
   movements: Movement[];
+  adblueRefills: AdBlueRefillRecord[];
   yardChecks: YardCheckResult[];
   equipment: Record<string, VehicleEquipment>;
   equipmentAudit: EquipmentAuditEvent[];
@@ -137,6 +141,7 @@ interface State {
   openSheet: (s: SheetKind) => void;
   closeSheet: () => void;
   moveVehicle: (vehicleId: string, toBayId: string, reason: MovementReason, note?: string) => void;
+  recordAdBlueRefill: (vehicleId: string, input: AdBlueRefillInput) => AdBlueRefillRecord;
   completeCheck: (vehicleId: string, input: CompleteYardCheckInput) => Defect[];
   raiseDefect: (input: { vehicleId: string; category: string; severity: DefectSeverity; notes: string }) => Defect;
   resolveDefect: (defectId: string, note?: string) => Defect | null;
@@ -252,6 +257,7 @@ export const useYard = create<State>((set, get) => ({
   defects: fx.defects,
   vorCases: fx.vorCases,
   movements: fx.movements,
+  adblueRefills: initialAdBlueRefills,
   yardChecks: fx.yardChecks,
   equipment: initialVehicleEquipment,
   equipmentAudit: [],
@@ -281,6 +287,7 @@ export const useYard = create<State>((set, get) => ({
       defects: payload.defects,
       vorCases: payload.vorCases,
       movements: payload.movements,
+      adblueRefills: payload.adblueRefills ?? get().adblueRefills,
       yardChecks: payload.yardChecks,
       equipment: payload.equipment,
       depotStock: payload.depotStock,
@@ -319,6 +326,23 @@ export const useYard = create<State>((set, get) => ({
       tasks,
     });
     void enqueueYardMutation("vehicle.move", { vehicleId, fromBayId, toBayId, reason, note, movementId: mv.id });
+  },
+
+  recordAdBlueRefill: (vehicleId, input) => {
+    const st = get();
+    const vehicle = st.vehicles.find(v => v.id === vehicleId);
+    if (!vehicle) throw new Error("Vehicle not found.");
+
+    const recordedAt = nowIso();
+    const record = createAdBlueRefillRecord(vehicle, input, {
+      id: uid("abr"),
+      recordedAt,
+      recordedBy: getActorName(),
+    });
+
+    set({ adblueRefills: [record, ...st.adblueRefills] });
+    void enqueueYardMutation("vehicle.adblue_refill", record);
+    return record;
   },
 
   completeCheck: (vehicleId, input) => {

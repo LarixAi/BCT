@@ -47,6 +47,9 @@ import { Route as AppVorCaseIdRouteImport } from './routes/_app.vor.$caseId'
 import { Route as AppTasksTaskIdRouteImport } from './routes/_app.tasks.$taskId'
 import { Route as AppSimulateDriverReportRouteImport } from './routes/_app.simulate.driver-report'
 import { Route as AppMoreSyncRouteImport } from './routes/_app.more.sync'
+import { Route as AppMoreSettingsRouteImport } from './routes/_app.more.settings'
+import { Route as AppMoreAccountRouteImport } from './routes/_app.more.account'
+import { Route as AppMoreAboutRouteImport } from './routes/_app.more.about'
 import { Route as AppInspectionsRepairVerificationRouteImport } from './routes/_app.inspections.repair-verification'
 import { Route as AppInspectionsDamageReviewRouteImport } from './routes/_app.inspections.damage-review'
 import { Route as AppInspectionsAnalyticsRouteImport } from './routes/_app.inspections.analytics'
@@ -61,6 +64,7 @@ import { Route as AppYardVehicleIdConditionRouteImport } from './routes/_app.yar
 import { Route as AppYardVehicleIdCheckRouteImport } from './routes/_app.yard.$vehicleId.check'
 import { Route as AppYardVehicleIdConditionInspectRouteImport } from './routes/_app.yard.$vehicleId.condition.inspect'
 import { Route as AppYardVehicleIdConditionCompareRouteImport } from './routes/_app.yard.$vehicleId.condition.compare'
+import { Route as AppYardVehicleIdAdblueRefillRouteImport } from './routes/_app.yard.$vehicleId.adblue.refill'
 import { Route as AppYardVehicleIdConditionDamageDamageIdRouteImport } from './routes/_app.yard.$vehicleId.condition.damage.$damageId'
 
 const PublicRoute = PublicRouteImport.update({
@@ -251,6 +255,21 @@ const AppMoreSyncRoute = AppMoreSyncRouteImport.update({
   path: '/sync',
   getParentRoute: () => AppMoreRoute,
 } as any)
+const AppMoreSettingsRoute = AppMoreSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppMoreRoute,
+} as any)
+const AppMoreAccountRoute = AppMoreAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AppMoreRoute,
+} as any)
+const AppMoreAboutRoute = AppMoreAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => AppMoreRoute,
+} as any)
 const AppInspectionsRepairVerificationRoute =
   AppInspectionsRepairVerificationRouteImport.update({
     id: '/repair-verification',
@@ -327,6 +346,12 @@ const AppYardVehicleIdConditionCompareRoute =
     path: '/compare',
     getParentRoute: () => AppYardVehicleIdConditionRoute,
   } as any)
+const AppYardVehicleIdAdblueRefillRoute =
+  AppYardVehicleIdAdblueRefillRouteImport.update({
+    id: '/adblue/refill',
+    path: '/adblue/refill',
+    getParentRoute: () => AppYardVehicleIdRoute,
+  } as any)
 const AppYardVehicleIdConditionDamageDamageIdRoute =
   AppYardVehicleIdConditionDamageDamageIdRouteImport.update({
     id: '/damage/$damageId',
@@ -362,6 +387,9 @@ export interface FileRoutesByFullPath {
   '/inspections/analytics': typeof AppInspectionsAnalyticsRoute
   '/inspections/damage-review': typeof AppInspectionsDamageReviewRoute
   '/inspections/repair-verification': typeof AppInspectionsRepairVerificationRoute
+  '/more/about': typeof AppMoreAboutRoute
+  '/more/account': typeof AppMoreAccountRoute
+  '/more/settings': typeof AppMoreSettingsRoute
   '/more/sync': typeof AppMoreSyncRoute
   '/simulate/driver-report': typeof AppSimulateDriverReportRoute
   '/tasks/$taskId': typeof AppTasksTaskIdRoute
@@ -383,6 +411,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/yard/health': typeof ApiV1YardHealthRoute
   '/api/v1/yard/mutations': typeof ApiV1YardMutationsRoute
   '/yard/$vehicleId/': typeof AppYardVehicleIdIndexRoute
+  '/yard/$vehicleId/adblue/refill': typeof AppYardVehicleIdAdblueRefillRoute
   '/yard/$vehicleId/condition/compare': typeof AppYardVehicleIdConditionCompareRoute
   '/yard/$vehicleId/condition/inspect': typeof AppYardVehicleIdConditionInspectRoute
   '/yard/$vehicleId/condition/damage/$damageId': typeof AppYardVehicleIdConditionDamageDamageIdRoute
@@ -408,6 +437,9 @@ export interface FileRoutesByTo {
   '/inspections/analytics': typeof AppInspectionsAnalyticsRoute
   '/inspections/damage-review': typeof AppInspectionsDamageReviewRoute
   '/inspections/repair-verification': typeof AppInspectionsRepairVerificationRoute
+  '/more/about': typeof AppMoreAboutRoute
+  '/more/account': typeof AppMoreAccountRoute
+  '/more/settings': typeof AppMoreSettingsRoute
   '/more/sync': typeof AppMoreSyncRoute
   '/simulate/driver-report': typeof AppSimulateDriverReportRoute
   '/tasks/$taskId': typeof AppTasksTaskIdRoute
@@ -428,6 +460,7 @@ export interface FileRoutesByTo {
   '/api/v1/yard/health': typeof ApiV1YardHealthRoute
   '/api/v1/yard/mutations': typeof ApiV1YardMutationsRoute
   '/yard/$vehicleId': typeof AppYardVehicleIdIndexRoute
+  '/yard/$vehicleId/adblue/refill': typeof AppYardVehicleIdAdblueRefillRoute
   '/yard/$vehicleId/condition/compare': typeof AppYardVehicleIdConditionCompareRoute
   '/yard/$vehicleId/condition/inspect': typeof AppYardVehicleIdConditionInspectRoute
   '/yard/$vehicleId/condition/damage/$damageId': typeof AppYardVehicleIdConditionDamageDamageIdRoute
@@ -463,6 +496,9 @@ export interface FileRoutesById {
   '/_app/inspections/analytics': typeof AppInspectionsAnalyticsRoute
   '/_app/inspections/damage-review': typeof AppInspectionsDamageReviewRoute
   '/_app/inspections/repair-verification': typeof AppInspectionsRepairVerificationRoute
+  '/_app/more/about': typeof AppMoreAboutRoute
+  '/_app/more/account': typeof AppMoreAccountRoute
+  '/_app/more/settings': typeof AppMoreSettingsRoute
   '/_app/more/sync': typeof AppMoreSyncRoute
   '/_app/simulate/driver-report': typeof AppSimulateDriverReportRoute
   '/_app/tasks/$taskId': typeof AppTasksTaskIdRoute
@@ -484,6 +520,7 @@ export interface FileRoutesById {
   '/api/v1/yard/health': typeof ApiV1YardHealthRoute
   '/api/v1/yard/mutations': typeof ApiV1YardMutationsRoute
   '/_app/yard/$vehicleId/': typeof AppYardVehicleIdIndexRoute
+  '/_app/yard/$vehicleId/adblue/refill': typeof AppYardVehicleIdAdblueRefillRoute
   '/_app/yard/$vehicleId/condition/compare': typeof AppYardVehicleIdConditionCompareRoute
   '/_app/yard/$vehicleId/condition/inspect': typeof AppYardVehicleIdConditionInspectRoute
   '/_app/yard/$vehicleId/condition/damage/$damageId': typeof AppYardVehicleIdConditionDamageDamageIdRoute
@@ -518,6 +555,9 @@ export interface FileRouteTypes {
     | '/inspections/analytics'
     | '/inspections/damage-review'
     | '/inspections/repair-verification'
+    | '/more/about'
+    | '/more/account'
+    | '/more/settings'
     | '/more/sync'
     | '/simulate/driver-report'
     | '/tasks/$taskId'
@@ -539,6 +579,7 @@ export interface FileRouteTypes {
     | '/api/v1/yard/health'
     | '/api/v1/yard/mutations'
     | '/yard/$vehicleId/'
+    | '/yard/$vehicleId/adblue/refill'
     | '/yard/$vehicleId/condition/compare'
     | '/yard/$vehicleId/condition/inspect'
     | '/yard/$vehicleId/condition/damage/$damageId'
@@ -564,6 +605,9 @@ export interface FileRouteTypes {
     | '/inspections/analytics'
     | '/inspections/damage-review'
     | '/inspections/repair-verification'
+    | '/more/about'
+    | '/more/account'
+    | '/more/settings'
     | '/more/sync'
     | '/simulate/driver-report'
     | '/tasks/$taskId'
@@ -584,6 +628,7 @@ export interface FileRouteTypes {
     | '/api/v1/yard/health'
     | '/api/v1/yard/mutations'
     | '/yard/$vehicleId'
+    | '/yard/$vehicleId/adblue/refill'
     | '/yard/$vehicleId/condition/compare'
     | '/yard/$vehicleId/condition/inspect'
     | '/yard/$vehicleId/condition/damage/$damageId'
@@ -618,6 +663,9 @@ export interface FileRouteTypes {
     | '/_app/inspections/analytics'
     | '/_app/inspections/damage-review'
     | '/_app/inspections/repair-verification'
+    | '/_app/more/about'
+    | '/_app/more/account'
+    | '/_app/more/settings'
     | '/_app/more/sync'
     | '/_app/simulate/driver-report'
     | '/_app/tasks/$taskId'
@@ -639,6 +687,7 @@ export interface FileRouteTypes {
     | '/api/v1/yard/health'
     | '/api/v1/yard/mutations'
     | '/_app/yard/$vehicleId/'
+    | '/_app/yard/$vehicleId/adblue/refill'
     | '/_app/yard/$vehicleId/condition/compare'
     | '/_app/yard/$vehicleId/condition/inspect'
     | '/_app/yard/$vehicleId/condition/damage/$damageId'
@@ -920,6 +969,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMoreSyncRouteImport
       parentRoute: typeof AppMoreRoute
     }
+    '/_app/more/settings': {
+      id: '/_app/more/settings'
+      path: '/settings'
+      fullPath: '/more/settings'
+      preLoaderRoute: typeof AppMoreSettingsRouteImport
+      parentRoute: typeof AppMoreRoute
+    }
+    '/_app/more/account': {
+      id: '/_app/more/account'
+      path: '/account'
+      fullPath: '/more/account'
+      preLoaderRoute: typeof AppMoreAccountRouteImport
+      parentRoute: typeof AppMoreRoute
+    }
+    '/_app/more/about': {
+      id: '/_app/more/about'
+      path: '/about'
+      fullPath: '/more/about'
+      preLoaderRoute: typeof AppMoreAboutRouteImport
+      parentRoute: typeof AppMoreRoute
+    }
     '/_app/inspections/repair-verification': {
       id: '/_app/inspections/repair-verification'
       path: '/repair-verification'
@@ -1018,6 +1088,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppYardVehicleIdConditionCompareRouteImport
       parentRoute: typeof AppYardVehicleIdConditionRoute
     }
+    '/_app/yard/$vehicleId/adblue/refill': {
+      id: '/_app/yard/$vehicleId/adblue/refill'
+      path: '/adblue/refill'
+      fullPath: '/yard/$vehicleId/adblue/refill'
+      preLoaderRoute: typeof AppYardVehicleIdAdblueRefillRouteImport
+      parentRoute: typeof AppYardVehicleIdRoute
+    }
     '/_app/yard/$vehicleId/condition/damage/$damageId': {
       id: '/_app/yard/$vehicleId/condition/damage/$damageId'
       path: '/damage/$damageId'
@@ -1075,11 +1152,17 @@ const AppInspectionsRouteWithChildren = AppInspectionsRoute._addFileChildren(
 )
 
 interface AppMoreRouteChildren {
+  AppMoreAboutRoute: typeof AppMoreAboutRoute
+  AppMoreAccountRoute: typeof AppMoreAccountRoute
+  AppMoreSettingsRoute: typeof AppMoreSettingsRoute
   AppMoreSyncRoute: typeof AppMoreSyncRoute
   AppMoreIndexRoute: typeof AppMoreIndexRoute
 }
 
 const AppMoreRouteChildren: AppMoreRouteChildren = {
+  AppMoreAboutRoute: AppMoreAboutRoute,
+  AppMoreAccountRoute: AppMoreAccountRoute,
+  AppMoreSettingsRoute: AppMoreSettingsRoute,
   AppMoreSyncRoute: AppMoreSyncRoute,
   AppMoreIndexRoute: AppMoreIndexRoute,
 }
@@ -1140,6 +1223,7 @@ interface AppYardVehicleIdRouteChildren {
   AppYardVehicleIdConditionRoute: typeof AppYardVehicleIdConditionRouteWithChildren
   AppYardVehicleIdEquipmentRoute: typeof AppYardVehicleIdEquipmentRoute
   AppYardVehicleIdIndexRoute: typeof AppYardVehicleIdIndexRoute
+  AppYardVehicleIdAdblueRefillRoute: typeof AppYardVehicleIdAdblueRefillRoute
 }
 
 const AppYardVehicleIdRouteChildren: AppYardVehicleIdRouteChildren = {
@@ -1147,6 +1231,7 @@ const AppYardVehicleIdRouteChildren: AppYardVehicleIdRouteChildren = {
   AppYardVehicleIdConditionRoute: AppYardVehicleIdConditionRouteWithChildren,
   AppYardVehicleIdEquipmentRoute: AppYardVehicleIdEquipmentRoute,
   AppYardVehicleIdIndexRoute: AppYardVehicleIdIndexRoute,
+  AppYardVehicleIdAdblueRefillRoute: AppYardVehicleIdAdblueRefillRoute,
 }
 
 const AppYardVehicleIdRouteWithChildren =

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useYard } from "@/store/yard";
-import { VehicleCard, SectionHeader } from "@/components/yard/primitives";
+import { VehicleCard, VehicleInventoryRow, SectionHeader } from "@/components/yard/primitives";
 import type { BayZone, VehicleStatus } from "@/types/yard";
 
 export const Route = createFileRoute("/_app/yard/")({
@@ -44,11 +44,31 @@ function YardList() {
         <FilterBar label="Status" value={status} options={STATUSES} onChange={setStatus as (v: string) => void} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:hidden">
         {filtered.map(v => <VehicleCard key={v.id} v={v} />)}
         {filtered.length === 0 && (
           <div className="col-span-full border border-dashed border-border p-8 text-center rounded-xs bg-white">
             <p className="text-sm font-bold uppercase tracking-widest text-muted">No vehicles match</p>
+          </div>
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-lg border border-border bg-white lg:block">
+        <div className="grid grid-cols-[72px_130px_minmax(120px,1fr)_170px_76px_minmax(130px,1fr)_24px] gap-3 bg-secondary/60 px-4 py-2.5 text-[9px] font-bold uppercase tracking-widest text-muted">
+          <span>Bay</span>
+          <span>Registration</span>
+          <span>Vehicle</span>
+          <span>Status</span>
+          <span>Fuel</span>
+          <span>Equipment</span>
+          <span aria-hidden />
+        </div>
+        {filtered.map(v => (
+          <VehicleInventoryRow key={v.id} v={v} zone={bayZone(v.bayId)} />
+        ))}
+        {filtered.length === 0 && (
+          <div className="p-10 text-center text-sm font-bold uppercase tracking-widest text-muted">
+            No vehicles match
           </div>
         )}
       </div>
@@ -65,7 +85,11 @@ function FilterBar({ label, value, options, onChange }: { label: string; value: 
           <button
             key={o}
             onClick={() => onChange(o)}
-            className={`px-2.5 py-1 rounded-xs border text-[10px] font-bold uppercase tracking-widest shrink-0 ${value === o ? "border-accent bg-accent text-white" : "border-border bg-white hover:border-accent"}`}
+            className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${
+              value === o
+                ? "border-primary bg-primary/10 text-foreground"
+                : "border-border bg-white hover:border-primary/50"
+            }`}
           >{o}</button>
         ))}
       </div>

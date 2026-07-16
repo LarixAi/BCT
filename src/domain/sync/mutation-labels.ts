@@ -5,6 +5,7 @@ export const MUTATION_LABELS: Record<OutboxMutationType, string> = {
   "vehicle.move": "Vehicle moved",
   "vehicle.mark_vor": "Vehicle marked VOR",
   "vehicle.release_vor": "Return to service",
+  "vehicle.adblue_refill": "AdBlue refill recorded",
   "check.complete": "Yard check completed",
   "defect.create": "Defect raised",
   "defect.resolve": "Defect resolved",

@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Fuel, Wrench, Package } from "lucide-react";
-import type { Trip, Vehicle, VehicleStatus } from "@/types/yard";
+import { ChevronRight, Fuel, Wrench, Package } from "lucide-react";
+import type { BayZone, Trip, Vehicle, VehicleStatus } from "@/types/yard";
 import { useVehicleReadiness } from "@/store/yard";
 import { READINESS_TONE } from "@/lib/readiness";
 import { STATUS_DISPLAY } from "@/domain/yard/status-display";
@@ -41,7 +41,7 @@ export function KpiCard({
     : tone === "warn" ? "bg-warn/5 border-warn/30 text-warn"
     : "bg-white border-border text-foreground";
   const inner = (
-    <div className={`p-3.5 rounded-sm border shadow-sm transition-all ${toneCls} ${to ? "hover:shadow-md active:scale-[0.98]" : ""}`}>
+    <div className={`rounded border p-3.5 transition-colors ${toneCls} ${to ? "hover:bg-secondary/40 active:bg-secondary" : ""}`}>
       <div className={`text-[10px] font-bold uppercase tracking-widest ${tone === "default" ? "text-muted" : ""}`}>{label}</div>
       <div className="text-2xl font-extrabold font-display tabular-nums leading-tight mt-0.5">{value}</div>
     </div>
@@ -92,7 +92,7 @@ export function DepartureRow({ trip, vehicle, driverName }: { trip: Trip; vehicl
       <Link
         to="/yard/$vehicleId/equipment"
         params={{ vehicleId: vehicle.id }}
-        className={`grid grid-cols-[92px_1fr_auto] items-center gap-2 p-3 border-b border-border hover:bg-secondary/50 transition-colors ${ready ? "bg-ok/5" : ""}`}
+        className={`grid grid-cols-[82px_1fr_auto] items-center gap-2 border-b border-border p-2.5 transition-colors hover:bg-secondary/50 sm:grid-cols-[92px_1fr_auto] sm:p-3 ${ready ? "bg-ok/5" : ""}`}
       >
         {content}
       </Link>
@@ -100,7 +100,7 @@ export function DepartureRow({ trip, vehicle, driverName }: { trip: Trip; vehicl
   }
 
   return (
-    <div className={`grid grid-cols-[92px_1fr_auto] items-center gap-2 p-3 border-b border-border ${ready ? "bg-ok/5" : ""}`}>
+    <div className={`grid grid-cols-[82px_1fr_auto] items-center gap-2 border-b border-border p-2.5 sm:grid-cols-[92px_1fr_auto] sm:p-3 ${ready ? "bg-ok/5" : ""}`}>
       {content}
     </div>
   );
@@ -112,12 +112,12 @@ export function VehicleCard({ v, nextAction }: { v: Vehicle; nextAction?: string
   const tone = READINESS_TONE[readiness.state];
   return (
     <Link
-      to="/yard/$vehicleId/equipment"
+      to="/yard/$vehicleId"
       params={{ vehicleId: v.id }}
-      className={`block bg-white border border-border p-4 rounded-xs hover:border-accent transition-colors ${isVor ? "border-l-4 border-l-vor" : ""}`}
+      className={`block rounded border border-border bg-white p-3 transition-colors hover:border-primary ${isVor ? "border-l-4 border-l-vor" : ""}`}
     >
       <div className="flex gap-3 items-start">
-        <div className={`size-11 rounded-xs grid place-items-center border shrink-0 font-mono text-sm font-bold ${isVor ? "bg-vor/5 border-vor/20 text-vor" : "bg-secondary border-border"}`}>
+        <div className={`grid size-10 shrink-0 place-items-center rounded border font-mono text-xs font-bold ${isVor ? "bg-vor/5 border-vor/20 text-vor" : "bg-secondary border-border"}`}>
           {v.bayId}
         </div>
         <div className="flex-1 min-w-0">
@@ -130,18 +130,51 @@ export function VehicleCard({ v, nextAction }: { v: Vehicle; nextAction?: string
             <span className="inline-flex items-center gap-1"><Fuel className="size-3" />{v.fuelPct}%</span>
             {v.lastCheckPassed === false && <span className="inline-flex items-center gap-1 text-vor"><Wrench className="size-3" />Check failed</span>}
           </div>
-          <div className={`mt-2 flex items-center gap-2 border ${tone.border} ${tone.bg} ${tone.text} rounded-xs px-2 py-1`}>
+          <div className={`mt-2 hidden items-center gap-2 rounded border px-2 py-1 sm:flex ${tone.border} ${tone.bg} ${tone.text}`}>
             <Package className="size-3 shrink-0" />
             <span className="text-[10px] font-bold uppercase tracking-widest shrink-0">{tone.label}</span>
             <span className="text-[10px] font-medium truncate">{readiness.summary}</span>
           </div>
           {nextAction && (
-            <div className="mt-3 pt-3 border-t border-border">
+            <div className="mt-2 border-t border-border pt-2">
               <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Next: {nextAction}</span>
             </div>
           )}
         </div>
       </div>
+    </Link>
+  );
+}
+
+export function VehicleInventoryRow({ v, zone }: { v: Vehicle; zone: BayZone }) {
+  const readiness = useVehicleReadiness(v.id);
+  const tone = READINESS_TONE[readiness.state];
+  const isVor = v.status === "VOR";
+
+  return (
+    <Link
+      to="/yard/$vehicleId"
+      params={{ vehicleId: v.id }}
+      className={`grid grid-cols-[72px_130px_minmax(120px,1fr)_170px_76px_minmax(130px,1fr)_24px] items-center gap-3 border-t border-border px-4 py-3 text-xs transition-colors hover:bg-secondary/40 ${
+        isVor ? "border-l-4 border-l-vor" : ""
+      }`}
+    >
+      <span className="font-mono font-bold">{v.bayId}</span>
+      <RegPlate reg={v.reg} tone={isVor ? "vor" : "default"} className="w-fit" />
+      <span className="text-muted">
+        {v.type}
+        <span className="ml-1 text-[10px]">· {zone}</span>
+      </span>
+      <StatusChip status={v.status} className="w-fit" />
+      <span className="inline-flex items-center gap-1 font-bold tabular-nums">
+        <Fuel className="size-3 text-muted" aria-hidden />
+        {v.fuelPct}%
+      </span>
+      <span className={`min-w-0 truncate font-bold ${tone.text}`}>
+        {tone.label}
+        <span className="ml-1 font-medium text-muted">· {readiness.summary}</span>
+      </span>
+      <ChevronRight className="size-4 text-muted" aria-hidden />
     </Link>
   );
 }
@@ -159,7 +192,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="border border-dashed border-border p-8 text-center rounded-sm bg-white shadow-sm">
+    <div className="rounded border border-dashed border-border bg-white p-8 text-center">
       {icon && <div className="mx-auto mb-3 text-muted opacity-60">{icon}</div>}
       <p className="text-sm font-bold font-display uppercase tracking-wide text-foreground">{title}</p>
       {hint && <p className="mt-2 text-sm text-muted max-w-sm mx-auto leading-relaxed">{hint}</p>}

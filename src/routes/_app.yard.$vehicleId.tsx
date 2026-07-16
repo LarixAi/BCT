@@ -11,9 +11,10 @@ function VehicleLayout() {
   const { vehicleId } = Route.useParams();
   const vehicle = useYard(s => s.vehicles.find(v => v.id === vehicleId));
   const pathname = useRouterState({ select: s => s.location.pathname });
-  const showTabs = vehicle && !pathname.includes("/check");
+  const isFocusedWorkflow = pathname.includes("/check") || pathname.includes("/adblue/");
+  const showTabs = vehicle && !isFocusedWorkflow;
 
-  if (!vehicle && !pathname.includes("/check")) throw notFound();
+  if (!vehicle && !isFocusedWorkflow) throw notFound();
 
   return (
     <div className="space-y-3">

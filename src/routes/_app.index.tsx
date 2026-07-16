@@ -18,11 +18,12 @@ import {
   homeSubtitle,
   yardCopy,
 } from "@/copy/yard-messages";
+import { yardPageTitle } from "@/components/brand/brand-copy";
 
 export const Route = createFileRoute("/_app/")({
   head: () => ({
     meta: [
-      { title: "Home Board — Veyvio Yard" },
+      { title: yardPageTitle("Home Board") },
       { name: "description", content: "Live depot picture: KPIs, departure line and yard inventory." },
     ],
   }),
@@ -63,25 +64,25 @@ function Home() {
   const depotActionCount = attention.length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 lg:space-y-6">
       <header className="animate-in-up">
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{yardCopy.home.boardLabel}</p>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight mt-0.5">
+        <h1 className="mt-1 max-w-xl font-display text-xl font-extrabold leading-tight tracking-tight [word-spacing:0.08em] sm:text-2xl">
           {homeOperationalHeadline(vehiclesNeedingAttention)}
         </h1>
-        <p className="text-sm text-muted mt-1">{homeSubtitle(vehiclesNeedingAttention, depotActionCount)}</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted sm:text-sm">{homeSubtitle(vehiclesNeedingAttention, depotActionCount)}</p>
       </header>
 
       {attention.length > 0 && (
         <section className="space-y-2 animate-in-up">
           <SectionHeader title={yardCopy.home.needsAttention} />
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
+          <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0">
             {attention.map(item => (
               <Link
                 key={item.id}
                 to={item.to}
                 params={item.params}
-                className={`snap-start shrink-0 min-w-[min(100%,200px)] min-h-[76px] p-3.5 rounded-sm border bg-white shadow-sm hover:shadow-md active:scale-[0.98] transition-all flex flex-col justify-between ${
+                className={`flex min-h-[76px] min-w-[calc(50%-0.25rem)] shrink-0 snap-start flex-col justify-between rounded border bg-white p-3 transition-colors hover:bg-secondary/30 lg:min-w-0 ${
                   item.tone === "vor" ? "border-vor/30 border-l-4 border-l-vor"
                   : item.tone === "warn" ? "border-warn/40 border-l-4 border-l-warn"
                   : item.tone === "primary" ? "border-primary/30 border-l-4 border-l-primary"
@@ -89,13 +90,13 @@ function Home() {
                 }`}
               >
                 <div>
-                  <div className={`text-sm font-display font-extrabold ${
+                  <div className={`font-display text-xs font-extrabold sm:text-sm ${
                     item.tone === "vor" ? "text-vor"
                     : item.tone === "warn" ? "text-warn"
                     : item.tone === "primary" ? "text-primary"
                     : "text-foreground"
                   }`}>{item.label}</div>
-                  <div className="text-xs text-muted mt-1 leading-snug">{item.detail}</div>
+                  <div className="mt-1 text-[10px] leading-snug text-muted sm:text-xs">{item.detail}</div>
                 </div>
                 <ChevronRight className="size-4 text-muted mt-2 self-end" />
               </Link>
@@ -114,7 +115,7 @@ function Home() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 animate-in-up">
+      <section className="hidden grid-cols-2 gap-2 animate-in-up sm:grid-cols-3 lg:grid lg:grid-cols-5">
         <KpiCard label="Available" value={c.available} to="/yard" />
         <KpiCard label="VOR" value={c.vor.toString().padStart(2, "0")} tone="vor" to="/vor" />
         <KpiCard label="Awaiting" value={c.awaiting.toString().padStart(2, "0")} tone="warn" to="/checks" />
@@ -122,74 +123,87 @@ function Home() {
         <KpiCard label="Workshop" value={c.workshop.toString().padStart(2, "0")} to="/yard" />
       </section>
 
-      <section className="grid grid-cols-3 gap-2 animate-in-up" style={{ animationDelay: "40ms" }}>
+      <section className="hidden grid-cols-3 gap-2 animate-in-up lg:grid" style={{ animationDelay: "40ms" }}>
         <QuickLink to="/yard/map" icon={<Map className="size-4" />} label="Yard map" />
         <QuickLink to="/arrivals" icon={<LogIn className="size-4" />} label="Arrivals" />
         <QuickLink to="/scan" icon={<ScanLine className="size-4" />} label="Scan" />
       </section>
 
-      {boardTasks.length > 0 && (
-        <section className="space-y-2 animate-in-up" style={{ animationDelay: "50ms" }}>
-          <SectionHeader
-            title="My tasks"
-            action={<Link to="/tasks" className="text-[10px] font-bold uppercase tracking-widest text-primary">All tasks →</Link>}
-          />
-          <div className="bg-white border border-border rounded-xs overflow-hidden divide-y divide-border">
-            {boardTasks.map(task => (
-              <Link
-                key={task.id}
-                to="/tasks/$taskId"
-                params={{ taskId: task.id }}
-                className="flex items-center gap-3 p-3 hover:bg-secondary/50"
-              >
-                <ListTodo className="size-4 text-primary shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold truncate">{task.title}</div>
-                  <div className="text-[10px] text-muted mt-0.5">
-                    {task.status.replace("_", " ")} · due {formatTaskDue(task.dueAt)}
-                  </div>
-                </div>
-                <ChevronRight className="size-4 text-muted shrink-0" />
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="space-y-2 animate-in-up" style={{ animationDelay: "60ms" }}>
-        <SectionHeader title="Zone occupancy" action={<Link to="/yard/map" className="text-[10px] font-bold uppercase tracking-widest text-primary">Map →</Link>} />
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-          {zoneStats.map(s => (
-            <div key={s.zone} className="shrink-0 bg-white border border-border rounded-xs px-3 py-2 min-w-[100px]">
-              <div className="text-[9px] font-bold uppercase tracking-widest text-muted truncate">{s.zone}</div>
-              <div className="text-lg font-display font-extrabold tabular-nums">{s.occupied}<span className="text-muted text-xs font-medium">/{s.total}</span></div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.85fr)] lg:items-start">
+        <div className="space-y-4 lg:space-y-6">
+          <section className="space-y-3 animate-in-up" style={{ animationDelay: "80ms" }}>
+            <SectionHeader
+              title="Departure Line"
+              sub="next 90 min"
+              action={<Link to="/departure-line" className="text-[10px] font-bold uppercase tracking-widest text-primary">View all →</Link>}
+            />
+            <div className="overflow-hidden rounded border border-border bg-white">
+              <div className="lg:hidden">
+                {trips.slice(0, 1).map(t => (
+                  <DepartureRow key={t.id} trip={t} vehicle={vehicles.find(v => v.id === t.vehicleId)} driverName={driverName(t.driverId)} />
+                ))}
+              </div>
+              <div className="hidden lg:block">
+                {trips.slice(0, 6).map(t => (
+                  <DepartureRow key={t.id} trip={t} vehicle={vehicles.find(v => v.id === t.vehicleId)} driverName={driverName(t.driverId)} />
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
-      </section>
+          </section>
 
-      <section className="space-y-3 animate-in-up" style={{ animationDelay: "80ms" }}>
-        <SectionHeader
-          title="Departure Line"
-          sub="next 90 min"
-          action={<Link to="/departure-line" className="text-[10px] font-bold uppercase tracking-widest text-primary">View all →</Link>}
-        />
-        <div className="bg-white border border-border rounded-xs overflow-hidden">
-          {trips.slice(0, 6).map(t => (
-            <DepartureRow key={t.id} trip={t} vehicle={vehicles.find(v => v.id === t.vehicleId)} driverName={driverName(t.driverId)} />
-          ))}
+          <section className="hidden space-y-3 animate-in-up lg:block" style={{ animationDelay: "160ms" }}>
+            <SectionHeader
+              title="Yard Inventory"
+              action={<Link to="/yard" className="text-[10px] font-bold uppercase tracking-widest text-primary">View all {vehicles.length} →</Link>}
+            />
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {preview.map(v => <VehicleCard key={v.id} v={v} nextAction={nextActionFor(v.status)} />)}
+            </div>
+          </section>
         </div>
-      </section>
 
-      <section className="space-y-3 animate-in-up" style={{ animationDelay: "160ms" }}>
-        <SectionHeader
-          title="Yard Inventory"
-          action={<Link to="/yard" className="text-[10px] font-bold uppercase tracking-widest text-primary">View all {vehicles.length} →</Link>}
-        />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {preview.map(v => <VehicleCard key={v.id} v={v} nextAction={nextActionFor(v.status)} />)}
+        <div className="hidden space-y-6 lg:block">
+          {boardTasks.length > 0 && (
+            <section className="space-y-2 animate-in-up" style={{ animationDelay: "50ms" }}>
+              <SectionHeader
+                title="My tasks"
+                action={<Link to="/tasks" className="text-[10px] font-bold uppercase tracking-widest text-primary">All tasks →</Link>}
+              />
+              <div className="divide-y divide-border overflow-hidden rounded-xs border border-border bg-white">
+                {boardTasks.map(task => (
+                  <Link
+                    key={task.id}
+                    to="/tasks/$taskId"
+                    params={{ taskId: task.id }}
+                    className="flex items-center gap-3 p-3 hover:bg-secondary/50"
+                  >
+                    <ListTodo className="size-4 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">{task.title}</div>
+                      <div className="mt-0.5 text-[10px] text-muted">
+                        {task.status.replace("_", " ")} · due {formatTaskDue(task.dueAt)}
+                      </div>
+                    </div>
+                    <ChevronRight className="size-4 shrink-0 text-muted" />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="space-y-2 animate-in-up" style={{ animationDelay: "60ms" }}>
+            <SectionHeader title="Zone occupancy" action={<Link to="/yard/map" className="text-[10px] font-bold uppercase tracking-widest text-primary">Map →</Link>} />
+            <div className="grid grid-cols-2 gap-2">
+              {zoneStats.map(s => (
+                <div key={s.zone} className="rounded-xs border border-border bg-white px-3 py-2">
+                  <div className="truncate text-[9px] font-bold uppercase tracking-widest text-muted">{s.zone}</div>
+                  <div className="font-display text-lg font-extrabold tabular-nums">{s.occupied}<span className="text-xs font-medium text-muted">/{s.total}</span></div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
     </div>
   );
 }

@@ -73,5 +73,8 @@ Master artwork (source of truth): `scripts/icons/icon-monogram-*.svg` (launcher)
 | Launcher monogram | `icon-monogram-foreground.svg` | VY teal badge in 66% safe zone |
 | Launcher background | `@color/ic_launcher_background` | Solid `#0B1526` |
 | Splash wordmark | `splash-wordmark.svg` | VEYVIO / YARD at ~38% screen width |
-| In-app splash | `SplashBrandMark` component | Matches canvas spec |
+| In-app splash | `SplashBrandMark` component | Midnight + Yard Teal glow; matches phone canvas |
+| Phone surfaces | [veyvio-yard-phone-surfaces.md](./veyvio-yard-phone-surfaces.md) | Hub + launch inventory |
+| Phone canvas | [canvases/veyvio-yard-brand-phone.canvas.tsx](./canvases/veyvio-yard-brand-phone.canvas.tsx) | Visual source of truth |
+| Copy constants | `src/components/brand/brand-copy.ts` | Campaign, promise, `yardPageTitle()` |
 | Regenerate | `npm run icons:android` | Runs `scripts/generate-brand-icons.mjs` |

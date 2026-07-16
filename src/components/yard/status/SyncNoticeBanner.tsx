@@ -26,7 +26,7 @@ export function SyncNoticeBanner() {
 
   return (
     <div className={`border-b px-4 py-2 ${TONE_STYLES[tone]}`}>
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 lg:mx-0 lg:max-w-none">
         <p className="flex items-center gap-2 text-xs font-medium min-w-0">
           <Icon className={`size-3.5 shrink-0 ${spin ? "animate-spin" : ""}`} aria-hidden />
           <span className="truncate">{message}</span>

@@ -4,7 +4,7 @@ import { useYard } from "@/store/yard";
 import { VehicleIdentityHeader } from "@/components/yard/VehicleIdentityHeader";
 import { PermissionGate } from "@/components/yard/PermissionGate";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ClipboardCheck, MoveRight, Search, TriangleAlert, MapPin, ShieldAlert, Fuel, Clock } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, Droplets, MoveRight, Search, TriangleAlert, MapPin, ShieldAlert, Fuel, Clock } from "lucide-react";
 import { drivers } from "@/data/fixtures";
 import { useCan } from "@/platform/permissions/use-can";
 
@@ -55,7 +55,7 @@ function VehicleDetail() {
           )}
         </div>
 
-        <div className={`mt-4 grid gap-2 ${canSpotAudit ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
+        <div className={`mt-4 grid gap-2 ${canSpotAudit ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"}`}>
           <PermissionGate permission="check.complete">
             <Link to="/yard/$vehicleId/check" params={{ vehicleId: vehicle.id }} className="contents">
               <Button className="w-full bg-accent hover:bg-accent/90 text-white uppercase tracking-widest font-bold text-xs">
@@ -75,76 +75,93 @@ function VehicleDetail() {
               <MoveRight className="size-4" /> Move
             </Button>
           </PermissionGate>
+          <PermissionGate permission="vehicle.move">
+            <Link to="/yard/$vehicleId/adblue/refill" params={{ vehicleId: vehicle.id }} className="contents">
+              <Button variant="outline" className="w-full border-primary/40 text-xs font-bold uppercase tracking-widest text-foreground hover:bg-primary/10">
+                <Droplets className="size-4 text-primary" /> AdBlue
+              </Button>
+            </Link>
+          </PermissionGate>
           <Button onClick={() => openSheet({ kind: "defect", vehicleId: vehicle.id })} className="bg-vor hover:bg-vor/90 text-white uppercase tracking-widest font-bold text-xs">
             <TriangleAlert className="size-4" /> Defect
           </Button>
         </div>
       </header>
 
-      {trip && (
-        <section className="bg-white border border-border rounded-xs p-4">
-          <h3 className="text-xs font-extrabold uppercase tracking-widest font-display mb-2">Assigned Trip</h3>
-          <div className="flex items-center justify-between text-xs">
-            <div>
-              <div className="font-bold">{trip.code} — {trip.service}</div>
-              <div className="text-muted">Depart {trip.departAt} · Driver {driverName ?? <span className="text-vor">UNASSIGNED</span>}</div>
-            </div>
-            <span className={`text-[10px] font-bold uppercase tracking-widest ${trip.ready ? "text-ok" : "text-vor"}`}>{trip.ready ? "Ready" : trip.blockers.join(" · ")}</span>
-          </div>
-        </section>
-      )}
-
-      {vorCases.length > 0 && (
-        <section className="bg-white border border-vor/30 rounded-xs p-4">
-          <h3 className="text-xs font-extrabold uppercase tracking-widest font-display text-vor mb-2 flex items-center gap-1"><ShieldAlert className="size-3.5" /> VOR Cases</h3>
-          <div className="space-y-2">
-            {vorCases.map(c => (
-              <Link key={c.id} to="/vor/$caseId" params={{ caseId: c.id }} className="flex items-center justify-between text-xs border border-border p-2 rounded-xs hover:bg-secondary/50">
-                <span className="font-mono">{c.id}</span>
-                <span className="font-bold uppercase tracking-widest text-vor">{c.lifecycle}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="bg-white border border-border rounded-xs p-4">
-        <h3 className="text-xs font-extrabold uppercase tracking-widest font-display mb-2">Open Defects · {defects.length}</h3>
-        {defects.length === 0 ? (
-          <p className="text-xs text-muted">No defects recorded.</p>
-        ) : (
-          <div className="space-y-2">
-            {defects.map(d => (
-              <Link key={d.id} to="/defects/$defectId" params={{ defectId: d.id }} className="block border border-border p-2 rounded-xs hover:bg-secondary/50">
-                <div className="flex justify-between text-xs">
-                  <span className="font-bold uppercase tracking-wider">{d.category}</span>
-                  <SevBadge sev={d.severity} />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(360px,1.05fr)] lg:items-start">
+        <div className="space-y-5">
+          {trip && (
+            <section className="rounded-xs border border-border bg-white p-4">
+              <h3 className="mb-2 font-display text-xs font-extrabold uppercase tracking-widest">Assigned Trip</h3>
+              <div className="flex items-center justify-between gap-4 text-xs">
+                <div>
+                  <div className="font-bold">{trip.code} — {trip.service}</div>
+                  <div className="text-muted">Depart {trip.departAt} · Driver {driverName ?? <span className="text-vor">UNASSIGNED</span>}</div>
                 </div>
-                <p className="text-xs text-muted mt-1">{d.notes}</p>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+                <span className={`text-right text-[10px] font-bold uppercase tracking-widest ${trip.ready ? "text-ok" : "text-vor"}`}>
+                  {trip.ready ? "Ready" : trip.blockers.join(" · ")}
+                </span>
+              </div>
+            </section>
+          )}
 
-      <section className="bg-white border border-border rounded-xs p-4">
-        <h3 className="text-xs font-extrabold uppercase tracking-widest font-display mb-2">Movement History</h3>
-        {movements.length === 0 ? (
-          <p className="text-xs text-muted">No movements recorded.</p>
-        ) : (
-          <ul className="space-y-1.5 text-xs">
-            {movements.slice(0, 8).map(m => (
-              <li key={m.id} className="flex items-center gap-2">
-                <MapPin className="size-3 text-muted shrink-0" />
-                <span className="font-mono text-[11px]">{m.fromBayId} → {m.toBayId}</span>
-                <span className="text-muted">·</span>
-                <span className="text-muted">{m.reason}</span>
-                <span className="text-muted ml-auto">{formatTime(m.at)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          <section className="rounded-xs border border-border bg-white p-4">
+            <h3 className="mb-2 font-display text-xs font-extrabold uppercase tracking-widest">Movement History</h3>
+            {movements.length === 0 ? (
+              <p className="text-xs text-muted">No movements recorded.</p>
+            ) : (
+              <ul className="space-y-2 text-xs">
+                {movements.slice(0, 8).map(m => (
+                  <li key={m.id} className="flex items-center gap-2 border-b border-border pb-2 last:border-0 last:pb-0">
+                    <MapPin className="size-3 shrink-0 text-muted" />
+                    <span className="font-mono text-[11px]">{m.fromBayId} → {m.toBayId}</span>
+                    <span className="text-muted">·</span>
+                    <span className="min-w-0 truncate text-muted">{m.reason}</span>
+                    <span className="ml-auto shrink-0 text-muted">{formatTime(m.at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <div className="space-y-5">
+          {vorCases.length > 0 && (
+            <section className="rounded-xs border border-vor/30 bg-white p-4">
+              <h3 className="mb-2 flex items-center gap-1 font-display text-xs font-extrabold uppercase tracking-widest text-vor">
+                <ShieldAlert className="size-3.5" /> VOR Cases
+              </h3>
+              <div className="space-y-2">
+                {vorCases.map(c => (
+                  <Link key={c.id} to="/vor/$caseId" params={{ caseId: c.id }} className="flex items-center justify-between rounded-xs border border-border p-2 text-xs hover:bg-secondary/50">
+                    <span className="font-mono">{c.id}</span>
+                    <span className="font-bold uppercase tracking-widest text-vor">{c.lifecycle}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="rounded-xs border border-border bg-white p-4">
+            <h3 className="mb-2 font-display text-xs font-extrabold uppercase tracking-widest">Open Defects · {defects.length}</h3>
+            {defects.length === 0 ? (
+              <p className="text-xs text-muted">No defects recorded.</p>
+            ) : (
+              <div className="space-y-2">
+                {defects.map(d => (
+                  <Link key={d.id} to="/defects/$defectId" params={{ defectId: d.id }} className="block rounded-xs border border-border p-2 hover:bg-secondary/50">
+                    <div className="flex justify-between text-xs">
+                      <span className="font-bold uppercase tracking-wider">{d.category}</span>
+                      <SevBadge sev={d.severity} />
+                    </div>
+                    <p className="mt-1 text-xs text-muted">{d.notes}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

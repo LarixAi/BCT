@@ -5,6 +5,7 @@ describe("mutation-labels", () => {
   it("covers all outbox mutation types with operational labels", () => {
     expect(Object.keys(MUTATION_LABELS).length).toBeGreaterThanOrEqual(20);
     expect(mutationLabel("vehicle.move")).toBe("Vehicle moved");
+    expect(mutationLabel("vehicle.adblue_refill")).toBe("AdBlue refill recorded");
     expect(mutationLabel("damage.review")).toBe("Damage reviewed");
   });
 

@@ -6,6 +6,7 @@ export type OutboxMutationType =
   | "vehicle.move"
   | "vehicle.mark_vor"
   | "vehicle.release_vor"
+  | "vehicle.adblue_refill"
   | "check.complete"
   | "defect.create"
   | "defect.resolve"

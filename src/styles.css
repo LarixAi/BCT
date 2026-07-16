@@ -46,7 +46,7 @@
 :root {
   --radius: 0.375rem;
   /* Veyvio Yard brand palette (light) — see docs/brand/design-tokens.md */
-  --background: #f5f7fa;
+  --background: #f9fafb;
   --foreground: #101828;
   --surface: #ffffff;
   --ink: #101828;
@@ -56,7 +56,7 @@
   --popover-foreground: #101828;
   --primary: #12a89d; /* Yard Teal */
   --primary-foreground: #ffffff;
-  --secondary: #eef2f6;
+  --secondary: #f4f4f5;
   --secondary-foreground: #101828;
   --muted: #667085;
   --muted-foreground: #475467;
@@ -67,7 +67,7 @@
   --border: #e4e7ec;
   --input: #e4e7ec;
   --ring: #12a89d;
-  --link: #2f6bff; /* Veyvio Blue */
+  --link: #12a89d;
   --vor: #b42318;
   --ok: #178c4b; /* Ready */
   --warn: #d97706; /* Attention */

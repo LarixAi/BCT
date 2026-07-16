@@ -1996,6 +1996,18 @@ Test on low, mid and current-range devices.
 | R19 | Accessibility, performance and observability | P2 |
 | R20 | Controlled pilot readiness review | Gate |
 
+### R0 implementation evidence — 16 July 2026
+
+**Status:** Implemented and build-guard verified.
+
+- Mock API is now an explicit development opt-in; the default selects real transport.
+- Production and mobile builds reject mock API or development authentication bypass with `ProductionConfigurationError` before asset transformation.
+- Application startup repeats the configuration assertion as runtime defence in depth.
+- Driver unit suite passes: 30 test files, 134 tests.
+- Production web and mobile builds pass with both development-only flags disabled.
+- Production web and mobile builds both reject `VITE_USE_MOCK_API=true`.
+- Repository-wide Driver type-check remains red on pre-existing route, store and domain diagnostics outside the R0 touch set; edited R0 files report no IDE diagnostics.
+
 ---
 
 ## 49. Ownership model

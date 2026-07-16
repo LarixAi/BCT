@@ -1,4 +1,4 @@
-import { getYardApi } from "@/platform/api";
+import { getYardApi, isMockApi } from "@/platform/api";
 import type { YardRole } from "@/types/permissions";
 import { saveBootstrapCache, listOutboxMutations } from "@/platform/storage/local-db";
 import { isOnline } from "@/platform/device/connectivity";
@@ -20,7 +20,7 @@ export async function runBootstrapSync(
   const sync = useSyncStore.getState();
   sync.setStatus("syncing");
 
-  if (!isOnline()) {
+  if (!isMockApi() && !isOnline()) {
     sync.setStatus("offline");
     return { ok: false, error: "No network connection" };
   }
@@ -40,7 +40,7 @@ export async function runBootstrapSync(
 /** Upload pending outbox mutations to API when online. */
 export async function processOutbox(): Promise<{ processed: number; failed: number }> {
   const sync = useSyncStore.getState();
-  if (!isOnline()) {
+  if (!isMockApi() && !isOnline()) {
     sync.setStatus("offline");
     return { processed: 0, failed: 0 };
   }

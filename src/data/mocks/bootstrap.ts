@@ -2,6 +2,7 @@ import * as fx from "@/data/fixtures";
 import { initialVehicleEquipment, initialDepotStock } from "@/data/equipment-fixtures";
 import { initialTasks } from "@/data/tasks-fixtures";
 import * as cfx from "@/data/condition-fixtures";
+import { initialAdBlueRefills } from "@/data/adblue-fixtures";
 import type {
   CustodyEvent,
   DamageObservation,
@@ -42,9 +43,10 @@ export interface BootstrapPayload {
   conditionSnapshots: VehicleConditionSnapshot[];
   custodyTimeline: CustodyEvent[];
   repairWorkOrders: RepairWorkOrder[];
+  adblueRefills: typeof initialAdBlueRefills;
 }
 
-export const BOOTSTRAP_SCHEMA_VERSION = 4;
+export const BOOTSTRAP_SCHEMA_VERSION = 5;
 
 export function buildBootstrapPayload(companyId: string, depotId: string, role: YardRole = "yard_manager"): BootstrapPayload {
   return {
@@ -73,6 +75,7 @@ export function buildBootstrapPayload(companyId: string, depotId: string, role: 
     conditionSnapshots: cfx.conditionSnapshots,
     custodyTimeline: cfx.custodyTimeline,
     repairWorkOrders: cfx.repairWorkOrders,
+    adblueRefills: initialAdBlueRefills,
   };
 }
 
@@ -98,5 +101,6 @@ export function normalizeBootstrapPayload(
     conditionSnapshots: payload.conditionSnapshots ?? defaults.conditionSnapshots,
     custodyTimeline: payload.custodyTimeline ?? defaults.custodyTimeline,
     repairWorkOrders: payload.repairWorkOrders ?? defaults.repairWorkOrders,
+    adblueRefills: payload.adblueRefills ?? defaults.adblueRefills,
   };
 }

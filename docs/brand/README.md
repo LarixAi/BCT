@@ -17,14 +17,18 @@ Shared brand docs for Yard and Driver. Same parent platform; each product keeps 
 
 App-local pointer: `Veyvio Driver /docs/brand/README.md`
 
-## Veyvio Yard
+## Veyvio Yard (phone)
 
 | Document | Purpose |
 |----------|---------|
 | [veyvio-yard-brand-foundation.md](./veyvio-yard-brand-foundation.md) | Full Yard brand system |
 | [design-tokens.md](./design-tokens.md) | Yard Teal / Midnight CSS map |
+| [veyvio-yard-phone-surfaces.md](./veyvio-yard-phone-surfaces.md) | Splash, chrome, hubs, About/Account/Settings |
+| [canvases/veyvio-yard-brand-phone.canvas.tsx](./canvases/veyvio-yard-brand-phone.canvas.tsx) | Phone hubs: Splash, Home, Checks, Vehicles, Yard, More |
 
-**Product promise:** Know the yard. Control the day.  
+**Master promise:** Move smarter. Operate safer.  
+**Yard campaign:** Every vehicle. Ready and accounted for.  
+**Focused promise:** Know the yard. Control the day.  
 **Primary accent:** Yard Teal `#12A89D`
 
 **Implementation plan:** [../plan/veyvio-yard-roadmap.md](../plan/veyvio-yard-roadmap.md)
