@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 const API = process.env.VEYVIO_API_URL ?? 'https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api'
 const ANON = process.env.VEYVIO_ANON_KEY ?? ''
 
-async function login(email: string, password: string) {
+async function login(email, password) {
   const res = await fetch(`${API}/api/auth/login`, {
     method: 'POST',
     headers: {
@@ -20,10 +20,10 @@ async function login(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   })
   assert.equal(res.status, 200, `login failed for ${email}`)
-  return res.json() as Promise<{ accessToken: string; user?: { activeTenantId: string } }>
+  return res.json()
 }
 
-async function get(path: string, token: string) {
+async function get(path, token) {
   return fetch(`${API}/api${path}`, {
     headers: { apikey: ANON, Authorization: `Bearer ${token}` },
   })
@@ -38,7 +38,7 @@ async function main() {
   const a = await login('admin@veyvio.test', 'VeyvioCommand1!')
   assert.ok(a.accessToken)
 
-  const vehicles = await (await get('/vehicles/profiles', a.accessToken)).json() as Array<{ id: string }>
+  const vehicles = await (await get('/vehicles/profiles', a.accessToken)).json()
   assert.ok(Array.isArray(vehicles))
   assert.ok(vehicles.length > 0, 'expected seeded vehicles for company A')
 

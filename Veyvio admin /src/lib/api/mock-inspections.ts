@@ -39,7 +39,7 @@ export const mockInspectionsApi = {
       status:
         r.status === 'signed_off'
           ? 'valid'
-          : r.status === 'failed' || (r.dueDate < new Date().toISOString().slice(0, 10) && r.status !== 'signed_off')
+          : r.status === 'failed' || r.dueDate < new Date().toISOString().slice(0, 10)
             ? 'overdue'
             : r.status === 'scheduled' || r.status === 'due'
               ? 'due_soon'

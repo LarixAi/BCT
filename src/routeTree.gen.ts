@@ -46,11 +46,11 @@ import { Route as AppYardVehicleIdRouteImport } from './routes/_app.yard.$vehicl
 import { Route as AppVorCaseIdRouteImport } from './routes/_app.vor.$caseId'
 import { Route as AppTasksTaskIdRouteImport } from './routes/_app.tasks.$taskId'
 import { Route as AppSimulateDriverReportRouteImport } from './routes/_app.simulate.driver-report'
+import { Route as AppMoreVehicleChecksRouteImport } from './routes/_app.more.vehicle-checks'
 import { Route as AppMoreSyncRouteImport } from './routes/_app.more.sync'
 import { Route as AppMoreSettingsRouteImport } from './routes/_app.more.settings'
 import { Route as AppMoreMessagesRouteImport } from './routes/_app.more.messages'
 import { Route as AppMoreBodyworkRouteImport } from './routes/_app.more.bodywork'
-import { Route as AppMoreVehicleChecksRouteImport } from './routes/_app.more.vehicle-checks'
 import { Route as AppMoreAccountRouteImport } from './routes/_app.more.account'
 import { Route as AppMoreAboutRouteImport } from './routes/_app.more.about'
 import { Route as AppInspectionsRepairVerificationRouteImport } from './routes/_app.inspections.repair-verification'
@@ -253,6 +253,11 @@ const AppSimulateDriverReportRoute = AppSimulateDriverReportRouteImport.update({
   path: '/simulate/driver-report',
   getParentRoute: () => AppRoute,
 } as any)
+const AppMoreVehicleChecksRoute = AppMoreVehicleChecksRouteImport.update({
+  id: '/vehicle-checks',
+  path: '/vehicle-checks',
+  getParentRoute: () => AppMoreRoute,
+} as any)
 const AppMoreSyncRoute = AppMoreSyncRouteImport.update({
   id: '/sync',
   path: '/sync',
@@ -271,11 +276,6 @@ const AppMoreMessagesRoute = AppMoreMessagesRouteImport.update({
 const AppMoreBodyworkRoute = AppMoreBodyworkRouteImport.update({
   id: '/bodywork',
   path: '/bodywork',
-  getParentRoute: () => AppMoreRoute,
-} as any)
-const AppMoreVehicleChecksRoute = AppMoreVehicleChecksRouteImport.update({
-  id: '/vehicle-checks',
-  path: '/vehicle-checks',
   getParentRoute: () => AppMoreRoute,
 } as any)
 const AppMoreAccountRoute = AppMoreAccountRouteImport.update({
@@ -407,11 +407,11 @@ export interface FileRoutesByFullPath {
   '/inspections/repair-verification': typeof AppInspectionsRepairVerificationRoute
   '/more/about': typeof AppMoreAboutRoute
   '/more/account': typeof AppMoreAccountRoute
-  '/more/messages': typeof AppMoreMessagesRoute
   '/more/bodywork': typeof AppMoreBodyworkRoute
-  '/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
+  '/more/messages': typeof AppMoreMessagesRoute
   '/more/settings': typeof AppMoreSettingsRoute
   '/more/sync': typeof AppMoreSyncRoute
+  '/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
   '/simulate/driver-report': typeof AppSimulateDriverReportRoute
   '/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/vor/$caseId': typeof AppVorCaseIdRoute
@@ -460,11 +460,11 @@ export interface FileRoutesByTo {
   '/inspections/repair-verification': typeof AppInspectionsRepairVerificationRoute
   '/more/about': typeof AppMoreAboutRoute
   '/more/account': typeof AppMoreAccountRoute
-  '/more/messages': typeof AppMoreMessagesRoute
   '/more/bodywork': typeof AppMoreBodyworkRoute
-  '/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
+  '/more/messages': typeof AppMoreMessagesRoute
   '/more/settings': typeof AppMoreSettingsRoute
   '/more/sync': typeof AppMoreSyncRoute
+  '/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
   '/simulate/driver-report': typeof AppSimulateDriverReportRoute
   '/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/vor/$caseId': typeof AppVorCaseIdRoute
@@ -522,11 +522,11 @@ export interface FileRoutesById {
   '/_app/inspections/repair-verification': typeof AppInspectionsRepairVerificationRoute
   '/_app/more/about': typeof AppMoreAboutRoute
   '/_app/more/account': typeof AppMoreAccountRoute
-  '/_app/more/messages': typeof AppMoreMessagesRoute
   '/_app/more/bodywork': typeof AppMoreBodyworkRoute
-  '/_app/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
+  '/_app/more/messages': typeof AppMoreMessagesRoute
   '/_app/more/settings': typeof AppMoreSettingsRoute
   '/_app/more/sync': typeof AppMoreSyncRoute
+  '/_app/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
   '/_app/simulate/driver-report': typeof AppSimulateDriverReportRoute
   '/_app/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/_app/vor/$caseId': typeof AppVorCaseIdRoute
@@ -584,11 +584,11 @@ export interface FileRouteTypes {
     | '/inspections/repair-verification'
     | '/more/about'
     | '/more/account'
-    | '/more/messages'
     | '/more/bodywork'
-    | '/more/vehicle-checks'
+    | '/more/messages'
     | '/more/settings'
     | '/more/sync'
+    | '/more/vehicle-checks'
     | '/simulate/driver-report'
     | '/tasks/$taskId'
     | '/vor/$caseId'
@@ -637,11 +637,11 @@ export interface FileRouteTypes {
     | '/inspections/repair-verification'
     | '/more/about'
     | '/more/account'
-    | '/more/messages'
     | '/more/bodywork'
-    | '/more/vehicle-checks'
+    | '/more/messages'
     | '/more/settings'
     | '/more/sync'
+    | '/more/vehicle-checks'
     | '/simulate/driver-report'
     | '/tasks/$taskId'
     | '/vor/$caseId'
@@ -698,11 +698,11 @@ export interface FileRouteTypes {
     | '/_app/inspections/repair-verification'
     | '/_app/more/about'
     | '/_app/more/account'
-    | '/_app/more/messages'
     | '/_app/more/bodywork'
-    | '/_app/more/vehicle-checks'
+    | '/_app/more/messages'
     | '/_app/more/settings'
     | '/_app/more/sync'
+    | '/_app/more/vehicle-checks'
     | '/_app/simulate/driver-report'
     | '/_app/tasks/$taskId'
     | '/_app/vor/$caseId'
@@ -998,6 +998,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSimulateDriverReportRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/more/vehicle-checks': {
+      id: '/_app/more/vehicle-checks'
+      path: '/vehicle-checks'
+      fullPath: '/more/vehicle-checks'
+      preLoaderRoute: typeof AppMoreVehicleChecksRouteImport
+      parentRoute: typeof AppMoreRoute
+    }
     '/_app/more/sync': {
       id: '/_app/more/sync'
       path: '/sync'
@@ -1024,13 +1031,6 @@ declare module '@tanstack/react-router' {
       path: '/bodywork'
       fullPath: '/more/bodywork'
       preLoaderRoute: typeof AppMoreBodyworkRouteImport
-      parentRoute: typeof AppMoreRoute
-    }
-    '/_app/more/vehicle-checks': {
-      id: '/_app/more/vehicle-checks'
-      path: '/vehicle-checks'
-      fullPath: '/more/vehicle-checks'
-      preLoaderRoute: typeof AppMoreVehicleChecksRouteImport
       parentRoute: typeof AppMoreRoute
     }
     '/_app/more/account': {
@@ -1211,22 +1211,22 @@ const AppInspectionsRouteWithChildren = AppInspectionsRoute._addFileChildren(
 interface AppMoreRouteChildren {
   AppMoreAboutRoute: typeof AppMoreAboutRoute
   AppMoreAccountRoute: typeof AppMoreAccountRoute
-  AppMoreMessagesRoute: typeof AppMoreMessagesRoute
   AppMoreBodyworkRoute: typeof AppMoreBodyworkRoute
-  AppMoreVehicleChecksRoute: typeof AppMoreVehicleChecksRoute
+  AppMoreMessagesRoute: typeof AppMoreMessagesRoute
   AppMoreSettingsRoute: typeof AppMoreSettingsRoute
   AppMoreSyncRoute: typeof AppMoreSyncRoute
+  AppMoreVehicleChecksRoute: typeof AppMoreVehicleChecksRoute
   AppMoreIndexRoute: typeof AppMoreIndexRoute
 }
 
 const AppMoreRouteChildren: AppMoreRouteChildren = {
   AppMoreAboutRoute: AppMoreAboutRoute,
   AppMoreAccountRoute: AppMoreAccountRoute,
-  AppMoreMessagesRoute: AppMoreMessagesRoute,
   AppMoreBodyworkRoute: AppMoreBodyworkRoute,
-  AppMoreVehicleChecksRoute: AppMoreVehicleChecksRoute,
+  AppMoreMessagesRoute: AppMoreMessagesRoute,
   AppMoreSettingsRoute: AppMoreSettingsRoute,
   AppMoreSyncRoute: AppMoreSyncRoute,
+  AppMoreVehicleChecksRoute: AppMoreVehicleChecksRoute,
   AppMoreIndexRoute: AppMoreIndexRoute,
 }
 

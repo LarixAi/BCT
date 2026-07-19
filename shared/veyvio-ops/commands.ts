@@ -10,7 +10,6 @@ import type {
 import {
   assertDutyTransition,
   assertJourneyTransition,
-  canTransitionDuty,
   canTransitionJourney,
 } from "./state-machines";
 

@@ -348,7 +348,10 @@ export function buildActivationResolution(driver: DriverProfile): ActivationReso
       // skip unused
     }
     // Only include mandatory catalogue items, or role items that apply (present in training list)
-    if (catalog.category === 'role' && !driver.workPermissions.some((p) => catalog.permissions.includes(p))) {
+    if (
+      catalog.category === 'role' &&
+      !driver.workPermissions.some((p) => p.enabled && catalog.permissions.includes(p.key))
+    ) {
       continue
     }
 

@@ -206,6 +206,8 @@ export interface DriverAccessSuspension {
 
 export interface DriverAccount {
   userAccountId: string | null
+  /** Login identity for the linked Driver app account (may differ from contact email). */
+  loginEmail?: string | null
   accountStatus: AccountStatus
   invitationStatus: InvitationStatus
   invitationSentAt: string | null

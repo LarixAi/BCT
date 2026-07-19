@@ -394,6 +394,7 @@ export interface IncidentsHubData {
   telematicsFeed: TelematicsIncidentFeedItem[]
   insurerConnectors: IncidentInsurerConnector[]
   riskSummary: { highRiskCount: number; avgScore: number }
+  settings?: IncidentSettings
 }
 
 export interface IncidentAutomationRule {

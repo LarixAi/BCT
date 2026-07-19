@@ -725,4 +725,4 @@ export const EXCEPTION_CATALOG: OperationalException[] = [
     lastUpdate: '07:00',
     source: 'Yard',
   },
-].map(enrichExceptionSuggestions)
+].map((ex) => enrichExceptionSuggestions(ex as OperationalException))

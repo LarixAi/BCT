@@ -158,7 +158,7 @@ export function openTasksForVehicle(tasks: YardTask[], vehicleId: string): YardT
 export function parseTaskScanRef(input: string): string | null {
   const trimmed = input.trim();
   const patterns = [
-    /^task[:\/]([a-z0-9_]+)$/i,
+    /^task[:/]([a-z0-9_]+)$/i,
     /^veyvio:task:([a-z0-9_]+)$/i,
     /^TASK-([a-z0-9_]+)$/i,
   ];

@@ -193,7 +193,7 @@ export function buildVehicleTimeline(vehicle: VehicleProfile): VehicleTimelineEv
       occurredAt: eq.lastCheckedAt,
       category: 'equipment',
       title: `Equipment check — ${eq.name}`,
-      detail: eq.status,
+      detail: eq.conditionLabel ?? (eq.assigned ? 'assigned' : 'unassigned'),
       actorName: null,
       source: 'yard',
       href: null,

@@ -244,7 +244,8 @@ export const mockVehicleReportsApi = {
           category: input.reportCategory ?? input.reportType,
           component: input.vehicleArea ?? input.reportType,
           description: input.description,
-          severity: severity === 'critical' ? 'dangerous' : severity === 'major' ? 'major' : 'minor',
+          // Critical reports take the VOR branch above — this path is non-critical only.
+          severity: severity === 'major' ? 'major' : 'minor',
           source: 'vehicle_report',
           location: input.location ?? undefined,
           mileage: input.mileage ?? undefined,

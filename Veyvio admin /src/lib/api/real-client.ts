@@ -6,7 +6,6 @@ import type {
   IncidentRecord,
   LiveDispatchResponse,
   LoginResponse,
-  ApiNotification,
   TenantMembershipOption,
   DepotRecord,
   DutyRecord,

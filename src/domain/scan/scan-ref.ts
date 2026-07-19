@@ -19,10 +19,10 @@ interface ResolveScanContext {
 }
 
 const ENTITY_PATTERNS: { kind: ScanEntityRef["kind"]; pattern: RegExp }[] = [
-  { kind: "task", pattern: /^(?:veyvio:)?task[:\/]([a-z0-9_]+)$/i },
-  { kind: "defect", pattern: /^(?:veyvio:)?defect[:\/]([a-z0-9_]+)$/i },
-  { kind: "vehicle", pattern: /^(?:veyvio:)?vehicle[:\/]([a-z0-9_]+)$/i },
-  { kind: "bay", pattern: /^(?:veyvio:)?bay[:\/]([a-z0-9_]+)$/i },
+  { kind: "task", pattern: /^(?:veyvio:)?task[:/]([a-z0-9_]+)$/i },
+  { kind: "defect", pattern: /^(?:veyvio:)?defect[:/]([a-z0-9_]+)$/i },
+  { kind: "vehicle", pattern: /^(?:veyvio:)?vehicle[:/]([a-z0-9_]+)$/i },
+  { kind: "bay", pattern: /^(?:veyvio:)?bay[:/]([a-z0-9_]+)$/i },
 ];
 
 export function parseScanEntityRef(input: string): ScanEntityRef | null {

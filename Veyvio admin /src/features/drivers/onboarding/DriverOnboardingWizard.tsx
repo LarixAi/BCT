@@ -686,11 +686,3 @@ function Field({
   )
 }
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-3 border-b border-border py-1.5">
-      <span className="text-muted">{label}</span>
-      <span className="font-medium text-ink">{value}</span>
-    </div>
-  )
-}

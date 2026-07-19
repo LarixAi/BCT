@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
@@ -16,8 +16,9 @@ export default defineConfig({
       '@veyvio/ops': path.resolve(__dirname, '../shared/veyvio-ops'),
     },
   },
+  // Vitest picks this up when run via `vitest` / `npm test`.
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
   },
-})
+} as import('vite').UserConfig & { test?: object })

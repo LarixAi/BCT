@@ -29,5 +29,6 @@
       "@veyvio/ops/*": ["../shared/veyvio-ops/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
 }

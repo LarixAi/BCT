@@ -162,7 +162,15 @@ export function VehicleEquipmentTab({
                       : ''}
                   </p>
                 </div>
-                <StatusPill status={item.status === 'available' || item.status === 'issued' ? 'compliant' : 'warning'} />
+                <StatusPill
+                  status={
+                    item.status === 'available' ||
+                    item.status === 'assigned' ||
+                    item.status === 'in_service'
+                      ? 'compliant'
+                      : 'warning'
+                  }
+                />
               </li>
             ))}
           </ul>

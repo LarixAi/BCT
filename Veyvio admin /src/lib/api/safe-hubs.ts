@@ -169,6 +169,9 @@ export function safeIncidentsHub(hub: IncidentsHubData): IncidentsHubData {
       autoPauseDriverOnCritical: false,
       icoAssessmentHours: 72,
       riddorAssessmentDays: 10,
+      nearMissTrackingEnabled: true,
+      welfareFollowUpDays: 7,
+      notifyRoles: ['transport_manager', 'compliance'],
     },
   }
 }
@@ -231,7 +234,6 @@ export function safeMaintenanceHub(hub: MaintenanceHubData): MaintenanceHubData 
     }),
     calendar: hub.calendar ?? [],
     suppliers: hub.suppliers ?? [],
-    parts: hub.parts ?? [],
     downtime: hub.downtime ?? {
       averageDowntimeHours: 0,
       vehiclesOnDowntime: 0,

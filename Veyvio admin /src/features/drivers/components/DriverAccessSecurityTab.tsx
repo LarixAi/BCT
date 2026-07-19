@@ -118,11 +118,6 @@ export function DriverAccessSecurityTab({
     },
   })
 
-  const cancelInvite = useMutation({
-    mutationFn: () => api.cancelDriverInvitation(driver.id, actorName, 'Revoked by administrator'),
-    onSuccess: invalidate,
-  })
-
   const passwordReset = useMutation({
     mutationFn: () => api.initiateDriverPasswordReset(driver.id, actorName),
     onSuccess: invalidate,

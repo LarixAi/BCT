@@ -66,5 +66,7 @@ function YardBootstrapHydrator() {
 
 /** Hook for components that need to know auth is active */
 export function useAppAuthenticated() {
-  return useSessionStore(s => s.isAuthenticated()) && useTenancyStore(s => s.isContextComplete());
+  const authenticated = useSessionStore(s => s.isAuthenticated());
+  const contextComplete = useTenancyStore(s => s.isContextComplete());
+  return authenticated && contextComplete;
 }
