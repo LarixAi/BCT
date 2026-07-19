@@ -2,19 +2,25 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { LiveDispatchVehicle } from '@/lib/api/types'
+import { veyvioMapStyle } from '@/features/live-operations/map/veyvioMapStyle'
 import { LiveMapDriverCard } from './LiveMapDriverCard'
 
-const MAP_STYLES = [
-  import.meta.env.VITE_MAP_TILE_STYLE,
-  'https://tiles.openfreemap.org/styles/liberty',
-  'https://demotiles.maplibre.org/style.json',
-].filter((url): url is string => Boolean(url))
-
 const DEFAULT_CENTER: [number, number] = [-0.1278, 51.5074]
-const DEFAULT_ZOOM = 10
+const DEFAULT_ZOOM = 11
+/** Fixed panel height so MapLibre never mounts into a 0×0 box. */
+export const LIVE_MAP_PANEL_HEIGHT_PX = 420
 
 export interface LiveVehicleMapHandle {
   fitFleet: () => void
+}
+
+export type MapStopMarker = {
+  id: string
+  longitude: number
+  latitude: number
+  label: string
+  kind?: 'pickup' | 'dropoff' | 'other'
+  order?: number
 }
 
 interface LiveVehicleMapProps {
@@ -25,9 +31,10 @@ interface LiveVehicleMapProps {
   onSelectDuty?: (dutyId: string) => void
   staleOnly?: boolean
   edgeToEdge?: boolean
-  resultsLabel?: string
   routeLine?: [number, number][]
   trailLine?: [number, number][]
+  /** Planned pickup / drop-off pins (shown in addition to the vehicle marker). */
+  stopMarkers?: MapStopMarker[]
 }
 
 const ROUTE_SOURCE = 'veyvio-route'
@@ -43,24 +50,25 @@ function positionedVehicles(vehicles: LiveDispatchVehicle[], staleOnly: boolean)
 }
 
 function scheduleResize(map: maplibregl.Map) {
+  map.resize()
   requestAnimationFrame(() => map.resize())
-  window.setTimeout(() => map.resize(), 50)
-  window.setTimeout(() => map.resize(), 250)
+  window.setTimeout(() => map.resize(), 100)
+  window.setTimeout(() => map.resize(), 400)
 }
 
 export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapProps>(
   function LiveVehicleMap(
     {
       vehicles,
-      className = 'h-full min-h-[300px]',
+      className = '',
       selectedDutyId,
       selectedVehicle,
       onSelectDuty,
       staleOnly = false,
       edgeToEdge = false,
-      resultsLabel,
       routeLine = [],
       trailLine = [],
+      stopMarkers = [],
     },
     ref,
   ) {
@@ -68,13 +76,20 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
     const containerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<maplibregl.Map | null>(null)
     const markersRef = useRef<maplibregl.Marker[]>([])
-    const styleIndexRef = useRef(0)
+    const stopMarkersRef = useRef<maplibregl.Marker[]>([])
     const positioned = useMemo(
       () => positionedVehicles(vehicles, staleOnly),
       [vehicles, staleOnly],
     )
     const [mapError, setMapError] = useState<string | null>(null)
     const [mapReady, setMapReady] = useState(false)
+
+    const showDefaultView = useCallback(() => {
+      const map = mapRef.current
+      if (!map) return
+      map.jumpTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM })
+      scheduleResize(map)
+    }, [])
 
     const fitFleet = useCallback(() => {
       const map = mapRef.current
@@ -87,18 +102,25 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
         bounds.extend([v.lastLongitude!, v.lastLatitude!])
         hasBounds = true
       }
-
       for (const coord of [...routeLine, ...trailLine]) {
         bounds.extend(coord)
         hasBounds = true
       }
+      for (const stop of stopMarkers) {
+        bounds.extend([stop.longitude, stop.latitude])
+        hasBounds = true
+      }
 
-      if (!hasBounds) return
+      if (!hasBounds) {
+        showDefaultView()
+        return
+      }
 
       if (
         positioned.length === 1 &&
         routeLine.length === 0 &&
-        trailLine.length === 0
+        trailLine.length === 0 &&
+        stopMarkers.length === 0
       ) {
         map.easeTo({
           center: [positioned[0]!.lastLongitude!, positioned[0]!.lastLatitude!],
@@ -109,51 +131,66 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
         map.fitBounds(bounds, { padding: 56, maxZoom: 14, duration: 500 })
       }
       scheduleResize(map)
-    }, [positioned, routeLine, trailLine])
+    }, [positioned, routeLine, trailLine, stopMarkers, showDefaultView])
 
     useImperativeHandle(ref, () => ({ fitFleet }), [fitFleet])
 
+    // Create the map only once the container has a real non-zero size.
     useEffect(() => {
       const container = containerRef.current
       const wrapper = wrapperRef.current
-      if (!container || !wrapper || mapRef.current) return
+      if (!container || !wrapper) return
 
       let cancelled = false
+      let raf = 0
+      let attempts = 0
 
-      const map = new maplibregl.Map({
-        container,
-        style: MAP_STYLES[styleIndexRef.current]!,
-        center: DEFAULT_CENTER,
-        zoom: DEFAULT_ZOOM,
-      })
-
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
-      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left')
-
-      map.on('load', () => {
-        if (cancelled) return
-        scheduleResize(map)
-        setMapReady(true)
-        setMapError(null)
-      })
-
-      map.on('error', (event) => {
-        const mapErr = event as { sourceId?: string; tile?: unknown }
-        if (mapErr.sourceId || mapErr.tile) return
-
-        if (styleIndexRef.current + 1 < MAP_STYLES.length) {
-          styleIndexRef.current += 1
-          map.setStyle(MAP_STYLES[styleIndexRef.current]!)
+      const init = () => {
+        if (cancelled || mapRef.current) return
+        attempts += 1
+        const w = container.clientWidth
+        const h = container.clientHeight
+        if (w < 2 || h < 2) {
+          if (attempts < 60) raf = requestAnimationFrame(init)
           return
         }
 
-        setMapError(
-          event.error?.message ??
-            (typeof event.error === 'string' ? event.error : 'Map tiles failed to load'),
-        )
-      })
+        try {
+          const map = new maplibregl.Map({
+            container,
+            style: veyvioMapStyle,
+            center: DEFAULT_CENTER,
+            zoom: DEFAULT_ZOOM,
+            attributionControl: false,
+          })
 
-      mapRef.current = map
+          map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
+          map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left')
+
+          map.on('load', () => {
+            if (cancelled) return
+            scheduleResize(map)
+            map.jumpTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM })
+            setMapReady(true)
+            setMapError(null)
+          })
+
+          map.on('error', (event) => {
+            const mapErr = event as { error?: { message?: string }; sourceId?: string; tile?: unknown }
+            if (mapErr.sourceId || mapErr.tile) return
+            setMapError(mapErr.error?.message ?? 'Map failed to load')
+          })
+
+          mapRef.current = map
+          // Show chrome quickly; tiles continue loading underneath.
+          setMapReady(true)
+          scheduleResize(map)
+        } catch (err) {
+          setMapError(err instanceof Error ? err.message : 'Could not create map')
+        }
+      }
+
+      raf = requestAnimationFrame(init)
 
       const resizeObserver = new ResizeObserver(() => {
         mapRef.current?.resize()
@@ -162,18 +199,21 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
 
       return () => {
         cancelled = true
+        cancelAnimationFrame(raf)
         resizeObserver.disconnect()
         markersRef.current.forEach((marker) => marker.remove())
         markersRef.current = []
-        map.remove()
+        stopMarkersRef.current.forEach((marker) => marker.remove())
+        stopMarkersRef.current = []
+        mapRef.current?.remove()
         mapRef.current = null
         setMapReady(false)
       }
     }, [])
 
     useEffect(() => {
-      const map = mapRef.current
-      if (!map || !mapReady) return
+      if (!mapRef.current || !mapReady) return
+      const mapInstance: maplibregl.Map = mapRef.current
 
       function upsertLineLayer(
         sourceId: string,
@@ -182,22 +222,19 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
         color: string,
         dasharray?: number[],
       ) {
-        if (!map) return
+        if (!mapInstance.isStyleLoaded()) return
 
         const geojson = {
           type: 'Feature' as const,
           properties: {},
-          geometry: {
-            type: 'LineString' as const,
-            coordinates,
-          },
+          geometry: { type: 'LineString' as const, coordinates },
         }
 
-        if (map.getSource(sourceId)) {
-          ;(map.getSource(sourceId) as maplibregl.GeoJSONSource).setData(geojson)
+        if (mapInstance.getSource(sourceId)) {
+          ;(mapInstance.getSource(sourceId) as maplibregl.GeoJSONSource).setData(geojson)
         } else if (coordinates.length >= 2) {
-          map.addSource(sourceId, { type: 'geojson', data: geojson })
-          map.addLayer({
+          mapInstance.addSource(sourceId, { type: 'geojson', data: geojson })
+          mapInstance.addLayer({
             id: layerId,
             type: 'line',
             source: sourceId,
@@ -209,19 +246,54 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
           })
         }
 
-        if (coordinates.length < 2 && map.getLayer(layerId)) {
-          map.removeLayer(layerId)
-          map.removeSource(sourceId)
+        if (coordinates.length < 2 && mapInstance.getLayer(layerId)) {
+          mapInstance.removeLayer(layerId)
+          mapInstance.removeSource(sourceId)
         }
       }
 
-      upsertLineLayer(ROUTE_SOURCE, `${ROUTE_SOURCE}-line`, routeLine, '#3b5bdb')
-      upsertLineLayer(TRAIL_SOURCE, `${TRAIL_SOURCE}-line`, trailLine, '#059669', [2, 2])
-
-      if (routeLine.length >= 2 || trailLine.length >= 2 || positioned.length > 0) {
-        fitFleet()
+      const apply = () => {
+        upsertLineLayer(ROUTE_SOURCE, `${ROUTE_SOURCE}-line`, routeLine, '#2f6bff')
+        upsertLineLayer(TRAIL_SOURCE, `${TRAIL_SOURCE}-line`, trailLine, '#059669', [2, 2])
+        if (
+          routeLine.length >= 2 ||
+          trailLine.length >= 2 ||
+          positioned.length > 0 ||
+          stopMarkers.length > 0
+        ) {
+          fitFleet()
+        } else showDefaultView()
       }
-    }, [mapReady, routeLine, trailLine, positioned.length, fitFleet])
+
+      if (mapInstance.isStyleLoaded()) apply()
+      else mapInstance.once('load', apply)
+    }, [mapReady, routeLine, trailLine, stopMarkers, positioned.length, fitFleet, showDefaultView])
+
+    useEffect(() => {
+      const map = mapRef.current
+      if (!map || !mapReady) return
+
+      stopMarkersRef.current.forEach((marker) => marker.remove())
+      stopMarkersRef.current = []
+
+      for (const stop of stopMarkers) {
+        const kind = stop.kind ?? 'other'
+        const el = document.createElement('button')
+        el.type = 'button'
+        el.className = `route-stop-marker route-stop-marker--${kind}`
+        el.title = stop.label
+        el.setAttribute('aria-label', stop.label)
+        el.innerHTML = `<span>${stop.order ?? ''}</span>`
+        stopMarkersRef.current.push(
+          new maplibregl.Marker({ element: el, anchor: 'bottom' })
+            .setLngLat([stop.longitude, stop.latitude])
+            .setPopup(
+              new maplibregl.Popup({ offset: 18, closeButton: false }).setText(stop.label),
+            )
+            .addTo(map),
+        )
+      }
+    }, [mapReady, stopMarkers])
 
     useEffect(() => {
       const map = mapRef.current
@@ -230,11 +302,7 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current = []
 
-      if (!positioned.length) return
-
       for (const vehicle of positioned) {
-        const lng = vehicle.lastLongitude!
-        const lat = vehicle.lastLatitude!
         const selected = vehicle.dutyId === selectedDutyId
         const markerEl = document.createElement('button')
         markerEl.type = 'button'
@@ -249,16 +317,21 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
           onSelectDuty?.(vehicle.dutyId)
         })
 
-        const marker = new maplibregl.Marker({ element: markerEl })
-          .setLngLat([lng, lat])
-          .addTo(map)
+        markersRef.current.push(
+          new maplibregl.Marker({ element: markerEl })
+            .setLngLat([vehicle.lastLongitude!, vehicle.lastLatitude!])
+            .addTo(map),
+        )
+      }
 
-        markersRef.current.push(marker)
+      if (!positioned.length && !stopMarkers.length) {
+        showDefaultView()
+        return
       }
 
       if (selectedDutyId) {
         const selected = positioned.find((v) => v.dutyId === selectedDutyId)
-        if (selected) {
+        if (selected && stopMarkers.length === 0) {
           map.easeTo({
             center: [selected.lastLongitude!, selected.lastLatitude!],
             zoom: 14,
@@ -270,11 +343,11 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
       }
 
       fitFleet()
-    }, [positioned, mapReady, selectedDutyId, onSelectDuty, fitFleet])
+    }, [positioned, mapReady, selectedDutyId, onSelectDuty, fitFleet, showDefaultView, stopMarkers.length])
 
     const shellClass = edgeToEdge
-      ? `relative overflow-hidden ${className}`
-      : `relative overflow-hidden rounded-lg border border-slate-200 ${className}`
+      ? `relative w-full overflow-hidden ${className}`
+      : `relative w-full overflow-hidden rounded-lg border border-slate-200 ${className}`
 
     const showFloatingCard =
       selectedVehicle &&
@@ -282,39 +355,31 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
       selectedVehicle.lastLongitude != null
 
     return (
-      <div ref={wrapperRef} className={shellClass}>
-        {resultsLabel && (
-          <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-center">
-            <div className="pointer-events-auto flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200/90 bg-white/95 px-3 py-2 text-xs text-slate-600 shadow-sm backdrop-blur-sm">
-              <span className="font-medium uppercase tracking-wide">{resultsLabel}</span>
-            </div>
-          </div>
-        )}
-
-        <div ref={containerRef} className="veyvio-map-container h-full w-full bg-slate-100" />
+      <div
+        ref={wrapperRef}
+        className={shellClass}
+        style={{ height: LIVE_MAP_PANEL_HEIGHT_PX, minHeight: LIVE_MAP_PANEL_HEIGHT_PX }}
+      >
+        <div
+          ref={containerRef}
+          className="veyvio-map-container h-full w-full"
+          style={{ height: '100%', width: '100%', background: '#EEF4FF' }}
+        />
 
         {!mapReady && !mapError && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-50/80 text-sm text-slate-500">
+          <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center text-sm text-slate-500">
             Loading map…
           </div>
         )}
 
         {mapError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-red-50 p-4 text-center text-sm text-red-800">
-            Could not load map tiles. Check your network connection and refresh.
-          </div>
-        )}
-
-        {mapReady && positioned.length === 0 && routeLine.length < 2 && trailLine.length < 2 && (
-          <div className="pointer-events-none absolute inset-x-4 top-16 rounded-md bg-white/90 px-3 py-2 text-center text-sm text-slate-600 shadow-sm">
-            {staleOnly
-              ? 'No stale GPS positions for this filter.'
-              : 'No GPS positions yet — map will update when drivers report location.'}
+          <div className="absolute inset-0 z-[2] flex items-center justify-center bg-amber-50 p-4 text-center text-sm text-amber-950">
+            Could not load map tiles ({mapError}). Check network access to map tile servers.
           </div>
         )}
 
         {mapReady && showFloatingCard && (
-          <div className="pointer-events-none absolute left-1/2 top-[42%] z-20 -translate-x-1/2">
+          <div className="pointer-events-none absolute bottom-3 left-3 z-20 max-w-[min(100%-1.5rem,16rem)]">
             <LiveMapDriverCard vehicle={selectedVehicle} />
           </div>
         )}

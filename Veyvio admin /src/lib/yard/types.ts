@@ -1,6 +1,73 @@
 /** Yard Operations domain — physical depot state separate from vehicle identity and legal availability. */
 
-export type YardTab = 'live' | 'map' | 'tasks' | 'movements' | 'handover' | 'exceptions'
+export type YardTab = 'live' | 'map' | 'tasks' | 'movements' | 'handover' | 'exceptions' | 'messages' | 'bodywork' | 'checks'
+
+export interface YardVehicleCheckSection {
+  id: string
+  section: string
+  question: string
+  answer: string
+  notes: string | null
+  photoDataUrl?: string | null
+}
+
+export interface YardVehicleCheckEvidence {
+  id: string
+  kind: string
+  label: string
+  capturedAt?: string
+  url: string | null
+}
+
+export interface YardVehicleCheckReport {
+  id: string
+  registrationNumber: string
+  fleetNumber: string | null
+  driverName: string | null
+  checkType: string
+  result: string
+  odometer: number | string | null
+  fuelLevel: string | null
+  startedAt: string | null
+  submittedAt: string | null
+  sectionCount: number
+  failCount: number
+  evidenceCount: number
+  odometerPhotoDataUrl: string | null
+  href: string
+  sections: YardVehicleCheckSection[]
+  evidence: YardVehicleCheckEvidence[]
+}
+
+export interface YardBodyworkReport {
+  id: string
+  defectRef: string
+  vehicleId: string
+  registrationNumber: string
+  fleetNumber: string | null
+  description: string
+  severity: string
+  status: string
+  zone: string | null
+  damageType: string | null
+  reportedAt: string
+  photoDataUrl: string | null
+  photoPath: string | null
+  vehicleCheckId: string | null
+  href: string
+}
+
+export interface YardDriverMessage {
+  id: string
+  conversationId: string
+  driverId: string | null
+  driverName: string
+  subject: string
+  body: string
+  sentAt: string
+  sourceApp: string
+  audience: 'dispatch' | 'yard' | 'both' | string
+}
 
 export type YardPresenceState =
   | 'expected'
@@ -224,6 +291,9 @@ export interface YardHubData {
   mapMarkers: YardMapVehicleMarker[]
   depots: { id: string; name: string }[]
   zones: YardZone[]
+  driverMessages?: YardDriverMessage[]
+  bodyworkReports?: YardBodyworkReport[]
+  vehicleChecks?: YardVehicleCheckReport[]
 }
 
 export interface RecordYardMovementInput {

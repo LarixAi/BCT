@@ -6,6 +6,7 @@ describe("mutation-labels", () => {
     expect(Object.keys(MUTATION_LABELS).length).toBeGreaterThanOrEqual(20);
     expect(mutationLabel("vehicle.move")).toBe("Vehicle moved");
     expect(mutationLabel("vehicle.adblue_refill")).toBe("AdBlue refill recorded");
+    expect(mutationLabel("departure.complete")).toBe("Vehicle departed for service");
     expect(mutationLabel("damage.review")).toBe("Damage reviewed");
   });
 

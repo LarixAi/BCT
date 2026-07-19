@@ -326,6 +326,21 @@ if (isProductionBuild() && isMockApi()) {
 - A disabled or removed Driver is blocked even if an older cache exists.
 - E2E verifies server bootstrap and offline cached restart.
 
+### Implementation evidence — 16 July 2026 (P0.3)
+
+**Real bootstrap transport plumbing:** Implemented in-repo (hardened contract).
+
+- Canonical platform path `GET /driver/bootstrap`; TanStack development adapter `GET /api/driver/bootstrap`. Difference hidden behind `getDriverBootstrapClient()` / `driverFetch`.
+- Principal identity from validated token/session claims only. Optional `depotId` query is context and must be in `permittedDepotIds`. Client tenancy headers are never trusted as authority.
+- Repository boundary (option B): development-only fixture adapter; production returns `503 bootstrap_unavailable` until an external platform adapter is connected.
+- Projection schema v8 with nested transitional `legacy` UI aggregates; canonical `authoritySource` is `platform | development_fixture` only.
+- Composite IndexedDB cache key `${companyId}:${depotId}:${driverId}` (DB v4); old depotId-only records discarded on upgrade.
+- Offline fallback only for network/timeout/503; 401/403/access-revoked/invalid projection fail closed. Production rejects non-`platform` authority.
+- Cached duties resolve from the projection only (`getCachedDutyFromBootstrap`); never the global mock Map.
+- Shared `driverFetch` for authenticated Driver HTTP (Bearer + credentials).
+- Verification (16 July 2026 hardening): Driver suite **168** tests passed; production build with mock/bypass disabled; client public assets contain no `buildBootstrapPayload` / `MOCK_DUTIES` / `data/mocks/bootstrap` / `DevelopmentFixtureBootstrapRepository` (`development_fixture` appears only as Zod authority enum).
+- Remaining for full P0-01 gate: encrypted local database (P0.5), real platform projection adapter, E2E offline-restart coverage.
+
 ---
 
 ## 6. P0-02 — Remove mock mutation fallback from production sync
@@ -388,6 +403,16 @@ message.acknowledge
 - Unsupported command UI displays a recoverable technical error and records diagnostics.
 - No unsupported action is marked successful.
 
+### Implementation evidence — 16 July 2026
+
+**Production mock-fallback removal:** Implemented.
+
+- Production outbox processing converts unsupported mutations to `UnsupportedDriverMutationError`, persists failure and surfaces “This action was not recorded.”
+- `mockSyncMutation` is loaded only inside the explicit mock-mode branch; the production sync path neither invokes it nor marks the mutation successful.
+- Durable outbox-to-command restoration now lives in the domain command module rather than the mock transport module.
+- Focused tests prove unsupported production mutations fail without mock transport and legacy fixture behavior remains development-only.
+- Remaining work for the wider P0-02 acceptance gate: complete the command inventory and add an exhaustive mapping test for every mutation type.
+
 ---
 
 ## 7. P0-03 — Missing session or tenancy must not apply locally
@@ -426,6 +451,17 @@ if (!tenancy.depotId) {
 - Expired session during active duty pauses command submission and starts recovery flow.
 - No local-only mutation is described as accepted or synced.
 - Security test verifies cross-company context cannot be injected from client storage.
+
+### Implementation evidence — 16 July 2026
+
+**Fail-closed mutation entry point:** Implemented.
+
+- Live mutations now throw `DriverOperationalContextError` when the Driver session, company or depot context is missing.
+- The error states that the action was not recorded, allowing existing action surfaces to display the operational failure.
+- Missing context does not call the mock duty mutation path or enqueue an outbox record.
+- Explicit mock mode remains available for development, but its local mutation is labelled `pending`, never `synced`.
+- Focused tests cover missing session, missing company, missing depot and explicit mock behavior.
+- Remaining work for the wider P0-03 acceptance gate: expired-session recovery UX, local diagnostics and cross-company storage-injection security coverage.
 
 ---
 

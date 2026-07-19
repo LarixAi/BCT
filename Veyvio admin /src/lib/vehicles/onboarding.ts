@@ -1,5 +1,9 @@
 import type { OnboardingStage, OnboardingStageId, VehicleOnboardingState } from './types'
 
+/**
+ * Release-engine onboarding stages (authoritative for checklist / advance APIs).
+ * The Admin Add Vehicle Wizard uses 12 UI steps in wizard-steps.ts that map onto these.
+ */
 export const ONBOARDING_STAGE_DEFS: { id: OnboardingStageId; label: string; description: string }[] = [
   { id: 'created', label: 'Create vehicle', description: 'Registration, VIN and fleet number recorded' },
   { id: 'identity_verified', label: 'Identity verification', description: 'Duplicate registration/VIN checks passed' },
@@ -66,6 +70,7 @@ export function advanceOnboardingStage(
   }
 }
 
-export function isOnboardingComplete(state: VehicleOnboardingState): boolean {
-  return state.stages.every((s) => s.status === 'complete')
+export function isOnboardingComplete(state: VehicleOnboardingState | null | undefined): boolean {
+  const stages = Array.isArray(state?.stages) ? state.stages : []
+  return stages.length > 0 && stages.every((s) => s.status === 'complete')
 }

@@ -9,36 +9,41 @@ test.describe('Vehicle management', () => {
   test('directory shows summary cards and vehicles', async ({ page }) => {
     await page.goto('/vehicles')
     await expect(page.getByRole('heading', { name: 'Vehicles' })).toBeVisible()
-    await expect(page.getByText('Active vehicles')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Total/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Available/ })).toBeVisible()
     await expect(page.getByText('VYV-014')).toBeVisible()
     await expect(page.getByText('AB12 CDE')).toBeVisible()
   })
 
-  test('profile shows release panel and tabs', async ({ page }) => {
+  test('profile shows readiness card and status strip', async ({ page }) => {
     await page.goto('/vehicles/veh-4')
     await expect(page.getByText('VYV-008')).toBeVisible()
-    await expect(page.getByText('Blocked from allocation')).toBeVisible()
+    await expect(page.getByTestId('vehicle-status-strip')).toBeVisible()
+    await expect(page.getByTestId('vehicle-readiness-card')).toBeVisible()
+    await expect(page.getByText('Not eligible for assignment')).toBeVisible()
     await expect(page.getByText('MOT expired', { exact: false })).toBeVisible()
     await page.getByRole('button', { name: 'Compliance', exact: true }).click()
     await expect(page.getByRole('cell', { name: 'MOT / annual test' })).toBeVisible()
   })
 
-  test('can create a new vehicle', async ({ page }) => {
+  test('can create a new vehicle via wizard identity step', async ({ page }) => {
     await page.goto('/vehicles/new')
+    await expect(page.getByRole('heading', { name: 'Add vehicle' })).toBeVisible()
+    await expect(page.getByText('Step 1')).toBeVisible()
     await page.getByLabel('Registration').fill('XX99 YYY')
     await page.getByLabel('Make').fill('Test')
     await page.getByLabel('Model').fill('Van')
-    await page.getByRole('button', { name: 'Create vehicle' }).click()
-    await expect(page).toHaveURL(/\/vehicles\/veh-.*\/onboarding/)
-    await expect(page.getByRole('heading', { name: 'XX99 YYY' })).toBeVisible()
-    await expect(page.getByText('Onboarding wizard')).toBeVisible()
+    await page.getByRole('button', { name: 'Create and continue' }).click()
+    await expect(page).toHaveURL(/\/vehicles\/veh-.*\/onboarding\?step=ownership/)
+    await expect(page.getByRole('heading', { name: /Onboard XX99 YYY/ })).toBeVisible()
+    await expect(page.getByText('Ownership path')).toBeVisible()
   })
 
-  test('onboarding wizard shows stages for awaiting vehicle', async ({ page }) => {
+  test('resume onboarding opens wizard for awaiting vehicle', async ({ page }) => {
     await page.goto('/vehicles/veh-6/onboarding')
-    await expect(page.getByText('Onboarding wizard')).toBeVisible()
-    await expect(page.getByText('MOT verified')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Mark complete' })).toBeDisabled()
+    await expect(page.getByRole('heading', { name: /Onboard/ })).toBeVisible()
+    await expect(page.getByText('Step 1')).toBeVisible()
+    await expect(page.getByText('Identity')).toBeVisible()
   })
 
   test('damage tab shows body zone map on VOR vehicle', async ({ page }) => {
@@ -60,7 +65,7 @@ test.describe('Vehicle management', () => {
 
   test('filter cards narrow the directory', async ({ page }) => {
     await page.goto('/vehicles')
-    await page.getByRole('button', { name: /VOR/ }).click()
+    await page.getByRole('button', { name: /^VOR/ }).click()
     await expect(page.getByText('CD34 EFG')).toBeVisible()
     await expect(page.getByText('AB12 CDE')).not.toBeVisible()
   })

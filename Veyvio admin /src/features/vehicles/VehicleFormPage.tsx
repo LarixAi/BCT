@@ -16,6 +16,11 @@ export function VehicleFormPage() {
   const { user } = useAuth()
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
+  /** Create flow lives on the 12-step onboarding wizard. */
+  useEffect(() => {
+    if (!isEdit) navigate('/vehicles/new', { replace: true })
+  }, [isEdit, navigate])
+
   const { data: existing, isLoading } = useQuery({
     queryKey: ['vehicle-profile', id],
     queryFn: () => api.getVehicleProfile(id!),
@@ -88,22 +93,21 @@ export function VehicleFormPage() {
     onSuccess: (vehicle) => {
       queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
       queryClient.invalidateQueries({ queryKey: ['vehicle-directory-summary'] })
-      navigate(isEdit ? `/vehicles/${vehicle.id}` : `/vehicles/${vehicle.id}/onboarding`)
+      navigate(`/vehicles/${vehicle.id}`)
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'Could not save vehicle'),
   })
 
-  if (isEdit && isLoading) return <p className="text-sm text-slate-500">Loading…</p>
+  if (!isEdit) return <p className="text-sm text-slate-500">Redirecting to Add vehicle wizard…</p>
+  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <VehicleBackLink />
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{isEdit ? 'Edit vehicle' : 'Add vehicle'}</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Edit vehicle</h1>
         <p className="text-sm text-slate-600">
-          {isEdit
-            ? 'Update vehicle identity and specification. Release status is recalculated automatically.'
-            : 'New vehicles enter onboarding — they cannot be released until documents and inspections are complete.'}
+          Update vehicle identity and specification. Release status is recalculated automatically.
         </p>
       </div>
 

@@ -108,6 +108,16 @@ export function CheckDetailPage() {
             <Row label="Driver" value={check.currentDriverName ?? '—'} />
             <Row label="Assigned work" value={check.assignedRunReference ?? '—'} />
             <Row label="Template" value={check.templateVersion} />
+            <Row label="Odometer" value={check.odometer != null ? String(check.odometer) : '—'} />
+            <Row label="Fuel / charge" value={check.fuelLevel ?? '—'} />
+            <Row
+              label="Started"
+              value={check.startedAt ? new Date(check.startedAt).toLocaleString('en-GB') : '—'}
+            />
+            <Row
+              label="Submitted"
+              value={check.submittedAt ? new Date(check.submittedAt).toLocaleString('en-GB') : '—'}
+            />
             <Row label="Reviewer" value={check.reviewerName ?? 'Pending'} />
           </dl>
           </SectionCard>
@@ -134,32 +144,70 @@ export function CheckDetailPage() {
       </div>
 
       {check.sections.length > 0 && (
-        <SectionCard title="Check sections" description="Answers from the template version used at submission">
+        <SectionCard title="Full walkaround" description="Every question and answer from the driver submission">
           <div className="grid gap-3 md:grid-cols-2">
-            {check.sections.map((s) => (
-              <div key={s.id} className={`rounded-lg border p-3 ${s.answer === 'No' ? 'border-red-200 bg-red-50/50' : 'border-slate-200'}`}>
-                <p className="text-xs font-medium uppercase text-slate-500">{s.section}</p>
-                <p className="text-sm font-medium">{s.question}</p>
-                <p className="mt-1 text-sm">{s.answer}</p>
-                {s.notes && <p className="mt-1 text-xs text-amber-800">{s.notes}</p>}
-                {s.createdDefectId && <p className="mt-1 text-xs text-red-700">Created defect {s.createdDefectId}</p>}
-              </div>
-            ))}
+            {check.sections.map((s) => {
+              const failed = /fail|no\s*\//i.test(s.answer)
+              const advisory = /advisory/i.test(s.answer)
+              return (
+                <div
+                  key={s.id}
+                  className={`rounded-lg border p-3 ${
+                    failed
+                      ? 'border-red-200 bg-red-50/50'
+                      : advisory
+                        ? 'border-amber-200 bg-amber-50/50'
+                        : 'border-slate-200'
+                  }`}
+                >
+                  <p className="text-xs font-medium uppercase text-slate-500">{s.section.replace(/_/g, ' ')}</p>
+                  <p className="text-sm font-medium">{s.question}</p>
+                  <p
+                    className={`mt-1 text-sm font-semibold ${
+                      failed ? 'text-red-800' : advisory ? 'text-amber-900' : 'text-emerald-800'
+                    }`}
+                  >
+                    {s.answer}
+                  </p>
+                  {s.notes && <p className="mt-1 text-xs text-amber-800">{s.notes}</p>}
+                  {s.zone || s.damageType ? (
+                    <p className="mt-1 text-xs text-slate-600">
+                      {[s.zone, s.damageType].filter(Boolean).join(' · ')}
+                    </p>
+                  ) : null}
+                  {s.photoDataUrl ? (
+                    <img
+                      src={s.photoDataUrl}
+                      alt={`Evidence for ${s.question}`}
+                      className="mt-2 max-h-40 w-full rounded-md object-cover"
+                    />
+                  ) : null}
+                  {s.createdDefectId && <p className="mt-1 text-xs text-red-700">Created defect {s.createdDefectId}</p>}
+                </div>
+              )
+            })}
           </div>
         </SectionCard>
       )}
 
       <SectionCard title="Evidence" description={`${check.evidence.length} items captured — originals preserved`}>
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {check.evidence.map((e) => (
-            <li key={e.id} className="rounded-lg border border-slate-200 p-3 text-sm">
-              <p className="font-medium capitalize">{e.kind}</p>
-              <p className="text-slate-600">{e.label}</p>
-              <p className="text-xs text-slate-500">{new Date(e.capturedAt).toLocaleString('en-GB')}</p>
-              {!e.sufficient && <p className="text-xs text-amber-700">Insufficient</p>}
-            </li>
-          ))}
-        </ul>
+        {check.evidence.length === 0 ? (
+          <p className="text-sm text-slate-500">No evidence uploaded with this check.</p>
+        ) : (
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {check.evidence.map((e) => (
+              <li key={e.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+                <p className="font-medium capitalize">{e.kind.replace(/_/g, ' ')}</p>
+                <p className="text-slate-600">{e.label}</p>
+                <p className="text-xs text-slate-500">{new Date(e.capturedAt).toLocaleString('en-GB')}</p>
+                {e.url ? (
+                  <img src={e.url} alt={e.label} className="mt-2 max-h-48 w-full rounded-md object-cover" />
+                ) : null}
+                {!e.sufficient && <p className="text-xs text-amber-700">Insufficient</p>}
+              </li>
+            ))}
+          </ul>
+        )}
       </SectionCard>
 
       {check.defectSummaries.length > 0 && (

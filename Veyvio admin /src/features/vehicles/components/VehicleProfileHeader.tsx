@@ -1,16 +1,14 @@
 import { Link } from 'react-router-dom'
-import { StatusPill, formatDate } from '@/components/ui/status'
+import { formatDate } from '@/components/ui/status'
 import {
-  COMPLIANCE_STATUS_LABELS,
   FUEL_TYPE_LABELS,
-  OPERATIONAL_STATUS_LABELS,
   READINESS_STATUS_LABELS,
-  RELEASE_DECISION_LABELS,
   VEHICLE_CATEGORY_LABELS,
   YARD_STATUS_LABELS,
 } from '@/lib/vehicles/constants'
 import type { VehicleProfile } from '@/lib/vehicles/types'
-import { ReleasePanel } from './ReleasePanel'
+import { VehicleReadinessCard } from './VehicleReadinessCard'
+import { VehicleStatusStrip } from './VehicleStatusStrip'
 
 export function VehicleProfileHeader({
   vehicle,
@@ -40,11 +38,8 @@ export function VehicleProfileHeader({
               {vehicle.make} {vehicle.model} · {vehicle.seatingCapacity} seats
               {vehicle.wheelchairCapacity > 0 && ` · ${vehicle.wheelchairCapacity} wheelchair`}
             </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <StatusPill status={vehicle.operationalStatus} />
-              <StatusPill status={vehicle.complianceStatus} />
-              <StatusPill status={vehicle.releaseDecision} />
-              <StatusPill status={vehicle.yardStatus} />
+            <div className="mt-3">
+              <VehicleStatusStrip vehicle={vehicle} />
             </div>
           </div>
         </div>
@@ -52,7 +47,7 @@ export function VehicleProfileHeader({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <ReleasePanel release={vehicle.release} />
+        <VehicleReadinessCard vehicle={vehicle} />
         <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm lg:col-span-2">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Meta label="Fleet number" value={vehicle.fleetNumber ?? '—'} />
@@ -63,10 +58,7 @@ export function VehicleProfileHeader({
             <Meta label="Current run" value={vehicle.currentRunReference ?? '—'} />
             <Meta label="Mileage" value={vehicle.mileage != null ? `${vehicle.mileage.toLocaleString()} mi` : '—'} />
             <Meta label="Fuel / charge" value={fuelLabel} />
-            <Meta label="Operational" value={OPERATIONAL_STATUS_LABELS[vehicle.operationalStatus]} />
-            <Meta label="Compliance" value={COMPLIANCE_STATUS_LABELS[vehicle.complianceStatus]} />
-            <Meta label="Release" value={RELEASE_DECISION_LABELS[vehicle.releaseDecision]} />
-            <Meta label="Readiness" value={READINESS_STATUS_LABELS[vehicle.readinessStatus]} />
+            <Meta label="Yard readiness" value={READINESS_STATUS_LABELS[vehicle.readinessStatus]} />
             <Meta label="Fuel type" value={FUEL_TYPE_LABELS[vehicle.fuelType]} />
             <Meta label="Open defects" value={String(vehicle.openDefectCount)} />
             <Meta

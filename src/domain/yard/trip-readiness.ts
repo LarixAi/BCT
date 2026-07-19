@@ -7,6 +7,11 @@ export function recomputeTrip(
   vehicles: Vehicle[],
   equipment: Record<string, VehicleEquipment>,
 ): Trip {
+  // Departed trips have left the depot — do not re-block them as "not on line".
+  if (trip.departedAt) {
+    return { ...trip, blockers: [], ready: true };
+  }
+
   const blockers: Trip["blockers"] = [];
   if (!trip.driverId) blockers.push("No driver");
   const vehicle = trip.vehicleId ? vehicles.find(v => v.id === trip.vehicleId) : undefined;

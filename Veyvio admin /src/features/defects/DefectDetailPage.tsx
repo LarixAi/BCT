@@ -147,7 +147,7 @@ export function DefectDetailPage() {
             Open vehicle
           </Link>
           {defect.linkedWorkOrderId && (
-            <Link to="/maintenance?tab=work_orders" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+            <Link to="/maintenance?tab=work-orders" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
               Maintenance job
             </Link>
           )}

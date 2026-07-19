@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell } from 'lucide-react'
 import { api } from '@/lib/api/client'
-import { mapApiNotification } from '@/lib/api/mappers'
 import { cn } from '@/lib/cn'
+import { buildNotificationsInbox } from '@/lib/notifications/build-notifications'
 import type { NotificationItem } from '@/lib/types'
 
 const PREVIEW_LIMIT = 6
@@ -28,9 +28,9 @@ export function NotificationBellDropdown() {
     refetchInterval: open ? 60_000 : false,
   })
 
-  const items = useMemo(() => notifications.map(mapApiNotification), [notifications])
+  const items = useMemo(() => buildNotificationsInbox(notifications), [notifications])
   const preview = items.slice(0, PREVIEW_LIMIT)
-  const unreadCount = unread?.count ?? 0
+  const unreadCount = Math.max(unread?.count ?? 0, items.filter((n) => !n.read).length)
 
   const markRead = useMutation({
     mutationFn: (id: string) => api.markNotificationRead(id),

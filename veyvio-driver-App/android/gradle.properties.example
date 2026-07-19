@@ -1,0 +1,7 @@
+# Copy to gradle.properties or set org.gradle.java.home in android/local.properties
+# Capacitor 8 requires JDK 21 (invalid source release: 21 without it).
+#
+# macOS Homebrew:
+# org.gradle.java.home=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+#
+# Or use npm run android:apk which sets JAVA_HOME automatically.

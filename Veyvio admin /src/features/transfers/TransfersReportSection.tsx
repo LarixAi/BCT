@@ -57,7 +57,7 @@ export function TransfersReportSection({ from, to }: { from: string; to: string 
                   <td className="py-2 pr-3 capitalize">{t.scope.replace(/_/g, ' ')}</td>
                   <td className="py-2 pr-3 capitalize">{t.status.replace(/_/g, ' ')}</td>
                   <td className="py-2">
-                    <Link to={`/ops-trips/${t.sourceTripId}`} className="text-command-600 hover:underline">
+                    <Link to={`/live-operations/trips/${t.sourceTripId}`} className="text-command-600 hover:underline">
                       View trip
                     </Link>
                   </td>

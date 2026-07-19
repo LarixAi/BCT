@@ -1,9 +1,18 @@
 export function canViewStaff(permissions: string[]): boolean {
-  return permissions.includes('staff.view') || permissions.includes('staff.manage')
+  return (
+    permissions.includes('staff.view') ||
+    permissions.includes('staff.manage') ||
+    permissions.includes('settings.users.manage') ||
+    permissions.includes('drivers.manage')
+  )
 }
 
 export function canCreateStaff(permissions: string[]): boolean {
-  return permissions.includes('staff.create') || permissions.includes('staff.manage')
+  return (
+    permissions.includes('staff.create') ||
+    permissions.includes('staff.manage') ||
+    permissions.includes('settings.users.manage')
+  )
 }
 
 export function canEditStaff(permissions: string[]): boolean {

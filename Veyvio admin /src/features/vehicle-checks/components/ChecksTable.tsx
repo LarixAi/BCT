@@ -10,11 +10,16 @@ export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperatio
 
   return (
     <div className="space-y-2">
-      {rows.map((row) => (
+      {rows.map((row) => {
+        const urgencyScore = row.urgencyScore ?? 0
+        const exceptionLabels = row.exceptionLabels ?? []
+        const suspiciousFlagCount = row.suspiciousFlagCount ?? 0
+        const defectCount = row.defectCount ?? 0
+        return (
         <div
           key={row.checkId}
           className={`rounded-xl border p-4 transition hover:border-slate-300 ${
-            row.urgencyScore >= 80 ? 'border-red-300 bg-red-50/60' : row.urgencyScore >= 40 ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200 bg-white'
+            urgencyScore >= 80 ? 'border-red-300 bg-red-50/60' : urgencyScore >= 40 ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200 bg-white'
           }`}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -27,13 +32,13 @@ export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperatio
                 {row.result && <StatusPill status={row.result} />}
               </div>
               <p className="text-sm text-slate-600">
-                {row.makeModel} · {row.fleetNumber ?? '—'} · {row.checkTypeLabel}
+                {row.makeModel ?? '—'} · {row.fleetNumber ?? '—'} · {row.checkTypeLabel ?? 'Vehicle check'}
               </p>
-              {row.exceptionLabels.length > 0 && (
-                <p className="mt-1 text-sm font-medium text-amber-900">{row.exceptionLabels.join(' · ')}</p>
+              {exceptionLabels.length > 0 && (
+                <p className="mt-1 text-sm font-medium text-amber-900">{exceptionLabels.join(' · ')}</p>
               )}
-              {row.suspiciousFlagCount > 0 && (
-                <p className="text-xs text-purple-800">{row.suspiciousFlagCount} review flag(s)</p>
+              {suspiciousFlagCount > 0 && (
+                <p className="text-xs text-purple-800">{suspiciousFlagCount} review flag(s)</p>
               )}
               <p className="mt-1 text-xs text-slate-500">
                 {row.completedBy ? `Completed by ${row.completedBy}` : 'Not completed'}
@@ -44,7 +49,7 @@ export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperatio
             <div className="text-right text-xs text-slate-500">
               <p>{RELEASE_STATUS_LABELS[row.operationalStatus] ?? row.operationalStatus}</p>
               {row.validUntil && <p>Valid until {new Date(row.validUntil).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>}
-              {row.defectCount > 0 && <p className="font-medium text-red-800">{row.defectCount} defect(s)</p>}
+              {defectCount > 0 && <p className="font-medium text-red-800">{defectCount} defect(s)</p>}
             </div>
           </div>
           {showActions && (
@@ -58,7 +63,8 @@ export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperatio
             </div>
           )}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

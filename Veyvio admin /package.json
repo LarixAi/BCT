@@ -8,7 +8,16 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:e2e": "playwright test"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "backend:login": "supabase login",
+    "backend:whoami": "supabase projects list",
+    "backend:start": "supabase start",
+    "backend:stop": "supabase stop",
+    "backend:reset": "supabase db reset",
+    "backend:link": "supabase link --project-ref qeckgqjrfbdyxchuncdt",
+    "backend:deploy": "supabase db push && supabase functions deploy command-api --no-verify-jwt"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.2",
@@ -28,8 +37,10 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "supabase": "^2.109.1",
     "tailwindcss": "^4.3.2",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^3.2.7"
   }
 }

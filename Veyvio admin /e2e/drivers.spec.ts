@@ -24,15 +24,65 @@ test.describe('Driver management', () => {
     await expect(page.getByRole('cell', { name: 'Driving licence' })).toBeVisible()
   })
 
-  test('can create a new driver', async ({ page }) => {
+  test('onboarding wizard: draft → invite → blocked activation', async ({ page }) => {
     await page.goto('/drivers/new')
-    await page.getByLabel('First name').fill('Test')
+    await expect(page.getByRole('heading', { name: 'Add driver' })).toBeVisible()
+    await expect(page.getByText(/three separate decisions/i)).toBeVisible()
+
+    await page.getByLabel('First name').fill('Wizard')
     await page.getByLabel('Last name').fill('Driver')
-    await page.getByRole('textbox', { name: 'Email' }).fill('test.driver@example.com')
-    await page.getByRole('textbox', { name: 'Phone' }).fill('07700999111')
-    await page.getByRole('button', { name: 'Create driver' }).click()
-    await expect(page).toHaveURL(/\/drivers\/drv-/)
-    await expect(page.getByRole('heading', { name: 'Test Driver' })).toBeVisible()
+    await page.getByLabel('Work or personal email').fill('wizard.driver@example.com')
+    await page.getByLabel('Mobile number').fill('07700999111')
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    await expect(page).toHaveURL(/\/drivers\/drv-.*\/onboarding/)
+    await expect(page.getByText(/Operational:.*Onboarding/i)).toBeVisible()
+    await expect(page.getByText(/Account:.*Draft/i)).toBeVisible()
+
+    await page.getByLabel('Start date').fill('2026-08-01')
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    await page.getByLabel('Driving licence number').fill('WIZARD123')
+    // Leave licence expiry empty so eligibility stays blocked
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    await expect(page.getByText(/Admins never see it/i)).toBeVisible()
+    await page.getByRole('button', { name: 'Create app account' }).click()
+
+    await expect(page.getByText(/Invitation sent/i).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Activate driver' })).toBeDisabled()
+    await expect(page.getByText(/Blocked/i).first()).toBeVisible()
+  })
+
+  test('onboarding wizard activates when eligible', async ({ page }) => {
+    const future = '2028-12-31'
+    await page.goto('/drivers/new')
+    await page.getByLabel('First name').fill('Ready')
+    await page.getByLabel('Last name').fill('Driver')
+    await page.getByLabel('Work or personal email').fill('ready.driver@example.com')
+    await page.getByLabel('Mobile number').fill('07700999222')
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    await expect(page).toHaveURL(/\/drivers\/drv-.*\/onboarding/)
+    await page.getByLabel('Start date').fill('2026-07-01')
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    await page.getByLabel('Driving licence number').fill('READY456')
+    await page.getByLabel('Licence expiry').fill(future)
+    await page.getByLabel('DQC / CPC expiry').fill(future)
+    await page.getByLabel('DBS expiry / review').fill(future)
+    await page.getByLabel('Medical expiry').fill(future)
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('button', { name: 'Create app account' }).click()
+
+    await expect(page.getByRole('button', { name: 'Activate driver' })).toBeEnabled()
+    await page.getByRole('button', { name: 'Activate driver' }).click()
+
+    await expect(page).toHaveURL(/\/drivers\/drv-[^/]+$/)
+    await expect(page.getByRole('heading', { name: 'Ready Driver' })).toBeVisible()
   })
 
   test('filter cards narrow the directory', async ({ page }) => {
@@ -51,5 +101,12 @@ test.describe('Driver management', () => {
     await page.goto('/drivers/drv-6')
     await page.getByRole('button', { name: 'Training', exact: true }).click()
     await expect(page.getByRole('cell', { name: 'Company induction' })).toBeVisible()
+  })
+
+  test('account route opens Access & Security tab', async ({ page }) => {
+    await page.goto('/drivers/drv-1/account')
+    await expect(page.getByText('Driver app access')).toBeVisible()
+    await expect(page.getByText(/never set or see passwords/i)).toBeVisible()
+    await expect(page.getByText('Devices and sessions')).toBeVisible()
   })
 })

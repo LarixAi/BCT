@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { DISPATCH_MODE_OPTIONS } from '@/lib/bookings/constants'
 import type { AutoPlanProposal, BookingDraft, DispatchMode } from '@/lib/bookings/types'
 import { evaluateDriverEligibility, jobContextFromBookingRequirements } from '@/lib/eligibility/engine'
+import { resolveFleetResourcesHub } from '@/lib/fleet-resources/resolve-hub'
 import { evaluateVehicleRelease } from '@/lib/vehicles/release'
 import { api } from '@/lib/api/client'
 
@@ -24,6 +26,22 @@ export function DispatchStep({
     queryFn: () => api.getVehicleProfiles(),
   })
   const { data: staff = [] } = useQuery({ queryKey: ['staff'], queryFn: () => api.getStaff() })
+  const { data: resources } = useQuery({
+    queryKey: ['fleet-resources-hub'],
+    queryFn: () =>
+      resolveFleetResourcesHub({
+        fetchLiveHub: () => api.getFleetResourcesHub(),
+        fetchProfiles: () => api.getVehicleProfiles(),
+      }),
+    retry: 1,
+  })
+  const resourceCtx = useMemo(
+    () => ({
+      tyres: resources?.hub.tyres,
+      equipment: resources?.hub.equipment,
+    }),
+    [resources],
+  )
 
   const dispatch = draft.dispatch
 
@@ -52,7 +70,7 @@ export function DispatchStep({
   )
 
   const vehicleOptions = vehicleProfiles.map((v) => {
-    const release = evaluateVehicleRelease(v, vehicleCtx)
+    const release = evaluateVehicleRelease(v, vehicleCtx, resourceCtx)
     const suffix = release.canAllocate ? '' : ' — not released'
     return {
       value: v.id,
@@ -62,7 +80,9 @@ export function DispatchStep({
   })
 
   const selectedVehicle = vehicleProfiles.find((v) => v.id === dispatch.vehicleId)
-  const selectedVehicleRelease = selectedVehicle ? evaluateVehicleRelease(selectedVehicle, vehicleCtx) : null
+  const selectedVehicleRelease = selectedVehicle
+    ? evaluateVehicleRelease(selectedVehicle, vehicleCtx, resourceCtx)
+    : null
   const driverOptions = driverProfiles.map((d) => {
     const eligibility = evaluateDriverEligibility(d, jobCtx)
     const suffix = eligibility.canAssign ? '' : ' — not eligible'
@@ -131,6 +151,40 @@ export function DispatchStep({
               options={[{ value: '', label: 'None' }, ...staff.map((s) => ({ value: s.id, label: `${s.firstName} ${s.lastName}` }))]}
             />
           </div>
+
+          {selectedVehicle && (
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+              <p className="font-medium">Readiness (shared projection)</p>
+              <p className="mt-1 text-xs text-slate-600">
+                {selectedVehicle.readiness.assignmentEligible
+                  ? 'Eligible for assignment under current release rules.'
+                  : 'Not eligible — maintenance, defects or release state block dispatch.'}
+              </p>
+              {selectedVehicle.readiness.blockingReasons.length > 0 && (
+                <ul className="mt-1 list-inside list-disc text-red-800">
+                  {selectedVehicle.readiness.blockingReasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              )}
+              {selectedVehicle.readiness.warningReasons.length > 0 && (
+                <ul className="mt-1 list-inside list-disc text-amber-800">
+                  {selectedVehicle.readiness.warningReasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-2 text-xs">
+                <Link to={`/maintenance?vehicle=${selectedVehicle.id}`} className="font-medium text-command-600 hover:underline">
+                  Open in Maintenance →
+                </Link>
+                {' · '}
+                <Link to={`/vehicles/${selectedVehicle.id}?tab=Maintenance`} className="font-medium text-command-600 hover:underline">
+                  Vehicle maintenance →
+                </Link>
+              </p>
+            </div>
+          )}
 
           {selectedVehicleRelease && !selectedVehicleRelease.canAllocate && (
             <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">

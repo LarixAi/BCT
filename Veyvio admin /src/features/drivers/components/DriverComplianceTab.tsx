@@ -68,6 +68,12 @@ export function DriverComplianceTab({
     },
   })
 
+  const actionError =
+    (verify.isError && (verify.error instanceof Error ? verify.error.message : 'Verify failed')) ||
+    (reject.isError && (reject.error instanceof Error ? reject.error.message : 'Reject failed')) ||
+    (upload.isError && (upload.error instanceof Error ? upload.error.message : 'Upload failed')) ||
+    null
+
   return (
     <div className="space-y-4">
       <SectionCard
@@ -87,6 +93,12 @@ export function DriverComplianceTab({
         <p className="mb-3 text-xs text-slate-500">
           Uploaded documents require verification before they affect eligibility. Previous versions are preserved.
         </p>
+
+        {actionError ? (
+          <p className="mb-3 rounded-lg border border-critical/30 bg-critical/5 px-3 py-2 text-sm text-critical">
+            {actionError}
+          </p>
+        ) : null}
 
         {showUpload && (
           <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">

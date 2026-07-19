@@ -1,0 +1,41 @@
+/**
+ * Driver map container styling — clean light background, no raster filters.
+ * Leaflet base CSS is imported in main.jsx; rules here guard Tailwind preflight
+ * from breaking overlay SVG routes and divIcon markers on Capacitor WebView.
+ */
+.driver-map-theme.leaflet-container {
+  background: #F2F2F2;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  z-index: 0 !important;
+}
+
+.driver-map-theme.leaflet-container .leaflet-tile-pane {
+  z-index: 1;
+}
+
+.driver-map-theme.leaflet-container .leaflet-overlay-pane {
+  z-index: 2;
+}
+
+.driver-map-theme.leaflet-container .leaflet-marker-pane {
+  z-index: 3;
+}
+
+.driver-map-theme.leaflet-container .leaflet-overlay-pane svg,
+.driver-map-theme.leaflet-container .leaflet-overlay-pane svg path {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.driver-map-theme .leaflet-overlay-pane svg path {
+  filter: none;
+}
+
+.driver-map-theme .leaflet-marker-icon.leaflet-div-icon {
+  background: transparent;
+  border: none;
+}
+
+.driver-map-theme .maplibregl-map {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}

@@ -9,16 +9,16 @@ function driverInitials(name: string | null) {
 
 export function LiveMapDriverCard({ vehicle }: { vehicle: LiveDispatchVehicle }) {
   return (
-    <div className="pointer-events-auto w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+    <div className="pointer-events-auto w-56 rounded-xl border border-[#e3e9f3] bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
       <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--veyvio-brand-50)] text-xs font-semibold text-[var(--veyvio-brand-700)]">
           {driverInitials(vehicle.driverName)}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900">
+          <p className="truncate text-sm font-semibold text-[var(--veyvio-brand-900)]">
             {vehicle.driverName ?? 'No driver'}
           </p>
-          <p className="truncate text-xs text-slate-500">
+          <p className="truncate font-mono text-xs tabular-nums text-slate-500">
             {vehicle.vehicleRegistration ?? vehicle.reference}
           </p>
         </div>
@@ -60,7 +60,7 @@ export function LiveMapDriverCard({ vehicle }: { vehicle: LiveDispatchVehicle })
             href={`https://www.google.com/maps?q=${vehicle.lastLatitude},${vehicle.lastLongitude}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-md bg-blue-50 px-2 py-1 text-blue-800 hover:bg-blue-100"
+            className="rounded-md bg-[var(--veyvio-brand-50)] px-2 py-1 text-[var(--veyvio-brand-700)] hover:bg-[var(--veyvio-brand-100)]"
           >
             Directions
           </a>

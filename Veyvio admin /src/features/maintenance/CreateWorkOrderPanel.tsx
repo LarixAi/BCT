@@ -5,7 +5,20 @@ import { WORK_ORDER_TYPE_LABELS } from '@/lib/maintenance/constants'
 import { api } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth-context'
 
-export function CreateWorkOrderPanel({ onClose }: { onClose: () => void }) {
+export type CreateWorkOrderPrefill = {
+  vehicleId?: string
+  type?: string
+  title?: string
+  scheduledDate?: string
+}
+
+export function CreateWorkOrderPanel({
+  onClose,
+  prefill,
+}: {
+  onClose: () => void
+  prefill?: CreateWorkOrderPrefill | null
+}) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
@@ -15,10 +28,12 @@ export function CreateWorkOrderPanel({ onClose }: { onClose: () => void }) {
     queryFn: () => api.getVehicleProfiles(),
   })
 
-  const [vehicleId, setVehicleId] = useState('')
-  const [title, setTitle] = useState('')
-  const [type, setType] = useState('repair')
-  const [scheduledDate, setScheduledDate] = useState(new Date().toISOString().slice(0, 10))
+  const [vehicleId, setVehicleId] = useState(prefill?.vehicleId ?? '')
+  const [title, setTitle] = useState(prefill?.title ?? '')
+  const [type, setType] = useState(prefill?.type ?? 'repair')
+  const [scheduledDate, setScheduledDate] = useState(
+    prefill?.scheduledDate ?? new Date().toISOString().slice(0, 10),
+  )
   const [provider, setProvider] = useState('Fleet Workshop')
 
   const create = useMutation({

@@ -25,7 +25,9 @@ const ZONE_ORDER: BayZone[] = [
 
 export function buildBayOccupancy(bays: Bay[], vehicles: Vehicle[]): BayOccupancy[] {
   const byBay = new Map<string, Vehicle>();
-  for (const v of vehicles) byBay.set(v.bayId, v);
+  for (const v of vehicles) {
+    if (v.status !== "Off-site") byBay.set(v.bayId, v);
+  }
   return bays.map(bay => ({ bay, vehicle: byBay.get(bay.id) ?? null }));
 }
 
@@ -62,7 +64,7 @@ export function zoneOccupancyStats(bays: Bay[], vehicles: Vehicle[]): ZoneStats[
 }
 
 export function getEmptyBaysInZone(bays: Bay[], vehicles: Vehicle[], zone: BayZone): Bay[] {
-  const occupied = new Set(vehicles.map(v => v.bayId));
+  const occupied = new Set(vehicles.filter(v => v.status !== "Off-site").map(v => v.bayId));
   return bays.filter(b => b.zone === zone && !occupied.has(b.id));
 }
 

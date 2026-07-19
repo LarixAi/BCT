@@ -48,6 +48,9 @@ import { Route as AppTasksTaskIdRouteImport } from './routes/_app.tasks.$taskId'
 import { Route as AppSimulateDriverReportRouteImport } from './routes/_app.simulate.driver-report'
 import { Route as AppMoreSyncRouteImport } from './routes/_app.more.sync'
 import { Route as AppMoreSettingsRouteImport } from './routes/_app.more.settings'
+import { Route as AppMoreMessagesRouteImport } from './routes/_app.more.messages'
+import { Route as AppMoreBodyworkRouteImport } from './routes/_app.more.bodywork'
+import { Route as AppMoreVehicleChecksRouteImport } from './routes/_app.more.vehicle-checks'
 import { Route as AppMoreAccountRouteImport } from './routes/_app.more.account'
 import { Route as AppMoreAboutRouteImport } from './routes/_app.more.about'
 import { Route as AppInspectionsRepairVerificationRouteImport } from './routes/_app.inspections.repair-verification'
@@ -260,6 +263,21 @@ const AppMoreSettingsRoute = AppMoreSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppMoreRoute,
 } as any)
+const AppMoreMessagesRoute = AppMoreMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => AppMoreRoute,
+} as any)
+const AppMoreBodyworkRoute = AppMoreBodyworkRouteImport.update({
+  id: '/bodywork',
+  path: '/bodywork',
+  getParentRoute: () => AppMoreRoute,
+} as any)
+const AppMoreVehicleChecksRoute = AppMoreVehicleChecksRouteImport.update({
+  id: '/vehicle-checks',
+  path: '/vehicle-checks',
+  getParentRoute: () => AppMoreRoute,
+} as any)
 const AppMoreAccountRoute = AppMoreAccountRouteImport.update({
   id: '/account',
   path: '/account',
@@ -389,6 +407,9 @@ export interface FileRoutesByFullPath {
   '/inspections/repair-verification': typeof AppInspectionsRepairVerificationRoute
   '/more/about': typeof AppMoreAboutRoute
   '/more/account': typeof AppMoreAccountRoute
+  '/more/messages': typeof AppMoreMessagesRoute
+  '/more/bodywork': typeof AppMoreBodyworkRoute
+  '/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
   '/more/settings': typeof AppMoreSettingsRoute
   '/more/sync': typeof AppMoreSyncRoute
   '/simulate/driver-report': typeof AppSimulateDriverReportRoute
@@ -439,6 +460,9 @@ export interface FileRoutesByTo {
   '/inspections/repair-verification': typeof AppInspectionsRepairVerificationRoute
   '/more/about': typeof AppMoreAboutRoute
   '/more/account': typeof AppMoreAccountRoute
+  '/more/messages': typeof AppMoreMessagesRoute
+  '/more/bodywork': typeof AppMoreBodyworkRoute
+  '/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
   '/more/settings': typeof AppMoreSettingsRoute
   '/more/sync': typeof AppMoreSyncRoute
   '/simulate/driver-report': typeof AppSimulateDriverReportRoute
@@ -498,6 +522,9 @@ export interface FileRoutesById {
   '/_app/inspections/repair-verification': typeof AppInspectionsRepairVerificationRoute
   '/_app/more/about': typeof AppMoreAboutRoute
   '/_app/more/account': typeof AppMoreAccountRoute
+  '/_app/more/messages': typeof AppMoreMessagesRoute
+  '/_app/more/bodywork': typeof AppMoreBodyworkRoute
+  '/_app/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
   '/_app/more/settings': typeof AppMoreSettingsRoute
   '/_app/more/sync': typeof AppMoreSyncRoute
   '/_app/simulate/driver-report': typeof AppSimulateDriverReportRoute
@@ -557,6 +584,9 @@ export interface FileRouteTypes {
     | '/inspections/repair-verification'
     | '/more/about'
     | '/more/account'
+    | '/more/messages'
+    | '/more/bodywork'
+    | '/more/vehicle-checks'
     | '/more/settings'
     | '/more/sync'
     | '/simulate/driver-report'
@@ -607,6 +637,9 @@ export interface FileRouteTypes {
     | '/inspections/repair-verification'
     | '/more/about'
     | '/more/account'
+    | '/more/messages'
+    | '/more/bodywork'
+    | '/more/vehicle-checks'
     | '/more/settings'
     | '/more/sync'
     | '/simulate/driver-report'
@@ -665,6 +698,9 @@ export interface FileRouteTypes {
     | '/_app/inspections/repair-verification'
     | '/_app/more/about'
     | '/_app/more/account'
+    | '/_app/more/messages'
+    | '/_app/more/bodywork'
+    | '/_app/more/vehicle-checks'
     | '/_app/more/settings'
     | '/_app/more/sync'
     | '/_app/simulate/driver-report'
@@ -976,6 +1012,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMoreSettingsRouteImport
       parentRoute: typeof AppMoreRoute
     }
+    '/_app/more/messages': {
+      id: '/_app/more/messages'
+      path: '/messages'
+      fullPath: '/more/messages'
+      preLoaderRoute: typeof AppMoreMessagesRouteImport
+      parentRoute: typeof AppMoreRoute
+    }
+    '/_app/more/bodywork': {
+      id: '/_app/more/bodywork'
+      path: '/bodywork'
+      fullPath: '/more/bodywork'
+      preLoaderRoute: typeof AppMoreBodyworkRouteImport
+      parentRoute: typeof AppMoreRoute
+    }
+    '/_app/more/vehicle-checks': {
+      id: '/_app/more/vehicle-checks'
+      path: '/vehicle-checks'
+      fullPath: '/more/vehicle-checks'
+      preLoaderRoute: typeof AppMoreVehicleChecksRouteImport
+      parentRoute: typeof AppMoreRoute
+    }
     '/_app/more/account': {
       id: '/_app/more/account'
       path: '/account'
@@ -1154,6 +1211,9 @@ const AppInspectionsRouteWithChildren = AppInspectionsRoute._addFileChildren(
 interface AppMoreRouteChildren {
   AppMoreAboutRoute: typeof AppMoreAboutRoute
   AppMoreAccountRoute: typeof AppMoreAccountRoute
+  AppMoreMessagesRoute: typeof AppMoreMessagesRoute
+  AppMoreBodyworkRoute: typeof AppMoreBodyworkRoute
+  AppMoreVehicleChecksRoute: typeof AppMoreVehicleChecksRoute
   AppMoreSettingsRoute: typeof AppMoreSettingsRoute
   AppMoreSyncRoute: typeof AppMoreSyncRoute
   AppMoreIndexRoute: typeof AppMoreIndexRoute
@@ -1162,6 +1222,9 @@ interface AppMoreRouteChildren {
 const AppMoreRouteChildren: AppMoreRouteChildren = {
   AppMoreAboutRoute: AppMoreAboutRoute,
   AppMoreAccountRoute: AppMoreAccountRoute,
+  AppMoreMessagesRoute: AppMoreMessagesRoute,
+  AppMoreBodyworkRoute: AppMoreBodyworkRoute,
+  AppMoreVehicleChecksRoute: AppMoreVehicleChecksRoute,
   AppMoreSettingsRoute: AppMoreSettingsRoute,
   AppMoreSyncRoute: AppMoreSyncRoute,
   AppMoreIndexRoute: AppMoreIndexRoute,

@@ -8,7 +8,8 @@ import type {
   OperationalEligibility,
   TrainingRequirement,
 } from '@/lib/drivers/types'
-import { buildTrainingRequirements, deriveComplianceStatus } from '@/lib/drivers/compliance'
+import { deriveComplianceStatus } from '@/lib/drivers/compliance'
+import { buildTrainingRequirements, isMandatoryTrainingKey } from '@/lib/drivers/training'
 
 export interface JobEligibilityContext {
   wheelchairRequired?: boolean
@@ -33,7 +34,24 @@ export function jobContextFromBookingRequirements(req: {
   }
 }
 
-const NON_DISPATCHABLE_ACCOUNT = ['suspended', 'disabled', 'locked', 'offboarded']
+const NON_DISPATCHABLE_ACCOUNT = [
+  'draft',
+  'invitation_pending',
+  'setup_incomplete',
+  'pending_approval',
+  'temporarily_suspended',
+  'compliance_restricted',
+  'locked',
+  'offboarded',
+  'archived',
+  'invitation_expired',
+  'password_reset_required',
+  // Legacy values that may still appear from older projections
+  'suspended',
+  'disabled',
+  'not_created',
+  'invite_pending',
+]
 const NON_DISPATCHABLE_EMPLOYMENT = ['suspended', 'employment_ended', 'applicant']
 const WARN_DAYS = 30
 
@@ -97,13 +115,19 @@ function checkRestrictions(
   return items
 }
 
-function checkDocumentExpiries(driver: Pick<DriverProfile, 'licenceExpiry' | 'cpcExpiry' | 'dbsExpiry' | 'medicalExpiry' | 'firstName' | 'lastName'>, ctx?: JobEligibilityContext): EligibilityFailure[] {
+function checkDocumentExpiries(driver: Pick<DriverProfile, 'licenceExpiry' | 'cpcExpiry' | 'dbsExpiry' | 'medicalExpiry' | 'firstName' | 'lastName' | 'documents'>, ctx?: JobEligibilityContext): EligibilityFailure[] {
   const name = `${driver.firstName} ${driver.lastName}`
   const items: EligibilityFailure[] = []
+  const licenceExpiry =
+    driver.licenceExpiry ??
+    driver.documents?.find((d) => d.requirementType === 'driving_licence' || d.requirementType === 'licence')?.expiryDate ??
+    null
 
-  if (isExpired(driver.licenceExpiry)) {
+  if (!licenceExpiry) {
+    items.push(failure('licence_missing', `${name}: driving licence expiry is required`, 'block', 'compliance'))
+  } else if (isExpired(licenceExpiry)) {
     items.push(failure('licence_expired', `${name}: driving licence expired`, 'block', 'compliance'))
-  } else if (isExpiringSoon(driver.licenceExpiry)) {
+  } else if (isExpiringSoon(licenceExpiry)) {
     items.push(failure('licence_expiring', `${name}: licence expiring within ${WARN_DAYS} days`, 'warning', 'compliance'))
   }
 
@@ -156,6 +180,17 @@ function checkWorkPermissions(
 function checkAccountAndEmployment(driver: DriverProfile): EligibilityFailure[] {
   const items: EligibilityFailure[] = []
   const name = `${driver.firstName} ${driver.lastName}`
+
+  if (driver.operationalStatus === 'draft') {
+    items.push(
+      failure(
+        'onboarding_incomplete',
+        `${name}: onboarding is not complete`,
+        'warning',
+        'employment',
+      ),
+    )
+  }
 
   if (NON_DISPATCHABLE_ACCOUNT.includes(driver.account.accountStatus)) {
     items.push(
@@ -224,14 +259,39 @@ function checkTrainingRequirements(
 ): EligibilityFailure[] {
   const items: EligibilityFailure[] = []
   for (const req of requirements) {
-    if (req.status === 'missing' || req.status === 'expired' || req.status === 'failed') {
-      if (req.key === 'safeguarding_training' && ctx?.schoolContract) {
-        items.push(failure('safeguarding_training', `${req.label} required — ${req.status.replace(/_/g, ' ')}`, 'block', 'compliance'))
-      } else if (req.key === 'wheelchair_restraint' && ctx?.wheelchairRequired) {
-        items.push(failure('wheelchair_training', `${req.label} required — ${req.status.replace(/_/g, ' ')}`, 'block', 'compliance'))
-      } else if (!ctx && (req.status === 'missing' || req.status === 'expired')) {
-        items.push(failure(`training_${req.key}`, `${req.label} — ${req.status.replace(/_/g, ' ')}`, 'warning', 'compliance'))
-      }
+    if (req.status !== 'missing' && req.status !== 'expired' && req.status !== 'failed') continue
+
+    const mandatory = req.category === 'mandatory' || isMandatoryTrainingKey(req.key)
+    const schoolBlock =
+      (req.key === 'safeguarding_children' || req.key === 'safeguarding_training' || req.key === 'send_autism_awareness') &&
+      ctx?.schoolContract
+    const wheelchairBlock =
+      (req.key === 'wheelchair_restraint' || req.key === 'midas_accessible' || req.key === 'lift_ramp_operation') &&
+      ctx?.wheelchairRequired
+
+    if (schoolBlock || wheelchairBlock) {
+      items.push(
+        failure(
+          req.key.startsWith('safeguarding') ? 'safeguarding_training' : 'wheelchair_training',
+          `${req.label} required — ${req.status.replace(/_/g, ' ')}`,
+          'block',
+          'compliance',
+        ),
+      )
+      continue
+    }
+
+    if (!ctx && mandatory) {
+      items.push(
+        failure(`training_${req.key}`, `${req.label} — ${req.status.replace(/_/g, ' ')}`, 'block', 'compliance'),
+      )
+      continue
+    }
+
+    if (!ctx) {
+      items.push(
+        failure(`training_${req.key}`, `${req.label} — ${req.status.replace(/_/g, ' ')}`, 'warning', 'compliance'),
+      )
     }
   }
   return items

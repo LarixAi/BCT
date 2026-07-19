@@ -22,25 +22,26 @@ function isExpired(dateStr: string | null | undefined): boolean {
 }
 
 export function getJobsInScope(trip: OperationalTrip, input: Pick<CreateTransferInput, 'scope' | 'sourceJobIds'>): OperationalJob[] {
+  const jobs = trip.jobs ?? []
   switch (input.scope) {
     case 'entire_trip':
     case 'driver_only':
     case 'vehicle_only':
     case 'driver_and_vehicle':
     case 'swap_drivers':
-      return trip.jobs
+      return jobs
     case 'selected_jobs':
-      return trip.jobs.filter((j) => input.sourceJobIds?.includes(j.id))
+      return jobs.filter((j) => input.sourceJobIds?.includes(j.id))
     case 'remaining_jobs':
-      return trip.jobs.filter(
+      return jobs.filter(
         (j) => j.status === 'unstarted' || j.status === 'waiting' || j.status === 'onboard',
       )
     case 'return_to_queue':
       return input.sourceJobIds?.length
-        ? trip.jobs.filter((j) => input.sourceJobIds!.includes(j.id))
-        : trip.jobs.filter((j) => j.status !== 'completed')
+        ? jobs.filter((j) => input.sourceJobIds!.includes(j.id))
+        : jobs.filter((j) => j.status !== 'completed')
     default:
-      return trip.jobs
+      return jobs
   }
 }
 

@@ -13,13 +13,21 @@ export type MaintenancePriorityGroup = 'critical' | 'urgent' | 'attention'
 
 export type MaintenanceTab =
   | 'overview'
+  | 'planner'
   | 'work-orders'
+  | 'technician'
+  | 'pmi'
+  | 'service'
+  | 'vor'
+  | 'parts'
+  | 'costs'
+  | 'compliance'
+  /** @deprecated legacy tabs kept for redirects */
   | 'schedule'
   | 'defects'
   | 'calendar'
   | 'downtime'
   | 'suppliers'
-  | 'costs'
 
 export interface MaintenanceSupplier {
   id: string
@@ -42,6 +50,10 @@ export interface PartsCatalogItem {
   unitCost: number
   vehicleTypes: string[]
   reorderLevel: number
+  /** On-hand warehouse quantity (Phase 2b) */
+  stockOnHand: number
+  location: string | null
+  bin: string | null
 }
 
 export interface DowntimeAnalytics {
@@ -54,13 +66,27 @@ export interface DowntimeAnalytics {
 }
 
 export interface MaintenanceOverviewSummary {
+  /** Primary attention strip (brief Phase 1) */
+  attention: {
+    dueToday: number
+    dueWithin14Days: number
+    overdue: number
+    vor: number
+    safetyCriticalDefects: number
+    inWorkshop: number
+    awaitingParts: number
+    readyForRelease: number
+  }
   fleetAvailability: {
     total: number
     available: number
+    availableWithAdvisory: number
     inMaintenance: number
     vor: number
     awaitingInspection: number
     awaitingParts: number
+    readyForRelease: number
+    dueSoonUsable: number
   }
   maintenanceRisk: {
     overdueServices: number
@@ -69,6 +95,7 @@ export interface MaintenanceOverviewSummary {
     repeatDefectVehicles: number
     motApproaching: number
     tachoApproaching: number
+    missingEvidence: number
   }
   workshopPosition: {
     notStarted: number
@@ -81,10 +108,11 @@ export interface MaintenanceOverviewSummary {
 }
 
 export interface MaintenanceSummaryCard {
-  id: keyof MaintenanceOverviewSummary['fleetAvailability'] | keyof MaintenanceOverviewSummary['maintenanceRisk'] | keyof MaintenanceOverviewSummary['workshopPosition']
-  group: 'fleetAvailability' | 'maintenanceRisk' | 'workshopPosition'
+  id: string
+  group: 'attention' | 'fleetAvailability' | 'maintenanceRisk' | 'workshopPosition'
   label: string
   filterKey: string
+  tone?: 'critical' | 'default'
 }
 
 export interface MaintenancePriorityItem {
@@ -101,6 +129,8 @@ export interface MaintenancePriorityItem {
   responsiblePerson: string | null
   expectedCompletion: string | null
   upcomingWork: string | null
+  recommendedAction: string | null
+  deadline: string | null
 }
 
 export interface MaintenanceFleetRow {
@@ -150,6 +180,16 @@ export interface FleetWorkOrderRow {
   actualCost: number | null
   roadTestRequired: boolean
   partsCount: number
+  /** PMI digital checklist progress when type === pmi */
+  pmiChecklistProgress: {
+    total: number
+    answered: number
+    failed: number
+    advisory: number
+    complete: boolean
+  } | null
+  estimateStatus: import('@/lib/vehicles/types').EstimateApprovalStatus | null
+  estimateTotal: number | null
   createdAt: string
   createdBy: string
 }
@@ -166,6 +206,7 @@ export interface ServiceScheduleItem {
   milesRemaining: number | null
   status: 'overdue' | 'due_soon' | 'scheduled' | 'ok'
   workshop: string | null
+  owner: string | null
   source: 'work_order' | 'profile'
 }
 

@@ -203,8 +203,8 @@ export function buildStaffHub(profiles: StaffProfile[], handovers: StaffHandover
   }
 }
 
-export function filterStaffRows(rows: StaffDirectoryRow[], filter: string, search: string): StaffDirectoryRow[] {
-  let list = rows
+export function filterStaffRows(rows: StaffDirectoryRow[] | undefined, filter: string, search: string): StaffDirectoryRow[] {
+  let list = rows ?? []
 
   if (filter === 'active') list = list.filter((r) => r.employmentStatus === 'active')
   else if (filter === 'on_duty') list = list.filter((r) => r.dutyStatus === 'on_duty')

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "590158999464",
+    "project_id": "core-support-fleet-8c5a6",
+    "storage_bucket": "core-support-fleet-8c5a6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:590158999464:android:f86a49b76d1e102079779d",
+        "android_client_info": {
+          "package_name": "com.coresupport.fleet.driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCiTjybS9J6ePoWAw1eBBqfBv-06a-l2Vw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

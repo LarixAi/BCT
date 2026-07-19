@@ -1,4 +1,5 @@
 import type {
+  ConditionStatus,
   FuelType,
   LifecycleStatus,
   OwnershipType,
@@ -37,10 +38,21 @@ export const FUEL_TYPE_LABELS: Record<FuelType, string> = {
 }
 
 export const OWNERSHIP_TYPE_LABELS: Record<OwnershipType, string> = {
-  owned: 'Owned',
-  leased: 'Leased',
+  owned: 'Company-owned',
+  leased: 'Financed / leased',
   hire_purchase: 'Hire purchase',
-  rental: 'Rental',
+  rental: 'Short-term rental',
+  long_term_hire: 'Long-term hire',
+  temporary_hire: 'Temporary hire',
+  migration: 'Migration import',
+}
+
+export const CONDITION_STATUS_LABELS: Record<ConditionStatus, string> = {
+  no_known_issues: 'No known issues',
+  advisory: 'Advisory',
+  repair_required: 'Repair required',
+  safety_critical: 'Safety-critical',
+  awaiting_assessment: 'Awaiting assessment',
 }
 
 export const LIFECYCLE_STATUS_LABELS: Record<LifecycleStatus, string> = {
@@ -107,21 +119,35 @@ export const RELEASE_DECISION_LABELS: Record<ReleaseDecision, string> = {
   manual_authorisation_required: 'Manual authorisation required',
 }
 
-export const FLEET_DIRECTORY_CARDS: {
+/** Six primary register KPI cards — filter on click. */
+export const FLEET_PRIMARY_CARDS: {
   id: keyof import('./types').VehicleDirectorySummary
   label: string
   filterKey?: string
 }[] = [
-  { id: 'totalActive', label: 'Active vehicles' },
-  { id: 'availableNow', label: 'Available now', filterKey: 'available' },
-  { id: 'currentlyAllocated', label: 'Currently allocated', filterKey: 'allocated' },
+  { id: 'total', label: 'Total' },
+  { id: 'availableNow', label: 'Available', filterKey: 'available' },
   { id: 'inService', label: 'In service', filterKey: 'in_service' },
+  { id: 'attention', label: 'Attention', filterKey: 'attention' },
   { id: 'vor', label: 'VOR', filterKey: 'vor' },
+  { id: 'complianceExpiring', label: 'Compliance expiring', filterKey: 'expiring' },
+]
+
+/** Secondary filter pills under the primary strip. */
+export const FLEET_SECONDARY_CARDS: {
+  id: keyof import('./types').VehicleDirectorySummary
+  label: string
+  filterKey?: string
+}[] = [
+  { id: 'totalActive', label: 'Active', filterKey: 'active' },
+  { id: 'currentlyAllocated', label: 'Allocated', filterKey: 'allocated' },
   { id: 'inMaintenance', label: 'In maintenance', filterKey: 'maintenance' },
   { id: 'checksOverdue', label: 'Checks overdue', filterKey: 'checks_overdue' },
-  { id: 'complianceExpiring', label: 'Compliance expiring', filterKey: 'expiring' },
   { id: 'motDue', label: 'MOT due', filterKey: 'mot_due' },
   { id: 'tachographDue', label: 'Tachograph due', filterKey: 'tacho_due' },
   { id: 'wheelRetorqueDue', label: 'Wheel re-torque due', filterKey: 'retorque_due' },
   { id: 'unknownLocation', label: 'Unknown location', filterKey: 'unknown_location' },
 ]
+
+/** @deprecated Use FLEET_PRIMARY_CARDS + FLEET_SECONDARY_CARDS */
+export const FLEET_DIRECTORY_CARDS = [...FLEET_PRIMARY_CARDS, ...FLEET_SECONDARY_CARDS]

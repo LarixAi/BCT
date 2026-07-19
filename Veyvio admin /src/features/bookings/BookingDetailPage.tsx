@@ -133,7 +133,7 @@ export function BookingDetailPage() {
                     {t.totalJobCount} jobs · Run {t.runReference ?? '—'}
                   </p>
                 </div>
-                <Link to={`/ops-trips/${t.id}`} className="text-sm font-medium text-command-600 hover:underline">
+                <Link to={`/live-operations/trips/${t.id}`} className="text-sm font-medium text-command-600 hover:underline">
                   View trip →
                 </Link>
               </li>

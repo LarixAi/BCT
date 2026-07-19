@@ -54,12 +54,19 @@ import type {
 } from '@/lib/transfers/types'
 import { mockDriversApi } from './mock-drivers'
 import { mockVehiclesApi } from './mock-vehicles'
+import { mockAdBlueApi } from '@/lib/adblue/mock-adblue'
+import { normalizeAdBlueRecords } from '@/lib/adblue/normalize'
+import { mockVehicleReportsApi } from '@/lib/vehicle-reports/mock-vehicle-reports'
 import { mockMaintenanceApi } from './mock-maintenance'
+import { mockInspectionsApi } from './mock-inspections'
+import { mockFleetResourcesApi } from './mock-fleet-resources'
+import { mockAttendanceApi } from '@/lib/attendance/mock-hub'
 import { mockStaffApi } from './mock-staff'
 import { mockYardApi } from './mock-yard'
 import { mockChecksApi } from './mock-checks'
 import { mockDefectsApi } from './mock-defects'
 import { mockIncidentsApi } from './mock-incidents'
+import { mockDepotsApi } from './mock-depots'
 import { isActiveIncident } from '@/lib/incidents/status'
 import { profileToLegacyRecord } from '@/lib/eligibility/engine'
 import { profileToLegacyVehicleRecord } from '@/lib/vehicles/release'
@@ -84,6 +91,11 @@ const MEMBERSHIPS_KEY = 'pending_memberships'
 export const MOCK_TOKEN = 'mock-demo-token'
 
 const today = () => new Date().toISOString().slice(0, 10)
+const shiftDate = (days: number) => {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
 
 const MOCK_USER: AuthUser = {
   id: 'user-demo',
@@ -93,6 +105,8 @@ const MOCK_USER: AuthUser = {
   platformRole: null,
   activeTenantId: 'tenant-demo',
   tenantName: 'Metro Transport Ltd',
+  tenantStatus: 'ACTIVE',
+  mfaEnabled: true,
   role: 'company_owner',
   permissions: [
     'dispatch.view',
@@ -189,12 +203,6 @@ const MOCK_USER: AuthUser = {
   ],
 }
 
-const MOCK_DEPOTS: DepotRecord[] = [
-  { id: 'depot-wembley', name: 'Wembley Depot' },
-  { id: 'depot-croydon', name: 'Croydon Depot' },
-  { id: 'depot-park-royal', name: 'Park Royal Depot' },
-]
-
 const ROUTE_STOPS: RouteStopRecord[] = [
   {
     id: 'stop-1',
@@ -247,7 +255,7 @@ let mockDuties: DutyDetailRecord[] = [
     dutyDate: today(),
     startTime: '07:30',
     endTime: '09:30',
-    status: 'in_progress',
+    status: 'passenger_boarded',
     route: { id: 'route-1', name: 'Oakwood School AM', stops: ROUTE_STOPS },
     driver: { id: 'drv-1', firstName: 'Jane', lastName: 'Smith', status: 'on_duty' },
     vehicle: { id: 'veh-1', registrationNumber: 'AB12 CDE', status: 'in_service' },
@@ -261,13 +269,13 @@ let mockDuties: DutyDetailRecord[] = [
     dutyDate: today(),
     startTime: '09:00',
     endTime: '12:00',
-    status: 'assigned',
+    status: 'in_progress',
     route: { id: 'route-2', name: 'Day Centre Run' },
     driver: { id: 'drv-2', firstName: 'Michael', lastName: 'Patel', status: 'on_duty' },
     vehicle: { id: 'veh-2', registrationNumber: 'GH56 HIJ', status: 'in_service' },
     lastLatitude: 51.515,
     lastLongitude: -0.142,
-    lastPositionAt: new Date().toISOString(),
+    lastPositionAt: new Date(Date.now() - 18 * 60_000).toISOString(),
   },
   {
     id: 'duty-3',
@@ -302,9 +310,109 @@ let mockDuties: DutyDetailRecord[] = [
     driver: { id: 'drv-4', firstName: 'Robert', lastName: 'Wilson', status: 'on_duty' },
     vehicle: { id: 'veh-3', registrationNumber: 'KL78 MNO', status: 'in_service' },
   },
+  {
+    id: 'duty-6',
+    reference: 'AM-112',
+    dutyDate: today(),
+    startTime: '07:35',
+    endTime: '09:45',
+    status: 'assigned',
+    route: { id: 'route-1', name: 'Oakwood School AM' },
+    driver: { id: 'drv-5', firstName: 'Maria', lastName: 'Jones', status: 'signed_on' },
+    vehicle: { id: 'veh-6', registrationNumber: 'EO71 NTJ', status: 'available' },
+  },
+  {
+    id: 'duty-7',
+    reference: 'AM-107',
+    dutyDate: today(),
+    startTime: '07:10',
+    endTime: '09:00',
+    status: 'assigned',
+    route: { id: 'route-2', name: 'Day Centre Run' },
+    driver: { id: 'drv-2', firstName: 'Michael', lastName: 'Patel', status: 'signed_on' },
+    vehicle: { id: 'veh-4', registrationNumber: 'CD34 EFG', status: 'off_road' },
+  },
+  // Planned duties for the week (Schedule planning view)
+  {
+    id: 'duty-plan-1',
+    reference: 'SCH-AM-210',
+    dutyDate: shiftDate(1),
+    startTime: '07:20',
+    endTime: '09:40',
+    status: 'planned',
+    route: { id: 'route-1', name: 'Oakwood School AM' },
+    driver: { id: 'drv-1', firstName: 'Jane', lastName: 'Smith' },
+    vehicle: { id: 'veh-1', registrationNumber: 'AB12 CDE' },
+  },
+  {
+    id: 'duty-plan-2',
+    reference: 'SCH-AM-211',
+    dutyDate: shiftDate(1),
+    startTime: '07:20',
+    endTime: '09:30',
+    status: 'planned',
+    route: { id: 'route-1', name: 'Oakwood School AM' },
+    driver: { id: 'drv-1', firstName: 'Jane', lastName: 'Smith' },
+    vehicle: { id: 'veh-6', registrationNumber: 'EO71 NTJ' },
+  },
+  {
+    id: 'duty-plan-3',
+    reference: 'HOSP-044',
+    dutyDate: shiftDate(2),
+    startTime: '10:00',
+    endTime: '13:00',
+    status: 'planned',
+    route: { id: 'route-4', name: 'Hospital transfer' },
+    driver: { id: 'drv-3', firstName: 'Alice', lastName: 'Brown' },
+    vehicle: { id: 'veh-2', registrationNumber: 'GH56 HIJ' },
+  },
+  {
+    id: 'duty-plan-4',
+    reference: 'SEND-018',
+    dutyDate: shiftDate(2),
+    startTime: '08:00',
+    endTime: '11:30',
+    status: 'unassigned',
+    route: { id: 'route-5', name: 'SEND morning' },
+    driver: null,
+    vehicle: null,
+  },
+  {
+    id: 'duty-plan-5',
+    reference: 'PRIV-102',
+    dutyDate: shiftDate(3),
+    startTime: '09:30',
+    endTime: '12:00',
+    status: 'planned',
+    route: { id: 'route-6', name: 'Private hire' },
+    driver: { id: 'drv-5', firstName: 'Maria', lastName: 'Jones' },
+    vehicle: { id: 'veh-3', registrationNumber: 'KL78 MNO' },
+  },
+  {
+    id: 'duty-plan-6',
+    reference: 'SCH-PM-220',
+    dutyDate: shiftDate(4),
+    startTime: '14:30',
+    endTime: '17:15',
+    status: 'planned',
+    route: { id: 'route-3', name: 'School PM Return' },
+    driver: { id: 'drv-4', firstName: 'Robert', lastName: 'Wilson' },
+    vehicle: { id: 'veh-4', registrationNumber: 'CD34 EFG', status: 'off_road' },
+  },
 ]
 
 let mockNotifications: ApiNotification[] = [
+  {
+    id: 'N-502',
+    tenantId: 'tenant-demo',
+    userId: 'user-demo',
+    type: 'driver.onboarding.evidence_submitted',
+    title: 'Driver evidence ready for review',
+    body: 'Larone Laing uploaded a MiDAS certificate. Submitted for admin review.',
+    link: '/drivers',
+    readAt: null,
+    createdAt: new Date(Date.now() - 2 * 60_000).toISOString(),
+  },
   {
     id: 'N-501',
     tenantId: 'tenant-demo',
@@ -543,12 +651,6 @@ const MOCK_MAINTENANCE: MaintenanceRecord[] = [
   { id: 'mnt-2', vehicleRegistration: 'CD34 EFG', vehicleId: 'veh-4', type: 'repair', scheduledDate: '2026-03-20', status: 'in_progress', provider: 'Fleet Workshop' },
 ]
 
-const MOCK_INSPECTIONS: InspectionRecord[] = [
-  { id: 'insp-1', vehicleRegistration: 'GH56 HIJ', vehicleId: 'veh-2', inspectionType: 'mot', dueDate: '2027-01-15', status: 'valid' },
-  { id: 'insp-2', vehicleRegistration: 'CD34 EFG', vehicleId: 'veh-4', inspectionType: 'mot', dueDate: '2025-04-01', status: 'overdue' },
-  { id: 'insp-3', vehicleRegistration: 'KL78 MNO', vehicleId: 'veh-3', inspectionType: 'annual_inspection', dueDate: '2026-06-01', status: 'due_soon' },
-]
-
 const MOCK_TEMPLATES: MessageTemplateRecord[] = [
   { id: 'tpl-1', name: 'Delay notification', category: 'operations', subject: 'Service delay — {{route}}', body: 'We are experiencing a delay on {{route}}. Revised ETA: {{eta}}.' },
   { id: 'tpl-2', name: 'Safeguarding escalation', category: 'safety', subject: 'Safeguarding — immediate review', body: 'A safeguarding concern has been raised. Please review incident {{incident_id}}.' },
@@ -684,8 +786,201 @@ export class MockApiClient {
     return {
       accessToken: MOCK_TOKEN,
       refreshToken: 'mock-refresh',
-      user: { ...MOCK_USER, activeTenantId: tenantId },
+      user: { ...MOCK_USER, activeTenantId: tenantId, tenantStatus: 'ACTIVE' },
     }
+  }
+
+  async signupCompany(input: {
+    email: string
+    firstName: string
+    lastName: string
+    companyName: string
+    country: string
+    phone?: string
+    password: string
+    termsAccepted: boolean
+    privacyAccepted: boolean
+  }) {
+    await delay(80)
+    if (!input.termsAccepted || !input.privacyAccepted) throw new Error('You must accept the terms and privacy notice')
+    return {
+      ok: true,
+      message: 'If an account can be created for this address, we will send instructions.',
+      pendingOrganisationId: 'pending-org-1',
+      devVerificationToken: 'demo-verify-token',
+    }
+  }
+
+  async verifySignupEmail(_token: string) {
+    await delay(50)
+    return { companyId: 'tenant-demo', userId: 'user-demo', nextStep: 'company_verification' }
+  }
+
+  async submitCompanyVerification(_input: Record<string, unknown>) {
+    await delay(50)
+    return { nextStep: 'contract_acceptance' }
+  }
+
+  async acceptCompanyContracts() {
+    await delay(50)
+    return { nextStep: 'setup' }
+  }
+
+  async completeCompanySetup(_input: { timezone?: string; depotName?: string; depotCode?: string }) {
+    await delay(50)
+    return { nextStep: 'active' }
+  }
+
+  async listInvitations() {
+    await delay(40)
+    return [
+      {
+        id: 'inv-1',
+        email: 'sarah.jones@example.com',
+        appType: 'COMMAND',
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 86400000 * 5).toISOString(),
+        acceptedAt: null,
+        revokedAt: null,
+        invitedBy: 'user-demo',
+        createdAt: new Date().toISOString(),
+        roleIds: [],
+      },
+    ]
+  }
+
+  async createInvitation(input: { email: string; roleName?: string }) {
+    await delay(60)
+    return {
+      invitation: {
+        id: 'inv-new',
+        email: input.email,
+        expiresAt: new Date(Date.now() + 86400000 * 7).toISOString(),
+        status: 'pending',
+        appType: 'COMMAND',
+      },
+      devInvitationToken: 'demo-invite-token',
+    }
+  }
+
+  async previewInvitation(_token: string) {
+    await delay(30)
+    return {
+      email: 'invitee@example.com',
+      companyName: 'Metro Transport Ltd',
+      appType: 'COMMAND' as string,
+      expiresAt: new Date(Date.now() + 86400000).toISOString(),
+      firstName: 'Invitee' as string | null,
+      lastName: 'User' as string | null,
+    }
+  }
+
+  async acceptInvitation(_input: { token: string; password: string; firstName: string; lastName: string }) {
+    await delay(80)
+    return {
+      companyId: 'tenant-demo',
+      userId: 'user-invitee',
+      email: 'invitee@example.com',
+      appType: 'COMMAND',
+    }
+  }
+
+  async forgotPassword(email: string) {
+    await delay(40)
+    return {
+      ok: true,
+      message: 'If an account exists for this address, we will send reset instructions.',
+      devResetToken: email ? 'demo-reset-token' : null,
+    }
+  }
+
+  async resetPassword(_token: string, _password: string) {
+    await delay(50)
+    return { ok: true }
+  }
+
+  async enableMfa() {
+    await delay(50)
+    return {
+      recoveryCodes: ['AAAA1111', 'BBBB2222', 'CCCC3333', 'DDDD4444', 'EEEE5555', 'FFFF6666', 'GGGG7777', 'HHHH8888'],
+      mfaEnabled: true,
+    }
+  }
+
+  async verifyMfa(input: {
+    challengeId: string
+    code: string
+    companyId?: string
+    refreshToken?: string
+    accessToken?: string
+  }) {
+    await delay(50)
+    if (!input.challengeId || !input.code) throw new Error('MFA challenge and code are required')
+    return {
+      accessToken: MOCK_TOKEN,
+      refreshToken: 'mock-refresh',
+      user: { ...MOCK_USER, mfaEnabled: true },
+      requiresTenantSelection: false,
+    }
+  }
+
+  async createSupportGrant(input: {
+    reason: string
+    ticketReference?: string
+    granteeUserId?: string
+    durationMinutes?: number
+  }) {
+    await delay(50)
+    return {
+      id: `grant-${Date.now()}`,
+      reason: input.reason,
+      ticketReference: input.ticketReference ?? null,
+      accessLevel: 'read_only',
+      expiresAt: new Date(Date.now() + (input.durationMinutes ?? 60) * 60_000).toISOString(),
+      createdAt: new Date().toISOString(),
+    }
+  }
+
+  async listSupportGrants() {
+    await delay(40)
+    return [] as Array<{
+      id: string
+      reason: string
+      ticketReference?: string | null
+      accessLevel?: string
+      expiresAt?: string
+      createdAt?: string
+    }>
+  }
+
+  async listRetentionPolicies() {
+    await delay(40)
+    return [
+      { category: 'unaccepted_invitations', retentionDays: 30 },
+      { category: 'authentication_logs', retentionDays: 365 },
+      { category: 'device_sessions', retentionDays: 90 },
+    ]
+  }
+
+  async requestDataExport(exportType = 'company_full') {
+    await delay(50)
+    return {
+      id: `export-${Date.now()}`,
+      exportType,
+      status: 'queued',
+      createdAt: new Date().toISOString(),
+    }
+  }
+
+  async listDataExports() {
+    await delay(40)
+    return [] as Array<{
+      id: string
+      exportType: string
+      status: string
+      createdAt?: string
+      completedAt?: string | null
+    }>
   }
 
   async getMe(): Promise<AuthUser> {
@@ -696,7 +991,7 @@ export class MockApiClient {
   async getDashboard(): Promise<DashboardSummary> {
     await delay()
     const active = mockDuties.filter((d) =>
-      ['assigned', 'in_progress', 'ready'].includes(d.status),
+      ['assigned', 'in_progress', 'ready', 'passenger_boarded'].includes(d.status),
     ).length
     const unassigned = mockDuties.filter((d) => d.status === 'unassigned').length
     const incidentsHub = mockIncidentsApi.hub()
@@ -730,6 +1025,27 @@ export class MockApiClient {
           href: '/drivers/drv-1',
           category: 'compliance' as const,
         },
+        {
+          severity: 'warning' as const,
+          title: '2 driver apps have not synced for over 40 minutes',
+          href: '/drivers?filter=stale_sync',
+          category: 'operations' as const,
+          details: ['Silence is not confirmation — check pending uploads'],
+        },
+        {
+          severity: 'danger' as const,
+          title: 'Driver assistance requested — Michael Patel',
+          href: '/live-operations?duty=duty-2',
+          category: 'safety' as const,
+          details: ['Category: Unable to find address', 'Vehicle may be moving — urgent contact only if required'],
+        },
+        {
+          severity: 'danger' as const,
+          title: 'Run AM-112 blocked — yard return inspection incomplete',
+          href: '/yard?tab=tasks',
+          category: 'fleet' as const,
+          details: ['Vehicle EO71 NTJ', 'Required by 07:35'],
+        },
       ],
       navBadges: { defects: MOCK_DEFECTS.length, compliance: 3 },
       timeline: mockDuties.slice(0, 8).map((d) => ({
@@ -747,7 +1063,7 @@ export class MockApiClient {
     const filtered = mockDuties.filter((d) => {
       if (!d.driver) return false
       if (scope === 'completed') return d.status === 'completed'
-      return ['in_progress', 'assigned'].includes(d.status)
+      return ['in_progress', 'assigned', 'passenger_boarded', 'en_route'].includes(d.status)
     })
     return {
       date: today(),
@@ -757,9 +1073,14 @@ export class MockApiClient {
     }
   }
 
-  async getDuties(params?: { date?: string; status?: string }): Promise<DutyRecord[]> {
+  async getDuties(params?: { date?: string; status?: string; from?: string; to?: string }): Promise<DutyRecord[]> {
     await delay()
     let list = [...mockDuties]
+    if (params?.from && params?.to) {
+      list = list.filter((d) => d.dutyDate >= params.from! && d.dutyDate <= params.to!)
+    } else if (params?.date) {
+      list = list.filter((d) => d.dutyDate === params.date)
+    }
     if (params?.status) list = list.filter((d) => d.status === params.status)
     return list
   }
@@ -795,6 +1116,10 @@ export class MockApiClient {
   }
 
   async updateDuty(id: string, data: Record<string, unknown>) {
+    return this.assignDuty(id, data)
+  }
+
+  async assignDuty(id: string, data: Record<string, unknown>) {
     await delay()
     const idx = mockDuties.findIndex((d) => d.id === id)
     if (idx < 0) throw new Error('Duty not found')
@@ -816,8 +1141,25 @@ export class MockApiClient {
           : null
         : null
     }
+    duty.publicationStatus =
+      duty.driver && duty.vehicle ? 'ready_to_publish' : duty.publicationStatus ?? 'draft'
     mockDuties[idx] = duty
     return duty
+  }
+
+  async publishDuty(id: string) {
+    await delay()
+    const idx = mockDuties.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Duty not found')
+    const duty = { ...mockDuties[idx]! }
+    if (!duty.driver) throw new Error('Driver is required before publish')
+    duty.publicationStatus = 'published'
+    duty.publishedAt = new Date().toISOString()
+    duty.acknowledgementRequired = true
+    duty.acknowledgementDeadline = `${duty.dutyDate}T20:00:00.000Z`
+    duty.driverLifecycleStatus = 'published'
+    mockDuties[idx] = duty
+    return { duty, eligibility: { status: 'eligible' as const, blockers: [], warnings: [] } }
   }
 
   async createDuty(data: Record<string, unknown>) {
@@ -825,9 +1167,10 @@ export class MockApiClient {
     const duty: DutyDetailRecord = {
       id: `duty-${Date.now()}`,
       reference: `DUTY-${mockDuties.length + 1}`,
-      dutyDate: (data.dutyDate as string) ?? today(),
-      startTime: (data.startTime as string) ?? null,
+      dutyDate: (data.dutyDate as string) ?? (data.serviceDate as string) ?? today(),
+      startTime: (data.startTime as string) ?? (data.plannedSignOnAt as string) ?? null,
       status: 'unassigned',
+      publicationStatus: 'draft',
       route: null,
       driver: null,
       vehicle: null,
@@ -876,9 +1219,91 @@ export class MockApiClient {
     return mockDriversApi.sendInvitation(id, actorName, channel)
   }
 
+  async createDriverAppAccount(
+    id: string,
+    input: import('@/lib/drivers/types').CreateDriverAppAccountInput,
+    actorName: string,
+  ): Promise<DriverProfile> {
+    await delay(100)
+    return mockDriversApi.createAppAccount(id, input, actorName)
+  }
+
+  async activateDriver(
+    id: string,
+    input: import('@/lib/drivers/types').ActivateDriverInput,
+    actorName: string,
+  ): Promise<DriverProfile> {
+    await delay(100)
+    return mockDriversApi.activate(id, input, actorName)
+  }
+
+  async suspendDriver(
+    id: string,
+    input: import('@/lib/drivers/types').SuspendDriverInput,
+    actorName: string,
+  ): Promise<DriverProfile> {
+    await delay(100)
+    return mockDriversApi.suspend(id, input, actorName)
+  }
+
+  async reinstateDriver(
+    id: string,
+    input: import('@/lib/drivers/types').ReinstateDriverInput,
+    actorName: string,
+  ): Promise<DriverProfile> {
+    await delay(100)
+    return mockDriversApi.reinstate(id, input, actorName)
+  }
+
+  async unlockDriver(
+    id: string,
+    input: import('@/lib/drivers/types').UnlockDriverInput,
+    actorName: string,
+  ): Promise<DriverProfile> {
+    await delay(100)
+    return mockDriversApi.unlock(id, input, actorName)
+  }
+
+  async offboardDriver(
+    id: string,
+    input: import('@/lib/drivers/types').OffboardDriverInput,
+    actorName: string,
+  ): Promise<DriverProfile> {
+    await delay(120)
+    return mockDriversApi.offboard(id, input, actorName)
+  }
+
+  async revokeDriverDevice(
+    id: string,
+    deviceId: string,
+    input: import('@/lib/drivers/types').RevokeDriverDeviceInput,
+    actorName: string,
+  ): Promise<DriverProfile> {
+    await delay(80)
+    return mockDriversApi.revokeDevice(id, deviceId, input, actorName)
+  }
+
   async cancelDriverInvitation(id: string, actorName: string, reason: string): Promise<DriverProfile> {
     await delay(80)
     return mockDriversApi.cancelInvitation(id, actorName, reason)
+  }
+
+  async addDriverNote(
+    id: string,
+    input: { category: string; body: string; visibleToDriver?: boolean },
+    actorName: string,
+  ): Promise<DriverProfile> {
+    await delay(80)
+    return mockDriversApi.addNote(
+      id,
+      {
+        category: input.category as import('@/lib/drivers/types').DriverNoteCategory,
+        body: input.body,
+        author: actorName,
+        visibleToDriver: Boolean(input.visibleToDriver),
+      },
+      actorName,
+    )
   }
 
   async initiateDriverPasswordReset(id: string, actorName: string): Promise<DriverProfile> {
@@ -894,6 +1319,95 @@ export class MockApiClient {
   async uploadDriverDocument(id: string, input: import('@/lib/drivers/types').UploadDriverDocumentInput, actorName: string) {
     await delay(100)
     return mockDriversApi.uploadDocument(id, input, actorName)
+  }
+
+  async recordDriverTraining(
+    id: string,
+    input: import('@/lib/drivers/types').RecordDriverTrainingInput,
+    actorName: string,
+  ) {
+    await delay(100)
+    return mockDriversApi.recordTraining(id, input, actorName)
+  }
+
+  async listDriverRequirements(id: string) {
+    await delay(40)
+    const { mockDriverRequirementsApi } = await import('./mock-driver-requirements')
+    return mockDriverRequirementsApi.list(id)
+  }
+
+  async requestDriverRequirements(
+    id: string,
+    input: import('@/lib/drivers/types').RequestDriverRequirementsInput,
+    actorName: string,
+  ) {
+    await delay(80)
+    const { mockDriverRequirementsApi } = await import('./mock-driver-requirements')
+    return mockDriverRequirementsApi.request(id, input, actorName)
+  }
+
+  async assignDriverRequirementTraining(
+    id: string,
+    input: import('@/lib/drivers/types').AssignDriverTrainingInput,
+    actorName: string,
+  ) {
+    await delay(80)
+    const { mockDriverRequirementsApi } = await import('./mock-driver-requirements')
+    return mockDriverRequirementsApi.assignTraining(id, input, actorName)
+  }
+
+  async rejectDriverRequirement(
+    id: string,
+    definitionKey: string,
+    input: import('@/lib/drivers/types').RejectDriverRequirementInput,
+    actorName: string,
+  ) {
+    await delay(80)
+    const { mockDriverRequirementsApi } = await import('./mock-driver-requirements')
+    return mockDriverRequirementsApi.reject(id, definitionKey, input, actorName)
+  }
+
+  async markDriverRequirementStatus(
+    id: string,
+    definitionKey: string,
+    status: 'not_applicable' | 'waived',
+    actorName: string,
+  ) {
+    await delay(60)
+    const { mockDriverRequirementsApi } = await import('./mock-driver-requirements')
+    return mockDriverRequirementsApi.markStatus(id, definitionKey, status, actorName)
+  }
+
+  async submitDriverRequirementEvidence(
+    id: string,
+    definitionKey: string,
+    actorName: string,
+    options?: { label?: string; message?: string },
+  ) {
+    await delay(80)
+    const { mockDriverRequirementsApi } = await import('./mock-driver-requirements')
+    const result = mockDriverRequirementsApi.submitEvidence(id, definitionKey, actorName, options)
+    mockNotifications = [
+      {
+        id: `N-${Date.now()}`,
+        tenantId: 'tenant-demo',
+        userId: 'user-demo',
+        type: 'driver.onboarding.evidence_submitted',
+        title: 'Driver evidence ready for review',
+        body: `${options?.label ?? definitionKey.replace(/_/g, ' ')} was uploaded and is waiting for review.`,
+        link: `/drivers/${id}?tab=Eligibility`,
+        readAt: null,
+        createdAt: new Date().toISOString(),
+      },
+      ...mockNotifications,
+    ]
+    return result
+  }
+
+  async getDriverRequirementHistory(id: string, definitionKey: string) {
+    await delay(40)
+    const { mockDriverRequirementsApi } = await import('./mock-driver-requirements')
+    return mockDriverRequirementsApi.history(id, definitionKey)
   }
 
   async verifyDriverDocument(id: string, documentId: string, actorName: string) {
@@ -1011,9 +1525,43 @@ export class MockApiClient {
     return mockVehiclesApi.updateWorkOrder(id, workOrderId, input, actorName)
   }
 
+  async updateVehiclePmiChecklistItem(
+    id: string,
+    workOrderId: string,
+    input: import('@/lib/vehicles/types').UpdatePmiChecklistItemInput,
+    actorName: string,
+  ) {
+    await delay(80)
+    return mockVehiclesApi.updatePmiChecklistItem(id, workOrderId, input, actorName)
+  }
+
   async addVehicleWorkOrderPart(id: string, workOrderId: string, input: import('@/lib/vehicles/types').AddWorkOrderPartInput, actorName: string) {
     await delay(80)
-    return mockVehiclesApi.addWorkOrderPart(id, workOrderId, input, actorName)
+    const updated = mockVehiclesApi.addWorkOrderPart(id, workOrderId, input, actorName)
+    const { workOrderPartToResourceInput } = await import('@/lib/fleet-resources/cross-app')
+    const ledger = workOrderPartToResourceInput({
+      vehicleId: id,
+      workOrderId,
+      partName: input.partName,
+      quantity: input.quantity,
+      unitCost: input.unitCost,
+      actorName,
+    })
+    mockFleetResourcesApi.recordTransaction({
+      ...ledger,
+      workOrderId,
+    })
+    return updated
+  }
+
+  async approveVehicleWorkOrderEstimate(
+    id: string,
+    workOrderId: string,
+    input: import('@/lib/vehicles/types').ApproveWorkOrderEstimateInput,
+    actorName: string,
+  ) {
+    await delay(80)
+    return mockVehiclesApi.approveWorkOrderEstimate(id, workOrderId, input, actorName)
   }
 
   async completeVehicleRetorque(id: string, taskId: string, actorName: string) {
@@ -1046,6 +1594,15 @@ export class MockApiClient {
     return mockVehiclesApi.advanceOnboardingStage(id, stageId, actorName)
   }
 
+  async activateVehicleFromWizard(
+    id: string,
+    options: { acknowledgeWarnings?: boolean; mode: 'submit_for_approval' | 'activate' | 'keep_blocked' },
+    actorName: string,
+  ) {
+    await delay(120)
+    return mockVehiclesApi.activateFromWizard(id, options, actorName)
+  }
+
   async reportVehicleDamage(id: string, input: import('@/lib/vehicles/types').ReportDamageInput, actorName: string) {
     await delay(80)
     return mockVehiclesApi.reportDamage(id, input, actorName)
@@ -1059,6 +1616,52 @@ export class MockApiClient {
   async recordVehicleCheck(id: string, input: import('@/lib/vehicles/types').RecordVehicleCheckInput, actorName: string) {
     await delay(80)
     return mockVehiclesApi.recordCheck(id, input, actorName)
+  }
+
+  async getVehicleAdBlueRecords(vehicleId: string) {
+    await delay(40)
+    return normalizeAdBlueRecords(mockAdBlueApi.listForVehicle(vehicleId))
+  }
+
+  async recordVehicleAdBlue(
+    vehicleId: string,
+    input: import('@/lib/adblue/types').RecordAdBlueInput,
+    actorName: string,
+  ) {
+    await delay(80)
+    const profile = mockVehiclesApi.get(vehicleId)
+    return mockAdBlueApi.record(vehicleId, profile?.registrationNumber ?? '—', input, actorName)
+  }
+
+  async getVehicleReports(params?: { vehicleId?: string; status?: string }) {
+    await delay(50)
+    return mockVehicleReportsApi.list(params)
+  }
+
+  async getVehicleReport(id: string) {
+    await delay(40)
+    const row = mockVehicleReportsApi.get(id)
+    if (!row) throw new Error('Vehicle report not found')
+    return row
+  }
+
+  async createVehicleReport(input: import('@/lib/vehicle-reports/types').CreateVehicleReportInput, actorName: string) {
+    await delay(80)
+    return mockVehicleReportsApi.create(input, actorName)
+  }
+
+  async reviewVehicleReport(
+    id: string,
+    input: import('@/lib/vehicle-reports/types').ReviewVehicleReportInput,
+    actorName: string,
+  ) {
+    await delay(80)
+    return mockVehicleReportsApi.review(id, input, actorName)
+  }
+
+  async getVehicleReportsHub() {
+    await delay(50)
+    return mockVehicleReportsApi.hub()
   }
 
   async getRoutes(): Promise<RouteRecord[]> {
@@ -1169,9 +1772,35 @@ export class MockApiClient {
     return MOCK_COMPLIANCE_SETTINGS
   }
 
-  async getMessages(params?: { folder?: 'inbox' | 'sent' }): Promise<MessageRecord[]> {
+  async createMessage(input: {
+    driverId: string
+    subject?: string
+    body: string
+    conversationId?: string
+    requiresAck?: boolean
+  }): Promise<MessageRecord> {
+    const record: MessageRecord = {
+      id: `msg-${Date.now()}`,
+      subject: input.subject ?? 'Ops notice',
+      body: input.body,
+      readAt: null,
+      createdAt: new Date().toISOString(),
+      conversationId: input.conversationId ?? `conv-${Date.now()}`,
+      driverId: input.driverId,
+      sourceApp: 'COMMAND',
+      sender: { id: 'admin', firstName: 'Ops', lastName: 'Desk' },
+      recipient: { id: input.driverId, firstName: 'Driver', lastName: '' },
+    }
+    mockMessages = [record, ...mockMessages]
+    return record
+  }
+
+  async getMessages(params?: { folder?: 'inbox' | 'sent'; driverId?: string }): Promise<MessageRecord[]> {
     await delay()
     const demoUserId = 'user-demo'
+    if (params?.driverId) {
+      return mockMessages.filter((m) => m.driverId === params.driverId)
+    }
     if (params?.folder === 'sent') {
       return mockMessages.filter((m) => m.sender.id === demoUserId)
     }
@@ -1402,7 +2031,209 @@ export class MockApiClient {
 
   async getInspections(): Promise<InspectionRecord[]> {
     await delay(50)
-    return MOCK_INSPECTIONS
+    return mockInspectionsApi.legacyList()
+  }
+
+  async getInspectionsHub() {
+    await delay(50)
+    return mockInspectionsApi.hub()
+  }
+
+  async getFleetResourcesHub() {
+    await delay(50)
+    return mockFleetResourcesApi.hub()
+  }
+
+  async getAttendanceHub() {
+    await delay(40)
+    return mockAttendanceApi.getHub()
+  }
+
+  async getLeaveRequests() {
+    await delay(40)
+    return mockAttendanceApi.listLeave()
+  }
+
+  async updateLeaveRequest(row: import('@/lib/attendance/types').LeaveRequestRecord) {
+    await delay(40)
+    return mockAttendanceApi.updateLeave(row)
+  }
+
+  async getAttendancePersonProfile(input: { personId?: string | null; personName?: string | null }) {
+    await delay(40)
+    return mockAttendanceApi.getPersonProfile(input)
+  }
+
+  async classifyAttendanceRow(input: {
+    rowId: string
+    classification: import('@/lib/attendance/types').ManagerClassification
+    reason?: import('@/lib/attendance/types').AbsenceReasonCode | null
+    note?: string
+    actorName: string
+  }) {
+    await delay(40)
+    return mockAttendanceApi.classifyBoardRow(input)
+  }
+
+  async getAttendanceCoverCandidates(dutyLabel?: string | null) {
+    await delay(40)
+    return mockAttendanceApi.listCoverCandidates(dutyLabel)
+  }
+
+  async assignAttendanceCover(input: {
+    originalPersonName: string
+    coverPersonId: string
+    coverPersonName: string
+    dutyLabel: string
+    actorName: string
+    overrideReason?: string
+  }) {
+    await delay(60)
+    return mockAttendanceApi.assignCover(input)
+  }
+
+  async recordResourceTransaction(input: {
+    resourceCategory: import('@/lib/fleet-resources/types').ResourceCategory
+    resourceItemId: string
+    resourceName: string
+    transactionType: import('@/lib/fleet-resources/types').ResourceTransactionType
+    quantity: number
+    unit: string
+    unitPrice?: number | null
+    vehicleId?: string | null
+    driverName?: string | null
+    supplierName?: string | null
+    odometer?: number | null
+    receiptFileName?: string | null
+    fuelCardId?: string | null
+    notes?: string | null
+    depotName?: string | null
+    workOrderId?: string | null
+    actorName: string
+  }) {
+    await delay(80)
+    return mockFleetResourcesApi.recordTransaction(input)
+  }
+
+  async updateFleetResourcesSettings(
+    patch: Partial<import('@/lib/fleet-resources/types').FleetResourcesSettings>,
+  ) {
+    await delay(40)
+    return mockFleetResourcesApi.updateSettings(patch)
+  }
+
+  async approveResourcePurchase(id: string, actorName: string) {
+    await delay(60)
+    return mockFleetResourcesApi.approvePurchase(id, actorName)
+  }
+
+  async fitResourceTyre(input: {
+    tyreId: string
+    vehicleId: string
+    position: string
+    positionLabel: string
+    actorName: string
+  }) {
+    await delay(80)
+    return mockFleetResourcesApi.fitTyre(input)
+  }
+
+  async removeResourceTyre(input: { tyreId: string; actorName: string; quarantine?: boolean }) {
+    await delay(80)
+    return mockFleetResourcesApi.removeTyre(input)
+  }
+
+  async rotateResourceTyres(input: {
+    vehicleId: string
+    aTyreId: string
+    bTyreId: string
+    actorName: string
+  }) {
+    await delay(80)
+    return mockFleetResourcesApi.rotateTyres(input)
+  }
+
+  async assignResourceEquipment(input: {
+    equipmentId: string
+    vehicleId: string | null
+    actorName: string
+  }) {
+    await delay(60)
+    return mockFleetResourcesApi.assignEquipment(input)
+  }
+
+  async transferResourceStock(input: {
+    resourceItemId: string
+    resourceName: string
+    quantity: number
+    unit: string
+    fromDepotId: string
+    fromDepotName: string
+    toDepotId: string
+    toDepotName: string
+    actorName: string
+  }) {
+    await delay(80)
+    return mockFleetResourcesApi.transferStock(input)
+  }
+
+  async receiveResourceTransfer(id: string, actorName: string) {
+    await delay(60)
+    return mockFleetResourcesApi.receiveTransfer(id, actorName)
+  }
+
+  async getInspection(id: string) {
+    await delay(40)
+    const row = mockInspectionsApi.get(id)
+    if (!row) throw new Error('Inspection not found')
+    return row
+  }
+
+  async scheduleInspection(input: {
+    vehicleId: string
+    inspectionType: import('@/lib/inspections/types').InspectionType
+    dueDate: string
+    bookedDate?: string | null
+    provider?: string
+    driverInstruction?: string | null
+  }) {
+    await delay(80)
+    return mockInspectionsApi.schedule(input)
+  }
+
+  async startInspection(id: string, actorName: string) {
+    await delay(80)
+    return mockInspectionsApi.start(id, actorName)
+  }
+
+  async updateInspectionChecklistItem(
+    id: string,
+    input: import('@/lib/vehicles/types').UpdatePmiChecklistItemInput,
+    actorName: string,
+  ) {
+    await delay(60)
+    return mockInspectionsApi.updateChecklistItem(id, input, actorName)
+  }
+
+  async completeInspectionChecklist(id: string) {
+    await delay(60)
+    return mockInspectionsApi.markAwaitingSignOff(id)
+  }
+
+  async signOffInspection(id: string, actorName: string) {
+    await delay(80)
+    return mockInspectionsApi.signOff(id, actorName)
+  }
+
+  async importInspection(input: {
+    vehicleId: string
+    inspectionType: import('@/lib/inspections/types').InspectionType
+    dueDate: string
+    fileName: string
+    outcome?: import('@/lib/inspections/types').InspectionOutcome
+  }) {
+    await delay(80)
+    return mockInspectionsApi.importStub(input)
   }
 
   async getMessageTemplates(): Promise<MessageTemplateRecord[]> {
@@ -1458,7 +2289,28 @@ export class MockApiClient {
 
   async getYardHub(depotId?: string) {
     await delay(50)
-    return mockYardApi.hub(depotId ?? 'depot-wembley')
+    const hub = mockYardApi.hub(depotId ?? 'depot-wembley')
+    return {
+      ...hub,
+      driverMessages: hub.driverMessages ?? [],
+      bodyworkReports: hub.bodyworkReports ?? [],
+      vehicleChecks: hub.vehicleChecks ?? [],
+    }
+  }
+
+  async getYardMessages() {
+    await delay(40)
+    return [] as import('@/lib/yard/types').YardDriverMessage[]
+  }
+
+  async replyYardMessage(input: { conversationId: string; driverId: string; body: string }) {
+    await delay(60)
+    return {
+      id: `yard-reply-${Date.now()}`,
+      conversationId: input.conversationId,
+      driverId: input.driverId,
+      body: input.body,
+    }
   }
 
   async recordYardMovement(input: import('@/lib/yard/types').RecordYardMovementInput, actorName: string) {
@@ -1784,7 +2636,39 @@ export class MockApiClient {
 
   async getDepots(): Promise<DepotRecord[]> {
     await delay(50)
-    return MOCK_DEPOTS
+    return mockDepotsApi.listRecords()
+  }
+
+  async getDepotProfiles() {
+    await delay(60)
+    return mockDepotsApi.listProfiles()
+  }
+
+  async getDepotProfile(id: string) {
+    await delay(40)
+    const profile = mockDepotsApi.getProfile(id)
+    if (!profile) throw new Error('Depot not found')
+    return profile
+  }
+
+  async getDepotOpsSnapshot(id: string, date?: string) {
+    await delay(80)
+    const day = date ?? today()
+    const vehicles = mockVehiclesApi.list()
+    const drivers = mockDriversApi.list()
+    const duties = await this.getDuties({ date: day })
+    const staff = mockStaffApi.list()
+    return mockDepotsApi.opsSnapshot(id, { vehicles, drivers, duties, staff })
+  }
+
+  async createDepot(input: import('@/lib/depots/types').CreateDepotInput, _actorName: string) {
+    await delay(100)
+    return mockDepotsApi.create(input)
+  }
+
+  async updateDepot(id: string, input: import('@/lib/depots/types').UpdateDepotInput, _actorName: string) {
+    await delay(80)
+    return mockDepotsApi.update(id, input)
   }
 
   async getBookings(params?: { view?: string }): Promise<BookingListItem[]> {
@@ -1881,7 +2765,7 @@ export class MockApiClient {
       wheelchairVehicleCount: wcCount,
       suitableStaffCount: staffCount,
       mockDuties,
-      depots: MOCK_DEPOTS,
+      depots: mockDepotsApi.listRecords(),
       drivers: getMockDrivers(),
       vehicles: getMockVehicles(),
       passengers: MOCK_PASSENGERS,
@@ -1960,6 +2844,84 @@ export class MockApiClient {
   async getTransferReport(periodFrom: string, periodTo: string) {
     await delay(80)
     return mockTransfersApi.getTransferReport(periodFrom, periodTo)
+  }
+
+  async getCommandResource<T>(path: string): Promise<T> {
+    await delay(80)
+    const normalized = path.split('?')[0].replace(/^\/+/, '')
+    const records: Record<string, unknown> = {
+      availability: {
+        generatedAt: new Date().toISOString(),
+        drivers: [
+          { id: 'drv-1', firstName: 'Larone', lastName: 'Mitchell', status: 'available', depotName: 'Wembley' },
+          { id: 'drv-2', firstName: 'Emma', lastName: 'Taylor', status: 'restricted', depotName: 'Wembley' },
+        ],
+        vehicles: [
+          { id: 'veh-1', registrationNumber: 'LK23 ABC', status: 'ready', depotName: 'Wembley' },
+          { id: 'veh-2', registrationNumber: 'MB12 VYO', status: 'vor', depotName: 'Wembley' },
+        ],
+        commitments: [],
+      },
+      cancellations: [
+        { id: 'can-1042', reference: 'B-1042', status: 'cancelled', cancelledAt: new Date().toISOString(), cancellation: { reason: 'Passenger unavailable', noticeMinutes: 42 } },
+        { id: 'can-1039', reference: 'B-1039', status: 'cancelled', cancelledAt: new Date().toISOString(), cancellation: { reason: 'Vehicle failure', noticeMinutes: 12 } },
+      ],
+      handover: [
+        { id: 'hnd-204', title: 'MB-12 release evidence', detail: 'Independent return-to-service decision required', priority: 'critical', status: 'open' },
+        { id: 'hnd-201', title: 'T-0191 passenger assistant', detail: 'Confirmation received by AM control', priority: 'normal', status: 'accepted' },
+      ],
+      'maintenance/work-orders': [
+        { id: 'wo-441', reference: 'WO-441', title: 'Rear position light repair', status: 'in_progress', priority: 'critical', provider: 'Northside Fleet' },
+        { id: 'wo-438', reference: 'WO-438', title: 'Brake inspection', status: 'overdue', priority: 'high', provider: 'Central Workshop' },
+      ],
+      compliance: { clearPercent: 91, expiring: 14, blocked: 4 },
+      'compliance/expiries': {
+        items: [
+          { id: 'exp-1', entityType: 'driver', entityLabel: 'James Wilson', documentType: 'Driver CPC', status: 'expiring_soon', daysUntilExpiry: 7 },
+          { id: 'exp-2', entityType: 'vehicle', entityLabel: 'LK22 DEF', documentType: 'MOT', status: 'expiring_soon', daysUntilExpiry: 12 },
+        ],
+      },
+      safeguarding: [
+        { id: 'sg-028', reference: 'SG-028', title: 'Approved collection contact control', severity: 'high', status: 'under_review', isSafeguarding: true },
+      ],
+      'risk-assessments': [
+        { id: 'ra-204', reference: 'RA-204', title: 'Wheelchair boarding', riskLevel: 'medium', status: 'active', reviewDueAt: '2026-07-18T09:00:00Z' },
+      ],
+      'corrective-actions': [
+        { id: 'ca-311', reference: 'CA-311', title: 'Improve pickup-bay separation', priority: 'high', status: 'in_progress', dueAt: '2026-07-18T16:00:00Z' },
+      ],
+      'communication/delivery': [
+        { id: 'msg-8812', subject: 'Run AM-104 delay', channel: 'driver_app', deliveryState: 'acknowledged', createdAt: new Date().toISOString() },
+        { id: 'msg-8808', subject: 'Revised passenger ETA', channel: 'sms', deliveryState: 'failed', createdAt: new Date().toISOString() },
+      ],
+      'settings/roles': [
+        { id: 'role-1', roleKey: 'transport_manager', label: 'Transport manager', userCount: 6, permissions: ['*'] },
+        { id: 'role-2', roleKey: 'dispatcher', label: 'Dispatcher', userCount: 14, permissions: ['dispatch.read', 'dispatch.manage'] },
+      ],
+      'settings/invitations': [
+        { id: 'inv-1', email: 'sarah.jones@example.com', roleKey: 'dispatcher', status: 'invited', invitedAt: new Date().toISOString() },
+      ],
+      imports: [
+        { id: 'imp-104', jobType: 'import', resourceType: 'passengers', fileName: 'passenger-updates.csv', status: 'validation_failed', rowCount: 184, errorCount: 6 },
+      ],
+      exports: [
+        { id: 'exp-881', jobType: 'export', resourceType: 'contract_activity', fileName: 'july-contract-activity.csv', status: 'completed', rowCount: 2814, errorCount: 0 },
+      ],
+    }
+    if (normalized === 'profile') {
+      return { id: 'usr-1', firstName: 'Sarah', lastName: 'Mitchell', email: 'sarah.mitchell@ridgeway.example', platformRole: 'transport_manager' } as T
+    }
+    if (normalized === 'search') return { results: [] } as T
+    if (/^duties\/[^/]+$/.test(normalized)) return { id: 'duty-104', reference: 'DUT-104', status: 'on_duty', driverName: 'Larone Mitchell', vehicleRegistration: 'LK23 ABC', startTime: '2026-07-17T05:58:00Z', updatedAt: new Date().toISOString() } as T
+    if (/^maintenance\/work-orders\/[^/]+$/.test(normalized)) return { id: 'wo-441', reference: 'WO-441', title: 'Rear position light repair', status: 'in_progress', provider: 'Northside Fleet', updatedAt: new Date().toISOString() } as T
+    if (/^inspections\/[^/]+$/.test(normalized)) return { id: 'ins-204', reference: 'INS-204', title: 'Wembley pickup operation', status: 'action_required', updatedAt: new Date().toISOString() } as T
+    if (/^passengers\/[^/]+$/.test(normalized)) return { id: 'passenger-1', name: 'Amira Khan', status: 'active', mobility: 'Wheelchair user', safeguarding: 'Approved contacts only', updatedAt: new Date().toISOString() } as T
+    if (/^customers\/[^/]+$/.test(normalized)) return { id: 'customer-1', name: 'Brent Supported Travel', status: 'active', activePassengers: 42, updatedAt: new Date().toISOString() } as T
+    if (/^schools\/[^/]+$/.test(normalized)) return { id: 'school-1', name: 'Brookfield Academy', status: 'active', arrivalWindow: '08:25–08:45', updatedAt: new Date().toISOString() } as T
+    if (/^contracts\/[^/]+$/.test(normalized)) return { id: 'contract-1', reference: 'CTR-2026-014', name: 'Supported travel 2026/27', status: 'active', updatedAt: new Date().toISOString() } as T
+    if (/^messages\/[^/]+$/.test(normalized)) return { id: 'message-1', title: 'Run AM-104 delay', status: 'response_due', createdAt: new Date().toISOString() } as T
+    if (/^staff\/[^/]+$/.test(normalized)) return { id: 'staff-1', name: 'Sarah Mitchell', status: 'active', role: 'Transport manager', updatedAt: new Date().toISOString() } as T
+    return (records[normalized] ?? []) as T
   }
 }
 

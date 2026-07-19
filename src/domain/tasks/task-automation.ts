@@ -142,6 +142,7 @@ export function tasksFromBlockedTrips(
 ): YardTask[] {
   const created: YardTask[] = [];
   for (const trip of trips) {
+    if (trip.departedAt) continue;
     if (hasOpenTaskForTrip([...existing, ...created], trip.id)) continue;
     const vehicle = trip.vehicleId ? vehicles.find(v => v.id === trip.vehicleId) : undefined;
     const task = buildBlockedTripTask(trip, vehicle, createdBy, nextId);

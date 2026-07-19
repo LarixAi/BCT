@@ -1,19 +1,23 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { YARD_SUMMARY_CARDS, YARD_TABS } from '@/lib/yard/constants'
+import { YARD_SUMMARY_CARDS, YARD_TABS, YARD_TASK_TYPE_LABELS } from '@/lib/yard/constants'
 import { canCreateYardTask, canRecordYardMovement } from '@/lib/yard/permissions'
-import type { YardTab, YardVehicleRow } from '@/lib/yard/types'
+import type { YardTab, YardTaskType, YardVehicleRow } from '@/lib/yard/types'
 import { YardLiveTab } from './YardLiveTab'
 import { YardMovementsTab } from './YardMovementsTab'
 import { YardTasksTab } from './YardTasksTab'
 import { YardMapTab } from './YardMapTab'
 import { YardHandoverTab } from './YardHandoverTab'
 import { YardExceptionsTab } from './YardExceptionsTab'
+import { YardDriverMessagesTab } from './YardDriverMessagesTab'
+import { YardBodyworkTab } from './YardBodyworkTab'
+import { YardVehicleChecksTab } from './YardVehicleChecksTab'
 import { RecordMovementPanel } from './components/RecordMovementPanel'
 import { CreateYardTaskPanel } from './components/CreateYardTaskPanel'
 import { VehicleOperationsDrawer } from './components/VehicleOperationsDrawer'
 import { api } from '@/lib/api/client'
+import { safeYardHub } from '@/lib/api/safe-hubs'
 import { useAuth } from '@/lib/auth-context'
 
 export function YardOperationsPage() {
@@ -21,12 +25,14 @@ export function YardOperationsPage() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = (searchParams.get('tab') as YardTab) || 'live'
-  const depotId = searchParams.get('depot') ?? 'depot-wembley'
+  const depotId = searchParams.get('depot') ?? ''
+  const vehicleDeepLink = searchParams.get('vehicle') ?? ''
+  const taskHint = searchParams.get('task') ?? ''
   const [filter, setFilter] = useState('all')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(vehicleDeepLink)
   const [selected, setSelected] = useState<YardVehicleRow | null>(null)
   const [showMovement, setShowMovement] = useState(false)
-  const [showTask, setShowTask] = useState(false)
+  const [showTask, setShowTask] = useState(taskHint === 'prepare_for_service' || taskHint === 'return_inspection')
 
   const permissions = user?.permissions ?? []
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
@@ -34,8 +40,8 @@ export function YardOperationsPage() {
   const canTask = canCreateYardTask(permissions)
 
   const { data: hub, isLoading, error, isError } = useQuery({
-    queryKey: ['yard-hub', depotId],
-    queryFn: () => api.getYardHub(depotId),
+    queryKey: ['yard-hub', depotId || 'default'],
+    queryFn: () => api.getYardHub(depotId || undefined),
   })
 
   function setTab(next: YardTab) {
@@ -45,19 +51,14 @@ export function YardOperationsPage() {
   }
 
   function setDepot(next: string) {
-    searchParams.set('depot', next)
+    if (!next) searchParams.delete('depot')
+    else searchParams.set('depot', next)
     setSearchParams(searchParams, { replace: true })
     setSelected(null)
   }
 
   function refresh() {
-    queryClient.invalidateQueries({ queryKey: ['yard-hub', depotId] })
-  }
-
-  function selectVehicle(vehicleId: string) {
-    const row = hub?.vehicles.find((v) => v.vehicleId === vehicleId) ?? null
-    setSelected(row)
-    setTab('live')
+    queryClient.invalidateQueries({ queryKey: ['yard-hub'] })
   }
 
   if (isLoading) return <p className="text-sm text-slate-500">Loading yard operations…</p>
@@ -65,7 +66,16 @@ export function YardOperationsPage() {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load yard operations'}</p>
   }
 
-  const openExceptions = hub.exceptions.filter((e) => e.escalationStatus !== 'resolved').length
+  const safeHub = safeYardHub(hub)
+
+  function selectVehicle(vehicleId: string) {
+    const row = safeHub.vehicles.find((v) => v.vehicleId === vehicleId) ?? null
+    setSelected(row)
+    setTab('live')
+  }
+
+  const openExceptions = safeHub.exceptions.filter((e) => e.escalationStatus !== 'resolved').length
+  const selectedDepot = depotId || safeHub.depotId || safeHub.depots[0]?.id || ''
 
   return (
     <div className="space-y-6">
@@ -73,18 +83,18 @@ export function YardOperationsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Yard Operations</h1>
           <p className="text-sm text-slate-600">
-            {hub.depotName} · {hub.operationalDate} · {hub.shiftLabel}
+            {safeHub.depotName} · {safeHub.operationalDate} · {safeHub.shiftLabel}
           </p>
           <p className="text-xs text-slate-500">Live vehicle movements, readiness and depot activity</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
-            value={depotId}
+            value={selectedDepot}
             onChange={(e) => setDepot(e.target.value)}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
             aria-label="Depot"
           >
-            {hub.depots.map((d) => (
+            {safeHub.depots.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
               </option>
@@ -120,8 +130,26 @@ export function YardOperationsPage() {
         </div>
       </div>
 
-      {showMovement && canMove && <RecordMovementPanel hub={hub} actorName={actorName} onClose={() => setShowMovement(false)} />}
-      {showTask && canTask && <CreateYardTaskPanel hub={hub} onClose={() => setShowTask(false)} />}
+      {taskHint && (
+        <div className="rounded-lg border border-command-200 bg-command-50 px-3 py-2 text-sm text-command-900" role="status">
+          {taskHint === 'return_inspection'
+            ? 'Maintenance requested a return-from-workshop check — create a return inspection task for the vehicle.'
+            : taskHint === 'prepare_for_service'
+              ? 'Maintenance requested prepare-for-workshop — create a yard task and capture mileage before handover.'
+              : `Task hint from Maintenance: ${taskHint.replace(/_/g, ' ')}.`}
+          {vehicleDeepLink && <span className="ml-1">Vehicle filter: {vehicleDeepLink}</span>}
+        </div>
+      )}
+
+      {showMovement && canMove && <RecordMovementPanel hub={safeHub} actorName={actorName} onClose={() => setShowMovement(false)} />}
+      {showTask && canTask && (
+        <CreateYardTaskPanel
+          hub={safeHub}
+          initialTaskType={taskHint in YARD_TASK_TYPE_LABELS ? (taskHint as YardTaskType) : undefined}
+          initialVehicleId={vehicleDeepLink || undefined}
+          onClose={() => setShowTask(false)}
+        />
+      )}
 
       {tab === 'live' && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
@@ -137,7 +165,7 @@ export function YardOperationsPage() {
                 filter === card.filterKey ? 'border-command-500 bg-command-50 ring-1 ring-command-500' : 'border-slate-200 bg-white hover:border-slate-300'
               }`}
             >
-              <p className="text-xl font-bold tabular-nums text-slate-900">{hub.summary[card.id]}</p>
+              <p className="text-xl font-bold tabular-nums text-slate-900">{safeHub.summary[card.id]}</p>
               <p className="text-xs text-slate-600">{card.label}</p>
             </button>
           ))}
@@ -158,6 +186,21 @@ export function YardOperationsPage() {
             {t.id === 'exceptions' && openExceptions > 0 && (
               <span className="ml-1.5 rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-800">{openExceptions}</span>
             )}
+            {t.id === 'checks' && (safeHub.vehicleChecks?.length ?? 0) > 0 && (
+              <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs font-semibold text-emerald-900">
+                {safeHub.vehicleChecks?.length}
+              </span>
+            )}
+            {t.id === 'bodywork' && (safeHub.bodyworkReports?.length ?? 0) > 0 && (
+              <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
+                {safeHub.bodyworkReports?.length}
+              </span>
+            )}
+            {t.id === 'messages' && (safeHub.driverMessages?.length ?? 0) > 0 && (
+              <span className="ml-1.5 rounded-full bg-command-100 px-1.5 py-0.5 text-xs font-semibold text-command-800">
+                {safeHub.driverMessages?.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -171,20 +214,23 @@ export function YardOperationsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full max-w-md rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
           />
-          <YardLiveTab hub={hub} filter={filter} search={search} selectedId={selected?.vehicleId ?? null} onSelect={setSelected} />
+          <YardLiveTab hub={safeHub} filter={filter} search={search} selectedId={selected?.vehicleId ?? null} onSelect={setSelected} />
         </>
       )}
 
-      {tab === 'movements' && <YardMovementsTab hub={hub} />}
-      {tab === 'tasks' && <YardTasksTab hub={hub} />}
-      {tab === 'map' && <YardMapTab hub={hub} />}
-      {tab === 'handover' && <YardHandoverTab hub={hub} />}
+      {tab === 'movements' && <YardMovementsTab hub={safeHub} />}
+      {tab === 'tasks' && <YardTasksTab hub={safeHub} />}
+      {tab === 'map' && <YardMapTab hub={safeHub} />}
+      {tab === 'handover' && <YardHandoverTab hub={safeHub} />}
       {tab === 'exceptions' && (
         <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-          <YardExceptionsTab hub={hub} onSelectVehicle={selectVehicle} />
-          {selected && <VehicleOperationsDrawer hub={hub} row={selected} onClose={() => setSelected(null)} />}
+          <YardExceptionsTab hub={safeHub} onSelectVehicle={selectVehicle} />
+          {selected && <VehicleOperationsDrawer hub={safeHub} row={selected} onClose={() => setSelected(null)} />}
         </div>
       )}
+      {tab === 'checks' && <YardVehicleChecksTab hub={safeHub} />}
+      {tab === 'bodywork' && <YardBodyworkTab hub={safeHub} />}
+      {tab === 'messages' && <YardDriverMessagesTab hub={safeHub} />}
     </div>
   )
 }

@@ -6,6 +6,8 @@ export interface AuthUser {
   platformRole: string | null
   activeTenantId: string | null
   tenantName: string | null
+  tenantStatus?: string | null
+  mfaEnabled?: boolean
   role: string | null
   permissions: string[]
   supportSessionId?: string | null
@@ -21,6 +23,10 @@ export interface LoginResponse {
   accessToken?: string
   refreshToken?: string
   requiresTenantSelection?: boolean
+  requiresMfaChallenge?: boolean
+  mfaChallengeId?: string
+  devMfaCode?: string
+  pendingCompanyId?: string | null
   memberships?: TenantMembershipOption[]
   user?: AuthUser
 }
@@ -85,6 +91,12 @@ export interface LiveDispatchVehicle {
   lastPositionAt: string | null
   staleMinutes: number | null
   isStale: boolean
+  /** True only when a real driver GPS ping exists for this duty. */
+  hasLiveGps?: boolean
+  /** Minutes behind plan (schedule), not GPS age. */
+  delayMinutes?: number | null
+  plannedStartAt?: string | null
+  plannedEndAt?: string | null
   staleThresholdMinutes: number
   nextStop: LiveDispatchNextStop | null
   routeTotalStops: number
@@ -172,8 +184,20 @@ export interface MessageRecord {
   body: string
   readAt: string | null
   createdAt: string
+  conversationId?: string | null
+  driverId?: string | null
+  audience?: 'dispatch' | 'yard' | 'both' | string | null
+  sourceApp?: string | null
   sender: { id: string; firstName: string; lastName: string }
   recipient: { id: string; firstName: string; lastName: string }
+}
+
+export interface CreateMessageInput {
+  driverId: string
+  subject?: string
+  body: string
+  conversationId?: string
+  requiresAck?: boolean
 }
 
 export interface ReportsSummary {
@@ -350,12 +374,28 @@ export interface DepotRecord {
   name: string
 }
 
+export type DutyPublicationStatus = 'draft' | 'ready_to_publish' | 'published' | 'cancelled'
+
+export interface DutyEligibilityResult {
+  status: 'eligible' | 'eligible_with_warnings' | 'blocked'
+  blockers: string[]
+  warnings: string[]
+}
+
 export interface DutyRecord {
   id: string
   reference: string
   dutyDate: string
   startTime: string | null
+  endTime?: string | null
   status: string
+  publicationStatus?: DutyPublicationStatus | string
+  publishedAt?: string | null
+  acknowledgementRequired?: boolean
+  acknowledgementDeadline?: string | null
+  driverLifecycleStatus?: string | null
+  specialInstructions?: string | null
+  version?: number
   route?: { id: string; name: string } | null
   driver?: { id: string; firstName: string; lastName: string; status?: string } | null
   vehicle?: { id: string; registrationNumber: string; status?: string } | null

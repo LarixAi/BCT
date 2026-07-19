@@ -60,7 +60,22 @@ export type ReleaseDecision =
 
 export type FuelType = 'diesel' | 'petrol' | 'electric' | 'hybrid' | 'hydrogen'
 
-export type OwnershipType = 'owned' | 'leased' | 'hire_purchase' | 'rental'
+export type OwnershipType =
+  | 'owned'
+  | 'leased'
+  | 'hire_purchase'
+  | 'rental'
+  | 'long_term_hire'
+  | 'temporary_hire'
+  | 'migration'
+
+/** Physical / defect condition — separate from lifecycle, operational, and compliance. */
+export type ConditionStatus =
+  | 'no_known_issues'
+  | 'advisory'
+  | 'repair_required'
+  | 'safety_critical'
+  | 'awaiting_assessment'
 
 export type VehicleCategory = 'minibus' | 'accessible' | 'coach' | 'car' | 'mpv' | 'van'
 
@@ -146,6 +161,56 @@ export interface VehicleVorRecord {
   resolvedAt: string | null
   resolvedBy: string | null
   resolutionReason: string | null
+  /** Work completed while vehicle was VOR */
+  workPerformed?: string | null
+  diagnosis?: string | null
+  repairType?: string | null
+  technicianName?: string | null
+  workOrderIds?: string[]
+  labourCost?: number | null
+  partsCost?: number | null
+  externalCost?: number | null
+  totalCost?: number | null
+  downtimeHours?: number | null
+  returnedToRoadAt?: string | null
+  returnedToRoadBy?: string | null
+  returnMileage?: number | null
+  verificationResult?: 'pass' | 'fail' | null
+  verifiedBy?: string | null
+  verifiedAt?: string | null
+  verificationMethod?: string | null
+  preventiveAction?: string | null
+  passengersOnboard?: boolean | null
+  safeToMove?: boolean | null
+  linkedReportId?: string | null
+}
+
+/** Fill episode cost/RTS fields when older records omit them. */
+export function normalizeVorRecord(record: VehicleVorRecord): VehicleVorRecord {
+  return {
+    ...record,
+    workPerformed: record.workPerformed ?? null,
+    diagnosis: record.diagnosis ?? null,
+    repairType: record.repairType ?? null,
+    technicianName: record.technicianName ?? null,
+    workOrderIds: record.workOrderIds ?? [],
+    labourCost: record.labourCost ?? null,
+    partsCost: record.partsCost ?? null,
+    externalCost: record.externalCost ?? null,
+    totalCost: record.totalCost ?? null,
+    downtimeHours: record.downtimeHours ?? null,
+    returnedToRoadAt: record.returnedToRoadAt ?? record.resolvedAt ?? null,
+    returnedToRoadBy: record.returnedToRoadBy ?? record.resolvedBy ?? null,
+    returnMileage: record.returnMileage ?? null,
+    verificationResult: record.verificationResult ?? null,
+    verifiedBy: record.verifiedBy ?? null,
+    verifiedAt: record.verifiedAt ?? null,
+    verificationMethod: record.verificationMethod ?? null,
+    preventiveAction: record.preventiveAction ?? null,
+    passengersOnboard: record.passengersOnboard ?? null,
+    safeToMove: record.safeToMove ?? null,
+    linkedReportId: record.linkedReportId ?? null,
+  }
 }
 
 export interface ReleaseFailure {
@@ -165,6 +230,17 @@ export interface VehicleReleaseResult {
   canAcceptPassengers: boolean
   summary: string
   evaluatedAt: string
+}
+
+/** Persisted PMI / safety inspection interval (Maintenance domain metadata). */
+export interface VehiclePmiInterval {
+  intervalWeeks: number
+  reason: string
+  approvedBy: string | null
+  approvedAt: string | null
+  reviewDueAt: string | null
+  mileageLimit: number | null
+  lastCompletedAt: string | null
 }
 
 export interface VehicleProfile {
@@ -197,9 +273,12 @@ export interface VehicleProfile {
   lifecycleStatus: LifecycleStatus
   operationalStatus: VehicleOperationalStatus
   complianceStatus: VehicleComplianceStatus
+  conditionStatus: ConditionStatus
   yardStatus: YardStatus
   readinessStatus: ReadinessStatus
   releaseDecision: ReleaseDecision
+  /** Shared projection for Admin, Dispatch, Yard, Driver, Live Ops */
+  readiness: VehicleReadiness
   capabilities: VehicleCapability[]
   motExpiry: string | null
   insuranceExpiry: string | null
@@ -217,6 +296,8 @@ export interface VehicleProfile {
   lastCheckType: string | null
   nextMaintenanceDate: string | null
   nextMaintenanceMileage: number | null
+  /** Persisted PMI interval policy; omit/null → company default / age-based guidance */
+  pmiInterval?: VehiclePmiInterval | null
   openDefectCount: number
   criticalDefectCount: number
   checksOverdue: boolean
@@ -248,10 +329,12 @@ export interface VehicleProfile {
 }
 
 export interface VehicleDirectorySummary {
+  total: number
   totalActive: number
   availableNow: number
   currentlyAllocated: number
   inService: number
+  attention: number
   vor: number
   inMaintenance: number
   checksOverdue: number
@@ -262,18 +345,36 @@ export interface VehicleDirectorySummary {
   unknownLocation: number
 }
 
+/** One shared readiness answer for Admin, Dispatch, Yard, Driver, Live Ops. */
+export interface VehicleReadiness {
+  vehicleId: string
+  lifecycleStatus: LifecycleStatus
+  operationalStatus: VehicleOperationalStatus
+  complianceStatus: VehicleComplianceStatus
+  conditionStatus: ConditionStatus
+  assignmentEligible: boolean
+  blockingReasons: string[]
+  warningReasons: string[]
+  calculatedAt: string
+  releaseDecision: ReleaseDecision
+}
+
 export interface CreateVehicleInput {
   registrationNumber: string
   fleetNumber?: string
   vin?: string
   make: string
   model: string
+  modelYear?: number | null
+  colour?: string | null
   vehicleCategory: VehicleCategory
   homeDepotId: string
   seatingCapacity: number
   wheelchairCapacity?: number
+  standingCapacity?: number
   fuelType?: FuelType
   ownershipType?: OwnershipType
+  ownerName?: string | null
 }
 
 export interface UpdateVehicleInput {
@@ -282,16 +383,44 @@ export interface UpdateVehicleInput {
   vin?: string
   make?: string
   model?: string
+  modelYear?: number | null
+  colour?: string | null
   vehicleCategory?: VehicleCategory
   homeDepotId?: string
   currentDepotId?: string
   seatingCapacity?: number
   wheelchairCapacity?: number
+  standingCapacity?: number
   fuelType?: FuelType
+  ownershipType?: OwnershipType
+  ownerName?: string | null
   mileage?: number
   parkingBay?: string
   currentLocationLabel?: string
+  nextMaintenanceDate?: string | null
+  nextMaintenanceMileage?: number | null
+  motExpiry?: string | null
+  insuranceExpiry?: string | null
+  taxExpiry?: string | null
+  /** Telematics / technology notes (Phase 1) */
+  telematicsProvider?: string | null
+  telematicsDeviceId?: string | null
+  driverCheckTemplate?: string | null
 }
+
+export type VehicleWizardStepId =
+  | 'identity'
+  | 'ownership'
+  | 'configuration'
+  | 'compliance'
+  | 'maintenance'
+  | 'technology'
+  | 'depot_yard'
+  | 'equipment'
+  | 'baseline_inspection'
+  | 'driver_checks'
+  | 'eligibility'
+  | 'review'
 
 export interface MarkVehicleVorInput {
   reason: string
@@ -470,6 +599,23 @@ export interface WorkOrderPartLine {
   supplierId: string | null
 }
 
+export type EstimateApprovalStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
+
+export interface WorkOrderEstimate {
+  labourHours: number
+  labourRate: number
+  labourCost: number
+  partsCost: number
+  totalCost: number
+  status: EstimateApprovalStatus
+  submittedAt: string | null
+  submittedBy: string | null
+  approvedAt: string | null
+  approvedBy: string | null
+  rejectionReason: string | null
+  notes: string | null
+}
+
 export interface MaintenanceWorkOrder {
   id: string
   type: string
@@ -493,6 +639,10 @@ export interface MaintenanceWorkOrder {
   notes: string | null
   roadTestRequired: boolean
   parts: WorkOrderPartLine[]
+  /** Digital PMI checklist when type === 'pmi' */
+  pmiChecklist: import('@/lib/maintenance/pmi-checklist').PmiChecklistInstance | null
+  /** Workshop estimate awaiting / approved (Phase 2b) */
+  estimate: WorkOrderEstimate | null
   returnToServiceApproved: boolean
   createdAt: string
   createdBy: string
@@ -509,6 +659,23 @@ export interface UpdateWorkOrderInput {
   labourCost?: number
   partsCost?: number
   roadTestRequired?: boolean
+  pmiChecklist?: import('@/lib/maintenance/pmi-checklist').PmiChecklistInstance | null
+  estimate?: WorkOrderEstimate | null
+}
+
+export interface ApproveWorkOrderEstimateInput {
+  decision: 'approved' | 'rejected'
+  notes?: string
+}
+
+export interface UpdatePmiChecklistItemInput {
+  templateItemId: string
+  result?: import('@/lib/maintenance/pmi-checklist').PmiItemResult
+  notes?: string | null
+  evidenceKind?: import('@/lib/maintenance/pmi-checklist').PmiEvidenceKind
+  evidenceNote?: string | null
+  evidenceFileName?: string | null
+  inspectorName?: string | null
 }
 
 export interface AddWorkOrderPartInput {
@@ -553,6 +720,15 @@ export interface ReturnToServiceInput {
   technicianSignOff: string
   checklist?: Record<string, boolean>
   repairType?: string
+  workPerformed?: string
+  diagnosis?: string
+  labourCost?: number | null
+  partsCost?: number | null
+  externalCost?: number | null
+  returnMileage?: number | null
+  verificationMethod?: string
+  preventiveAction?: string
+  verificationResult?: 'pass' | 'fail'
 }
 
 // --- Phase 5: Wheels & equipment ---
@@ -588,6 +764,11 @@ export interface VehicleEquipmentItem {
   serviceable: boolean
   expiryDate: string | null
   lastCheckedAt: string | null
+  /** Optional asset identity for Yard QR / Fleet Resources join */
+  assetNumber?: string | null
+  qrCode?: string | null
+  replacementValue?: number | null
+  conditionLabel?: 'good' | 'damaged' | 'missing' | 'expired' | null
 }
 
 // --- Phase 4: Tachograph ---

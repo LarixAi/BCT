@@ -2,14 +2,26 @@ import type { MaintenanceSummaryCard } from './types'
 
 export const MAINTENANCE_TABS = [
   { id: 'overview' as const, label: 'Overview' },
-  { id: 'work-orders' as const, label: 'Work orders' },
-  { id: 'schedule' as const, label: 'Service schedule' },
-  { id: 'defects' as const, label: 'Defects' },
-  { id: 'calendar' as const, label: 'Calendar' },
-  { id: 'downtime' as const, label: 'Downtime' },
-  { id: 'suppliers' as const, label: 'Suppliers & parts' },
-  { id: 'costs' as const, label: 'Costs & reports' },
+  { id: 'planner' as const, label: 'Planner' },
+  { id: 'work-orders' as const, label: 'Work Orders' },
+  { id: 'technician' as const, label: 'Technician' },
+  { id: 'pmi' as const, label: 'PMI & Safety' },
+  { id: 'service' as const, label: 'Service & Statutory' },
+  { id: 'vor' as const, label: 'VOR Board' },
+  { id: 'parts' as const, label: 'Parts & Suppliers' },
+  { id: 'costs' as const, label: 'Costs' },
+  { id: 'compliance' as const, label: 'Compliance' },
 ]
+
+/** Legacy tab ids → current tab */
+export const MAINTENANCE_TAB_ALIASES: Record<string, string> = {
+  schedule: 'planner',
+  calendar: 'planner',
+  /** Legacy URL — still resolves to defects register (not in primary strip) */
+  downtime: 'costs',
+  suppliers: 'parts',
+  work_orders: 'work-orders',
+}
 
 export const MAINTENANCE_STATUS_LABELS: Record<string, string> = {
   no_action: 'No action',
@@ -24,7 +36,7 @@ export const WORK_ORDER_TYPE_LABELS: Record<string, string> = {
   scheduled_service: 'Scheduled service',
   routine_service: 'Routine service',
   repair: 'Defect repair',
-  pmi: 'Preventative maintenance',
+  pmi: 'PMI / safety inspection',
   mot_prep: 'MOT preparation',
   tyre: 'Tyre replacement',
   bodywork: 'Bodywork repair',
@@ -38,38 +50,28 @@ export const PRIORITY_GROUP_LABELS = {
   attention: 'Attention required',
 } as const
 
+/** Primary Overview strip — brief Phase 1 cards */
+export const ATTENTION_CARDS: MaintenanceSummaryCard[] = [
+  { id: 'dueToday', group: 'attention', label: 'Due today', filterKey: 'due_today' },
+  { id: 'dueWithin14Days', group: 'attention', label: 'Due within 14 days', filterKey: 'due_14' },
+  { id: 'overdue', group: 'attention', label: 'Overdue', filterKey: 'overdue_service', tone: 'critical' },
+  { id: 'vor', group: 'attention', label: 'Vehicles VOR', filterKey: 'vor', tone: 'critical' },
+  { id: 'safetyCriticalDefects', group: 'attention', label: 'Open safety-critical defects', filterKey: 'safety_critical', tone: 'critical' },
+  { id: 'inWorkshop', group: 'attention', label: 'In workshop', filterKey: 'in_maintenance' },
+  { id: 'awaitingParts', group: 'attention', label: 'Awaiting parts', filterKey: 'awaiting_parts' },
+  { id: 'readyForRelease', group: 'attention', label: 'Ready for release', filterKey: 'wo_ready_release' },
+]
+
 export const SUMMARY_CARD_GROUPS: { title: string; cards: MaintenanceSummaryCard[] }[] = [
   {
     title: 'Fleet availability',
     cards: [
       { id: 'total', group: 'fleetAvailability', label: 'Total fleet', filterKey: 'all' },
       { id: 'available', group: 'fleetAvailability', label: 'Available', filterKey: 'available' },
+      { id: 'availableWithAdvisory', group: 'fleetAvailability', label: 'Available with advisory', filterKey: 'advisory' },
       { id: 'inMaintenance', group: 'fleetAvailability', label: 'In maintenance', filterKey: 'in_maintenance' },
       { id: 'vor', group: 'fleetAvailability', label: 'VOR', filterKey: 'vor' },
-      { id: 'awaitingInspection', group: 'fleetAvailability', label: 'Awaiting inspection', filterKey: 'awaiting_inspection' },
-      { id: 'awaitingParts', group: 'fleetAvailability', label: 'Awaiting parts', filterKey: 'awaiting_parts' },
-    ],
-  },
-  {
-    title: 'Maintenance risk',
-    cards: [
-      { id: 'overdueServices', group: 'maintenanceRisk', label: 'Overdue services', filterKey: 'overdue_service' },
-      { id: 'dueWithin7Days', group: 'maintenanceRisk', label: 'Due within 7 days', filterKey: 'due_soon' },
-      { id: 'safetyCriticalDefects', group: 'maintenanceRisk', label: 'Safety-critical defects', filterKey: 'safety_critical' },
-      { id: 'repeatDefectVehicles', group: 'maintenanceRisk', label: 'Repeat defects', filterKey: 'repeat_defect' },
-      { id: 'motApproaching', group: 'maintenanceRisk', label: 'MOT approaching', filterKey: 'mot_approaching' },
-      { id: 'tachoApproaching', group: 'maintenanceRisk', label: 'Tacho calibration due', filterKey: 'tacho_approaching' },
-    ],
-  },
-  {
-    title: 'Workshop position',
-    cards: [
-      { id: 'notStarted', group: 'workshopPosition', label: 'Not started', filterKey: 'wo_not_started' },
-      { id: 'inProgress', group: 'workshopPosition', label: 'In progress', filterKey: 'wo_in_progress' },
-      { id: 'awaitingParts', group: 'workshopPosition', label: 'Awaiting parts', filterKey: 'wo_awaiting_parts' },
-      { id: 'awaitingApproval', group: 'workshopPosition', label: 'Awaiting approval', filterKey: 'wo_awaiting_approval' },
-      { id: 'readyForInspection', group: 'workshopPosition', label: 'Ready for inspection', filterKey: 'wo_ready_inspection' },
-      { id: 'readyForRelease', group: 'workshopPosition', label: 'Ready to return', filterKey: 'wo_ready_release' },
+      { id: 'dueSoonUsable', group: 'fleetAvailability', label: 'Due soon (still usable)', filterKey: 'due_14' },
     ],
   },
 ]

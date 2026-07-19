@@ -1,7 +1,14 @@
 import type { VehicleRecord } from '@/lib/api/types'
+import {
+  evaluateResourceReadiness,
+  resourceReadinessToReleaseFailures,
+} from '@/lib/fleet-resources/readiness'
+import type { EquipmentAsset, TyreAsset } from '@/lib/fleet-resources/types'
+import { deriveConditionStatus } from './condition'
 import { deriveVehicleComplianceStatus, nearestVehicleExpiry } from './compliance'
 import { syncDefectCounts } from './defects'
 import { equipmentReady } from './equipment'
+import { projectVehicleReadiness } from './readiness-projection'
 import { checkTachographReview } from './tachograph'
 import { nearestRetorqueDue } from './wheels'
 import type {
@@ -64,6 +71,21 @@ function checkEquipment(profile: VehicleProfile, ctx?: JobVehicleContext): Relea
     return [failure('equipment_missing', `${reg}: missing equipment — ${missing.join(', ')}`, 'block', 'operational')]
   }
   return []
+}
+
+/** Fleet Resources readiness gate — fuel, tyres, required kit. */
+function checkResourceGate(
+  profile: VehicleProfile,
+  resourceCtx?: { tyres?: TyreAsset[]; equipment?: EquipmentAsset[] },
+): ReleaseFailure[] {
+  const result = evaluateResourceReadiness({
+    profile,
+    tyres: resourceCtx?.tyres,
+    equipment: resourceCtx?.equipment,
+  })
+  return resourceReadinessToReleaseFailures(result).map((f) =>
+    failure(f.code, f.message, f.severity, f.category),
+  )
 }
 
 function checkLifecycle(profile: VehicleProfile): ReleaseFailure[] {
@@ -203,6 +225,17 @@ function checkMaintenance(profile: VehicleProfile): ReleaseFailure[] {
   if (profile.checksOverdue) {
     items.push(failure('check_overdue', `${reg}: daily check overdue`, 'block', 'maintenance'))
   }
+  const today = new Date().toISOString().slice(0, 10)
+  if (profile.nextMaintenanceDate && profile.nextMaintenanceDate < today) {
+    items.push(
+      failure(
+        'inspection_overdue',
+        `${reg}: formal inspection / PMI overdue — clear in Inspections before dispatch`,
+        'block',
+        'compliance',
+      ),
+    )
+  }
   return items
 }
 
@@ -251,6 +284,7 @@ function deriveReleaseDecision(blocks: ReleaseFailure[], warnings: ReleaseFailur
 export function evaluateVehicleRelease(
   profile: VehicleProfile,
   ctx?: JobVehicleContext,
+  resourceCtx?: { tyres?: TyreAsset[]; equipment?: EquipmentAsset[] },
 ): VehicleReleaseResult {
   const raw = [
     ...checkLifecycle(profile),
@@ -264,6 +298,7 @@ export function evaluateVehicleRelease(
     ...checkRestrictions(profile, ctx),
     ...checkCapabilities(profile, ctx),
     ...checkEquipment(profile, ctx),
+    ...checkResourceGate(profile, resourceCtx),
   ]
 
   const blocks = raw.filter((f) => f.severity === 'block')
@@ -344,7 +379,7 @@ export function syncVehicleProfile(profile: VehicleProfile): VehicleProfile {
     defects: profile.defects ?? [],
   })
   const wheelRetorqueDueAt = profile.wheelRetorqueDueAt ?? nearestRetorqueDue(profile.wheelLayout ?? [])
-  const enriched: VehicleProfile = {
+  const withDefects: VehicleProfile = {
     ...profile,
     ...defectCounts,
     complianceStatus,
@@ -360,13 +395,21 @@ export function syncVehicleProfile(profile: VehicleProfile): VehicleProfile {
     wheelLayout: profile.wheelLayout ?? [],
     retorqueTasks: profile.retorqueTasks ?? [],
     equipment: profile.equipment ?? [],
+    damageRecords: profile.damageRecords ?? [],
     wheelRetorqueDueAt,
   }
+  const conditionStatus = deriveConditionStatus(withDefects)
+  const enriched: VehicleProfile = {
+    ...withDefects,
+    conditionStatus,
+  }
   const release = evaluateVehicleRelease(enriched)
+  const readiness = projectVehicleReadiness(enriched, release)
   return {
     ...enriched,
     releaseDecision: release.releaseDecision,
     release,
+    readiness,
     status: operationalToLegacyStatus(enriched.operationalStatus),
     updatedAt: new Date().toISOString(),
   }

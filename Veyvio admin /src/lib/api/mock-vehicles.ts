@@ -7,6 +7,8 @@ import { emitVehicleEvent, mockTelematicsFromDuty } from '@/lib/vehicles/events'
 import { ingestDriverPlatformEvents } from '@/lib/ops/ingest-driver-platform-events'
 import { canReturnToService, normalizeWorkOrder } from '@/lib/vehicles/maintenance'
 import { computeFleetIntelligence } from '@/lib/vehicles/intelligence'
+import { isPmiChecklistComplete, pmiChecklistCompletionBlockers, updateChecklistItem } from '@/lib/maintenance/pmi-checklist'
+import { buildEstimateFromCosts } from '@/lib/maintenance/suppliers'
 import { canTransitionWorkOrder } from '@/lib/maintenance/work-order-lifecycle'
 import { validateOnboardingStage } from '@/lib/vehicles/onboarding-checks'
 import {
@@ -30,6 +32,8 @@ import type {
   UpdateVehicleEquipmentInput,
   UpdateVehicleInput,
   UpdateWorkOrderInput,
+  UpdatePmiChecklistItemInput,
+  ApproveWorkOrderEstimateInput,
   AddWorkOrderPartInput,
   UploadVehicleDocumentInput,
   VehicleAuditEvent,
@@ -214,7 +218,7 @@ function attachPlatformEvent(
 function buildProfile(
   partial: Omit<
     VehicleProfile,
-    'release' | 'releaseDecision' | 'nearestExpiryDate' | 'nearestExpiryLabel' | 'status' |
+    'release' | 'releaseDecision' | 'readiness' | 'conditionStatus' | 'nearestExpiryDate' | 'nearestExpiryLabel' | 'status' |
     'checks' | 'defects' | 'workOrders' | 'wheelLayout' | 'retorqueTasks' | 'equipment' | 'tachograph' |
     'onboarding' | 'damageRecords' | 'telematics' | 'platformEvents' | 'downtimeEvents'
   > & {
@@ -235,6 +239,7 @@ function buildProfile(
 ): VehicleProfile {
   const withDefaults = {
     ...partial,
+    pmiInterval: partial.pmiInterval ?? null,
     documents: partial.documents ?? [],
     restrictions: partial.restrictions ?? [],
     vorRecords: partial.vorRecords ?? [],
@@ -397,22 +402,50 @@ function seedWorkOrdersForVehicle(id: string) {
   }
   if (id === 'veh-4') {
     return [normalizeWorkOrder({
-      id: 'wo-4', type: 'repair', title: 'Brake system repair', status: 'awaiting_parts',
+      id: 'wo-4', type: 'repair', title: 'Brake system repair', status: 'awaiting_authorisation',
       scheduledDate: daysFromNow(0), targetCompletionDate: daysFromNow(2), provider: 'Fleet Workshop',
-      estimatedCost: 1200, labourCost: 420, partsCost: 180, labourHours: 6.5,
+      estimatedCost: 1200, labourCost: 422.5, partsCost: 180, labourHours: 6.5,
       defectId: 'vdef-1', technicianName: 'Dave Wilson', managerName: 'Tom Harris',
       creationSource: 'vehicle_check', diagnosis: 'Brake fluid leak at rear union',
-      notes: 'Awaiting brake fluid parts', roadTestRequired: true,
-      parts: [{ id: 'wop-1', partName: 'Brake fluid DOT 4', partNumber: 'BF-DOT4-1L', quantity: 2, unitCost: 12.5, supplierId: 'sup-3' }],
+      notes: 'Estimate submitted — awaiting manager approval before parts order', roadTestRequired: true,
+      parts: [
+        { id: 'wop-1', partName: 'Brake fluid DOT 4', partNumber: 'BF-DOT4-1L', quantity: 2, unitCost: 12.5, supplierId: 'sup-3' },
+        { id: 'wop-2', partName: 'Front brake pads set', partNumber: 'BP-FR-4421', quantity: 1, unitCost: 89, supplierId: 'sup-3' },
+      ],
+      estimate: {
+        ...buildEstimateFromCosts({
+          labourHours: 6.5,
+          labourRate: 65,
+          partsCost: 114,
+          status: 'submitted',
+          submittedBy: 'Dave Wilson',
+          notes: 'Includes pads and fluid; road test after repair',
+        }),
+        submittedAt: daysAgo(0),
+        partsCost: 114,
+        labourCost: 422.5,
+        totalCost: 536.5,
+      },
       createdAt: daysAgo(0), createdBy: 'Tom Harris',
     })]
   }
   if (id === 'veh-5') {
-    return [normalizeWorkOrder({
-      id: 'wo-5', type: 'pmi', title: 'PMI due at 200k miles', status: 'approved',
-      scheduledDate: daysFromNow(7), provider: 'External Workshop', estimatedCost: 380,
-      creationSource: 'scheduled_service_rule', createdAt: daysAgo(14), createdBy: 'Maria Santos',
-    })]
+    return [
+      normalizeWorkOrder({
+        id: 'wo-5', type: 'pmi', title: 'PMI due at 200k miles', status: 'approved',
+        scheduledDate: daysFromNow(7), provider: 'External Workshop', estimatedCost: 380,
+        creationSource: 'scheduled_service_rule', createdAt: daysAgo(14), createdBy: 'Maria Santos',
+      }),
+      normalizeWorkOrder({
+        id: 'wo-5b', type: 'pmi', title: 'PMI re-test — brake performance', status: 'quality_check',
+        scheduledDate: daysFromNow(0), provider: 'Fleet Workshop', estimatedCost: 220,
+        creationSource: 'defect_triage', technicianName: 'Dave Wilson', managerName: 'Tom Harris',
+        diagnosis: 'Awaiting brake performance print and photographic evidence',
+        parts: [],
+        createdAt: daysAgo(2), createdBy: 'Tom Harris',
+        // pmiChecklist auto-instantiated by normalizeWorkOrder for type=pmi
+      }),
+    ]
   }
   return []
 }
@@ -469,6 +502,15 @@ const SEED_PROFILES: VehicleProfile[] = [
     lastCheckType: 'Driver pre-use walkaround',
     nextMaintenanceDate: daysFromNow(45),
     nextMaintenanceMileage: 90000,
+    pmiInterval: {
+      intervalWeeks: 8,
+      reason: 'Company default PMI interval',
+      approvedBy: 'Transport Manager',
+      approvedAt: '2026-01-15T09:00:00.000Z',
+      reviewDueAt: '2026-10-01',
+      mileageLimit: 90000,
+      lastCompletedAt: daysAgo(20).slice(0, 10),
+    },
     openDefectCount: 0,
     criticalDefectCount: 0,
     checksOverdue: false,
@@ -664,6 +706,15 @@ const SEED_PROFILES: VehicleProfile[] = [
     lastCheckType: 'Yard return inspection',
     nextMaintenanceDate: daysFromNow(0),
     nextMaintenanceMileage: 112500,
+    pmiInterval: {
+      intervalWeeks: 6,
+      reason: 'Safety-critical defect history — Transport Manager shortened PMI to six weeks',
+      approvedBy: 'Tom Harris',
+      approvedAt: '2026-03-01T09:00:00.000Z',
+      reviewDueAt: '2026-09-01',
+      mileageLimit: 112500,
+      lastCompletedAt: daysAgo(40).slice(0, 10),
+    },
     openDefectCount: 2,
     criticalDefectCount: 1,
     checksOverdue: false,
@@ -893,16 +944,32 @@ function audit(action: string, actor: string, actorRole: string, prev: string | 
   }
 }
 
+function isAttentionVehicle(v: VehicleProfile): boolean {
+  return (
+    !v.readiness.assignmentEligible ||
+    v.conditionStatus === 'advisory' ||
+    v.conditionStatus === 'repair_required' ||
+    v.conditionStatus === 'safety_critical' ||
+    v.conditionStatus === 'awaiting_assessment' ||
+    v.complianceStatus === 'expiring_soon' ||
+    v.complianceStatus === 'non_compliant' ||
+    v.checksOverdue ||
+    v.openDefectCount > 0
+  )
+}
+
 function computeSummary(list: VehicleProfile[]): VehicleDirectorySummary {
   const active = list.filter((v) => v.lifecycleStatus === 'active')
   const WARN = 30
   const warnThreshold = Date.now() + WARN * 24 * 60 * 60 * 1000
 
   return {
+    total: list.length,
     totalActive: active.length,
     availableNow: list.filter((v) => v.operationalStatus === 'available').length,
     currentlyAllocated: list.filter((v) => ['allocated', 'in_service', 'reserved'].includes(v.operationalStatus)).length,
     inService: list.filter((v) => v.operationalStatus === 'in_service').length,
+    attention: list.filter(isAttentionVehicle).length,
     vor: list.filter((v) => v.operationalStatus === 'vor').length,
     inMaintenance: list.filter((v) => ['in_workshop', 'awaiting_parts', 'under_inspection'].includes(v.operationalStatus)).length,
     checksOverdue: list.filter((v) => v.checksOverdue).length,
@@ -965,11 +1032,11 @@ export const mockVehiclesApi = {
       fleetNumber: input.fleetNumber ?? null,
       make: input.make,
       model: input.model,
-      modelYear: null,
+      modelYear: input.modelYear ?? null,
       vehicleCategory: input.vehicleCategory,
-      colour: null,
+      colour: input.colour ?? null,
       ownershipType: input.ownershipType ?? 'owned',
-      ownerName: null,
+      ownerName: input.ownerName ?? null,
       homeDepotId: input.homeDepotId,
       homeDepotName: depotName,
       currentDepotId: input.homeDepotId,
@@ -978,7 +1045,7 @@ export const mockVehiclesApi = {
       parkingBay: null,
       seatingCapacity: input.seatingCapacity,
       wheelchairCapacity: input.wheelchairCapacity ?? 0,
-      standingCapacity: 0,
+      standingCapacity: input.standingCapacity ?? 0,
       fuelType: input.fuelType ?? 'diesel',
       fuelLevelPercent: null,
       batteryLevelPercent: null,
@@ -1040,9 +1107,46 @@ export const mockVehiclesApi = {
         : input.homeDepotId === 'depot-wembley'
           ? 'Wembley Depot'
           : current.homeDepotName
+    const {
+      telematicsProvider,
+      telematicsDeviceId,
+      driverCheckTemplate,
+      ...profileFields
+    } = input
+    let telematics = current.telematics
+    if (telematicsProvider != null || telematicsDeviceId != null) {
+      telematics = {
+        provider: telematicsProvider ?? current.telematics?.provider ?? 'Configured',
+        connected: Boolean(telematicsDeviceId ?? current.telematics?.connected),
+        lastSyncAt: current.telematics?.lastSyncAt ?? null,
+        latitude: current.telematics?.latitude ?? null,
+        longitude: current.telematics?.longitude ?? null,
+        speedMph: current.telematics?.speedMph ?? null,
+        heading: current.telematics?.heading ?? null,
+        ignitionOn: current.telematics?.ignitionOn ?? false,
+        odometerMiles: current.telematics?.odometerMiles ?? null,
+        fuelPercent: current.telematics?.fuelPercent ?? null,
+        batteryPercent: current.telematics?.batteryPercent ?? null,
+        gpsFreshnessSeconds: current.telematics?.gpsFreshnessSeconds ?? null,
+      }
+    }
+    const notes =
+      driverCheckTemplate != null && driverCheckTemplate !== ''
+        ? [
+            ...current.notes.filter((n) => !n.body.startsWith('Driver check template:')),
+            {
+              id: `note-tpl-${Date.now()}`,
+              body: `Driver check template: ${driverCheckTemplate}`,
+              createdAt: now(),
+              createdBy: actorName,
+            },
+          ]
+        : current.notes
     const updated = buildProfile({
       ...current,
-      ...input,
+      ...profileFields,
+      telematics,
+      notes,
       homeDepotName: input.homeDepotId ? depotName : current.homeDepotName,
       currentDepotName: input.currentDepotId ? depotName : current.currentDepotName,
       auditEvents: [
@@ -1070,6 +1174,27 @@ export const mockVehiclesApi = {
       resolvedAt: null,
       resolvedBy: null,
       resolutionReason: null,
+      workPerformed: null,
+      diagnosis: null,
+      repairType: null,
+      technicianName: null,
+      workOrderIds: [],
+      labourCost: null,
+      partsCost: null,
+      externalCost: null,
+      totalCost: null,
+      downtimeHours: null,
+      returnedToRoadAt: null,
+      returnedToRoadBy: null,
+      returnMileage: null,
+      verificationResult: null,
+      verifiedBy: null,
+      verifiedAt: null,
+      verificationMethod: null,
+      preventiveAction: null,
+      passengersOnboard: null,
+      safeToMove: input.recoveryRequired ? false : null,
+      linkedReportId: null,
     }
     const updated = buildProfile({
       ...current,
@@ -1092,14 +1217,57 @@ export const mockVehiclesApi = {
     const current = profiles[idx]!
     const blockers = canReturnToService(current, input)
     if (blockers.length > 0) throw new Error(blockers.join('; '))
+    const resolvedAt = now()
+    const linkedWoIds = current.workOrders
+      .filter((w) => !['cancelled'].includes(w.status))
+      .map((w) => w.id)
+    const labourFromOrders = current.workOrders.reduce((sum, w) => sum + (w.labourCost ?? 0), 0)
+    const partsFromOrders = current.workOrders.reduce((sum, w) => sum + (w.partsCost ?? 0), 0)
+    const labourCost = input.labourCost ?? (labourFromOrders > 0 ? labourFromOrders : null)
+    const partsCost = input.partsCost ?? (partsFromOrders > 0 ? partsFromOrders : null)
+    const externalCost = input.externalCost ?? null
+    const costFromOrders = current.workOrders.reduce((sum, w) => sum + (w.actualCost ?? w.estimatedCost ?? 0), 0)
+    const totalCost =
+      labourCost != null || partsCost != null || externalCost != null
+        ? (labourCost ?? 0) + (partsCost ?? 0) + (externalCost ?? 0)
+        : costFromOrders > 0
+          ? costFromOrders
+          : null
     const updated = buildProfile({
       ...current,
       operationalStatus: 'available',
       yardStatus: 'in_yard',
       readinessStatus: 'ready',
-      vorRecords: current.vorRecords.map((v) =>
-        !v.resolvedAt ? { ...v, resolvedAt: now(), resolvedBy: actorName, resolutionReason: input.reason } : v,
-      ),
+      vorRecords: current.vorRecords.map((v) => {
+        if (v.resolvedAt) return v
+        const startMs = new Date(v.reportedAt).getTime()
+        const endMs = new Date(resolvedAt).getTime()
+        const downtimeHours = Number.isFinite(startMs) ? Math.round(((endMs - startMs) / 3_600_000) * 10) / 10 : null
+        return {
+          ...v,
+          resolvedAt,
+          resolvedBy: actorName,
+          resolutionReason: input.reason,
+          workPerformed: input.workPerformed ?? input.reason,
+          diagnosis: input.diagnosis ?? v.diagnosis,
+          repairType: input.repairType ?? v.repairType,
+          technicianName: input.technicianSignOff || actorName,
+          workOrderIds: linkedWoIds.length ? linkedWoIds : v.workOrderIds,
+          labourCost,
+          partsCost,
+          externalCost,
+          totalCost,
+          downtimeHours,
+          returnedToRoadAt: resolvedAt,
+          returnedToRoadBy: actorName,
+          returnMileage: input.returnMileage ?? current.mileage,
+          verificationResult: input.verificationResult ?? 'pass',
+          verifiedBy: actorName,
+          verifiedAt: resolvedAt,
+          verificationMethod: input.verificationMethod ?? 'Post-repair inspection',
+          preventiveAction: input.preventiveAction ?? null,
+        }
+      }),
       workOrders: current.workOrders.map((w) =>
         w.status === 'in_progress' || w.status === 'quality_check'
           ? { ...w, status: 'completed' as const, completedDate: daysFromNow(0), returnToServiceApproved: true }
@@ -1472,6 +1640,90 @@ export const mockVehiclesApi = {
     return updated
   },
 
+  /**
+   * Wizard activation: evaluate release as if lifecycle were active.
+   * Safety-critical / hard blocks cannot be overridden; warnings may be acknowledged.
+   */
+  activateFromWizard(
+    id: string,
+    options: { acknowledgeWarnings?: boolean; mode: 'submit_for_approval' | 'activate' | 'keep_blocked' },
+    actorName: string,
+  ): VehicleProfile {
+    const idx = profiles.findIndex((v) => v.id === id)
+    if (idx < 0) throw new Error('Vehicle not found')
+    const current = profiles[idx]!
+
+    if (options.mode === 'keep_blocked' || options.mode === 'submit_for_approval') {
+      const updated = buildProfile({
+        ...current,
+        auditEvents: [
+          ...current.auditEvents,
+          audit(
+            options.mode === 'submit_for_approval' ? 'Submitted for onboarding approval' : 'Kept blocked pending readiness',
+            actorName,
+            'Fleet administrator',
+            null,
+            options.mode,
+          ),
+        ],
+      })
+      profiles[idx] = updated
+      return updated
+    }
+
+    const probe = syncVehicleProfile({
+      ...current,
+      lifecycleStatus: 'active',
+      operationalStatus: current.operationalStatus === 'under_inspection' ? 'available' : current.operationalStatus,
+    })
+    const hardBlocks = probe.release.failures.filter(
+      (f) => f.severity === 'block' && f.code !== 'lifecycle_inactive',
+    )
+    if (hardBlocks.length > 0) {
+      throw new Error(hardBlocks.map((f) => f.message).join('; '))
+    }
+    if (probe.release.warnings.length > 0 && !options.acknowledgeWarnings) {
+      throw new Error('Acknowledge warnings before activating, or keep the vehicle blocked.')
+    }
+
+    const completedAt = new Date().toISOString()
+    const onboarding = {
+      ...current.onboarding,
+      currentStage: 'approved' as const,
+      approvedAt: completedAt,
+      approvedBy: actorName,
+      stages: current.onboarding.stages.map((s) => ({
+        ...s,
+        status: 'complete' as const,
+        completedAt: s.completedAt ?? completedAt,
+        completedBy: s.completedBy ?? actorName,
+      })),
+    }
+
+    let updated = buildProfile({
+      ...current,
+      onboarding,
+      lifecycleStatus: 'active',
+      operationalStatus: 'available',
+      complianceStatus:
+        current.complianceStatus === 'awaiting_verification' ? 'compliant' : current.complianceStatus,
+      auditEvents: [
+        ...current.auditEvents,
+        audit('Vehicle activated from onboarding wizard', actorName, 'Fleet administrator', 'awaiting_onboarding', 'active'),
+      ],
+    })
+    updated = attachPlatformEvent(
+      updated,
+      'vehicle.onboarding_completed',
+      `Vehicle ${current.registrationNumber} activated`,
+      actorName,
+      'command',
+      { mode: 'wizard_activate' },
+    )
+    profiles[idx] = updated
+    return updated
+  },
+
   advanceOnboardingStage(id: string, stageId: OnboardingStageId, actorName: string): VehicleProfile {
     const idx = profiles.findIndex((v) => v.id === id)
     if (idx < 0) throw new Error('Vehicle not found')
@@ -1687,12 +1939,25 @@ export const mockVehiclesApi = {
     if (input.status && !canTransitionWorkOrder(existing.status, input.status)) {
       throw new Error(`Cannot transition from ${existing.status} to ${input.status}`)
     }
+    if (input.status === 'completed' && existing.type === 'pmi') {
+      const checklist = input.pmiChecklist ?? existing.pmiChecklist
+      const blockers = pmiChecklistCompletionBlockers(checklist)
+      if (blockers.length > 0) {
+        throw new Error(`PMI cannot be completed: ${blockers[0]}`)
+      }
+    }
 
     const workOrders = current.workOrders.map((w) =>
       w.id === workOrderId
         ? normalizeWorkOrder({
             ...w,
             ...input,
+            pmiChecklist:
+              input.pmiChecklist !== undefined
+                ? input.status === 'completed' && input.pmiChecklist
+                  ? { ...input.pmiChecklist, completedAt: daysFromNow(0) }
+                  : input.pmiChecklist
+                : w.pmiChecklist,
             completedDate: input.status === 'completed' ? daysFromNow(0) : w.completedDate,
             actualCost: input.status === 'completed' ? (input.labourCost ?? 0) + (input.partsCost ?? w.partsCost ?? 0) : w.actualCost,
           })
@@ -1741,6 +2006,128 @@ export const mockVehiclesApi = {
     return updated
   },
 
+  updatePmiChecklistItem(
+    id: string,
+    workOrderId: string,
+    input: UpdatePmiChecklistItemInput,
+    actorName: string,
+  ): VehicleProfile {
+    const idx = profiles.findIndex((v) => v.id === id)
+    if (idx < 0) throw new Error('Vehicle not found')
+    const current = profiles[idx]!
+    const existing = current.workOrders.find((w) => w.id === workOrderId)
+    if (!existing) throw new Error('Work order not found')
+    if (existing.type !== 'pmi') throw new Error('Checklist only applies to PMI work orders')
+    if (!existing.pmiChecklist) throw new Error('PMI checklist not initialised')
+
+    let checklist = updateChecklistItem(existing.pmiChecklist, input.templateItemId, {
+      result: input.result,
+      notes: input.notes,
+      actorName,
+      evidence:
+        input.evidenceKind !== undefined || input.evidenceNote !== undefined || input.evidenceFileName !== undefined
+          ? {
+              kind: input.evidenceKind,
+              note: input.evidenceNote,
+              fileName: input.evidenceFileName,
+            }
+          : undefined,
+    })
+    if (input.inspectorName !== undefined) {
+      checklist = { ...checklist, inspectorName: input.inspectorName }
+    }
+    if (isPmiChecklistComplete(checklist) && !checklist.completedAt) {
+      checklist = { ...checklist, completedAt: now() }
+    }
+
+    const workOrders = current.workOrders.map((w) =>
+      w.id === workOrderId ? normalizeWorkOrder({ ...w, pmiChecklist: checklist }) : w,
+    )
+    const updated = buildProfile({
+      ...current,
+      workOrders,
+      auditEvents: [
+        ...current.auditEvents,
+        audit('PMI checklist updated', actorName, 'Maintenance', workOrderId, input.templateItemId),
+      ],
+    })
+    profiles[idx] = updated
+    return updated
+  },
+
+  approveWorkOrderEstimate(
+    id: string,
+    workOrderId: string,
+    input: ApproveWorkOrderEstimateInput,
+    actorName: string,
+  ): VehicleProfile {
+    const idx = profiles.findIndex((v) => v.id === id)
+    if (idx < 0) throw new Error('Vehicle not found')
+    const current = profiles[idx]!
+    const existing = current.workOrders.find((w) => w.id === workOrderId)
+    if (!existing) throw new Error('Work order not found')
+    if (!existing.estimate) throw new Error('No estimate on this work order')
+    if (existing.estimate.status !== 'submitted' && existing.estimate.status !== 'draft') {
+      throw new Error(`Estimate is already ${existing.estimate.status}`)
+    }
+
+    const estimate =
+      input.decision === 'approved'
+        ? {
+            ...existing.estimate,
+            status: 'approved' as const,
+            approvedAt: now(),
+            approvedBy: actorName,
+            rejectionReason: null,
+            notes: input.notes ?? existing.estimate.notes,
+          }
+        : {
+            ...existing.estimate,
+            status: 'rejected' as const,
+            approvedAt: null,
+            approvedBy: null,
+            rejectionReason: input.notes ?? 'Estimate rejected',
+          }
+
+    const nextStatus =
+      input.decision === 'approved'
+        ? existing.status === 'awaiting_authorisation'
+          ? ('awaiting_parts' as const)
+          : existing.status
+        : ('in_progress' as const)
+
+    const workOrders = current.workOrders.map((w) =>
+      w.id === workOrderId
+        ? normalizeWorkOrder({
+            ...w,
+            estimate,
+            status: nextStatus,
+            estimatedCost: estimate.totalCost,
+            labourCost: estimate.labourCost,
+            partsCost: estimate.partsCost,
+            labourHours: estimate.labourHours,
+          })
+        : w,
+    )
+
+    const updated = buildProfile({
+      ...current,
+      workOrders,
+      auditEvents: [
+        ...current.auditEvents,
+        audit(
+          input.decision === 'approved' ? 'Estimate approved' : 'Estimate rejected',
+          actorName,
+          'Maintenance',
+          workOrderId,
+          `£${estimate.totalCost}`,
+        ),
+      ],
+    })
+    profiles[idx] = updated
+    return updated
+  },
+
   addWorkOrderPart(id: string, workOrderId: string, input: AddWorkOrderPartInput, actorName: string): VehicleProfile {
     const idx = profiles.findIndex((v) => v.id === id)
     if (idx < 0) throw new Error('Vehicle not found')
@@ -1770,20 +2157,24 @@ export const mockVehiclesApi = {
 
   listReleaseExceptions() {
     return this.list()
-      .filter((v) => !v.release.canAllocate)
+      .filter((v) => !v.readiness.assignmentEligible)
       .map((v) => {
-        const primaryBlock = v.release.failures[0]?.message ?? v.release.summary
+        const primaryBlock = v.readiness.blockingReasons[0] ?? v.release.summary
         return {
           id: `EX-VEH-${v.reference}`,
-          severity: v.release.releaseDecision === 'blocked' ? ('high' as const) : ('medium' as const),
+          severity: v.readiness.releaseDecision === 'blocked' ? ('high' as const) : ('medium' as const),
           title: `Vehicle release blocked — ${v.registrationNumber}`,
           category: 'vehicle' as const,
+          typeCode: 'vehicle_release_blocked' as const,
+          source: 'Vehicles',
+          vehicleRegistration: v.registrationNumber,
+          description: primaryBlock,
           relatedRecord: v.reference,
           relatedHref: `/vehicles/${v.id}`,
           depot: v.currentDepotName,
           raisedAt: v.updatedAt,
           ageMinutes: Math.max(1, Math.round((Date.now() - new Date(v.updatedAt).getTime()) / 60000)),
-          slaMinutesRemaining: v.release.releaseDecision === 'blocked' ? 60 : null,
+          slaMinutesRemaining: v.readiness.releaseDecision === 'blocked' ? 60 : null,
           owner: null,
           status: 'new' as const,
           lastUpdate: v.updatedAt,

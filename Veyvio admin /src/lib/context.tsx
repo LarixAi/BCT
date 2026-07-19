@@ -18,6 +18,7 @@ interface OperationalContextValue {
   operationalDate: string
   operationalDateIso: string
   connectionStatus: ConnectionStatus
+  setConnectionStatus: (status: ConnectionStatus) => void
   depots: DepotOption[]
 }
 
@@ -26,6 +27,7 @@ const OperationalContext = createContext<OperationalContextValue | null>(null)
 export function OperationalProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [depotId, setDepotId] = useState('all')
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('live')
 
   const { data: depots = [] } = useQuery({
     queryKey: ['depots'],
@@ -33,6 +35,21 @@ export function OperationalProvider({ children }: { children: ReactNode }) {
     enabled: !!user?.activeTenantId,
     staleTime: 60_000,
   })
+
+  const { data: driverSummary } = useQuery({
+    queryKey: ['driver-directory-summary'],
+    queryFn: () => api.getDriverDirectorySummary(),
+    enabled: !!user?.activeTenantId,
+    staleTime: 45_000,
+    refetchInterval: 45_000,
+  })
+
+  const derivedConnection: ConnectionStatus =
+    connectionStatus !== 'live'
+      ? connectionStatus
+      : (driverSummary?.appNotRecentlySynced ?? 0) > 5
+        ? 'delayed'
+        : 'live'
 
   const depotOptions: DepotOption[] = [
     { id: 'all', name: 'All depots' },
@@ -51,7 +68,8 @@ export function OperationalProvider({ children }: { children: ReactNode }) {
       year: 'numeric',
     }),
     operationalDateIso: todayIsoDate(),
-    connectionStatus: 'live',
+    connectionStatus: derivedConnection,
+    setConnectionStatus,
     depots: depotOptions,
   }
 

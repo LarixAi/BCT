@@ -19,6 +19,8 @@ import {
   ListTodo,
   ClipboardCheck,
   Info,
+  MessageSquare,
+  Camera,
 } from "lucide-react";
 import { ChevronRight } from "lucide-react";
 
@@ -31,7 +33,20 @@ export const Route = createFileRoute("/_app/more/")({
 
 const WORKFLOW_LINKS = [
   { to: "/tasks", label: "Tasks", icon: ListTodo, desc: "Yard work assigned to you" },
-  { to: "/inspections", label: "Inspections", icon: ClipboardCheck, desc: "Damage review, baselines and analytics" },
+  { to: "/more/messages", label: "Driver messages", icon: MessageSquare, desc: "Talk with drivers on Command" },
+  {
+    to: "/more/vehicle-checks",
+    label: "Vehicle checks",
+    icon: ClipboardCheck,
+    desc: "Full driver walkarounds with photos and answers",
+  },
+  {
+    to: "/more/bodywork",
+    label: "Driver bodywork",
+    icon: Camera,
+    desc: "Damage photos from Driver vehicle checks",
+  },
+  { to: "/inspections", label: "Inspections", icon: ListChecks, desc: "Damage review, baselines and analytics" },
 ] as const;
 
 const OPS_LINKS = [

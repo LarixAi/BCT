@@ -2,6 +2,7 @@ import { SectionCard } from '@/components/ui'
 import { formatAutomationActions } from '@/lib/defects/automation'
 import { formatSlaRemaining } from '@/lib/defects/sla'
 import type { DefectsHubData } from '@/lib/defects/types'
+import { formatRoleList } from '@/lib/format'
 
 export function DefectsRulesTab({ hub }: { hub: DefectsHubData }) {
   const { slaSettings, automationRules } = hub
@@ -42,7 +43,7 @@ export function DefectsRulesTab({ hub }: { hub: DefectsHubData }) {
           </div>
           <div>
             <dt className="text-slate-500">Notify roles</dt>
-            <dd className="font-medium">{slaSettings.notifyRoles.join(', ').replace(/_/g, ' ')}</dd>
+            <dd className="font-medium">{formatRoleList(slaSettings?.notifyRoles)}</dd>
           </div>
         </dl>
       </SectionCard>

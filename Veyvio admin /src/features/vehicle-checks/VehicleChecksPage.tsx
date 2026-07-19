@@ -15,6 +15,7 @@ import {
 import { ChecksTemplatesTab, ChecksIntelligenceTab } from './ChecksTemplatesTab'
 import { StartAdminCheckPanel } from './components/StartAdminCheckPanel'
 import { api } from '@/lib/api/client'
+import { safeChecksHub } from '@/lib/api/safe-hubs'
 import { useAuth } from '@/lib/auth-context'
 
 export function VehicleChecksPage() {
@@ -53,7 +54,9 @@ export function VehicleChecksPage() {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load vehicle checks'}</p>
   }
 
-  const actionCount = hub.summary.actionRequired
+  const safeHub = safeChecksHub(hub)
+
+  const actionCount = safeHub.summary.actionRequired
 
   return (
     <div className="space-y-6">
@@ -63,7 +66,7 @@ export function VehicleChecksPage() {
           <p className="text-sm text-slate-600">
             Monitor vehicle safety checks, review reported defects and control vehicle release across the operation.
           </p>
-          <p className="text-xs text-slate-500">{hub.operationalDate}</p>
+          <p className="text-xs text-slate-500">{safeHub.operationalDate}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={refresh} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
@@ -81,12 +84,12 @@ export function VehicleChecksPage() {
         </div>
       </div>
 
-      {showStart && canStart && <StartAdminCheckPanel hub={hub} onClose={() => setShowStart(false)} />}
+      {showStart && canStart && <StartAdminCheckPanel hub={safeHub} onClose={() => setShowStart(false)} />}
 
       {(tab === 'overview' || !searchParams.get('tab')) && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {CHECKS_SUMMARY_CARDS.map((card) => {
-            const sub = card.subKey ? hub.summary[card.subKey] : null
+            const sub = card.subKey ? safeHub.summary[card.subKey] : null
             return (
               <button
                 key={card.id}
@@ -99,7 +102,7 @@ export function VehicleChecksPage() {
                   filter === card.filterKey ? 'border-command-500 bg-command-50 ring-1 ring-command-500' : 'border-slate-200 bg-white hover:border-slate-300'
                 }`}
               >
-                <p className="text-xl font-bold tabular-nums text-slate-900">{hub.summary[card.id]}</p>
+                <p className="text-xl font-bold tabular-nums text-slate-900">{safeHub.summary[card.id]}</p>
                 <p className="text-xs text-slate-600">{card.label}</p>
                 {sub != null && typeof sub === 'number' && sub > 0 && (
                   <p className="mt-1 text-xs text-amber-700">
@@ -141,7 +144,7 @@ export function VehicleChecksPage() {
         />
         <select value={depotId} onChange={(e) => setDepotId(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm" aria-label="Depot">
           <option value="all">All depots</option>
-          {hub.depots.map((d) => (
+          {safeHub.depots.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
             </option>
@@ -149,16 +152,16 @@ export function VehicleChecksPage() {
         </select>
       </div>
 
-      {tab === 'overview' && <ChecksOverviewTab hub={hub} filter={filter} search={search} depotId={depotId} />}
-      {tab === 'live' && <ChecksLiveTab hub={hub} />}
-      {tab === 'submitted' && <ChecksSubmittedTab hub={hub} search={search} depotId={depotId} />}
-      {tab === 'action' && <ChecksActionTab hub={hub} search={search} depotId={depotId} />}
-      {tab === 'overdue' && <ChecksOverdueTab hub={hub} search={search} depotId={depotId} />}
-      {tab === 'history' && <ChecksHistoryTab hub={hub} search={search} depotId={depotId} />}
+      {tab === 'overview' && <ChecksOverviewTab hub={safeHub} filter={filter} search={search} depotId={depotId} />}
+      {tab === 'live' && <ChecksLiveTab hub={safeHub} />}
+      {tab === 'submitted' && <ChecksSubmittedTab hub={safeHub} search={search} depotId={depotId} />}
+      {tab === 'action' && <ChecksActionTab hub={safeHub} search={search} depotId={depotId} />}
+      {tab === 'overdue' && <ChecksOverdueTab hub={safeHub} search={search} depotId={depotId} />}
+      {tab === 'history' && <ChecksHistoryTab hub={safeHub} search={search} depotId={depotId} />}
       {tab === 'templates' && (
         <div className="space-y-6">
-          <ChecksTemplatesTab hub={hub} />
-          <ChecksIntelligenceTab hub={hub} />
+          <ChecksTemplatesTab hub={safeHub} />
+          <ChecksIntelligenceTab hub={safeHub} />
         </div>
       )}
     </div>

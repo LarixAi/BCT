@@ -1,3 +1,4 @@
+import { instantiatePmiChecklist } from '@/lib/maintenance/pmi-checklist'
 import { validateReleaseChecklist } from '@/lib/maintenance/release-checklist'
 import type { ReturnToServiceInput, VehicleProfile, WorkOrderStatus, MaintenanceWorkOrder } from './types'
 
@@ -18,7 +19,7 @@ export const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
 export function normalizeWorkOrder(
   partial: Partial<MaintenanceWorkOrder> & Pick<MaintenanceWorkOrder, 'id' | 'type' | 'title' | 'status' | 'createdAt' | 'createdBy'>,
 ): MaintenanceWorkOrder {
-  return {
+  const merged = {
     scheduledDate: null,
     targetCompletionDate: null,
     completedDate: null,
@@ -37,9 +38,15 @@ export function normalizeWorkOrder(
     notes: null,
     roadTestRequired: false,
     parts: [],
+    pmiChecklist: null as MaintenanceWorkOrder['pmiChecklist'],
+    estimate: null as MaintenanceWorkOrder['estimate'],
     returnToServiceApproved: false,
     ...partial,
   }
+  if (merged.type === 'pmi' && !merged.pmiChecklist) {
+    merged.pmiChecklist = instantiatePmiChecklist()
+  }
+  return merged
 }
 
 export function canReturnToService(profile: VehicleProfile, input: ReturnToServiceInput): string[] {
@@ -51,6 +58,15 @@ export function canReturnToService(profile: VehicleProfile, input: ReturnToServi
     blockers.push('Wheel re-torque overdue — complete before release')
   }
   if (!input.technicianSignOff.trim()) blockers.push('Technician sign-off required')
+  const openVor = profile.vorRecords.some((v) => !v.resolvedAt)
+  if (openVor) {
+    if (!(input.workPerformed?.trim() || input.reason.trim())) {
+      blockers.push('Record the work completed before return to road')
+    }
+    if (input.verificationResult === 'fail') {
+      blockers.push('Verification failed — vehicle cannot return to road')
+    }
+  }
   const openOrders = profile.workOrders.filter((w) => !['completed', 'cancelled'].includes(w.status))
   if (openOrders.length > 0) blockers.push(`${openOrders.length} open work order(s)`)
   const repairType = input.repairType ?? openOrders[0]?.type

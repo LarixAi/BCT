@@ -18,6 +18,7 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
   const [notes, setNotes] = useState('')
   const [createWorkOrder, setCreateWorkOrder] = useState(true)
   const [markVor, setMarkVor] = useState(false)
+  const [flash, setFlash] = useState<string | null>(null)
 
   const open = defects.filter((d) => d.status !== 'closed')
 
@@ -36,6 +37,7 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
         actorName,
       ),
     onSuccess: () => {
+      setFlash(createWorkOrder ? 'Defect triaged — work order linked' : 'Defect triaged')
       invalidate()
       setSelected(null)
       setNotes('')
@@ -44,6 +46,11 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
 
   return (
     <div className="space-y-4">
+      {flash && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900" role="status">
+          {flash}
+        </p>
+      )}
       <SectionCard
         title="Defect register"
         description={`${open.length} open defects from driver, yard and command — shared with vehicle records`}
@@ -57,6 +64,7 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
               <th className="pb-2 pr-3 font-medium">Severity</th>
               <th className="pb-2 pr-3 font-medium">Status</th>
               <th className="pb-2 pr-3 font-medium">Triage</th>
+              <th className="pb-2 pr-3 font-medium">Work order</th>
               <th className="pb-2 pr-3 font-medium">Impact</th>
               <th className="pb-2 font-medium">Actions</th>
             </tr>
@@ -74,6 +82,18 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
                 <td className="py-2.5 pr-3">{DEFECT_SEVERITY_LABELS[d.severity]}</td>
                 <td className="py-2.5 pr-3"><StatusPill status={d.status} /></td>
                 <td className="py-2.5 pr-3 capitalize text-slate-600">{d.triageStatus.replace(/_/g, ' ')}</td>
+                <td className="py-2.5 pr-3">
+                  {d.linkedWorkOrderId ? (
+                    <Link
+                      to={`/maintenance?tab=work-orders&wo=${d.linkedWorkOrderId}&vehicle=${d.vehicleId}`}
+                      className="font-mono text-xs text-command-600 hover:underline"
+                    >
+                      {d.linkedWorkOrderId}
+                    </Link>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
                 <td className="py-2.5 pr-3 text-slate-600">{d.operationalImpact}</td>
                 <td className="py-2.5">
                   {d.status !== 'closed' && d.triageStatus === 'pending' && (

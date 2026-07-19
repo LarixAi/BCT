@@ -211,6 +211,7 @@ export const yardCopy = {
     },
     departure: {
       released: (tripCode: string) => `${tripCode} released for departure`,
+      leftDepot: (tripCode: string) => `${tripCode} left the depot — bay is now empty`,
     },
     task: {
       completed: "Task completed",

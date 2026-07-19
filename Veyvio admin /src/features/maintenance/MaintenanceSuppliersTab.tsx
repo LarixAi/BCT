@@ -1,7 +1,10 @@
 import { SectionCard } from '@/components/ui'
+import { isLowStock } from '@/lib/maintenance/suppliers'
 import type { MaintenanceHubData } from '@/lib/maintenance/types'
 
 export function MaintenanceSuppliersTab({ suppliers, parts }: Pick<MaintenanceHubData, 'suppliers' | 'parts'>) {
+  const lowStock = parts.filter(isLowStock)
+
   return (
     <div className="space-y-4">
       <SectionCard title="Approved suppliers" description="Internal workshops, franchise dealers and parts vendors">
@@ -34,32 +37,56 @@ export function MaintenanceSuppliersTab({ suppliers, parts }: Pick<MaintenanceHu
         </table>
       </SectionCard>
 
-      <SectionCard title="Parts catalogue" description="Common parts linked to suppliers for work order costing">
-        <table className="w-full min-w-[700px] text-left text-sm">
+      <SectionCard
+        title="Parts warehouse"
+        description={`${lowStock.length} item(s) at or below reorder level — approve estimates before raising purchase orders`}
+      >
+        {lowStock.length > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Low stock: {lowStock.map((p) => p.name).join(', ')}
+          </div>
+        )}
+        <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
               <th className="pb-2 pr-3 font-medium">Part</th>
               <th className="pb-2 pr-3 font-medium">Number</th>
               <th className="pb-2 pr-3 font-medium">Supplier</th>
               <th className="pb-2 pr-3 font-medium">Unit cost</th>
-              <th className="pb-2 font-medium">Reorder at</th>
+              <th className="pb-2 pr-3 font-medium">On hand</th>
+              <th className="pb-2 pr-3 font-medium">Reorder at</th>
+              <th className="pb-2 font-medium">Location / bin</th>
             </tr>
           </thead>
           <tbody>
             {parts.map((p) => {
               const supplier = suppliers.find((s) => s.id === p.supplierId)
+              const low = isLowStock(p)
               return (
-                <tr key={p.id} className="border-b border-slate-50">
+                <tr key={p.id} className={`border-b border-slate-50 ${low ? 'bg-amber-50/60' : ''}`}>
                   <td className="py-2.5 pr-3 font-medium">{p.name}</td>
                   <td className="py-2.5 pr-3 font-mono text-xs text-slate-500">{p.partNumber}</td>
                   <td className="py-2.5 pr-3 text-slate-600">{supplier?.name ?? '—'}</td>
                   <td className="py-2.5 pr-3 text-slate-600">£{p.unitCost.toFixed(2)}</td>
-                  <td className="py-2.5 text-slate-600">{p.reorderLevel}</td>
+                  <td className={`py-2.5 pr-3 tabular-nums font-medium ${low ? 'text-amber-900' : 'text-slate-900'}`}>
+                    {p.stockOnHand}
+                  </td>
+                  <td className="py-2.5 pr-3 text-slate-600">{p.reorderLevel}</td>
+                  <td className="py-2.5 text-xs text-slate-600">
+                    {p.location ?? '—'}
+                    {p.bin ? ` · ${p.bin}` : ''}
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+      </SectionCard>
+
+      <SectionCard title="Parts catalogue" description="Common parts linked to suppliers for work order costing">
+        <p className="text-sm text-slate-600">
+          Catalogue lines feed work-order estimates. Stock movements and purchase orders deepen in later Phase 2 passes.
+        </p>
       </SectionCard>
     </div>
   )

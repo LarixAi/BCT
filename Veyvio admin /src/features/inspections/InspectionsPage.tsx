@@ -1,63 +1,210 @@
-import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { SectionCard } from '@/components/ui'
-import { StatusPill } from '@/components/ui/status'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { INSPECTION_TABS } from '@/lib/inspections/constants'
+import { resolveInspectionsHub } from '@/lib/inspections/resolve-hub'
+import type { InspectionTab } from '@/lib/inspections/types'
 import { api } from '@/lib/api/client'
+import { InspectionsAwaitingRepairTab } from './InspectionsAwaitingRepairTab'
+import { InspectionsCalendarTab } from './InspectionsCalendarTab'
+import { InspectionsProvidersTab } from './InspectionsProvidersTab'
+import { InspectionsRegisterTab } from './InspectionsRegisterTab'
+import { ScheduleInspectionPanel } from './ScheduleInspectionPanel'
+
+function resolveTab(raw: string | null): InspectionTab {
+  if (raw && INSPECTION_TABS.some((t) => t.id === raw)) return raw as InspectionTab
+  return 'register'
+}
 
 export function InspectionsPage() {
-  const { data: inspections = [], isLoading } = useQuery({
-    queryKey: ['inspections'],
-    queryFn: () => api.getInspections(),
+  const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = resolveTab(searchParams.get('tab'))
+  const [filter, setFilter] = useState(searchParams.get('filter') ?? 'all')
+  const [search, setSearch] = useState(searchParams.get('q') ?? '')
+  const [showSchedule, setShowSchedule] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['inspections-hub'],
+    queryFn: () =>
+      resolveInspectionsHub({
+        fetchLiveHub: () => api.getInspectionsHub(),
+        fetchProfiles: () => api.getVehicleProfiles(),
+      }),
+    retry: 1,
   })
 
-  const overdue = inspections.filter((i) => i.status === 'overdue').length
+  const hub = data?.hub
+  const source = data?.source
+
+  const { data: vehicles = [] } = useQuery({
+    queryKey: ['vehicle-profiles'],
+    queryFn: () => api.getVehicleProfiles(),
+  })
+
+  useEffect(() => {
+    const f = searchParams.get('filter')
+    if (f) setFilter(f)
+  }, [searchParams])
+
+  function setTab(next: InspectionTab) {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'register') params.delete('tab')
+    else params.set('tab', next)
+    setSearchParams(params, { replace: true })
+  }
+
+  function onFilter(next: string) {
+    setFilter(next)
+    const params = new URLSearchParams(searchParams)
+    if (next === 'all') params.delete('filter')
+    else params.set('filter', next)
+    if (tab !== 'register') params.delete('tab')
+    setSearchParams(params, { replace: true })
+  }
+
+  const importMutation = useMutation({
+    mutationFn: (vehicleId: string) =>
+      api.importInspection({
+        vehicleId,
+        inspectionType: 'safety_pmi',
+        dueDate: new Date().toISOString().slice(0, 10),
+        fileName: 'imported-inspection.pdf',
+        outcome: 'incomplete',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inspections-hub'] })
+      setShowImport(false)
+    },
+  })
+
+  if (isLoading || !hub) return <p className="text-sm text-slate-500">Loading inspections…</p>
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Inspections</h1>
-        <p className="text-sm text-slate-600">MOT and statutory inspection due dates</p>
+      {(source === 'demo' || source === 'projected') && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          {source === 'demo'
+            ? 'Live inspections hub is unavailable — showing demo inspection register so you can keep working.'
+            : 'Live inspections hub is unavailable — showing inspection stubs from vehicle compliance dates.'}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Inspections</h1>
+          <p className="text-sm text-slate-600">
+            Formal inspection schedule, checklist outcomes and sign-off — not daily vehicle checks.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSchedule(true)}
+            className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white hover:bg-command-700"
+          >
+            Schedule inspection
+          </button>
+          <Link
+            to="/inspections?tab=calendar"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Calendar
+          </Link>
+          <button
+            type="button"
+            onClick={() => setShowImport(true)}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Import inspection
+          </button>
+          <Link
+            to="/maintenance?tab=pmi"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Manage schedules
+          </Link>
+        </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 sm:max-w-xs">
-        <p className="text-2xl font-bold tabular-nums text-red-700">{overdue}</p>
-        <p className="text-sm text-slate-600">Overdue inspections</p>
+      <div className="flex flex-wrap gap-1 border-b border-slate-200">
+        {INSPECTION_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`border-b-2 px-3 py-2 text-sm font-medium ${
+              tab === t.id
+                ? 'border-command-600 text-command-700'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <SectionCard title="Inspection register">
-        {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
-        ) : (
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
-                <th className="pb-2 pr-4 font-medium">Vehicle</th>
-                <th className="pb-2 pr-4 font-medium">Type</th>
-                <th className="pb-2 pr-4 font-medium">Due date</th>
-                <th className="pb-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inspections.map((i) => (
-                <tr key={i.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                  <td className="py-2.5 pr-4">
-                    <Link to={`/vehicles/${i.vehicleId}`} className="font-medium text-command-600 hover:underline">
-                      {i.vehicleRegistration}
-                    </Link>
-                  </td>
-                  <td className="py-2.5 pr-4 uppercase text-slate-600">{i.inspectionType.replace(/_/g, ' ')}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">
-                    {new Date(i.dueDate).toLocaleDateString('en-GB')}
-                  </td>
-                  <td className="py-2.5">
-                    <StatusPill status={i.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </SectionCard>
+      {tab === 'register' && (
+        <InspectionsRegisterTab
+          hub={hub}
+          filter={filter}
+          onFilter={onFilter}
+          search={search}
+          onSearch={setSearch}
+        />
+      )}
+      {tab === 'calendar' && <InspectionsCalendarTab events={hub.calendar} />}
+      {tab === 'awaiting-repair' && <InspectionsAwaitingRepairTab register={hub.register} />}
+      {tab === 'providers' && <InspectionsProvidersTab providers={hub.providers} />}
+
+      {showSchedule && <ScheduleInspectionPanel onClose={() => setShowSchedule(false)} />}
+
+      {showImport && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-4 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Import inspection (PDF metadata)</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Phase 1 stub — records PDF file name and queues the inspection for sign-off review.
+            </p>
+            <label className="mt-4 block text-sm">
+              <span className="mb-1 block font-medium text-slate-700">Vehicle</span>
+              <select
+                id="import-vehicle"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                defaultValue=""
+              >
+                <option value="">Select…</option>
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.registrationNumber}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowImport(false)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={importMutation.isPending}
+                onClick={() => {
+                  const el = document.getElementById('import-vehicle') as HTMLSelectElement | null
+                  if (el?.value) importMutation.mutate(el.value)
+                }}
+                className="rounded-lg bg-command-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                Import stub
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

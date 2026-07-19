@@ -30,6 +30,7 @@ import { StaffDutyPanel } from './components/StaffDutyPanel'
 import { StaffTrainingCompliancePanel } from './components/StaffTrainingCompliancePanel'
 import { StaffGovernancePanel } from './components/StaffGovernancePanel'
 import { StaffDocumentsTab } from './components/StaffDocumentsTab'
+import { StaffAttendanceTab } from './components/StaffAttendanceTab'
 import { StaffSessionsPanel } from './components/StaffSessionsPanel'
 import { temporaryDepotExpiringSoon } from '@/lib/staff/depot-access'
 import { canStartDutyWithTraining } from '@/lib/staff/training'
@@ -42,6 +43,7 @@ const TABS = [
   'Account',
   'Depots',
   'Schedule',
+  'Attendance',
   'Training',
   'Documents',
   'Tasks',
@@ -52,6 +54,7 @@ const TAB_QUERY_MAP: Record<string, (typeof TABS)[number]> = {
   account: 'Account',
   employment: 'Employment',
   schedule: 'Schedule',
+  attendance: 'Attendance',
   training: 'Training',
   documents: 'Documents',
   tasks: 'Tasks',
@@ -426,6 +429,8 @@ export function StaffDetailPage() {
           </table>
         </SectionCard>
       )}
+
+      {tab === 'Attendance' && <StaffAttendanceTab staff={staff} />}
 
       {tab === 'Schedule' && (
         <div className="space-y-4">

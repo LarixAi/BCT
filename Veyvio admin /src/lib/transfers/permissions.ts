@@ -13,29 +13,48 @@ const SCOPE_PERMISSION: Partial<Record<TransferScope, string>> = {
   return_to_queue: 'transfer.queue',
 }
 
-export function allowedTransferScopes(permissions: string[]): typeof TRANSFER_SCOPES {
-  const isSenior =
+const PRIVILEGED_OPS_ROLES = new Set([
+  'company_owner',
+  'owner',
+  'admin',
+  'administrator',
+  'operations_manager',
+  'ops_manager',
+  'dispatcher',
+  'dispatch_manager',
+])
+
+function hasFullTransferAccess(permissions: string[], role?: string | null) {
+  if (permissions.includes('*')) return true
+  if (role && PRIVILEGED_OPS_ROLES.has(role)) return true
+  return (
     permissions.includes('transfer.live') ||
     permissions.includes('transfer.override') ||
-    permissions.includes('dispatch.override')
-
-  return TRANSFER_SCOPES.filter((scope) => {
-    const required = SCOPE_PERMISSION[scope.id]
-    if (!required) return isSenior
-    if (permissions.includes(required)) return true
-    if (scope.workflowTypes.includes('live_transfer') && isSenior) return true
-    return false
-  })
-}
-
-export function canPerformHandover(permissions: string[]) {
-  return (
-    permissions.includes('transfer.handover') ||
-    permissions.includes('transfer.override') ||
-    permissions.includes('dispatch.override')
+    permissions.includes('dispatch.override') ||
+    permissions.includes('dispatch.manage')
   )
 }
 
-export function canOverrideTransferWarnings(permissions: string[]) {
+export function allowedTransferScopes(
+  permissions: string[],
+  role?: string | null,
+): typeof TRANSFER_SCOPES {
+  if (hasFullTransferAccess(permissions, role)) return TRANSFER_SCOPES
+
+  return TRANSFER_SCOPES.filter((scope) => {
+    const required = SCOPE_PERMISSION[scope.id]
+    if (!required) return false
+    return permissions.includes(required)
+  })
+}
+
+export function canPerformHandover(permissions: string[], role?: string | null) {
+  if (hasFullTransferAccess(permissions, role)) return true
+  return permissions.includes('transfer.handover')
+}
+
+export function canOverrideTransferWarnings(permissions: string[], role?: string | null) {
+  if (permissions.includes('*')) return true
+  if (role && PRIVILEGED_OPS_ROLES.has(role)) return true
   return permissions.includes('transfer.override') || permissions.includes('dispatch.override')
 }

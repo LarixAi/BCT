@@ -5,6 +5,7 @@ import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
 import type { ComplianceItemRecord } from '@/lib/api/types'
+import { formatRoleList } from '@/lib/format'
 
 export function ComplianceRulesPage() {
   const [days, setDays] = useState(30)
@@ -42,12 +43,23 @@ export function ComplianceRulesPage() {
             <p className="text-sm text-slate-500">Loading…</p>
           ) : settings ? (
             <dl className="space-y-2 text-sm">
-              <Row label="Warn before expiry" value={`${settings.warnDaysBeforeExpiry} days`} />
-              <Row label="Block assignment when expired" value={settings.blockAssignmentOnExpired ? 'Yes' : 'No'} />
-              <Row label="Auto-unassign on expiry" value={settings.autoUnassignOnExpired ? 'Yes' : 'No'} />
-              <Row label="Notify roles" value={settings.notifyRoles.join(', ').replace(/_/g, ' ')} />
+              <Row
+                label="Warn before expiry"
+                value={`${settings.warnDaysBeforeExpiry ?? 30} days`}
+              />
+              <Row
+                label="Block assignment when expired"
+                value={settings.blockAssignmentOnExpired ? 'Yes' : 'No'}
+              />
+              <Row
+                label="Auto-unassign on expiry"
+                value={settings.autoUnassignOnExpired ? 'Yes' : 'No'}
+              />
+              <Row label="Notify roles" value={formatRoleList(settings.notifyRoles)} />
             </dl>
-          ) : null}
+          ) : (
+            <p className="text-sm text-slate-500">Automation settings are not available for this company yet.</p>
+          )}
         </SectionCard>
 
         <SectionCard title="Filter window">

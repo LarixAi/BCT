@@ -37,6 +37,7 @@ function noticeFromEvent(event: PlatformEvent): YardDriverOpsNotice | null {
   const vehicleId = String(payload.vehicleId ?? event.aggregateId);
   if (
     event.eventType !== "defect.reported" &&
+    event.eventType !== "journey.started" &&
     event.eventType !== "vehicle.returned" &&
     event.eventType !== "vehicle_check.submitted" &&
     event.eventType !== "vehicle_swap.requested" &&
@@ -46,6 +47,7 @@ function noticeFromEvent(event: PlatformEvent): YardDriverOpsNotice | null {
   }
   const summary: Record<string, string> = {
     "defect.reported": "Driver defect — review vehicle readiness",
+    "journey.started": "Vehicle departed for service — bay released",
     "vehicle.returned": "Driver handed vehicle back — confirm bay custody",
     "vehicle_check.submitted": "Driver walkaround submitted",
     "vehicle_swap.requested": "Driver requested vehicle swap",

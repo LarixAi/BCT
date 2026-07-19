@@ -10,6 +10,7 @@ import { DefectsExportButton } from './components/DefectsExportButton'
 import { PriorityAlertPanel } from './components/PriorityAlertPanel'
 import { ReportDefectPanel } from './components/ReportDefectPanel'
 import { api } from '@/lib/api/client'
+import { safeDefectsHub } from '@/lib/api/safe-hubs'
 import { useAuth } from '@/lib/auth-context'
 
 export function DefectsPage() {
@@ -55,6 +56,8 @@ export function DefectsPage() {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load defects'}</p>
   }
 
+  const safeHub = safeDefectsHub(hub)
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -63,7 +66,7 @@ export function DefectsPage() {
           <p className="text-sm text-slate-600">
             Review, prioritise and resolve vehicle faults across the operation.
           </p>
-          <p className="text-xs text-slate-500">{hub.operationalDate}</p>
+          <p className="text-xs text-slate-500">{safeHub.operationalDate}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canReport && (
@@ -75,22 +78,22 @@ export function DefectsPage() {
               Report defect
             </button>
           )}
-          <Link to="/maintenance?tab=work_orders" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+          <Link to="/maintenance?tab=work-orders" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
             Create workshop job
           </Link>
-          <DefectsExportButton rows={hub.register} />
+          <DefectsExportButton rows={safeHub.register} />
           <button type="button" onClick={refresh} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
             Refresh
           </button>
         </div>
       </div>
 
-      {showReport && canReport && <ReportDefectPanel hub={hub} onClose={() => setShowReport(false)} />}
+      {showReport && canReport && <ReportDefectPanel hub={safeHub} onClose={() => setShowReport(false)} />}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {DEFECTS_SUMMARY_CARDS.map((card) => {
-          const value = hub.summary[card.id]
-          const sub = card.subKey ? hub.summary[card.subKey] : null
+          const value = safeHub.summary[card.id]
+          const sub = card.subKey ? safeHub.summary[card.subKey] : null
           return (
             <button
               key={card.id}
@@ -120,7 +123,7 @@ export function DefectsPage() {
         })}
       </div>
 
-      <PriorityAlertPanel alerts={hub.priorityAlerts} />
+      <PriorityAlertPanel alerts={safeHub.priorityAlerts} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
@@ -136,7 +139,7 @@ export function DefectsPage() {
           className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
         >
           <option value="all">All depots</option>
-          {hub.depots.map((d) => (
+          {safeHub.depots.map((d) => (
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>
@@ -177,12 +180,12 @@ export function DefectsPage() {
 
       <DefectsBulkActionBar
         selected={selected}
-        rows={hub.register}
+        rows={safeHub.register}
         onClear={() => setSelected([])}
       />
 
       <DefectsTabContent
-        hub={hub}
+        hub={safeHub}
         tab={tab}
         filter={filter}
         search={search}

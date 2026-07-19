@@ -18,7 +18,7 @@ export const COMMAND_NAV: NavEntry[] = [
   {
     label: 'Command',
     children: [
-      { label: 'Overview', href: '/' },
+      { label: 'Control centre', href: '/' },
       { label: 'Live Operations', href: '/live-operations' },
       { label: 'Exceptions', href: '/exceptions' },
       { label: 'Notifications', href: '/notifications' },
@@ -44,6 +44,7 @@ export const COMMAND_NAV: NavEntry[] = [
       { label: 'Depots', href: '/depots' },
       { label: 'Yard Operations', href: '/yard' },
       { label: 'Maintenance', href: '/maintenance' },
+      { label: 'Fleet Resources', href: '/fleet-resources' },
     ],
   },
   {

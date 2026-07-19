@@ -6,6 +6,7 @@ import { canManageIncidentSettings } from '@/lib/incidents/permissions'
 import type { IncidentSettings } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth-context'
+import { formatRoleList } from '@/lib/format'
 import { IncidentIntegrationsPanel } from './components/IncidentIntegrationsPanel'
 
 export function IncidentSettingsPage() {
@@ -80,7 +81,7 @@ export function IncidentSettingsPage() {
           </div>
           <div>
             <dt className="text-slate-500">Notify roles</dt>
-            <dd className="font-medium">{settings.notifyRoles.join(', ').replace(/_/g, ' ')}</dd>
+            <dd className="font-medium">{formatRoleList(settings.notifyRoles)}</dd>
           </div>
         </dl>
       </SectionCard>

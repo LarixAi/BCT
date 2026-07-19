@@ -1,6 +1,17 @@
 # Veyvio brand
 
-Shared brand docs for Yard and Driver. Same parent platform; each product keeps its own colour signal and field of work.
+Shared brand docs for Command, Yard and Driver. Same parent platform; each product keeps its own colour signal and field of work.
+
+## Veyvio Command (web)
+
+| Document | Purpose |
+|----------|---------|
+| [veyvio-command-brand-foundation.md](./veyvio-command-brand-foundation.md) | Command brand: naming, tokens, chrome, auth |
+
+**Primary chrome:** Veyvio Midnight `#0B1526`  
+**Primary accent:** Veyvio Blue `#2F6BFF` (COMMAND wordmark, active nav, links)
+
+App implementation: `Veyvio admin /src/index.css`, `src/components/brand/`
 
 ## Veyvio Driver (phone)
 

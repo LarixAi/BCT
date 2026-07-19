@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { RESTRICTION_TYPE_OPTIONS } from '@/lib/drivers/compliance'
+import { isAggregateOnboardingFailure } from '@/lib/drivers/activation-requirements'
 import { formatDate } from '@/components/ui/status'
 import type { DriverProfile } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
+import { ActivationResolutionCentre } from './ActivationResolutionCentre'
 
 export function DriverEligibilityTab({
   driver,
@@ -30,6 +32,15 @@ export function DriverEligibilityTab({
     queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
     queryClient.invalidateQueries({ queryKey: ['driver-eligibility-exceptions'] })
   }
+
+  const activate = useMutation({
+    mutationFn: () => api.activateDriver(driver.id, {}, actorName),
+    onSuccess: invalidate,
+  })
+
+  const otherChecks = driver.eligibility.failures
+    .concat(driver.eligibility.warnings)
+    .filter((item) => !isAggregateOnboardingFailure(item.code))
 
   const addRestriction = useMutation({
     mutationFn: () => {
@@ -77,9 +88,18 @@ export function DriverEligibilityTab({
 
   return (
     <div className="space-y-4">
-      <SectionCard title="General eligibility checks">
+      <ActivationResolutionCentre
+        driver={driver}
+        actorName={actorName}
+        canManage={canManage}
+        mode="profile"
+        activating={activate.isPending}
+        onActivate={() => activate.mutate()}
+      />
+
+      <SectionCard title="Other eligibility checks">
         <ul className="space-y-2 text-sm">
-          {driver.eligibility.failures.concat(driver.eligibility.warnings).map((item) => (
+          {otherChecks.map((item) => (
             <li
               key={item.code}
               className={`rounded-lg px-3 py-2 ${
@@ -89,8 +109,10 @@ export function DriverEligibilityTab({
               {item.message}
             </li>
           ))}
-          {driver.eligibility.failures.length === 0 && driver.eligibility.warnings.length === 0 && (
-            <li className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">All general checks passed.</li>
+          {otherChecks.length === 0 && (
+            <li className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">
+              No additional eligibility blocks outside activation requirements.
+            </li>
           )}
         </ul>
       </SectionCard>

@@ -6,6 +6,7 @@ import {
   DUTY_STATUS_LABELS,
   ELIGIBILITY_LABELS,
   EMPLOYMENT_TYPE_LABELS,
+  OPERATIONAL_STATUS_LABELS,
 } from '@/lib/drivers/constants'
 import type { DriverProfile } from '@/lib/drivers/types'
 import { EligibilityPanel } from './EligibilityPanel'
@@ -37,10 +38,10 @@ export function DriverProfileHeader({
               {driver.employeeNumber ? ` · ${driver.employeeNumber}` : ''}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <StatusPill status={driver.dutyStatus} />
-              <StatusPill status={driver.account.accountStatus} />
-              <StatusPill status={driver.complianceStatus} />
+              <StatusPill status={driver.operationalStatus} />
+              <StatusPill status={driver.account?.accountStatus ?? 'draft'} />
               <StatusPill status={driver.operationalEligibility} />
+              <StatusPill status={driver.dutyStatus} />
             </div>
           </div>
         </div>
@@ -51,10 +52,14 @@ export function DriverProfileHeader({
         <EligibilityPanel eligibility={driver.eligibility} />
         <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm lg:col-span-2">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Meta label="Operational" value={OPERATIONAL_STATUS_LABELS[driver.operationalStatus]} />
+            <Meta
+              label="Account"
+              value={ACCOUNT_STATUS_LABELS[driver.account?.accountStatus ?? 'draft']}
+            />
+            <Meta label="Eligibility" value={ELIGIBILITY_LABELS[driver.operationalEligibility]} />
             <Meta label="Duty status" value={DUTY_STATUS_LABELS[driver.dutyStatus]} />
-            <Meta label="Account" value={ACCOUNT_STATUS_LABELS[driver.account.accountStatus]} />
             <Meta label="Compliance" value={COMPLIANCE_STATUS_LABELS[driver.complianceStatus]} />
-            <Meta label="Release status" value={ELIGIBILITY_LABELS[driver.operationalEligibility]} />
             <Meta
               label="Next duty"
               value={
@@ -66,16 +71,16 @@ export function DriverProfileHeader({
             <Meta
               label="Last app sync"
               value={
-                driver.account.lastAppSyncAt
+                driver.account?.lastAppSyncAt
                   ? new Date(driver.account.lastAppSyncAt).toLocaleString('en-GB')
                   : 'Never'
               }
             />
-            <Meta label="App version" value={driver.account.appVersion ?? '—'} />
+            <Meta label="App version" value={driver.account?.appVersion ?? '—'} />
             <Meta
               label="Last login"
               value={
-                driver.account.lastLoginAt
+                driver.account?.lastLoginAt
                   ? new Date(driver.account.lastLoginAt).toLocaleString('en-GB')
                   : '—'
               }

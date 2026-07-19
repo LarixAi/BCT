@@ -9,6 +9,7 @@ import {
   primaryOpenDefect,
   severityRank,
 } from './status'
+import { checklistProgress, isPmiChecklistComplete } from './pmi-checklist'
 import type {
   FleetDefectRow,
   FleetWorkOrderRow,
@@ -22,6 +23,7 @@ import type {
 
 const WARN_DAYS = 30
 const DUE_SOON_DAYS = 7
+const DUE_14_DAYS = 14
 const OPEN_WO_STATUSES = new Set([
   'requested', 'awaiting_review', 'approved', 'scheduled', 'vehicle_awaiting_workshop',
   'in_progress', 'awaiting_parts', 'awaiting_authorisation', 'quality_check',
@@ -39,6 +41,11 @@ function isOverdue(date: string | null): boolean {
 function isDueSoon(date: string | null, days = DUE_SOON_DAYS): boolean {
   const d = daysUntil(date)
   return d != null && d >= 0 && d <= days
+}
+
+function isDueToday(date: string | null): boolean {
+  const d = daysUntil(date)
+  return d === 0
 }
 
 function isApproaching(date: string | null, days = WARN_DAYS): boolean {
@@ -129,6 +136,15 @@ function flattenWorkOrders(profiles: VehicleProfile[]): FleetWorkOrderRow[] {
         actualCost: w.actualCost,
         roadTestRequired: w.roadTestRequired,
         partsCount: w.parts.length,
+        pmiChecklistProgress:
+          w.type === 'pmi'
+            ? {
+                ...checklistProgress(w.pmiChecklist),
+                complete: isPmiChecklistComplete(w.pmiChecklist),
+              }
+            : null,
+        estimateStatus: w.estimate?.status ?? null,
+        estimateTotal: w.estimate?.totalCost ?? null,
         createdAt: w.createdAt,
         createdBy: w.createdBy,
       }
@@ -186,6 +202,7 @@ function buildSchedule(profiles: VehicleProfile[], workOrders: FleetWorkOrderRow
         milesRemaining,
         status: overdue ? 'overdue' as const : dueSoon ? 'due_soon' as const : 'scheduled' as const,
         workshop: null,
+        owner: 'Fleet Workshop',
         source: 'profile' as const,
       }
     })
@@ -204,6 +221,7 @@ function buildSchedule(profiles: VehicleProfile[], workOrders: FleetWorkOrderRow
       milesRemaining: null,
       status: isOverdue(w.scheduledDate) ? 'overdue' as const : isDueSoon(w.scheduledDate) ? 'due_soon' as const : 'scheduled' as const,
       workshop: w.provider,
+      owner: w.technicianName ?? w.managerName ?? w.provider,
       source: 'work_order' as const,
     }))
 
@@ -221,25 +239,62 @@ function computeSummary(
 ): MaintenanceOverviewSummary {
   const openWo = workOrders.filter((w) => OPEN_WO_STATUSES.has(w.status))
   const openDefects = defects.filter((d) => d.status !== 'closed')
+  const readyForRelease = profiles.filter((p) => deriveMaintenanceStatus(p) === 'ready_for_release').length
+  const awaitingParts = profiles.filter((p) => deriveMaintenanceStatus(p) === 'awaiting_parts').length
+  const inWorkshop = profiles.filter((p) =>
+    ['in_workshop', 'under_inspection'].includes(p.operationalStatus) || deriveMaintenanceStatus(p) === 'in_workshop',
+  ).length
+  const vor = profiles.filter((p) => p.operationalStatus === 'vor').length
+  const safetyCritical = openDefects.filter((d) => d.severity === 'dangerous').length
+  const overdue = profiles.filter((p) => isOverdue(p.nextMaintenanceDate)).length
+  const dueToday = profiles.filter((p) => isDueToday(p.nextMaintenanceDate)).length
+  const dueWithin14 = profiles.filter((p) => isDueSoon(p.nextMaintenanceDate, DUE_14_DAYS)).length
 
   return {
+    attention: {
+      dueToday,
+      dueWithin14Days: dueWithin14,
+      overdue,
+      vor,
+      safetyCriticalDefects: safetyCritical,
+      inWorkshop,
+      awaitingParts,
+      readyForRelease,
+    },
     fleetAvailability: {
       total: profiles.length,
-      available: profiles.filter((p) => p.operationalStatus === 'available').length,
+      available: profiles.filter((p) => p.operationalStatus === 'available' && p.openDefectCount === 0).length,
+      availableWithAdvisory: profiles.filter(
+        (p) => p.operationalStatus === 'available' && p.openDefectCount > 0 && p.criticalDefectCount === 0,
+      ).length,
       inMaintenance: profiles.filter((p) =>
         ['in_workshop', 'awaiting_parts', 'under_inspection'].includes(p.operationalStatus),
       ).length,
-      vor: profiles.filter((p) => p.operationalStatus === 'vor').length,
+      vor,
       awaitingInspection: profiles.filter((p) => deriveMaintenanceStatus(p) === 'awaiting_inspection').length,
-      awaitingParts: profiles.filter((p) => deriveMaintenanceStatus(p) === 'awaiting_parts').length,
+      awaitingParts,
+      readyForRelease,
+      dueSoonUsable: profiles.filter(
+        (p) =>
+          p.operationalStatus === 'available' &&
+          isDueSoon(p.nextMaintenanceDate, DUE_14_DAYS) &&
+          !isOverdue(p.nextMaintenanceDate),
+      ).length,
     },
     maintenanceRisk: {
-      overdueServices: profiles.filter((p) => isOverdue(p.nextMaintenanceDate)).length,
+      overdueServices: overdue,
       dueWithin7Days: profiles.filter((p) => isDueSoon(p.nextMaintenanceDate)).length,
-      safetyCriticalDefects: openDefects.filter((d) => d.severity === 'dangerous').length,
+      safetyCriticalDefects: safetyCritical,
       repeatDefectVehicles: profiles.filter((p) => p.defects.filter((d) => d.status !== 'closed').length >= 2).length,
       motApproaching: profiles.filter((p) => isApproaching(p.motExpiry)).length,
       tachoApproaching: profiles.filter((p) => isApproaching(p.tachographCalibrationExpiry)).length,
+      missingEvidence: openWo.filter(
+        (w) =>
+          w.type === 'pmi' &&
+          ['quality_check', 'in_progress', 'awaiting_authorisation'].includes(w.status) &&
+          w.pmiChecklistProgress != null &&
+          !w.pmiChecklistProgress.complete,
+      ).length,
     },
     workshopPosition: {
       notStarted: openWo.filter((w) => ['requested', 'awaiting_review', 'approved', 'scheduled'].includes(w.status)).length,
@@ -247,7 +302,7 @@ function computeSummary(
       awaitingParts: openWo.filter((w) => w.status === 'awaiting_parts').length,
       awaitingApproval: openWo.filter((w) => w.status === 'awaiting_authorisation').length,
       readyForInspection: openWo.filter((w) => w.status === 'quality_check').length,
-      readyForRelease: profiles.filter((p) => deriveMaintenanceStatus(p) === 'ready_for_release').length,
+      readyForRelease,
     },
   }
 }
@@ -273,6 +328,8 @@ function buildPriorityQueue(profiles: VehicleProfile[], workOrders: FleetWorkOrd
         responsiblePerson: wo?.technicianName ?? wo?.createdBy ?? null,
         expectedCompletion: wo?.scheduledDate ?? null,
         upcomingWork: p.nextRunReference ? `Allocated: ${p.nextRunReference}` : p.nextDepartureTime ? `Departure ${p.nextDepartureTime}` : null,
+        recommendedAction: wo ? 'Progress work order and complete return-to-service' : 'Open VOR board and raise work order',
+        deadline: wo?.targetCompletionDate ?? wo?.scheduledDate ?? null,
       })
     }
 
@@ -291,6 +348,8 @@ function buildPriorityQueue(profiles: VehicleProfile[], workOrders: FleetWorkOrd
         responsiblePerson: null,
         expectedCompletion: null,
         upcomingWork: null,
+        recommendedAction: 'Book MOT / annual test and attach certificate',
+        deadline: p.motExpiry,
       })
     }
 
@@ -302,13 +361,15 @@ function buildPriorityQueue(profiles: VehicleProfile[], workOrders: FleetWorkOrd
         registrationNumber: p.registrationNumber,
         fleetNumber: p.fleetNumber,
         depot: p.currentDepotName,
-        issue: 'Service overdue',
+        issue: 'PMI / service overdue',
         severity: 'major',
         operationalImpact: 'Schedule conflict risk',
         maintenanceStage: deriveMaintenanceStatus(p),
         responsiblePerson: null,
         expectedCompletion: p.nextMaintenanceDate,
         upcomingWork: p.nextRunReference,
+        recommendedAction: 'Schedule PMI and hold dispatch until completed',
+        deadline: p.nextMaintenanceDate,
       })
     }
 
@@ -327,6 +388,8 @@ function buildPriorityQueue(profiles: VehicleProfile[], workOrders: FleetWorkOrd
         responsiblePerson: null,
         expectedCompletion: p.motExpiry,
         upcomingWork: null,
+        recommendedAction: 'Book annual test before assignment window',
+        deadline: p.motExpiry,
       })
     }
 
@@ -346,6 +409,10 @@ function buildPriorityQueue(profiles: VehicleProfile[], workOrders: FleetWorkOrd
         responsiblePerson: null,
         expectedCompletion: null,
         upcomingWork: null,
+        recommendedAction: pendingDefect.linkedWorkOrderId
+          ? 'Open linked work order'
+          : 'Triage defect and create work order',
+        deadline: null,
       })
     }
   }
@@ -430,13 +497,16 @@ function buildCalendar(
 
 export function filterFleetRows(rows: MaintenanceFleetRow[], filter: string, search: string): MaintenanceFleetRow[] {
   let list = rows
-  if (filter === 'available') list = list.filter((r) => r.operationalStatus === 'available')
+  if (filter === 'available') list = list.filter((r) => r.operationalStatus === 'available' && r.openDefects === 0)
+  else if (filter === 'advisory') list = list.filter((r) => r.operationalStatus === 'available' && r.openDefects > 0)
   else if (filter === 'vor') list = list.filter((r) => r.operationalStatus === 'vor')
   else if (filter === 'in_maintenance') list = list.filter((r) => r.maintenanceStatus === 'in_workshop' || r.maintenanceStatus === 'awaiting_parts')
   else if (filter === 'awaiting_inspection') list = list.filter((r) => r.maintenanceStatus === 'awaiting_inspection')
   else if (filter === 'awaiting_parts') list = list.filter((r) => r.maintenanceStatus === 'awaiting_parts')
   else if (filter === 'overdue_service') list = list.filter((r) => r.nextServiceDate && isOverdue(r.nextServiceDate))
+  else if (filter === 'due_today') list = list.filter((r) => r.nextServiceDate && isDueToday(r.nextServiceDate))
   else if (filter === 'due_soon') list = list.filter((r) => r.nextServiceDate && isDueSoon(r.nextServiceDate))
+  else if (filter === 'due_14') list = list.filter((r) => r.nextServiceDate && isDueSoon(r.nextServiceDate, DUE_14_DAYS))
   else if (filter === 'safety_critical') list = list.filter((r) => r.severity === 'dangerous')
   else if (filter === 'wo_in_progress') list = list.filter((r) => r.maintenanceStatus === 'in_workshop')
   else if (filter === 'wo_awaiting_parts') list = list.filter((r) => r.maintenanceStatus === 'awaiting_parts')
@@ -449,7 +519,8 @@ export function filterFleetRows(rows: MaintenanceFleetRow[], filter: string, sea
         r.registrationNumber.toLowerCase().includes(q) ||
         r.fleetNumber?.toLowerCase().includes(q) ||
         r.depot.toLowerCase().includes(q) ||
-        r.currentIssue?.toLowerCase().includes(q),
+        r.currentIssue?.toLowerCase().includes(q) ||
+        r.vehicleId.toLowerCase() === q,
     )
   }
   return list

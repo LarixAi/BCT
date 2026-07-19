@@ -106,7 +106,7 @@ export function DepartureRow({ trip, vehicle, driverName }: { trip: Trip; vehicl
   );
 }
 
-export function VehicleCard({ v, nextAction }: { v: Vehicle; nextAction?: string }) {
+export function VehicleCard({ v, nextAction, zone }: { v: Vehicle; nextAction?: string; zone?: BayZone }) {
   const isVor = v.status === "VOR";
   const readiness = useVehicleReadiness(v.id);
   const tone = READINESS_TONE[readiness.state];
@@ -126,14 +126,14 @@ export function VehicleCard({ v, nextAction }: { v: Vehicle; nextAction?: string
             <StatusChip status={v.status} />
           </div>
           <div className="flex items-center gap-3 text-[11px] font-medium text-muted">
-            <span className="uppercase tracking-wider">{v.type}</span>
+            <span className="uppercase tracking-wider">{zone ? `${zone} · ${v.type}` : v.type}</span>
             <span className="inline-flex items-center gap-1"><Fuel className="size-3" />{v.fuelPct}%</span>
             {v.lastCheckPassed === false && <span className="inline-flex items-center gap-1 text-vor"><Wrench className="size-3" />Check failed</span>}
           </div>
-          <div className={`mt-2 hidden items-center gap-2 rounded border px-2 py-1 sm:flex ${tone.border} ${tone.bg} ${tone.text}`}>
+          <div className={`mt-2 flex items-center gap-2 text-[10px] ${tone.text}`}>
             <Package className="size-3 shrink-0" />
-            <span className="text-[10px] font-bold uppercase tracking-widest shrink-0">{tone.label}</span>
-            <span className="text-[10px] font-medium truncate">{readiness.summary}</span>
+            <span className="shrink-0 font-bold uppercase tracking-widest">{tone.label}</span>
+            <span className="truncate font-medium text-muted">{readiness.summary}</span>
           </div>
           {nextAction && (
             <div className="mt-2 border-t border-border pt-2">

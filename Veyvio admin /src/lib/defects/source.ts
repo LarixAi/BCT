@@ -38,7 +38,7 @@ export function buildDefectSourceRecord(
       type: 'maintenance_job',
       reference: linkedWorkOrderId,
       label: 'Maintenance work order',
-      href: `/maintenance?tab=work_orders&wo=${linkedWorkOrderId}`,
+      href: `/maintenance?tab=work-orders&wo=${linkedWorkOrderId}`,
       reportedAt: defect.reportedAt,
       reporterName: defect.reportedBy,
     }

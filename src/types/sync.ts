@@ -14,6 +14,7 @@ export type OutboxMutationType =
   | "equipment.transfer"
   | "equipment.restock"
   | "departure.release"
+  | "departure.complete"
   | "task.update"
   | "handover.complete"
   | "inspection.start"

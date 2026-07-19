@@ -29,7 +29,10 @@ export function YardTasksTab({ hub }: { hub: YardHubData }) {
 
   return (
     <div className="space-y-4">
-      <SectionCard title="Yard task queue" description={`${openTasks.length} open tasks at ${hub.depotName}`}>
+      <SectionCard
+        title="Yard task queue"
+        description={`${openTasks.length} open tasks at ${hub.depotName}. Completing refuel, fluids or equipment tasks writes to Fleet Resources.`}
+      >
         {openTasks.length === 0 ? (
           <p className="text-sm text-slate-500">No open yard tasks.</p>
         ) : (

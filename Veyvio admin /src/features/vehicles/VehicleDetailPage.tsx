@@ -15,14 +15,18 @@ import type { ReturnToServiceInput } from '@/lib/vehicles/types'
 import { VehicleBackLink, VehicleProfileHeader } from './components/VehicleProfileHeader'
 import { VehicleChecksTab } from './components/VehicleChecksTab'
 import { VehicleComplianceTab } from './components/VehicleComplianceTab'
+import { VehicleDocumentsTab } from './components/VehicleDocumentsTab'
 import { VehicleDefectsTab } from './components/VehicleDefectsTab'
 import { VehicleEquipmentTab } from './components/VehicleEquipmentTab'
 import { VehicleDamageTab } from './components/VehicleDamageTab'
 import { VehicleTelematicsPanel } from './components/VehicleTelematicsPanel'
-import { eventTypeLabel } from '@/lib/vehicles/events'
 import { isOnboardingComplete } from '@/lib/vehicles/onboarding'
 import { VehicleMaintenanceTab } from './components/VehicleMaintenanceTab'
 import { VehicleWheelsTab } from './components/VehicleWheelsTab'
+import { VehicleFuelCostsPanel } from '@/features/fleet-resources/VehicleFuelCostsPanel'
+import { VehicleAdBlueTab } from './components/VehicleAdBlueTab'
+import { VehicleCostsTab } from './components/VehicleCostsTab'
+import { VehicleTimelineTab } from './components/VehicleTimelineTab'
 import { api } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth-context'
 
@@ -33,7 +37,10 @@ const TABS = [
   'Checks & inspections',
   'Defects',
   'Damage & media',
+  'Report history',
+  'Fuel & AdBlue',
   'Maintenance',
+  'Costs',
   'Wheels & tyres',
   'Equipment',
   'Documents',
@@ -47,6 +54,10 @@ const TAB_QUERY_MAP: Record<string, (typeof TABS)[number]> = {
   checks: 'Checks & inspections',
   maintenance: 'Maintenance',
   defects: 'Defects',
+  wheels: 'Wheels & tyres',
+  adblue: 'Fuel & AdBlue',
+  reports: 'Report history',
+  costs: 'Costs',
 }
 
 export function VehicleDetailPage() {
@@ -59,6 +70,10 @@ export function VehicleDetailPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>(initialTab)
   const [showRelease, setShowRelease] = useState(false)
   const [releaseReason, setReleaseReason] = useState('')
+  const [workPerformed, setWorkPerformed] = useState('')
+  const [labourCost, setLabourCost] = useState('')
+  const [partsCost, setPartsCost] = useState('')
+  const [returnMileage, setReturnMileage] = useState('')
   const [postRepairCheck, setPostRepairCheck] = useState(false)
   const [retorqueComplete, setRetorqueComplete] = useState(false)
   const [technicianSignOff, setTechnicianSignOff] = useState('')
@@ -104,21 +119,28 @@ export function VehicleDetailPage() {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Vehicle not found'}</p>
   }
 
-  const todayDuties = duties.filter((d) => d.vehicle?.id === vehicle.id)
+  const dutyRows = Array.isArray(duties) ? duties : []
+  const workOrders = Array.isArray(vehicle.workOrders) ? vehicle.workOrders : []
+  const todayDuties = dutyRows.filter((d) => d.vehicle?.id === vehicle.id)
   const canEdit = canEditVehicle(permissions)
   const canVor = canMarkVehicleVor(permissions)
   const canRelease = canReleasePerm(permissions)
   const canVerify = canVerifyVehicleDocuments(permissions)
-  const openRepairType = vehicle.workOrders.find((w) => !['completed', 'cancelled'].includes(w.status))?.type ?? 'repair'
+  const openRepairType = workOrders.find((w) => !['completed', 'cancelled'].includes(w.status))?.type ?? 'repair'
   const checklistItems = releaseChecklistForRepairType(openRepairType)
   const releaseBlockers = showRelease
     ? canReturnToService(vehicle, {
         reason: releaseReason,
+        workPerformed,
         postRepairCheckComplete: postRepairCheck,
         wheelRetorqueComplete: retorqueComplete,
         technicianSignOff,
         checklist: releaseChecklist,
         repairType: openRepairType,
+        labourCost: labourCost ? Number(labourCost) : null,
+        partsCost: partsCost ? Number(partsCost) : null,
+        returnMileage: returnMileage ? Number(returnMileage) : null,
+        verificationResult: 'pass',
       })
     : []
 
@@ -165,6 +187,50 @@ export function VehicleDetailPage() {
               <span className="text-slate-600">Release reason</span>
               <input value={releaseReason} onChange={(e) => setReleaseReason(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
             </label>
+            <label className="block">
+              <span className="text-slate-600">Work performed</span>
+              <textarea
+                value={workPerformed}
+                onChange={(e) => setWorkPerformed(e.target.value)}
+                rows={2}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                placeholder="What was repaired or replaced"
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="text-slate-600">Labour £</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={labourCost}
+                  onChange={(e) => setLabourCost(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-600">Parts £</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={partsCost}
+                  onChange={(e) => setPartsCost(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-600">Return mileage</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={returnMileage}
+                  onChange={(e) => setReturnMileage(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                />
+              </label>
+            </div>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={postRepairCheck} onChange={(e) => setPostRepairCheck(e.target.checked)} />
               Post-repair inspection complete
@@ -202,11 +268,17 @@ export function VehicleDetailPage() {
               onClick={() =>
                 returnToService.mutate({
                   reason: releaseReason,
+                  workPerformed: workPerformed || releaseReason,
                   postRepairCheckComplete: postRepairCheck,
                   wheelRetorqueComplete: retorqueComplete,
                   technicianSignOff,
                   checklist: releaseChecklist,
                   repairType: openRepairType,
+                  labourCost: labourCost ? Number(labourCost) : null,
+                  partsCost: partsCost ? Number(partsCost) : null,
+                  returnMileage: returnMileage ? Number(returnMileage) : vehicle.mileage,
+                  verificationResult: 'pass',
+                  verificationMethod: 'Post-repair inspection',
                 })
               }
               disabled={returnToService.isPending || releaseBlockers.length > 0 || !releaseReason}
@@ -233,6 +305,34 @@ export function VehicleDetailPage() {
 
       {tab === 'Overview' && (
         <div className="grid gap-4 lg:grid-cols-2">
+          <SectionCard title="Readiness callouts" description="Deep links into the systems that feed the shared projection">
+            <ul className="space-y-2 text-sm">
+              <li>
+                <Link to={`/vehicles/${vehicle.id}?tab=damage`} className="font-medium text-command-600 hover:underline">
+                  Yard / damage map
+                </Link>
+                <span className="text-slate-500"> — physical readiness and baseline condition</span>
+              </li>
+              <li>
+                <Link to={`/defects?vehicle=${encodeURIComponent(vehicle.registrationNumber)}`} className="font-medium text-command-600 hover:underline">
+                  Open defects
+                </Link>
+                <span className="text-slate-500"> — {vehicle.openDefectCount} open · condition {vehicle.conditionStatus.replace(/_/g, ' ')}</span>
+              </li>
+              <li>
+                <Link to={`/maintenance`} className="font-medium text-command-600 hover:underline">
+                  Maintenance
+                </Link>
+                <span className="text-slate-500"> — work orders and PMI programme</span>
+              </li>
+              <li>
+                <Link to="/exceptions?module=vehicle" className="font-medium text-command-600 hover:underline">
+                  Exceptions inbox
+                </Link>
+                <span className="text-slate-500"> — release blocks needing intervention</span>
+              </li>
+            </ul>
+          </SectionCard>
           <SectionCard title="Current operation">
             <dl className="space-y-2 text-sm">
               <Row label="Driver" value={vehicle.currentDriverName ?? '—'} />
@@ -248,6 +348,13 @@ export function VehicleDetailPage() {
               <Row label="Departure" value={vehicle.nextDepartureTime ?? '—'} />
             </dl>
           </SectionCard>
+          <div className="lg:col-span-2">
+            <VehicleFuelCostsPanel
+              vehicleId={vehicle.id}
+              registrationNumber={vehicle.registrationNumber}
+              fuelLevelPercent={vehicle.fuelLevelPercent}
+            />
+          </div>
           <div className="lg:col-span-2">
             <VehicleTelematicsPanel vehicle={vehicle} />
           </div>
@@ -290,7 +397,10 @@ export function VehicleDetailPage() {
       )}
       {tab === 'Defects' && <VehicleDefectsTab vehicle={vehicle} actorName={actorName} />}
       {tab === 'Damage & media' && <VehicleDamageTab vehicle={vehicle} actorName={actorName} />}
+      {tab === 'Report history' && <VehicleReportHistoryTab vehicleId={vehicle.id} />}
+      {tab === 'Fuel & AdBlue' && <VehicleAdBlueTab vehicle={vehicle} />}
       {tab === 'Maintenance' && <VehicleMaintenanceTab vehicle={vehicle} actorName={actorName} />}
+      {tab === 'Costs' && <VehicleCostsTab vehicle={vehicle} />}
       {tab === 'Wheels & tyres' && <VehicleWheelsTab vehicle={vehicle} actorName={actorName} />}
       {tab === 'Equipment' && (
         <VehicleEquipmentTab
@@ -299,41 +409,45 @@ export function VehicleDetailPage() {
           actorName={actorName}
         />
       )}
-      {tab === 'Documents' && <VehicleComplianceTab vehicle={vehicle} actorName={actorName} canVerify={canVerify} />}
-      {tab === 'Timeline & audit' && (
-        <div className="space-y-4">
-          {vehicle.platformEvents.length > 0 && (
-            <SectionCard title="Platform events" description="Cross-application event bus">
-              <ul className="space-y-3">
-                {vehicle.platformEvents.map((e) => (
-                  <li key={e.id} className="border-b border-slate-100 pb-3 text-sm last:border-0">
-                    <p className="font-medium capitalize">{eventTypeLabel(e.type)}</p>
-                    <p className="text-slate-700">{e.summary}</p>
-                    <p className="text-slate-500">
-                      {e.sourceApplication}
-                      {e.actorName && ` · ${e.actorName}`}
-                      {' · '}
-                      {new Date(e.createdAt).toLocaleString('en-GB')}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </SectionCard>
-          )}
-          <SectionCard title="Audit trail">
-            <ul className="space-y-3">
-              {vehicle.auditEvents.map((e) => (
-                <li key={e.id} className="border-b border-slate-100 pb-3 text-sm last:border-0">
-                  <p className="font-medium">{e.action}</p>
-                  <p className="text-slate-600">{e.actor} · {new Date(e.createdAt).toLocaleString('en-GB')}</p>
-                  {e.reason && <p className="text-slate-500">{e.reason}</p>}
-                </li>
-              ))}
-            </ul>
-          </SectionCard>
-        </div>
+      {tab === 'Documents' && (
+        <VehicleDocumentsTab vehicle={vehicle} actorName={actorName} canVerify={canVerify} />
       )}
+      {tab === 'Timeline & audit' && <VehicleTimelineTab vehicle={vehicle} />}
     </div>
+  )
+}
+
+function VehicleReportHistoryTab({ vehicleId }: { vehicleId: string }) {
+  const { data: reports = [], isLoading } = useQuery({
+    queryKey: ['vehicle-reports', vehicleId],
+    queryFn: () => api.getVehicleReports({ vehicleId }),
+  })
+
+  if (isLoading) return <p className="text-sm text-slate-500">Loading report history…</p>
+
+  return (
+    <SectionCard title="Report history" description={`${reports.length} reports`}>
+      {reports.length === 0 ? (
+        <p className="text-sm text-slate-500">No vehicle reports for this asset yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {reports.map((report) => (
+            <li key={report.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Link to={`/vehicle-reports/${report.id}`} className="font-medium text-command-700 hover:underline">
+                  {report.reference} · {report.title}
+                </Link>
+                <StatusPill status={report.severity === 'critical' ? 'vor' : 'warning'} />
+              </div>
+              <p className="text-slate-600">
+                {new Date(report.reportedAt).toLocaleString('en-GB')} · {report.stage.replace(/_/g, ' ')} ·{' '}
+                {report.nextAction}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
   )
 }
 

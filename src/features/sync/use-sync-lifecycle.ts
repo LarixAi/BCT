@@ -21,7 +21,8 @@ export function useSyncLifecycle() {
       const hadBeenOffline = wasOfflineRef.current;
       wasOfflineRef.current = false;
       void hydrate().then(() => {
-        if (hadBeenOffline) notifyConnectionRestored();
+        const hasPendingRecords = useSyncStore.getState().pendingCount > 0;
+        if (hadBeenOffline && !hasPendingRecords) notifyConnectionRestored();
         void processOutbox();
       });
     }
@@ -41,7 +42,9 @@ export function useSyncLifecycle() {
 }
 
 export function useSyncStatusLabel(): { label: string; tone: "ok" | "warn" | "vor" | "muted" } {
-  const { status, pendingCount, failedCount } = useSyncLifecycle();
+  const status = useSyncStore(s => s.status);
+  const pendingCount = useSyncStore(s => s.pendingCount);
+  const failedCount = useSyncStore(s => s.failedCount);
   const [online, setOnline] = useState(isOnline());
 
   useEffect(() => {
@@ -71,7 +74,8 @@ export function useSyncNotice(): {
   tone: "offline" | "pending" | "failed";
   showLink: boolean;
 } {
-  const { pendingCount, failedCount } = useSyncLifecycle();
+  const pendingCount = useSyncStore(s => s.pendingCount);
+  const failedCount = useSyncStore(s => s.failedCount);
   const [online, setOnline] = useState(isOnline());
 
   useEffect(() => {

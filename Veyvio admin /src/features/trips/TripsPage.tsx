@@ -1,109 +1,351 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
-import { VEYVIO_TERMS } from '@/lib/terminology'
+import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
+import { useOperationalContext } from '@/lib/context'
+import { filterTrips, tripSummary, type TripBoardFilter } from '@/lib/ops/runs-trips-schedule'
+import type { OperationalTrip } from '@/lib/transfers/types'
+
+const FILTERS: { id: TripBoardFilter; label: string }[] = [
+  { id: 'all', label: 'All trips' },
+  { id: 'active', label: 'Active' },
+  { id: 'upcoming', label: 'Upcoming' },
+  { id: 'delayed', label: 'Delayed' },
+  { id: 'complete', label: 'Complete' },
+  { id: 'cancelled', label: 'Cancelled' },
+]
 
 export function TripsPage() {
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const { operationalDate } = useOperationalContext()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [filter, setFilter] = useState<TripBoardFilter>('all')
+  const [search, setSearch] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('trip'))
 
-  const { data: trips = [], isLoading } = useQuery({
-    queryKey: ['operational-trips', statusFilter],
-    queryFn: () =>
-      api.getOperationalTrips({
-        status: statusFilter === 'all' ? undefined : statusFilter,
-      }),
+  const { data: trips = [], isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['operational-trips'],
+    queryFn: () => api.getOperationalTrips(),
   })
 
+  useEffect(() => {
+    const trip = searchParams.get('trip')
+    if (trip) setSelectedId(trip)
+    const run = searchParams.get('run')
+    if (run) setSearch(run)
+
+    const status = searchParams.get('status') ?? searchParams.get('filter')
+    if (!status) return
+    const mapped =
+      status === 'completed' || status === 'complete'
+        ? 'complete'
+        : status === 'cancelled'
+          ? 'cancelled'
+          : status === 'active'
+            ? 'active'
+            : status === 'upcoming'
+              ? 'upcoming'
+              : status === 'delayed'
+                ? 'delayed'
+                : null
+    if (mapped) setFilter(mapped)
+  }, [searchParams])
+
+  const summary = useMemo(() => tripSummary(trips), [trips])
+  const filtered = useMemo(() => filterTrips(trips, filter, search), [trips, filter, search])
+  const selected = trips.find((t) => t.id === selectedId) ?? null
+
+  function selectTrip(id: string) {
+    setSelectedId(id)
+    const next = new URLSearchParams(searchParams)
+    next.set('trip', id)
+    setSearchParams(next, { replace: true })
+  }
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Operational trips</h1>
-        <p className="text-sm text-slate-600">
-          {VEYVIO_TERMS.trip.definition} — driver-facing work packages containing jobs
-        </p>
+    <div className="flex min-h-[calc(100vh-7rem)] flex-col gap-4">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Trips</h1>
+            <p className="mt-0.5 text-sm text-slate-700">
+              {operationalDate} · What journeys are taking place?
+            </p>
+            <p className={cn('mt-1 text-xs', isFetching ? 'text-amber-800' : 'text-emerald-700')}>
+              {isFetching
+                ? 'Refreshing journeys…'
+                : 'Service delivery board — passengers, pickups and drop-offs'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            >
+              Refresh
+            </button>
+            <Link
+              to="/runs"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            >
+              Runs
+            </Link>
+            <Link
+              to="/live-operations"
+              className="rounded-lg border border-command-200 bg-command-50 px-3 py-1.5 text-sm font-medium text-command-800 hover:bg-command-100"
+            >
+              Live Operations
+            </Link>
+            <Link
+              to="/bookings"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            >
+              Bookings
+            </Link>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search passenger, school, driver, trip…"
+            className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          />
+          <div className="flex flex-wrap gap-1">
+            {FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilter(f.id)}
+                className={cn(
+                  'rounded-full px-2.5 py-1 text-[11px] font-medium',
+                  filter === f.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200',
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        <strong>Terminology:</strong> A <strong>{VEYVIO_TERMS.trip.term}</strong> contains{' '}
-        <strong>{VEYVIO_TERMS.job.term.toLowerCase()}s</strong>. A <strong>{VEYVIO_TERMS.run.term}</strong> (duty) may
-        include one or more trips. <strong>{VEYVIO_TERMS.booking.term}s</strong> are commercial requests — see{' '}
-        <Link to="/bookings" className="font-medium underline">
-          Bookings
-        </Link>
-        . Route <strong>stops</strong> are on each{' '}
-        <Link to="/runs" className="font-medium underline">
-          run detail
-        </Link>{' '}
-        page.
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {['all', 'in_progress', 'assigned', 'planned', 'completed'].map((s) => (
+      <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        {(
+          [
+            { id: 'all' as const, title: "Today's trips", value: summary.total },
+            { id: 'complete' as const, title: 'Complete', value: summary.complete },
+            { id: 'active' as const, title: 'Active', value: summary.active },
+            { id: 'upcoming' as const, title: 'Upcoming', value: summary.upcoming },
+            { id: 'delayed' as const, title: 'Delayed', value: summary.delayed, tone: 'warning' as const },
+            { id: 'cancelled' as const, title: 'Cancelled', value: summary.cancelled, tone: 'danger' as const },
+          ] as const
+        ).map((card) => (
           <button
-            key={s}
+            key={card.id}
             type="button"
-            onClick={() => setStatusFilter(s)}
-            className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${
-              statusFilter === s ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'
-            }`}
+            onClick={() => setFilter(card.id)}
+            className={cn(
+              'rounded-xl border bg-white p-3 text-left transition hover:border-command-400',
+              filter === card.id ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200',
+              'tone' in card && card.tone === 'danger' && filter !== card.id && 'border-red-200',
+              'tone' in card && card.tone === 'warning' && filter !== card.id && 'border-amber-200',
+            )}
           >
-            {s === 'all' ? 'All' : s.replace(/_/g, ' ')}
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{card.title}</p>
+            <p
+              className={cn(
+                'mt-1 text-2xl font-bold tabular-nums',
+                'tone' in card && card.tone === 'danger'
+                  ? 'text-red-800'
+                  : 'tone' in card && card.tone === 'warning'
+                    ? 'text-amber-800'
+                    : 'text-slate-900',
+              )}
+            >
+              {card.value}
+            </p>
           </button>
         ))}
       </div>
 
-      <SectionCard title="Trips" description={`${trips.length} operational trips`}>
-        {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
-        ) : trips.length === 0 ? (
-          <p className="text-sm text-slate-500">No operational trips match this filter.</p>
-        ) : (
-          <table className="w-full min-w-[800px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
-                <th className="pb-2 pr-4 font-medium">Trip</th>
-                <th className="pb-2 pr-4 font-medium">Run</th>
-                <th className="pb-2 pr-4 font-medium">Driver</th>
-                <th className="pb-2 pr-4 font-medium">Jobs</th>
-                <th className="pb-2 pr-4 font-medium">Onboard</th>
-                <th className="pb-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trips.map((trip) => (
-                <tr key={trip.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                  <td className="py-2.5 pr-4">
-                    <Link to={`/ops-trips/${trip.id}`} className="font-medium text-command-600 hover:underline">
-                      {trip.reference}
-                    </Link>
-                    <p className="text-xs text-slate-500">{trip.routeName}</p>
-                  </td>
-                  <td className="py-2.5 pr-4">
-                    {trip.dutyId ? (
-                      <Link to={`/runs/${trip.dutyId}`} className="text-command-600 hover:underline">
-                        {trip.runReference ?? trip.dutyId}
-                      </Link>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="py-2.5 pr-4 text-slate-600">{trip.driverName ?? 'Unassigned'}</td>
-                  <td className="py-2.5 pr-4 tabular-nums text-slate-600">
-                    {trip.completedJobCount}/{trip.totalJobCount}
-                  </td>
-                  <td className="py-2.5 pr-4 tabular-nums text-slate-600">{trip.passengersOnboard}</td>
-                  <td className="py-2.5">
-                    <StatusPill status={trip.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_340px]">
+        <SectionCard title="Trip board" description={`${filtered.length} journeys`} className="min-h-0 overflow-hidden" flush>
+          <div className="min-h-0 flex-1 overflow-auto">
+            {isLoading ? (
+              <p className="p-4 text-sm text-slate-500">Loading…</p>
+            ) : filtered.length === 0 ? (
+              <p className="p-8 text-center text-sm text-slate-500">No trips match this filter.</p>
+            ) : (
+              <table className="min-w-full text-left text-sm">
+                <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-wide text-slate-500">
+                  <tr className="border-b border-slate-200">
+                    <th className="px-3 py-2 font-medium">Trip</th>
+                    <th className="px-3 py-2 font-medium">Pickup</th>
+                    <th className="px-3 py-2 font-medium">Passengers</th>
+                    <th className="px-3 py-2 font-medium">Vehicle</th>
+                    <th className="px-3 py-2 font-medium">Driver</th>
+                    <th className="px-3 py-2 font-medium">Run</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((trip) => {
+                    const jobs = trip.jobs ?? []
+                    const firstJob = jobs[0]
+                    return (
+                      <tr
+                        key={trip.id}
+                        onClick={() => selectTrip(trip.id)}
+                        className={cn(
+                          'cursor-pointer border-b border-slate-100 hover:bg-slate-50',
+                          selectedId === trip.id && 'bg-command-50',
+                        )}
+                      >
+                        <td className="px-3 py-2.5">
+                          <p className="font-semibold text-slate-900">{trip.reference}</p>
+                          <p className="text-xs text-slate-500">{trip.routeName ?? '—'}</p>
+                        </td>
+                        <td className="px-3 py-2.5 tabular-nums text-slate-700">
+                          {firstJob?.plannedPickupTime
+                            ? new Date(firstJob.plannedPickupTime).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '—'}
+                        </td>
+                        <td className="px-3 py-2.5 tabular-nums text-slate-700">
+                          {trip.passengersOnboard}/{trip.totalJobCount}
+                          {trip.delayMinutes > 0 && (
+                            <span className="ml-1 text-xs font-medium text-amber-800">+{trip.delayMinutes}m</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-xs tabular-nums">
+                          {trip.vehicleRegistration ?? '—'}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-700">{trip.driverName ?? 'Unassigned'}</td>
+                        <td className="px-3 py-2.5">
+                          {trip.dutyId ? (
+                            <Link
+                              to={`/runs/${trip.dutyId}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-command-700 hover:underline"
+                            >
+                              {trip.runReference ?? 'Run'}
+                            </Link>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <StatusPill status={trip.status} />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </SectionCard>
+
+        <TripDetailPanel trip={selected} />
+      </div>
+    </div>
+  )
+}
+
+function TripDetailPanel({ trip }: { trip: OperationalTrip | null }) {
+  if (!trip) {
+    return (
+      <SectionCard title="Selected trip" description="Journey card">
+        <p className="text-sm text-slate-500">
+          Select a trip to see passengers, pickup/drop-off and actions. Runs organise the driver — trips organise the passengers.
+        </p>
       </SectionCard>
+    )
+  }
+
+  return (
+    <SectionCard
+      title={trip.reference}
+      description={`${trip.status.replace(/_/g, ' ')} · ${trip.routeName ?? 'Journey'}`}
+      className="min-h-0 overflow-hidden"
+      flush
+    >
+      <div className="max-h-[560px] space-y-3 overflow-y-auto p-4 text-sm">
+        <Row label="Driver" value={trip.driverName ?? 'Unassigned'} />
+        <Row label="Vehicle" value={trip.vehicleRegistration ?? '—'} />
+        <Row label="Run" value={trip.runReference ?? '—'} />
+        <Row label="Depot" value={trip.depotName ?? '—'} />
+        <Row label="Progress" value={`${trip.completedJobCount}/${trip.totalJobCount} jobs`} />
+        <Row label="Onboard" value={String(trip.passengersOnboard)} />
+        <Row label="Delay" value={trip.delayMinutes > 0 ? `${trip.delayMinutes} min` : 'None'} />
+
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Passengers</p>
+          <ul className="mt-2 space-y-2">
+            {(trip.jobs ?? []).length === 0 && (
+              <li className="text-slate-500">No passenger jobs on this trip.</li>
+            )}
+            {(trip.jobs ?? []).map((job) => (
+              <li key={job.id} className="rounded-lg border border-slate-100 px-2.5 py-2">
+                <p className="font-medium text-slate-900">{job.passengerName}</p>
+                <p className="text-xs text-slate-500">
+                  {job.pickupAddress} → {job.dropoffAddress}
+                </p>
+                <p className="mt-1 text-[11px] capitalize text-slate-600">
+                  {job.status.replace(/_/g, ' ')}
+                  {job.wheelchairRequired ? ' · Wheelchair' : ''}
+                  {job.escortRequired ? ' · Escort' : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <Link
+            to={`/live-operations/trips/${trip.id}?tab=journey`}
+            className="rounded-lg border border-command-200 bg-command-50 px-2 py-2 text-center text-xs font-medium text-command-800 hover:bg-command-100"
+          >
+            Open journey sequence
+          </Link>
+          {trip.dutyId && (
+            <Link
+              to={`/runs/${trip.dutyId}`}
+              className="rounded-lg border border-slate-200 px-2 py-2 text-center text-xs font-medium hover:bg-slate-50"
+            >
+              Open parent run
+            </Link>
+          )}
+          <Link
+            to={`/messages?compose=1&to=${encodeURIComponent(trip.driverName ?? '')}&run=${encodeURIComponent(trip.runReference ?? trip.reference)}`}
+            className="rounded-lg border border-slate-200 px-2 py-2 text-center text-xs font-medium hover:bg-slate-50"
+          >
+            Message driver
+          </Link>
+          <Link
+            to={`/exceptions?create=1&run=${encodeURIComponent(trip.runReference ?? trip.reference)}`}
+            className="rounded-lg border border-slate-200 px-2 py-2 text-center text-xs font-medium hover:bg-slate-50"
+          >
+            Create exception
+          </Link>
+        </div>
+      </div>
+    </SectionCard>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3 border-b border-slate-100 pb-2">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-right font-medium capitalize text-slate-900">{value}</span>
     </div>
   )
 }

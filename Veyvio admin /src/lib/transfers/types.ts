@@ -20,6 +20,10 @@ export interface OperationalJob {
   plannedDropoffTime?: string | null
   actualPickupTime?: string | null
   actualDropoffTime?: string | null
+  pickupLatitude?: number | null
+  pickupLongitude?: number | null
+  dropoffLatitude?: number | null
+  dropoffLongitude?: number | null
   status: JobStatus
   wheelchairRequired: boolean
   escortRequired: boolean

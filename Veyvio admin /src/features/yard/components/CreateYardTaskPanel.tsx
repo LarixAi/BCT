@@ -9,13 +9,23 @@ import { useAuth } from '@/lib/auth-context'
 const TASK_TYPES = Object.keys(YARD_TASK_TYPE_LABELS) as YardTaskType[]
 const PRIORITIES = Object.keys(YARD_TASK_PRIORITY_LABELS) as YardTaskPriority[]
 
-export function CreateYardTaskPanel({ hub, onClose }: { hub: YardHubData; onClose: () => void }) {
+export function CreateYardTaskPanel({
+  hub,
+  onClose,
+  initialTaskType,
+  initialVehicleId,
+}: {
+  hub: YardHubData
+  onClose: () => void
+  initialTaskType?: YardTaskType
+  initialVehicleId?: string
+}) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
-  const [vehicleId, setVehicleId] = useState(hub.vehicles[0]?.vehicleId ?? '')
-  const [taskType, setTaskType] = useState<YardTaskType>('return_inspection')
+  const [vehicleId, setVehicleId] = useState(initialVehicleId || hub.vehicles[0]?.vehicleId || '')
+  const [taskType, setTaskType] = useState<YardTaskType>(initialTaskType ?? 'return_inspection')
   const [priority, setPriority] = useState<YardTaskPriority>('routine')
   const [assignedStaffName, setAssignedStaffName] = useState('')
   const [instructions, setInstructions] = useState('')

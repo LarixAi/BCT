@@ -134,16 +134,18 @@ export function mapAlertToException(alert: DashboardAlert, index: number): Opera
   const severityMap = { danger: 'critical', warning: 'high', info: 'medium' } as const
   const categoryMap = {
     compliance: 'compliance',
-    operations: 'trip',
+    operations: 'journey',
     fleet: 'vehicle',
-    safety: 'passenger',
+    safety: 'customer',
   } as const
 
   return {
     id: `alert-${index}`,
     severity: severityMap[alert.severity] ?? 'medium',
     title: alert.title,
-    category: categoryMap[alert.category] ?? 'trip',
+    category: categoryMap[alert.category] ?? 'journey',
+    typeCode: `alert_${alert.category}`,
+    description: alert.details?.[0] ?? alert.title,
     relatedRecord: alert.title.split(' ').slice(0, 3).join(' '),
     relatedHref: mapCommandHref(alert.href),
     depot: '—',
@@ -154,6 +156,7 @@ export function mapAlertToException(alert: DashboardAlert, index: number): Opera
     status: 'new',
     lastUpdate: 'Today',
     recommendedAction: alert.details?.[0],
+    source: 'Dashboard',
   }
 }
 
@@ -165,7 +168,9 @@ export function mapDefectToException(defect: DefectRecord): OperationalException
     id: defect.id,
     severity,
     title: `${defect.severity} ${defect.category} defect`,
+    typeCode: 'vehicle_defect_reported',
     category: 'vehicle',
+    description: defect.description ?? `${defect.severity} ${defect.category} defect`,
     relatedRecord: defect.vehicle?.registrationNumber ?? 'Vehicle',
     relatedHref: `/defects/${defect.id}`,
     depot: '—',
@@ -176,6 +181,8 @@ export function mapDefectToException(defect: DefectRecord): OperationalException
     status: 'new',
     lastUpdate: new Date(defect.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     recommendedAction: defect.description ?? 'Review defect and assess vehicle availability',
+    source: 'Defects',
+    vehicleRegistration: defect.vehicle?.registrationNumber ?? null,
   }
 }
 
@@ -184,7 +191,9 @@ export function mapIncidentToException(incident: IncidentRecord): OperationalExc
     id: incident.id,
     severity: incident.isSafeguarding ? 'critical' : 'high',
     title: incident.title ?? incident.description ?? 'Open incident',
-    category: 'passenger',
+    typeCode: 'incident_awaiting_review',
+    category: 'customer',
+    description: incident.description ?? incident.title ?? 'Open incident',
     relatedRecord: incident.id.slice(0, 8),
     relatedHref: `/incidents/${incident.id}`,
     depot: '—',
@@ -194,6 +203,7 @@ export function mapIncidentToException(incident: IncidentRecord): OperationalExc
     owner: null,
     status: 'new',
     lastUpdate: new Date(incident.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    source: 'Incidents',
   }
 }
 
@@ -231,10 +241,20 @@ function formatDutyStatus(status: string): string {
 }
 
 export function mapApiNotification(notification: ApiNotification): NotificationItem {
+  const isOnboarding =
+    notification.type.startsWith('driver.onboarding.') ||
+    notification.type.startsWith('driver.app_invite.')
   const priority =
-    notification.type.includes('emergency') || notification.type.includes('safeguarding')
+    notification.type.includes('emergency') ||
+    notification.type.includes('safeguarding') ||
+    notification.type.includes('delivery_failed')
       ? 'urgent'
-      : notification.type.includes('stale') || notification.type.includes('late')
+      : notification.type.includes('stale') ||
+          notification.type.includes('late') ||
+          notification.type.includes('evidence_submitted') ||
+          notification.type.includes('ready_for_activation') ||
+          notification.type.includes('training_requested') ||
+          notification.type.includes('request_overdue')
         ? 'high'
         : 'normal'
 
@@ -242,7 +262,17 @@ export function mapApiNotification(notification: ApiNotification): NotificationI
     ? 'operational'
     : notification.type.includes('defect')
       ? 'vehicle'
-      : 'system'
+      : isOnboarding
+        ? 'operational'
+        : 'system'
+
+  const actionLabel = notification.type.includes('evidence_submitted')
+    ? 'Review certificate'
+    : notification.type.includes('ready_for_activation')
+      ? 'Review and activate'
+      : notification.type.includes('delivery_failed')
+        ? 'Resend invite'
+        : 'Open record'
 
   return {
     id: notification.id,
@@ -258,9 +288,13 @@ export function mapApiNotification(notification: ApiNotification): NotificationI
     priority,
     read: notification.readAt != null,
     acknowledged: notification.readAt != null,
-    actionRequired: notification.readAt == null && priority !== 'normal',
+    actionRequired:
+      notification.readAt == null &&
+      (priority !== 'normal' ||
+        notification.type.includes('evidence_submitted') ||
+        notification.type.includes('ready_for_activation')),
     actions: notification.link
-      ? [{ label: 'Open record', href: mapCommandHref(notification.link), variant: 'primary' as const }]
+      ? [{ label: actionLabel, href: mapCommandHref(notification.link), variant: 'primary' as const }]
       : undefined,
   }
 }

@@ -1,13 +1,53 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-command-50: #f0f4ff;
-  --color-command-100: #e0e9ff;
-  --color-command-500: #3b5bdb;
-  --color-command-600: #2f4ac0;
-  --color-command-700: #243a96;
-  --color-command-900: #1a2b5c;
+  /* Veyvio Command — from brand canvas */
+  --color-command-50: #eff6ff;
+  --color-command-100: #dbeafe;
+  --color-command-200: #bfdbfe;
+  --color-command-500: #2f6bff;
+  --color-command-600: #2f6bff;
+  --color-command-700: #1f4ed8;
+  --color-command-800: #1a3fb0;
+  --color-command-900: #0b1526;
+  --color-midnight: #0b1526;
+  --color-page: #f2f5f9;
+  --color-ink: #101828;
+  --color-ink-soft: #344054;
+  --color-muted: #667085;
+  --color-border: #dce2ea;
+  --color-border-strong: #c7d0dd;
+  --color-ready: #178c4b;
+  --color-attention: #d97706;
+  --color-critical: #d92d20;
+  --color-vor: #b42318;
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  --veyvio-brand-50: #eef4ff;
+  --veyvio-brand-100: #dfe9ff;
+  --veyvio-brand-500: #3165f5;
+  --veyvio-brand-600: #2458e6;
+  --veyvio-brand-700: #1d4ed8;
+  --veyvio-brand-900: #0b1739;
+
+  --veyvio-success-50: #ecfdf5;
+  --veyvio-success-500: #10b981;
+  --veyvio-success-700: #047857;
+
+  --veyvio-warning-50: #fff7e6;
+  --veyvio-warning-500: #f59e0b;
+  --veyvio-warning-700: #b45309;
+
+  --veyvio-danger-50: #fff1f2;
+  --veyvio-danger-500: #ef4444;
+  --veyvio-danger-700: #be123c;
+
+  --veyvio-neutral-50: #f8fafc;
+  --veyvio-neutral-200: #e2e8f0;
+  --veyvio-neutral-400: #94a3b8;
+  --veyvio-neutral-600: #475569;
 }
 
 * {
@@ -24,8 +64,8 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--color-page);
+  color: var(--color-ink);
 }
 
 /* Live map markers */
@@ -42,32 +82,64 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 9999px;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  border: 2px solid #f2f5f9;
+  box-shadow: 0 0 0 1px rgba(11, 21, 38, 0.55), 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 .live-vehicle-marker span.live {
-  background: #059669;
+  background: #178c4b;
 }
 
 .live-vehicle-marker.map-pin span.live {
-  background: #ea580c;
+  background: #2f6bff;
 }
 
 .live-vehicle-marker.map-pin.selected span.live {
-  background: #c2410c;
+  background: #1f4ed8;
   width: 16px;
   height: 16px;
 }
 
 .live-vehicle-marker span.stale {
-  background: #d97706;
+  background: #7a5af8;
 }
 
 .live-vehicle-marker.selected span {
   width: 18px;
   height: 18px;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 0 0 3px rgba(47, 107, 255, 0.35);
+}
+
+.route-stop-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid #ffffff;
+  border-radius: 9999px;
+  background: #0b1526;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(11, 21, 38, 0.45);
+  cursor: default;
+}
+
+.route-stop-marker--pickup {
+  background: #2f6bff;
+}
+
+.route-stop-marker--dropoff {
+  background: #178c4b;
+}
+
+.route-stop-marker span {
+  display: block;
+  min-width: 1ch;
+  text-align: center;
 }
 
 .veyvio-map-container .maplibregl-map,
@@ -75,4 +147,56 @@ body {
 .veyvio-map-container canvas.maplibregl-canvas {
   width: 100% !important;
   height: 100% !important;
+}
+
+/* Command map palette — light canvas for shared LiveVehicleMap. */
+.veyvio-map-container {
+  --map-bg: #eef4ff;
+  --map-ink: #0b1739;
+  --map-muted: #64748b;
+  --map-accent: #2f6bff;
+  position: relative;
+  z-index: 0;
+  background: var(--map-bg);
+}
+
+.veyvio-map-container .maplibregl-ctrl-group {
+  background: #ffffff;
+  border: 1px solid #dce4f0;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+
+.veyvio-map-container .maplibregl-ctrl-group button {
+  background: transparent;
+  border-color: #e7ecf3;
+}
+
+.veyvio-map-container .maplibregl-ctrl-group button + button {
+  border-top-color: #e7ecf3;
+}
+
+.veyvio-map-container .maplibregl-ctrl-group button:hover {
+  background: #eef4ff;
+}
+
+.veyvio-map-container .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: none;
+}
+
+.veyvio-map-container .maplibregl-ctrl-attrib {
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--map-muted);
+  font-size: 10px;
+  opacity: 0.9;
+}
+
+.veyvio-map-container .maplibregl-ctrl-attrib a {
+  color: var(--map-ink);
+}
+
+.veyvio-map-container .maplibregl-ctrl-bottom-right,
+.veyvio-map-container .maplibregl-ctrl-bottom-left,
+.veyvio-map-container .maplibregl-ctrl-top-right {
+  z-index: 2;
 }

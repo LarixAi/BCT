@@ -7,6 +7,7 @@ export type PlatformEventName =
   | "vehicle.verified"
   | "vehicle_check.submitted"
   | "defect.reported"
+  | "resource.transaction.recorded"
   | "vehicle.held"
   | "journey.started"
   | "stop.arrived"
@@ -23,7 +24,7 @@ export type PlatformEventName =
   | "duty.completed"
   | "safeguarding.case_opened";
 
-export type PlatformEventConsumer = "dispatch" | "live_ops" | "yard" | "vehicles" | "defects" | "maintenance" | "audit" | "incidents" | "trips" | "drivers" | "exceptions";
+export type PlatformEventConsumer = "dispatch" | "live_ops" | "yard" | "vehicles" | "defects" | "maintenance" | "audit" | "incidents" | "trips" | "drivers" | "exceptions" | "fleet_resources";
 
 export interface PlatformEvent {
   eventId: string;
@@ -46,8 +47,9 @@ const EVENT_CONSUMERS: Record<PlatformEventName, PlatformEventConsumer[]> = {
   "vehicle.verified": ["yard", "vehicles", "audit"],
   "vehicle_check.submitted": ["yard", "vehicles", "audit"],
   "defect.reported": ["defects", "maintenance", "vehicles", "audit"],
+  "resource.transaction.recorded": ["fleet_resources", "yard", "vehicles", "audit"],
   "vehicle.held": ["live_ops", "yard", "dispatch", "audit"],
-  "journey.started": ["live_ops", "trips", "audit"],
+  "journey.started": ["live_ops", "trips", "yard", "audit"],
   "stop.arrived": ["live_ops", "trips"],
   "passenger.outcome_recorded": ["trips", "live_ops", "audit"],
   "delay.reported": ["exceptions", "dispatch", "live_ops"],

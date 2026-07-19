@@ -1,16 +1,27 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { AuthLayout, authInputClass, authPrimaryButtonClass } from '@/components/brand/AuthLayout'
 import { api, isMockApi } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
+import { tenantSetupPath } from '@/features/auth/SignupPages'
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { login, verifyMfa } = useAuth()
   const [email, setEmail] = useState(isMockApi ? 'demo@veyvio.com' : '')
   const [password, setPassword] = useState(isMockApi ? 'demo' : '')
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [mfa, setMfa] = useState<{
+    challengeId: string
+    companyId?: string | null
+    devCode?: string
+    accessToken?: string
+    refreshToken?: string
+  } | null>(null)
+  const [mfaCode, setMfaCode] = useState('')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -18,11 +29,23 @@ export function LoginPage() {
     setLoading(true)
     try {
       const result = await login(email, password, rememberMe)
+      if (result.requiresMfaChallenge && result.mfaChallengeId) {
+        setMfa({
+          challengeId: result.mfaChallengeId,
+          companyId: result.pendingCompanyId,
+          devCode: result.devMfaCode,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        })
+        setMfaCode(result.devMfaCode ?? '')
+        return
+      }
       if (result.requiresTenantSelection) {
         navigate('/select-company')
         return
       }
-      navigate('/')
+      const setupPath = tenantSetupPath(result.tenantStatus)
+      navigate(setupPath ?? '/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
@@ -30,27 +53,87 @@ export function LoginPage() {
     }
   }
 
+  async function handleMfaSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!mfa) return
+    setError('')
+    setLoading(true)
+    try {
+      await verifyMfa({
+        challengeId: mfa.challengeId,
+        code: mfaCode,
+        companyId: mfa.companyId,
+        accessToken: mfa.accessToken,
+        refreshToken: mfa.refreshToken,
+      })
+      navigate('/')
+    } catch (err) {
+      if (err && typeof err === 'object' && 'requiresTenantSelection' in err) {
+        navigate('/select-company')
+        return
+      }
+      setError(err instanceof Error ? err.message : 'MFA verification failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="mb-8 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wider text-command-600">Veyvio</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">Command</h1>
-          <p className="mt-2 text-sm text-slate-600">Sign in to your transport operations centre</p>
-          {isMockApi && (
-            <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-              Demo mode — any email and password will sign you in. No backend required.
+    <AuthLayout
+      title={mfa ? 'Confirm MFA' : 'Sign in'}
+      subtitle={
+        mfa
+          ? 'Enter your authenticator or recovery code to open Command'
+          : 'Access your transport operations centre'
+      }
+      footer={
+        <div className="mt-4 space-y-2 text-center text-sm text-muted">
+          {!mfa && (
+            <p>
+              <Link to="/forgot-password" className="font-medium text-command-600 hover:underline">
+                Forgot password?
+              </Link>
             </p>
           )}
+          <p>
+            First company representative?{' '}
+            <Link to="/signup" className="font-medium text-command-600 hover:underline">
+              Register your company
+            </Link>
+          </p>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+      }
+    >
+      {mfa ? (
+        <form onSubmit={handleMfaSubmit} className="space-y-4">
+          {error && <p className="rounded-lg bg-critical/10 px-3 py-2 text-sm text-critical">{error}</p>}
+          {mfa.devCode && (
+            <p className="rounded-lg bg-attention/10 px-3 py-2 text-xs text-attention">
+              Temporary MFA code for this environment: <strong className="text-ink">{mfa.devCode}</strong>
+            </p>
           )}
+          <div>
+            <label htmlFor="mfa" className="mb-1 block text-sm font-medium text-ink-soft">
+              Authenticator or recovery code
+            </label>
+            <input
+              id="mfa"
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value)}
+              required
+              className={authInputClass}
+            />
+          </div>
+          <button type="submit" disabled={loading} className={authPrimaryButtonClass}>
+            {loading ? 'Verifying…' : 'Verify and continue'}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && <p className="rounded-lg bg-critical/10 px-3 py-2 text-sm text-critical">{error}</p>}
 
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-ink-soft">
               Email
             </label>
             <input
@@ -60,12 +143,12 @@ export function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-command-500 focus:outline-none focus:ring-2 focus:ring-command-500/20"
+              className={authInputClass}
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-ink-soft">
               Password
             </label>
             <input
@@ -75,39 +158,32 @@ export function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-command-500 focus:outline-none focus:ring-2 focus:ring-command-500/20"
+              className={authInputClass}
             />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-600">
+          <label className="flex items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded border-slate-300"
+              className="rounded border-border"
             />
             Remember me
           </label>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-command-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700 disabled:opacity-60"
-          >
+          <button type="submit" disabled={loading} className={authPrimaryButtonClass}>
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-
-        <p className="mt-6 text-center text-xs text-slate-500">
-          {isMockApi ? 'Running in frontend-only demo mode' : `API: ${import.meta.env.VITE_API_URL ?? 'http://localhost:4000'}`}
-        </p>
-      </div>
-    </div>
+      )}
+    </AuthLayout>
   )
 }
 
 export function SelectCompanyPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { selectTenant } = useAuth()
   const memberships = api.getPendingMemberships()
   const [error, setError] = useState('')
@@ -115,14 +191,11 @@ export function SelectCompanyPage() {
 
   if (memberships.length === 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-sm text-slate-600">No companies available. Please sign in again.</p>
-          <Link to="/login" className="mt-4 inline-block text-sm font-medium text-command-600 hover:underline">
-            Back to sign in
-          </Link>
-        </div>
-      </div>
+      <AuthLayout title="No companies available" subtitle="Sign in again to load your company memberships.">
+        <Link to="/login" className="inline-flex w-full items-center justify-center rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700">
+          Back to sign in
+        </Link>
+      </AuthLayout>
     )
   }
 
@@ -131,6 +204,7 @@ export function SelectCompanyPage() {
     setLoading(tenantId)
     try {
       await selectTenant(tenantId)
+      queryClient.clear()
       navigate('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not select company')
@@ -140,36 +214,28 @@ export function SelectCompanyPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-900">Select company</h1>
-        <p className="mt-1 text-sm text-slate-600">Choose which transport company to manage</p>
-
-        {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
-        )}
-
-        <ul className="mt-6 space-y-2">
-          {memberships.map((m) => (
-            <li key={m.tenantId}>
-              <button
-                type="button"
-                onClick={() => handleSelect(m.tenantId)}
-                disabled={loading != null}
-                className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-left hover:border-command-500 hover:bg-command-50 disabled:opacity-60"
-              >
-                <div>
-                  <p className="font-medium text-slate-900">{m.tenantName}</p>
-                  <p className="text-xs capitalize text-slate-500">{m.role.replace(/_/g, ' ')}</p>
-                </div>
-                <span className="text-xs text-command-600">
-                  {loading === m.tenantId ? 'Loading…' : 'Select →'}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
+    <AuthLayout title="Select company" subtitle="Choose which transport company to manage">
+      {error && <p className="mb-4 rounded-lg bg-critical/10 px-3 py-2 text-sm text-critical">{error}</p>}
+      <ul className="space-y-2">
+        {memberships.map((m) => (
+          <li key={m.tenantId}>
+            <button
+              type="button"
+              onClick={() => handleSelect(m.tenantId)}
+              disabled={loading != null}
+              className="flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-left hover:border-command-500 hover:bg-command-50 disabled:opacity-60"
+            >
+              <div>
+                <p className="font-medium text-ink">{m.tenantName}</p>
+                <p className="text-xs capitalize text-muted">{m.role.replace(/_/g, ' ')}</p>
+              </div>
+              <span className="text-xs font-semibold text-command-600">
+                {loading === m.tenantId ? 'Loading…' : 'Select →'}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </AuthLayout>
   )
 }

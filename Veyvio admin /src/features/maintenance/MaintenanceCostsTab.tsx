@@ -18,6 +18,44 @@ export function MaintenanceCostsTab({ intelligence }: { intelligence: Maintenanc
         />
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        <MetricCard
+          label="Fleet avg cost / mile"
+          value={
+            intelligence.fleetAvgCostPerMile != null
+              ? `£${intelligence.fleetAvgCostPerMile.toFixed(2)}`
+              : '—'
+          }
+        />
+        <MetricCard label="Unplanned share" value={`${intelligence.unplannedSharePercent}%`} />
+      </div>
+
+      <SectionCard
+        title="Cost alerts"
+        description="Vehicles and patterns needing cost attention — predictive shell, not a forecast model"
+      >
+        {intelligence.costAlerts.length === 0 ? (
+          <p className="text-sm text-slate-500">No cost alerts on the current fleet snapshot.</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {intelligence.costAlerts.map((alert) => (
+              <li
+                key={alert.id}
+                className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
+              >
+                <div>
+                  <p className="font-medium text-slate-900">{alert.registration}</p>
+                  <p className="text-amber-950">{alert.message}</p>
+                </div>
+                <Link to={alert.href} className="text-xs font-medium text-command-600 hover:underline">
+                  Open →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
+
       <SectionCard title="Cost per mile" description="Maintenance spend relative to vehicle mileage">
         {intelligence.maintenanceCostPerMile.length === 0 ? (
           <p className="text-sm text-slate-500">Insufficient mileage data.</p>

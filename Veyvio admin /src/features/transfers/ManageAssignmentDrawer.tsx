@@ -6,10 +6,12 @@ import {
   TRANSFER_WORKFLOW_LABELS,
   PASSENGER_FACING_TRANSFER_MESSAGE,
 } from '@/lib/transfers/constants'
+import { deriveOperationalPosition } from '@/lib/transfers/operational-trip'
 import { allowedTransferScopes, canPerformHandover, canOverrideTransferWarnings } from '@/lib/transfers/permissions'
 import { HandoverWorkflowDialog } from './HandoverWorkflowDialog'
 import type {
   CreateTransferInput,
+  OperationalTrip,
   TransferCandidate,
   TransferScope,
   TransferWorkflowType,
@@ -33,11 +35,13 @@ export function ManageAssignmentDrawer({
   onClose,
   onComplete,
   initialScope,
+  initialTrip,
 }: {
   tripId: string
   onClose: () => void
   onComplete?: () => void
   initialScope?: TransferScope
+  initialTrip?: OperationalTrip | null
 }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -54,15 +58,33 @@ export function ManageAssignmentDrawer({
   const [overrideWarnings, setOverrideWarnings] = useState(false)
   const [error, setError] = useState('')
 
-  const { data: position } = useQuery({
+  const { data: loadedTrip, isLoading: tripLoading, isError: tripFailed } = useQuery({
+    queryKey: ['operational-trip', tripId],
+    queryFn: () => api.getOperationalTrip(tripId),
+    retry: false,
+    enabled: Boolean(tripId) && !initialTrip,
+  })
+
+  const trip = loadedTrip ?? initialTrip ?? null
+
+  const { data: loadedPosition, isLoading: positionLoading } = useQuery({
     queryKey: ['operational-position', tripId],
     queryFn: () => api.getOperationalPosition(tripId),
+    retry: false,
+    enabled: Boolean(tripId),
   })
+
+  const position = useMemo(() => {
+    if (loadedPosition?.trip) return loadedPosition
+    if (trip) return deriveOperationalPosition(trip)
+    return null
+  }, [loadedPosition, trip])
 
   const { data: candidates = [] } = useQuery({
     queryKey: ['transfer-candidates', tripId],
     queryFn: () => api.getTransferCandidates(tripId),
     enabled: step >= 2,
+    retry: false,
   })
 
   const { data: otherTrips = [] } = useQuery({
@@ -112,12 +134,14 @@ export function ManageAssignmentDrawer({
     queryKey: ['transfer-validation', draftInput],
     queryFn: () => api.validateTransfer(draftInput!),
     enabled: !!draftInput && step >= 3,
+    retry: false,
   })
 
   const { data: impact } = useQuery({
     queryKey: ['transfer-impact', draftInput],
     queryFn: () => api.previewTransferImpact(draftInput!),
     enabled: !!draftInput && step >= 5,
+    retry: false,
   })
 
   const commit = useMutation({
@@ -134,9 +158,9 @@ export function ManageAssignmentDrawer({
     onError: (e) => setError(e instanceof Error ? e.message : 'Transfer failed'),
   })
 
-  const trip = position?.trip
-  const jobsInScope = trip
-    ? getJobsInScope(trip, { scope, sourceJobIds: scope === 'selected_jobs' ? selectedJobIds : undefined })
+  const resolvedTrip = position?.trip ?? trip
+  const jobsInScope = resolvedTrip
+    ? getJobsInScope(resolvedTrip, { scope, sourceJobIds: scope === 'selected_jobs' ? selectedJobIds : undefined })
     : []
   const needsHandoverRecording = requiresHandoverRecording(jobsInScope)
   const workflowType = validation?.workflowType ?? (needsHandoverRecording ? 'physical_handover' : 'reassignment')
@@ -144,9 +168,10 @@ export function ManageAssignmentDrawer({
   const blocking = hasBlockingTransferErrors(validationItems)
   const warnings = hasTransferWarnings(validationItems)
   const permissions = user?.permissions ?? []
-  const scopeOptions = allowedTransferScopes(permissions)
-  const handoverAllowed = canPerformHandover(permissions)
-  const overrideAllowed = canOverrideTransferWarnings(permissions)
+  const scopeOptions = allowedTransferScopes(permissions, user?.role)
+  const handoverAllowed = canPerformHandover(permissions, user?.role)
+  const overrideAllowed = canOverrideTransferWarnings(permissions, user?.role)
+  const isBootstrapping = !resolvedTrip && (tripLoading || positionLoading) && !tripFailed
 
   function toggleJob(id: string) {
     setSelectedJobIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -187,9 +212,15 @@ export function ManageAssignmentDrawer({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-command-600">Manage assignment</p>
-              <h2 className="text-lg font-semibold text-slate-900">{trip?.reference ?? 'Loading…'}</h2>
+              <h2 className="text-lg font-semibold text-slate-900">
+                {resolvedTrip?.reference ?? (isBootstrapping ? 'Loading…' : 'Assignment')}
+              </h2>
               <p className="text-sm text-slate-600">
-                {trip?.runReference ? `Run ${trip.runReference}` : 'Operational trip'}
+                {resolvedTrip?.runReference
+                  ? `Run ${resolvedTrip.runReference}`
+                  : resolvedTrip
+                    ? 'Operational trip'
+                    : 'Duty assignment'}
               </p>
             </div>
             <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
@@ -211,30 +242,47 @@ export function ManageAssignmentDrawer({
         </header>
 
         <div className="flex-1 overflow-y-auto p-5">
-          {step === 0 && (
+          {isBootstrapping && (
+            <p className="text-sm text-slate-600">Loading the current assignment…</p>
+          )}
+
+          {!isBootstrapping && !resolvedTrip && (
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+              <p className="font-medium">This assignment could not be loaded.</p>
+              <p>Close and try again, or manage the duty from Assign on the board.</p>
+            </div>
+          )}
+
+          {step === 0 && resolvedTrip && (
             <div className="space-y-2">
               <p className="text-sm text-slate-600">Select exactly what is being moved — not a generic reassignment.</p>
-              {scopeOptions.map((opt) => (
-                <label
-                  key={opt.id}
-                  className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${
-                    scope === opt.id ? 'border-command-500 bg-command-50' : 'border-slate-200'
-                  }`}
-                >
-                  <input type="radio" name="scope" checked={scope === opt.id} onChange={() => setScope(opt.id)} className="mt-1" />
-                  <div>
-                    <p className="font-medium text-slate-900">{opt.label}</p>
-                    <p className="text-sm text-slate-600">{opt.description}</p>
-                  </div>
-                </label>
-              ))}
-              {scope === 'selected_jobs' && trip && (
+              {scopeOptions.length === 0 ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  Your role cannot change assignments. Ask a dispatcher or company owner.
+                </p>
+              ) : (
+                scopeOptions.map((opt) => (
+                  <label
+                    key={opt.id}
+                    className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${
+                      scope === opt.id ? 'border-command-500 bg-command-50' : 'border-slate-200'
+                    }`}
+                  >
+                    <input type="radio" name="scope" checked={scope === opt.id} onChange={() => setScope(opt.id)} className="mt-1" />
+                    <div>
+                      <p className="font-medium text-slate-900">{opt.label}</p>
+                      <p className="text-sm text-slate-600">{opt.description}</p>
+                    </div>
+                  </label>
+                ))
+              )}
+              {scope === 'selected_jobs' && (
                 <SectionCard title="Select passengers to move">
                   <p className="mb-2 text-xs text-slate-500">
                     Select any passenger — onboard or not yet collected. Onboard moves are recorded as a handover.
                   </p>
                   <ul className="space-y-2 text-sm">
-                    {trip.jobs
+                    {(resolvedTrip.jobs ?? [])
                       .filter((j) => j.status !== 'completed' && j.status !== 'transferred')
                       .map((j) => (
                         <li key={j.id}>
@@ -256,10 +304,14 @@ export function ManageAssignmentDrawer({
                           </label>
                         </li>
                       ))}
+                    {(resolvedTrip.jobs ?? []).filter((j) => j.status !== 'completed' && j.status !== 'transferred')
+                      .length === 0 && (
+                      <li className="text-slate-500">No passenger jobs on this assignment yet.</li>
+                    )}
                   </ul>
                 </SectionCard>
               )}
-              {handoverAllowed && trip && trip.passengersOnboard > 0 && (
+              {handoverAllowed && resolvedTrip.passengersOnboard > 0 && (
                 <button
                   type="button"
                   onClick={() => setShowHandover(true)}
@@ -271,28 +323,28 @@ export function ManageAssignmentDrawer({
             </div>
           )}
 
-          {step === 1 && position && (
+          {step === 1 && position && resolvedTrip && (
             <SectionCard title="Current operational position">
               <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                <Stat label="Driver" value={trip?.driverName ?? 'Unassigned'} />
-                <Stat label="Vehicle" value={trip?.vehicleRegistration ?? 'Unassigned'} />
-                <Stat label="Trip status" value={trip?.status ?? '—'} />
-                <Stat label="Onboard" value={String(trip?.passengersOnboard ?? 0)} />
+                <Stat label="Driver" value={resolvedTrip.driverName ?? 'Unassigned'} />
+                <Stat label="Vehicle" value={resolvedTrip.vehicleRegistration ?? 'Unassigned'} />
+                <Stat label="Trip status" value={resolvedTrip.status ?? '—'} />
+                <Stat label="Onboard" value={String(resolvedTrip.passengersOnboard ?? 0)} />
                 <Stat label="Completed jobs" value={String(position.completedJobs.length)} />
                 <Stat label="Remaining jobs" value={String(position.remainingJobs.length)} />
-                <Stat label="Delay" value={`${trip?.delayMinutes ?? 0} min`} />
-                <Stat label="Driver online" value={trip?.driverOnline ? 'Yes' : 'No'} />
-                <Stat label="Manifest v" value={String(trip?.manifestVersion ?? 0)} />
-                <Stat label="Acknowledged" value={trip?.acknowledgedAt ? 'Yes' : 'Pending'} />
+                <Stat label="Delay" value={`${resolvedTrip.delayMinutes ?? 0} min`} />
+                <Stat label="Driver online" value={resolvedTrip.driverOnline ? 'Yes' : 'No'} />
+                <Stat label="Manifest v" value={String(resolvedTrip.manifestVersion ?? 0)} />
+                <Stat label="Acknowledged" value={resolvedTrip.acknowledgedAt ? 'Yes' : 'Pending'} />
               </dl>
               {position.activeJob && (
                 <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   Active job: {position.activeJob.passengerName} ({position.activeJob.status})
                 </p>
               )}
-              {trip && trip.passengersOnboard > 0 && (
+              {resolvedTrip.passengersOnboard > 0 && (
                 <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  {trip.passengersOnboard} passenger(s) onboard — you can move them using{' '}
+                  {resolvedTrip.passengersOnboard} passenger(s) onboard — you can move them using{' '}
                   <strong>Selected jobs</strong> or <strong>Remaining unstarted jobs</strong>. Record handover
                   location and authorisation on the reason step.
                 </p>
@@ -542,7 +594,8 @@ export function ManageAssignmentDrawer({
             <button
               type="button"
               onClick={nextStep}
-              className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white hover:bg-command-700"
+              disabled={isBootstrapping || !resolvedTrip || (step === 0 && scopeOptions.length === 0)}
+              className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white hover:bg-command-700 disabled:opacity-50"
             >
               Continue
             </button>

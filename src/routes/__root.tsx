@@ -11,7 +11,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NativeChromeInit } from "../platform/native/native-chrome-init";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -99,7 +99,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <NativeChromeInit />
       <Outlet />
-      <Toaster position="top-center" richColors />
+      <Toaster position="top-center" />
     </QueryClientProvider>
   );
 }

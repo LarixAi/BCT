@@ -83,6 +83,7 @@ export function commandTypeToEvent(type: OpsCommandType): string {
     "passenger.outcome": "passenger.outcome_recorded",
     "incident.report": "incident.initial_submitted",
     "defect.report": "defect.reported",
+    "resource.transaction.record": "resource.transaction.recorded",
   };
   return map[type] ?? type;
 }

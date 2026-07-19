@@ -1,217 +1,394 @@
-import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { SectionCard, StatusBadge } from '@/components/ui'
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api/client'
+import { useAuth } from '@/lib/auth-context'
+import { useOperationalContext } from '@/lib/context'
 import {
-  mapAlertToException,
-  mapDefectToException,
-  mapIncidentToException,
-} from '@/lib/api/mappers'
-import { EXCEPTION_VIEWS } from '@/lib/mock-data'
-import type { OperationalException } from '@/lib/types'
+  applyExceptionOverlays,
+  buildExceptionsInbox,
+  type ExceptionOverlay,
+} from '@/lib/exceptions/build-exceptions-inbox'
+import {
+  countBySeverity,
+  filterExceptions,
+  isOpenException,
+  type ExceptionSmartFilter,
+} from '@/lib/exceptions/exception-filters'
+import { buildExceptionKpis } from '@/lib/exceptions/exception-kpis'
+import type { ExceptionCategory, ExceptionSeverity, OperationalException } from '@/lib/types'
+import { ExceptionBulkBar } from './ExceptionBulkBar'
+import { ExceptionInvestigationPanel } from './ExceptionInvestigationPanel'
+import { ExceptionQueue } from './ExceptionQueue'
+import { ExceptionControlBar, ExceptionSummaryStrip } from './ExceptionWorkspacePanels'
+
+function severityFromParam(value: string | null): ExceptionSmartFilter | null {
+  if (value === 'critical' || value === 'high') return 'critical'
+  if (value === 'medium' || value === 'low') return 'open'
+  return null
+}
+
+type SummaryFocus = ExceptionSeverity | 'awaiting' | 'escalated' | 'sla' | null
 
 export function ExceptionsPage() {
-  const [view, setView] = useState('critical')
-  const [selected, setSelected] = useState<OperationalException | null>(null)
+  const { user } = useAuth()
+  const { operationalDate, depotId, depots } = useOperationalContext()
+  const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const currentUserName = user ? `${user.firstName} ${user.lastName}`.trim() || user.email : 'You'
 
-  const { data: dashboard, isLoading: dashboardLoading } = useQuery({
+  const [listTab, setListTab] = useState<'open' | 'resolved'>('open')
+  const [smart, setSmart] = useState<ExceptionSmartFilter>(
+    () => severityFromParam(searchParams.get('severity')) ?? 'open',
+  )
+  const [module, setModule] = useState<ExceptionCategory | 'all'>('all')
+  const [summaryFocus, setSummaryFocus] = useState<SummaryFocus>(
+    searchParams.get('severity') === 'critical' ? 'critical' : null,
+  )
+  const [search, setSearch] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [overlays, setOverlays] = useState<Record<string, ExceptionOverlay>>({})
+  const [localRaised, setLocalRaised] = useState<OperationalException[]>([])
+  const [toast, setToast] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createTitle, setCreateTitle] = useState('')
+
+  const { data: dashboard, isLoading: dashboardLoading, isFetching: dashboardFetching } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => api.getDashboard(),
   })
 
-  const { data: defects = [], isLoading: defectsLoading } = useQuery({
+  const { data: defects = [], isLoading: defectsLoading, isFetching: defectsFetching } = useQuery({
     queryKey: ['defects', 'open'],
     queryFn: () => api.getDefects({ status: 'open' }),
   })
 
-  const { data: incidents = [], isLoading: incidentsLoading } = useQuery({
+  const { data: incidents = [], isLoading: incidentsLoading, isFetching: incidentsFetching } = useQuery({
     queryKey: ['incidents', 'open'],
     queryFn: () => api.getIncidents({ status: 'open' }),
   })
 
-  const { data: driverEligibilityExceptions = [], isLoading: driverExceptionsLoading } = useQuery({
+  const {
+    data: driverEligibilityExceptions = [],
+    isLoading: driverExceptionsLoading,
+    isFetching: driverExceptionsFetching,
+  } = useQuery({
     queryKey: ['driver-eligibility-exceptions'],
     queryFn: () => api.getDriverEligibilityExceptions(),
   })
 
-  const { data: vehicleReleaseExceptions = [], isLoading: vehicleExceptionsLoading } = useQuery({
+  const {
+    data: vehicleReleaseExceptions = [],
+    isLoading: vehicleExceptionsLoading,
+    isFetching: vehicleExceptionsFetching,
+  } = useQuery({
     queryKey: ['vehicle-release-exceptions'],
     queryFn: () => api.getVehicleReleaseExceptions(),
   })
 
-  const allExceptions = useMemo(() => {
-    const fromAlerts = (dashboard?.alerts ?? []).map(mapAlertToException)
-    const fromDefects = defects.map(mapDefectToException)
-    const fromIncidents = incidents.map(mapIncidentToException)
+  const yardDepot = depotId === 'all' ? 'depot-wembley' : depotId
+  const { data: yardHub, isLoading: yardLoading, isFetching: yardFetching } = useQuery({
+    queryKey: ['yard-hub', yardDepot],
+    queryFn: () => api.getYardHub(yardDepot),
+  })
 
-    const combined = [...fromAlerts, ...fromDefects, ...fromIncidents, ...driverEligibilityExceptions, ...vehicleReleaseExceptions]
-    const severityRank = { critical: 0, high: 1, medium: 2, low: 3 }
-    return combined.sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
-  }, [dashboard, defects, incidents, driverEligibilityExceptions, vehicleReleaseExceptions])
+  useEffect(() => {
+    const fromSeverity = severityFromParam(searchParams.get('severity'))
+    if (fromSeverity) setSmart(fromSeverity)
+    if (searchParams.get('severity') === 'critical') setSummaryFocus('critical')
+    if (searchParams.get('create') === '1') {
+      setCreateOpen(true)
+      const run = searchParams.get('run')
+      if (run) setCreateTitle(`Exception for run ${run}`)
+    }
+  }, [searchParams])
+
+  const composed = useMemo(() => {
+    const inbox = buildExceptionsInbox({
+      alerts: dashboard?.alerts,
+      defects,
+      incidents,
+      driverExceptions: driverEligibilityExceptions,
+      vehicleExceptions: vehicleReleaseExceptions,
+      yardExceptions: yardHub?.exceptions,
+      includeCatalog: true,
+    })
+    return [...localRaised, ...inbox]
+  }, [
+    dashboard,
+    defects,
+    incidents,
+    driverEligibilityExceptions,
+    vehicleReleaseExceptions,
+    yardHub,
+    localRaised,
+  ])
+
+  const withOverlays = useMemo(() => applyExceptionOverlays(composed, overlays), [composed, overlays])
+
+  const depotLabel =
+    depotId === 'all' ? null : (depots.find((d) => d.id === depotId)?.name ?? depotId)
 
   const filtered = useMemo(() => {
-    switch (view) {
-      case 'critical':
-        return allExceptions.filter((e) => e.severity === 'critical' || e.severity === 'high')
-      case 'unassigned':
-        return allExceptions.filter((e) => !e.owner)
-      case 'sla':
-        return allExceptions.filter(
-          (e) => e.slaMinutesRemaining !== null && e.slaMinutesRemaining <= 5,
-        )
-      case 'resolved':
-        return allExceptions.filter((e) => e.status === 'resolved')
-      default:
-        return allExceptions
+    const smartFilter: ExceptionSmartFilter =
+      listTab === 'resolved' ? 'resolved' : smart === 'resolved' ? 'open' : smart
+
+    let rows = filterExceptions(withOverlays, {
+      smart: smartFilter,
+      module,
+      currentUserName,
+      currentDepot: depotLabel,
+    })
+
+    if (listTab === 'open') {
+      rows = rows.filter(isOpenException)
     }
-  }, [allExceptions, view])
 
-  const isLoading = dashboardLoading || defectsLoading || incidentsLoading || driverExceptionsLoading || vehicleExceptionsLoading
+    if (summaryFocus === 'critical' || summaryFocus === 'high' || summaryFocus === 'medium' || summaryFocus === 'low') {
+      rows = rows.filter((ex) =>
+        summaryFocus === 'medium' ? ex.severity === 'medium' || ex.severity === 'low' : ex.severity === summaryFocus,
+      )
+    } else if (summaryFocus === 'awaiting') {
+      rows = rows.filter((ex) => !ex.owner && isOpenException(ex))
+    } else if (summaryFocus === 'escalated') {
+      rows = rows.filter((ex) => Boolean(ex.escalated))
+    } else if (summaryFocus === 'sla') {
+      rows = rows.filter((ex) => ex.slaMinutesRemaining != null && ex.slaMinutesRemaining < 0)
+    }
 
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Exceptions</h1>
-        <p className="text-sm text-slate-600">
-          Aggregated from dashboard alerts, open defects and incidents
-        </p>
-      </div>
+    const q = search.trim().toLowerCase()
+    if (q) {
+      rows = rows.filter((ex) =>
+        [ex.title, ex.description, ex.relatedRecord, ex.driverName, ex.vehicleRegistration, ex.runRef, ex.bookingRef]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q)),
+      )
+    }
 
-      <div className="flex flex-wrap gap-2">
-        {EXCEPTION_VIEWS.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            onClick={() => setView(v.id)}
-            className={cn(
-              'rounded-full px-3 py-1 text-xs font-medium transition',
-              view === v.id
-                ? 'bg-command-600 text-white'
-                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50',
-            )}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
+    return rows
+  }, [withOverlays, smart, module, currentUserName, depotLabel, summaryFocus, search, listTab])
 
-      {isLoading && (
-        <p className="text-sm text-slate-500">Loading exceptions…</p>
-      )}
+  const severityCounts = useMemo(() => countBySeverity(withOverlays), [withOverlays])
+  const kpis = useMemo(() => buildExceptionKpis(withOverlays), [withOverlays])
+  const openCount = useMemo(() => withOverlays.filter(isOpenException).length, [withOverlays])
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <SectionCard title="Exception queue" description={`${filtered.length} exceptions in this view`}>
-          {filtered.length === 0 && !isLoading ? (
-            <p className="text-sm text-slate-500">No exceptions in this view.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
-                    <th className="pb-2 pr-3 font-medium">Severity</th>
-                    <th className="pb-2 pr-3 font-medium">Exception</th>
-                    <th className="pb-2 pr-3 font-medium">Category</th>
-                    <th className="pb-2 pr-3 font-medium">Related</th>
-                    <th className="pb-2 pr-3 font-medium">Age</th>
-                    <th className="pb-2 pr-3 font-medium">SLA</th>
-                    <th className="pb-2 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((ex) => (
-                    <tr
-                      key={ex.id}
-                      onClick={() => setSelected(ex)}
-                      className={cn(
-                        'cursor-pointer border-b border-slate-50 transition hover:bg-slate-50',
-                        selected?.id === ex.id && 'bg-command-50',
-                      )}
-                    >
-                      <td className="py-2.5 pr-3">
-                        <StatusBadge kind="severity" value={ex.severity} />
-                      </td>
-                      <td className="py-2.5 pr-3 font-medium text-slate-900">{ex.title}</td>
-                      <td className="py-2.5 pr-3 capitalize text-slate-600">{ex.category}</td>
-                      <td className="py-2.5 pr-3 text-command-600">{ex.relatedRecord}</td>
-                      <td className="py-2.5 pr-3 tabular-nums text-slate-600">{ex.ageMinutes}m</td>
-                      <td className="py-2.5 pr-3 tabular-nums">
-                        {ex.slaMinutesRemaining === null ? (
-                          '—'
-                        ) : ex.slaMinutesRemaining < 0 ? (
-                          <span className="font-medium text-red-600">Overdue</span>
-                        ) : (
-                          <span className="text-amber-700">{ex.slaMinutesRemaining}m</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 capitalize text-slate-600">{ex.status.replace(/_/g, ' ')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </SectionCard>
+  const selected =
+    filtered.find((e) => e.id === selectedId) ??
+    withOverlays.find((e) => e.id === selectedId) ??
+    null
 
-        <ExceptionDetail exception={selected} />
-      </div>
-    </div>
-  )
-}
+  const isLoading =
+    dashboardLoading ||
+    defectsLoading ||
+    incidentsLoading ||
+    driverExceptionsLoading ||
+    vehicleExceptionsLoading ||
+    yardLoading
 
-function ExceptionDetail({ exception }: { exception: OperationalException | null }) {
-  if (!exception) {
-    return (
-      <SectionCard title="Exception detail">
-        <p className="text-sm text-slate-500">Select an exception to view details.</p>
-      </SectionCard>
-    )
+  const isFetching =
+    dashboardFetching ||
+    defectsFetching ||
+    incidentsFetching ||
+    driverExceptionsFetching ||
+    vehicleExceptionsFetching ||
+    yardFetching
+
+  function patchOverlay(id: string, patch: ExceptionOverlay) {
+    setOverlays((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], ...patch },
+    }))
+  }
+
+  function bulkPatch(patch: ExceptionOverlay) {
+    setOverlays((prev) => {
+      const next = { ...prev }
+      for (const id of selectedIds) {
+        next[id] = { ...next[id], ...patch }
+      }
+      return next
+    })
+    setToast(`Updated ${selectedIds.size} exception${selectedIds.size === 1 ? '' : 's'}`)
+  }
+
+  function raiseException() {
+    const run = searchParams.get('run')
+    const id = `LOCAL-${Date.now()}`
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const raised: OperationalException = {
+      id,
+      severity: 'high',
+      title: createTitle.trim() || 'Manual exception',
+      typeCode: 'manual_exception',
+      category: 'dispatch',
+      description: createTitle.trim() || 'Raised from Command',
+      relatedRecord: run ?? id,
+      relatedHref: run ? `/live-operations?duty=${encodeURIComponent(run)}` : '/exceptions',
+      depot: depotLabel ?? 'Wembley',
+      raisedAt: now,
+      ageMinutes: 0,
+      slaMinutesRemaining: 30,
+      owner: currentUserName,
+      status: 'new',
+      lastUpdate: now,
+      source: 'Command',
+      runRef: run,
+      timeline: [{ at: now, label: 'Exception raised manually' }],
+      audit: [{ id: `audit-${id}`, at: now, actor: currentUserName, action: 'Exception raised' }],
+    }
+    setLocalRaised((prev) => [raised, ...prev])
+    setSelectedId(id)
+    setCreateOpen(false)
+    setCreateTitle('')
+    const next = new URLSearchParams(searchParams)
+    next.delete('create')
+    setSearchParams(next, { replace: true })
+    setToast('Exception raised')
+  }
+
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    void queryClient.invalidateQueries({ queryKey: ['defects'] })
+    void queryClient.invalidateQueries({ queryKey: ['incidents'] })
+    void queryClient.invalidateQueries({ queryKey: ['driver-eligibility-exceptions'] })
+    void queryClient.invalidateQueries({ queryKey: ['vehicle-release-exceptions'] })
+    void queryClient.invalidateQueries({ queryKey: ['yard-hub'] })
+  }
+
+  if (isLoading && withOverlays.length === 0) {
+    return <p className="text-sm text-slate-500">Loading exceptions…</p>
   }
 
   return (
-    <SectionCard title="Exception detail" className="sticky top-4">
-      <div className="space-y-4 text-sm">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-slate-900">{exception.title}</h3>
-          <StatusBadge kind="severity" value={exception.severity} />
-        </div>
+    <div className="flex min-h-[calc(100vh-7rem)] flex-col gap-4">
+      <ExceptionControlBar
+        dateLabel={operationalDate}
+        openCount={openCount}
+        search={search}
+        onSearch={setSearch}
+        listTab={listTab}
+        onListTab={(tab) => {
+          setListTab(tab)
+          if (tab === 'resolved') setSmart('resolved')
+          else if (smart === 'resolved') setSmart('open')
+        }}
+        smart={smart}
+        onSmart={(v) => {
+          setSmart(v)
+          setSummaryFocus(null)
+          if (v === 'resolved') setListTab('resolved')
+          else setListTab('open')
+        }}
+        onRaise={() => setCreateOpen(true)}
+        onRefresh={refresh}
+        isLoading={isFetching}
+      />
 
-        <dl className="space-y-2">
-          <DetailItem label="ID" value={exception.id} />
-          <DetailItem label="Status" value={exception.status.replace(/_/g, ' ')} />
-          <DetailItem label="Category" value={exception.category} />
-          <DetailItem label="Related" value={exception.relatedRecord} />
-          {exception.ageMinutes > 0 && (
-            <DetailItem label="Age" value={`${exception.ageMinutes} minutes`} />
-          )}
-        </dl>
+      {toast && (
+        <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+          {toast}
+          <button type="button" className="ml-3 text-xs font-medium text-command-700" onClick={() => setToast(null)}>
+            Dismiss
+          </button>
+        </p>
+      )}
 
-        {exception.recommendedAction && (
-          <div className="rounded-lg bg-command-50 px-3 py-2 text-xs text-command-900">
-            <p className="font-semibold">Recommended action</p>
-            <p className="mt-1">{exception.recommendedAction}</p>
-          </div>
-        )}
+      <ExceptionSummaryStrip
+        counts={severityCounts}
+        kpis={kpis}
+        active={summaryFocus}
+        onSelect={(id) => setSummaryFocus((prev) => (prev === id ? null : id))}
+      />
 
-        <a
-          href={exception.relatedHref}
-          className="block rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-medium text-command-600 hover:bg-command-50"
-        >
-          Open related record →
-        </a>
+      <ExceptionBulkBar
+        count={selectedIds.size}
+        onAssignDispatch={() => bulkPatch({ owner: 'Dispatch', status: 'assigned' })}
+        onAssignFleet={() => bulkPatch({ owner: 'Fleet', status: 'assigned' })}
+        onEscalate={() => bulkPatch({ escalated: true, status: 'action_in_progress' })}
+        onInvestigating={() => bulkPatch({ status: 'investigating' })}
+        onClose={() => bulkPatch({ status: 'resolved' })}
+        onExport={() => setToast('Export queued (mock)')}
+      />
+
+      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_340px]">
+        <ExceptionQueue
+          rows={filtered}
+          selectedId={selectedId}
+          selectedIds={selectedIds}
+          module={module}
+          onModule={setModule}
+          onSelect={(ex) => setSelectedId(ex.id)}
+          onToggleSelect={(id) => {
+            setSelectedIds((prev) => {
+              const next = new Set(prev)
+              if (next.has(id)) next.delete(id)
+              else next.add(id)
+              return next
+            })
+          }}
+          onToggleAll={(checked) => {
+            setSelectedIds(checked ? new Set(filtered.map((r) => r.id)) : new Set())
+          }}
+        />
+
+        <ExceptionInvestigationPanel
+          exception={selected}
+          onAssignMe={() => selected && patchOverlay(selected.id, { owner: currentUserName, status: 'assigned' })}
+          onInvestigate={() => selected && patchOverlay(selected.id, { status: 'investigating' })}
+          onEscalate={() =>
+            selected && patchOverlay(selected.id, { escalated: true, status: 'action_in_progress' })
+          }
+          onClose={() => selected && patchOverlay(selected.id, { status: 'resolved' })}
+          onAddNote={(body) => {
+            if (!selected) return
+            const entry = {
+              id: `note-${Date.now()}`,
+              at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              author: currentUserName,
+              body,
+            }
+            const existing = overlays[selected.id]?.notes ?? selected.notes ?? []
+            patchOverlay(selected.id, { notes: [...existing, entry] })
+          }}
+        />
       </div>
-    </SectionCard>
-  )
-}
 
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right font-medium capitalize text-slate-900">{value}</dd>
+      {createOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Raise exception</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Creates a local inbox item until the exceptions API accepts writes.
+            </p>
+            <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-slate-500">
+              Title
+              <input
+                value={createTitle}
+                onChange={(e) => setCreateTitle(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal normal-case text-slate-900"
+                placeholder="What needs intervention?"
+              />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCreateOpen(false)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={raiseException}
+                className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100"
+              >
+                Raise
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
-}
-
-function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(' ')
 }

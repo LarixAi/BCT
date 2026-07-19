@@ -64,6 +64,9 @@ export interface Trip {
   blockers: BlockerReason[];
   releasedAt?: string;
   releasedBy?: string;
+  departedAt?: string;
+  departedBy?: string;
+  departureSource?: "driver_journey_start" | "yard_confirmed";
 }
 
 export type DefectSeverity = "Minor" | "Major" | "Safety-critical";
@@ -113,6 +116,7 @@ export type MovementReason =
   | "Move to wash"
   | "Move to workshop"
   | "Move off-site"
+  | "Departed for service"
   | "Return from off-site";
 
 export interface Movement {

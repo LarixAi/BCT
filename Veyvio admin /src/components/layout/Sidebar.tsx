@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { ChevronDown, PanelLeftClose, PanelLeft } from 'lucide-react'
 import { useState } from 'react'
+import { CommandWordmark } from '@/components/brand/CommandWordmark'
 import { COMMAND_NAV, isNavGroup } from '@/lib/navigation'
 import { cn } from '@/lib/cn'
 
@@ -10,21 +11,25 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   return (
     <aside
       className={cn(
-        'flex h-full flex-col border-r border-slate-200 bg-command-900 text-white transition-all duration-200',
-        collapsed ? 'w-16' : 'w-64',
+        'flex h-full flex-col border-r border-white/10 bg-midnight text-white transition-all duration-200',
+        collapsed ? 'w-[4.5rem]' : 'w-60',
       )}
     >
-      <div className="flex h-14 items-center justify-between border-b border-white/10 px-4">
-        {!collapsed && (
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-command-100">Veyvio</p>
-            <p className="text-sm font-semibold">Command</p>
+      <div className="flex h-14 items-center justify-between gap-2 border-b border-white/10 px-3">
+        {!collapsed ? (
+          <CommandWordmark inverted compact align="left" />
+        ) : (
+          <div
+            className="grid h-8 w-8 place-items-center rounded-md bg-command-500 text-sm font-black text-white"
+            title="Veyvio Command"
+          >
+            V
           </div>
         )}
         <button
           type="button"
           onClick={onToggle}
-          className="rounded-md p-1.5 text-command-100 hover:bg-white/10"
+          className="rounded-md p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
@@ -80,7 +85,7 @@ function NavGroupSection({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-command-100 hover:bg-white/5"
+        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/55 hover:bg-white/5 hover:text-white/80"
       >
         {label}
         <ChevronDown className={cn('h-3.5 w-3.5 transition', open && 'rotate-180')} />
@@ -114,7 +119,9 @@ function NavItem({
       className={cn(
         'block rounded-md text-sm transition',
         collapsed ? 'px-2 py-2 text-center text-[10px] leading-tight' : 'px-3 py-2',
-        active ? 'bg-white/15 font-medium text-white' : 'text-command-100 hover:bg-white/10 hover:text-white',
+        active
+          ? 'bg-command-500 font-semibold text-white'
+          : 'text-white/70 hover:bg-white/10 hover:text-white',
       )}
     >
       {collapsed ? label.split(' ')[0] : label}

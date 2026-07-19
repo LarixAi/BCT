@@ -17,7 +17,7 @@ type ListFilter =
   | 'eligible'
   | 'not_eligible'
   | 'expiring'
-  | 'invite_pending'
+  | 'invitation_pending'
   | 'on_duty'
   | 'on_trip'
   | 'restricted'
@@ -237,8 +237,8 @@ function filterDrivers(drivers: DriverProfile[], filter: ListFilter, search: str
           d.eligibility.warnings.some((w) => w.code.includes('expiring')),
       )
       break
-    case 'invite_pending':
-      list = list.filter((d) => d.account.accountStatus === 'invite_pending')
+    case 'invitation_pending':
+      list = list.filter((d) => d.account.accountStatus === 'invitation_pending')
       break
     case 'on_duty':
       list = list.filter((d) =>
@@ -253,7 +253,8 @@ function filterDrivers(drivers: DriverProfile[], filter: ListFilter, search: str
         (d) =>
           d.operationalEligibility === 'restricted' ||
           d.employmentStatus === 'suspended' ||
-          d.account.accountStatus === 'suspended',
+          d.account.accountStatus === 'temporarily_suspended' ||
+          d.account.accountStatus === 'compliance_restricted',
       )
       break
     case 'stale_sync':

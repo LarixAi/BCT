@@ -235,6 +235,30 @@ export const mockTransfersApi = {
     return { ...t, jobs: t.jobs.map((j) => ({ ...j })) }
   },
 
+  /** Upsert a live/API trip into the mock store so journey-sequence can operate on it. */
+  upsertTrip(trip: OperationalTrip): OperationalTrip {
+    const normalized: OperationalTrip = {
+      ...trip,
+      jobs: (trip.jobs ?? []).map((j, i) => ({
+        ...j,
+        tripId: trip.id,
+        sequence: j.sequence || i + 1,
+      })),
+    }
+    syncTripCounts(normalized)
+    const idx = operationalTrips.findIndex((t) => t.id === trip.id)
+    if (idx >= 0) {
+      operationalTrips = operationalTrips.map((t, i) => (i === idx ? normalized : t))
+    } else {
+      operationalTrips = [...operationalTrips, normalized]
+    }
+    return mockTransfersApi.getTrip(trip.id)
+  },
+
+  hasTrip(id: string): boolean {
+    return operationalTrips.some((t) => t.id === id)
+  },
+
   getPosition(tripId: string): OperationalPosition {
     const trip = mockTransfersApi.getTrip(tripId)
     return {
@@ -461,6 +485,198 @@ export const mockTransfersApi = {
 
   getAssignmentHistory(tripId: string): AssignmentHistoryEntry[] {
     return assignmentHistory.filter((h) => h.tripId === tripId)
+  },
+
+  /** Apply journey-sequence reorder — bumps manifest and syncs counts. */
+  applyJobReorder(tripId: string, jobs: OperationalJob[]): OperationalTrip {
+    const idx = operationalTrips.findIndex((t) => t.id === tripId)
+    if (idx < 0) throw new Error('Operational trip not found')
+    const trip = operationalTrips[idx]!
+    trip.jobs = jobs.map((j) => ({ ...j, tripId }))
+    trip.manifestVersion += 1
+    trip.lastAppSync = new Date().toISOString()
+    syncTripCounts(trip)
+    operationalTrips = [...operationalTrips]
+    return mockTransfersApi.getTrip(tripId)
+  },
+
+  /** Move selected jobs from one operational trip onto another (or detach). */
+  moveJobsBetweenTrips(input: {
+    sourceTripId: string
+    destinationTripId: string | null
+    jobIds: string[]
+    actorName: string
+  }): { source: OperationalTrip; destination: OperationalTrip | null } {
+    const sourceIdx = operationalTrips.findIndex((t) => t.id === input.sourceTripId)
+    if (sourceIdx < 0) throw new Error('Source trip not found')
+    const source = operationalTrips[sourceIdx]!
+    const moving = source.jobs.filter((j) => input.jobIds.includes(j.id))
+    if (!moving.length) throw new Error('No matching jobs to move')
+
+    source.jobs = source.jobs.filter((j) => !input.jobIds.includes(j.id))
+    source.jobs = source.jobs.map((j, i) => ({ ...j, sequence: i + 1 }))
+    source.manifestVersion += 1
+    syncTripCounts(source)
+
+    let destination: OperationalTrip | null = null
+    if (input.destinationTripId) {
+      const destIdx = operationalTrips.findIndex((t) => t.id === input.destinationTripId)
+      if (destIdx < 0) throw new Error('Destination trip not found')
+      destination = operationalTrips[destIdx]!
+      const startSeq = destination.jobs.length
+      destination.jobs = [
+        ...destination.jobs,
+        ...moving.map((j, i) => ({
+          ...j,
+          tripId: destination!.id,
+          sequence: startSeq + i + 1,
+          transferIndicator: `Moved from ${source.reference}`,
+          status: j.status === 'cancelled' ? j.status : ('unstarted' as const),
+        })),
+      ]
+      destination.manifestVersion += 1
+      syncTripCounts(destination)
+    }
+
+    operationalTrips = [...operationalTrips]
+    assignmentHistory = [
+      {
+        id: `ah-move-${Date.now()}`,
+        tripId: source.id,
+        dutyId: source.dutyId,
+        changeType: destination
+          ? `Jobs moved to ${destination.reference}`
+          : 'Jobs left unassigned',
+        fromDriverId: source.driverId,
+        fromDriverName: source.driverName,
+        toDriverId: destination?.driverId ?? null,
+        toDriverName: destination?.driverName ?? null,
+        fromVehicleId: source.vehicleId,
+        fromVehicleRegistration: source.vehicleRegistration,
+        toVehicleId: destination?.vehicleId ?? null,
+        toVehicleRegistration: destination?.vehicleRegistration ?? null,
+        reason: moving.map((j) => j.passengerName).join(', '),
+        adminName: input.actorName,
+        at: new Date().toISOString(),
+        transferId: null,
+        immutable: true,
+      },
+      ...assignmentHistory,
+    ]
+
+    return {
+      source: mockTransfersApi.getTrip(source.id),
+      destination: destination ? mockTransfersApi.getTrip(destination.id) : null,
+    }
+  },
+
+  createSplitTripFromJobs(input: {
+    sourceTripId: string
+    jobIds: string[]
+    actorName: string
+  }): OperationalTrip {
+    const sourceIdx = operationalTrips.findIndex((t) => t.id === input.sourceTripId)
+    if (sourceIdx < 0) throw new Error('Source trip not found')
+    const source = operationalTrips[sourceIdx]!
+    const moving = source.jobs.filter((j) => input.jobIds.includes(j.id))
+    if (!moving.length) throw new Error('No matching jobs to split')
+
+    tripSeq += 1
+    const newId = `trip-${tripSeq}`
+    const created: OperationalTrip = {
+      ...source,
+      id: newId,
+      reference: `TRP-${tripSeq}`,
+      runReference: `SPLIT-${tripSeq}`,
+      status: 'planned',
+      assignmentStatus: 'unassigned',
+      driverId: null,
+      driverName: null,
+      vehicleId: null,
+      vehicleRegistration: null,
+      acceptedAt: null,
+      acknowledgedAt: null,
+      manifestVersion: 1,
+      lastAppSync: null,
+      delayMinutes: 0,
+      passengersOnboard: 0,
+      completedJobCount: 0,
+      totalJobCount: moving.length,
+      activeJobId: null,
+      jobs: moving.map((j, i) => ({
+        ...j,
+        id: `${j.id}-split-${tripSeq}`,
+        tripId: newId,
+        sequence: i + 1,
+        status: 'unstarted',
+        transferIndicator: `Split from ${source.reference}`,
+      })),
+    }
+    syncTripCounts(created)
+
+    source.jobs = source.jobs
+      .filter((j) => !input.jobIds.includes(j.id))
+      .map((j, i) => ({ ...j, sequence: i + 1 }))
+    source.manifestVersion += 1
+    syncTripCounts(source)
+
+    operationalTrips = [...operationalTrips, created]
+    assignmentHistory = [
+      {
+        id: `ah-split-${Date.now()}`,
+        tripId: source.id,
+        dutyId: source.dutyId,
+        changeType: `Trip split → ${created.reference}`,
+        fromDriverId: source.driverId,
+        fromDriverName: source.driverName,
+        toDriverId: null,
+        toDriverName: null,
+        fromVehicleId: source.vehicleId,
+        fromVehicleRegistration: source.vehicleRegistration,
+        toVehicleId: null,
+        toVehicleRegistration: null,
+        reason: moving.map((j) => j.passengerName).join(', '),
+        adminName: input.actorName,
+        at: new Date().toISOString(),
+        transferId: null,
+        immutable: true,
+      },
+      ...assignmentHistory,
+    ]
+    return mockTransfersApi.getTrip(newId)
+  },
+
+  recordSequenceNotification(
+    tripId: string,
+    audiences: string[],
+    actorName: string,
+  ): void {
+    const trip = operationalTrips.find((t) => t.id === tripId)
+    if (!trip) return
+    assignmentHistory = [
+      {
+        id: `ah-seq-${Date.now()}`,
+        tripId,
+        dutyId: trip.dutyId,
+        changeType: 'Journey sequence reorganised',
+        fromDriverId: trip.driverId,
+        fromDriverName: trip.driverName,
+        toDriverId: trip.driverId,
+        toDriverName: trip.driverName,
+        fromVehicleId: trip.vehicleId,
+        fromVehicleRegistration: trip.vehicleRegistration,
+        toVehicleId: trip.vehicleId,
+        toVehicleRegistration: trip.vehicleRegistration,
+        reason: audiences.length
+          ? `Notifications: ${audiences.join(', ')}`
+          : 'Saved without sending notifications',
+        adminName: actorName,
+        at: new Date().toISOString(),
+        transferId: null,
+        immutable: true,
+      },
+      ...assignmentHistory,
+    ]
   },
 
   getTripsByBooking(bookingId: string): OperationalTrip[] {

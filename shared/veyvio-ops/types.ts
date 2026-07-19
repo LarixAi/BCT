@@ -1,5 +1,10 @@
 /** Shared operational vocabulary for Driver, Admin, Yard. */
 
+/**
+ * Execution / prep lifecycle after a duty is visible to the driver.
+ * Publication (draft → published) is owned by Admin and is separate —
+ * Driver only receives published duties via bootstrap.
+ */
 export type DutyLifecycleStatus =
   | "assigned"
   | "delivered"
@@ -12,6 +17,13 @@ export type DutyLifecycleStatus =
   | "cancelled"
   | "transferred"
   | "suspended";
+
+/** Admin publication visibility — not the same as DutyLifecycleStatus. */
+export type DutyPublicationStatus =
+  | "draft"
+  | "ready_to_publish"
+  | "published"
+  | "cancelled";
 
 export type JourneyLifecycleStatus =
   | "scheduled"
@@ -118,7 +130,8 @@ export type OpsCommandType =
   | "stop.arrive"
   | "passenger.outcome"
   | "incident.report"
-  | "defect.report";
+  | "defect.report"
+  | "resource.transaction.record";
 
 export interface OfflineCommand {
   commandId: string;

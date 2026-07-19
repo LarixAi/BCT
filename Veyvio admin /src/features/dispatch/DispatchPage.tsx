@@ -10,6 +10,10 @@ import { useOperationalContext } from '@/lib/context'
 import { ManageAssignmentButton } from '@/features/transfers/ManageAssignmentButton'
 import { ManageAssignmentDrawer } from '@/features/transfers/ManageAssignmentDrawer'
 import {
+  publicationBadge,
+  PublishDutyDialog,
+} from '@/features/dispatch/PublishDutyDialog'
+import {
   applyUpdatePreview,
   columnForDuty,
   dutiesForColumn,
@@ -45,6 +49,8 @@ export function DispatchPage() {
     conflicts: string[]
   } | null>(null)
   const [transferTripId, setTransferTripId] = useState<string | null>(null)
+  const [publishingDutyId, setPublishingDutyId] = useState<string | null>(null)
+  const [publishError, setPublishError] = useState<string | null>(null)
   const [error, setError] = useState('')
   const mapRef = useRef<LiveVehicleMapHandle>(null)
   const queryClient = useQueryClient()
@@ -87,6 +93,23 @@ export function DispatchPage() {
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'Update failed'),
   })
+
+  const publishMutation = useMutation({
+    mutationFn: (id: string) => api.publishDuty(id),
+    onSuccess: () => {
+      setPublishingDutyId(null)
+      setPublishError(null)
+      queryClient.invalidateQueries({ queryKey: ['duties', date] })
+      queryClient.invalidateQueries({ queryKey: ['live-dispatch'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+    onError: (err) =>
+      setPublishError(err instanceof Error ? err.message : 'Duty could not be published'),
+  })
+
+  const publishingDuty = publishingDutyId
+    ? duties.find((duty) => duty.id === publishingDutyId) ?? null
+    : null
 
   const assignBlocks = getDutyComplianceBlocks(
     drivers.find((d) => d.id === selectedDriver) ?? null,
@@ -257,7 +280,11 @@ export function DispatchPage() {
 
       <SectionCard
         title="Live map"
-        description="Active duties with GPS — refreshes every 30 seconds"
+        description={
+          liveVehicles.length === 0
+            ? 'Operating area shown — markers appear when duties report location'
+            : `${liveVehicles.length} active duties with GPS — refreshes every 30 seconds`
+        }
         flush
         action={
           <button
@@ -274,7 +301,6 @@ export function DispatchPage() {
           vehicles={liveVehicles}
           className="h-64"
           edgeToEdge
-          resultsLabel={`${liveVehicles.length} active duties`}
         />
       </SectionCard>
 
@@ -330,9 +356,21 @@ export function DispatchPage() {
                             : 'border-slate-200'
                       } ${draggingId === duty.id ? 'opacity-50' : 'hover:border-slate-300'}`}
                     >
-                      <p className="text-sm font-medium text-slate-900">
-                        {duty.route?.name ?? duty.reference}
-                      </p>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-900">
+                          {duty.route?.name ?? duty.reference}
+                        </p>
+                        {(() => {
+                          const badge = publicationBadge(duty.publicationStatus)
+                          return (
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}
+                            >
+                              {badge.label}
+                            </span>
+                          )
+                        })()}
+                      </div>
                       <p className="mt-1 text-xs tabular-nums text-slate-500">{duty.startTime ?? '—'}</p>
                       <p className="mt-1 text-xs text-slate-600">
                         {duty.driver ? `${duty.driver.firstName} ${duty.driver.lastName}` : 'No driver'}
@@ -362,8 +400,23 @@ export function DispatchPage() {
                           >
                             Assign
                           </button>
+                          {duty.publicationStatus !== 'published' &&
+                          duty.publicationStatus !== 'cancelled' &&
+                          duty.driver ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPublishError(null)
+                                setPublishingDutyId(duty.id)
+                              }}
+                              className="text-xs font-semibold text-emerald-700 hover:underline"
+                            >
+                              Publish
+                            </button>
+                          ) : null}
                           <ManageAssignmentButton
                             dutyId={duty.id}
+                            duty={duty}
                             className="text-xs font-medium text-command-600 hover:underline"
                           />
                         </div>
@@ -421,6 +474,19 @@ export function DispatchPage() {
             queryClient.invalidateQueries({ queryKey: ['duties', date] })
             queryClient.invalidateQueries({ queryKey: ['operational-trips'] })
           }}
+        />
+      )}
+
+      {publishingDuty && (
+        <PublishDutyDialog
+          duty={publishingDuty}
+          busy={publishMutation.isPending}
+          error={publishError}
+          onCancel={() => {
+            setPublishingDutyId(null)
+            setPublishError(null)
+          }}
+          onConfirm={() => publishMutation.mutate(publishingDuty.id)}
         />
       )}
     </div>

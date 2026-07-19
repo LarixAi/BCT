@@ -75,7 +75,6 @@ export function VehicleTelematicsPanel({ vehicle }: { vehicle: VehicleProfile })
           trailLine={trailLine}
           className="h-56 min-h-[224px]"
           edgeToEdge
-          resultsLabel={`${vehicle.registrationNumber} · ${freshness}`}
         />
       )}
     </SectionCard>

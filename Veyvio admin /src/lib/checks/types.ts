@@ -69,7 +69,7 @@ export interface ChecksOperationalRow {
   sourceApplication: string | null
   startedAt: string | null
   submittedAt: string | null
-  result: 'pass' | 'fail' | 'pass_with_advisory' | null
+  result: 'pass' | 'fail' | 'pass_with_advisory' | 'advisory' | null
   defectCount: number
   highestDefectSeverity: DefectSeverity | null
   evidenceCount: number
@@ -105,7 +105,7 @@ export interface LiveCheckRow {
 
 export interface CheckEvidenceItem {
   id: string
-  kind: 'photo' | 'video' | 'signature' | 'odometer' | 'fuel' | 'note'
+  kind: 'photo' | 'video' | 'signature' | 'odometer' | 'fuel' | 'note' | 'bodywork' | string
   label: string
   capturedAt: string
   url: string | null
@@ -120,6 +120,9 @@ export interface CheckSectionAnswer {
   answeredAt: string
   createdDefectId: string | null
   notes: string | null
+  photoDataUrl?: string | null
+  zone?: string | null
+  damageType?: string | null
 }
 
 export interface CheckTimelineEvent {
@@ -136,6 +139,8 @@ export interface CheckDetailRecord extends ChecksOperationalRow {
   vorStatus: boolean
   currentDriverName: string | null
   templateVersion: string
+  odometer?: number | string | null
+  fuelLevel?: string | null
   sections: CheckSectionAnswer[]
   evidence: CheckEvidenceItem[]
   timeline: CheckTimelineEvent[]

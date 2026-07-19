@@ -1,68 +1,148 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { SectionCard, StatusBadge } from '@/components/ui'
+import { SectionCard } from '@/components/ui'
+import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
-import { mapApiNotification } from '@/lib/api/mappers'
-import { NOTIFICATION_TABS } from '@/lib/mock-data'
+import {
+  buildNotificationsInbox,
+  filterNotifications,
+  groupNotifications,
+  notificationKpis,
+  priorityLabel,
+} from '@/lib/notifications/build-notifications'
+import { NOTIFICATION_TABS, type NotificationTabId } from '@/lib/notifications/catalog'
 import type { NotificationItem } from '@/lib/types'
 
-export function NotificationsPage() {
-  const [tab, setTab] = useState('all')
-  const queryClient = useQueryClient()
+type SummaryFocus = 'unread' | 'action' | 'critical' | 'assigned' | null
 
-  const { data: notifications = [], isLoading, error, isError } = useQuery({
+export function NotificationsPage() {
+  const queryClient = useQueryClient()
+  const [tab, setTab] = useState<NotificationTabId>('all')
+  const [search, setSearch] = useState('')
+  const [summaryFocus, setSummaryFocus] = useState<SummaryFocus>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [localRead, setLocalRead] = useState<Record<string, boolean>>({})
+
+  const { data: apiNotifications = [], isLoading, error, isError, refetch, isFetching } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => api.getNotifications(),
     refetchInterval: 60_000,
   })
 
-  const mapped = useMemo(() => notifications.map(mapApiNotification), [notifications])
+  const inbox = useMemo(() => {
+    const built = buildNotificationsInbox(apiNotifications)
+    return built.map((n) =>
+      localRead[n.id] === undefined ? n : { ...n, read: localRead[n.id], acknowledged: localRead[n.id] ? n.acknowledged : n.acknowledged },
+    )
+  }, [apiNotifications, localRead])
 
-  const filtered = useMemo(() => {
-    switch (tab) {
-      case 'unread':
-        return mapped.filter((n) => !n.read)
-      case 'action':
-        return mapped.filter((n) => n.actionRequired)
-      case 'safety':
-        return mapped.filter((n) => n.category === 'safety' || n.priority === 'urgent')
-      case 'system':
-        return mapped.filter((n) => n.category === 'system')
-      case 'archived':
-        return mapped.filter((n) => n.read && !n.actionRequired)
-      default:
-        return mapped
-    }
-  }, [mapped, tab])
+  const filtered = useMemo(
+    () => filterNotifications(inbox, { tab, search, summary: summaryFocus }),
+    [inbox, tab, search, summaryFocus],
+  )
 
-  const unreadCount = mapped.filter((n) => !n.read).length
+  const groups = useMemo(() => groupNotifications(filtered), [filtered])
+  const kpis = useMemo(() => notificationKpis(inbox), [inbox])
+  const selected = filtered.find((n) => n.id === selectedId) ?? inbox.find((n) => n.id === selectedId) ?? null
 
   const markAllRead = useMutation({
     mutationFn: () => api.markAllNotificationsRead(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      setLocalRead((prev) => {
+        const next = { ...prev }
+        for (const n of inbox) next[n.id] = true
+        return next
+      })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
   })
 
   const markRead = useMutation({
     mutationFn: (id: string) => api.markNotificationRead(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: (_data, id) => {
+      setLocalRead((prev) => ({ ...prev, [id]: true }))
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
   })
 
+  function openNotification(n: NotificationItem) {
+    setSelectedId(n.id)
+    if (!n.read) markRead.mutate(n.id)
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Notifications</h1>
-          <p className="text-sm text-slate-600">Live notifications from the veymo platform</p>
+    <div className="flex min-h-[calc(100vh-7rem)] flex-col gap-4">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Notifications</h1>
+            <p className="mt-0.5 text-sm text-slate-700">
+              Operational updates, alerts and items requiring your attention.
+            </p>
+            <p className={cn('mt-1 text-xs', isFetching ? 'text-amber-800' : 'text-emerald-700')}>
+              {isFetching ? 'Refreshing alerts…' : `${kpis.unread} unread · system alerts, not conversations`}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => markAllRead.mutate()}
+              disabled={markAllRead.isPending || kpis.unread === 0}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+            >
+              Mark all as read
+            </button>
+            <Link
+              to="/settings/notifications"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            >
+              Preferences
+            </Link>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            >
+              Refresh
+            </button>
+            <Link
+              to="/messages"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            >
+              Messages
+            </Link>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => markAllRead.mutate()}
-          disabled={markAllRead.isPending || unreadCount === 0}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          Mark all as read
-        </button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search alerts, drivers, vehicles…"
+            className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          />
+          <div className="flex flex-wrap gap-1">
+            {NOTIFICATION_TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setTab(t.id)
+                  setSummaryFocus(null)
+                }}
+                className={cn(
+                  'rounded-full px-2.5 py-1 text-[11px] font-medium',
+                  tab === t.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200',
+                )}
+              >
+                {t.label}
+                {t.id === 'unread' && kpis.unread > 0 ? ` (${kpis.unread})` : ''}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {isError && (
@@ -71,171 +151,221 @@ export function NotificationsPage() {
         </p>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {NOTIFICATION_TABS.map((t) => (
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {(
+          [
+            { id: 'unread' as const, title: 'Unread', value: kpis.unread },
+            { id: 'action' as const, title: 'Action required', value: kpis.actionRequired, tone: 'warning' as const },
+            { id: 'critical' as const, title: 'Critical', value: kpis.critical, tone: 'danger' as const },
+            { id: 'assigned' as const, title: 'Assigned to me', value: kpis.assignedToMe },
+          ] as const
+        ).map((card) => (
           <button
-            key={t.id}
+            key={card.id}
             type="button"
-            onClick={() => setTab(t.id)}
+            onClick={() => setSummaryFocus((prev) => (prev === card.id ? null : card.id))}
             className={cn(
-              'rounded-full px-3 py-1 text-xs font-medium transition',
-              tab === t.id
-                ? 'bg-command-600 text-white'
-                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50',
+              'rounded-xl border bg-white p-3 text-left transition hover:border-command-400',
+              summaryFocus === card.id ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200',
+              'tone' in card && card.tone === 'danger' && summaryFocus !== card.id && 'border-red-200',
+              'tone' in card && card.tone === 'warning' && summaryFocus !== card.id && 'border-amber-200',
             )}
           >
-            {t.label}
-            {t.id === 'unread' && unreadCount > 0 && (
-              <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">
-                {unreadCount}
-              </span>
-            )}
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{card.title}</p>
+            <p
+              className={cn(
+                'mt-1 text-2xl font-bold tabular-nums',
+                'tone' in card && card.tone === 'danger'
+                  ? 'text-red-800'
+                  : 'tone' in card && card.tone === 'warning'
+                    ? 'text-amber-800'
+                    : 'text-slate-900',
+              )}
+            >
+              {card.value}
+            </p>
           </button>
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-        <div className="space-y-3">
-          {isLoading && <p className="text-sm text-slate-500">Loading notifications…</p>}
-
-          {!isLoading && filtered.length === 0 ? (
-            <SectionCard title="No notifications">
-              <p className="text-sm text-slate-500">Nothing in this view right now.</p>
-            </SectionCard>
-          ) : (
-            filtered.map((notification) => (
-              <NotificationCard
-                key={notification.id}
-                notification={notification}
-                onMarkRead={() => markRead.mutate(notification.id)}
-              />
-            ))
-          )}
-        </div>
-
-        <SectionCard title="Preferences" description="Configure how you receive alerts">
-          <div className="space-y-3 text-sm">
-            <PreferenceRow label="Operational alerts" inApp email />
-            <PreferenceRow label="Safety alerts" inApp email push mandatory />
-            <PreferenceRow label="Assignment updates" inApp />
-            <PreferenceRow label="Daily summary" email />
-            <p className="pt-2 text-xs text-slate-500">
-              Mandatory safety alerts cannot be disabled per company policy.
-            </p>
+      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_340px]">
+        <SectionCard
+          title="Alert feed"
+          description="What has happened, and what needs your attention"
+          className="flex min-h-0 flex-col overflow-hidden"
+          flush
+        >
+          <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
+            {isLoading && <p className="text-sm text-slate-500">Loading notifications…</p>}
+            {!isLoading && filtered.length === 0 && (
+              <p className="py-8 text-center text-sm text-slate-500">
+                {tab === 'unread'
+                  ? 'You have read all current notifications.'
+                  : search
+                    ? 'No notifications match the selected filters.'
+                    : 'You are all caught up. New operational updates will appear here.'}
+              </p>
+            )}
+            {groups.map((group) => (
+              <div key={group.label}>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {group.label}
+                </p>
+                <ul className="space-y-2">
+                  {group.items.map((n) => (
+                    <li key={n.id}>
+                      <button
+                        type="button"
+                        onClick={() => openNotification(n)}
+                        className={cn(
+                          'w-full rounded-xl border bg-white p-3 text-left transition hover:border-command-400',
+                          selectedId === n.id ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200',
+                          !n.read && 'border-l-4 border-l-command-500',
+                        )}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <PriorityChip priority={n.priority} />
+                          <span className="text-xs text-slate-500">{n.receivedAt}</span>
+                        </div>
+                        <p className={cn('mt-1.5 text-sm', !n.read ? 'font-semibold text-slate-900' : 'font-medium text-slate-800')}>
+                          {n.title}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-xs text-slate-600">{n.body}</p>
+                        <p className="mt-2 text-[11px] text-slate-500">
+                          {[n.relatedRecord, n.depot, n.driverName && `Driver ${n.driverName}`, n.vehicleRegistration]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                        {n.actions?.[0] && (
+                          <span className="mt-2 inline-block text-xs font-medium text-command-700">
+                            {n.actions[0].label}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </SectionCard>
+
+        <NotificationDetailDrawer
+          notification={selected}
+          onMarkUnread={() => selected && setLocalRead((prev) => ({ ...prev, [selected.id]: false }))}
+          onAcknowledge={() => selected && setLocalRead((prev) => ({ ...prev, [selected.id]: true }))}
+        />
       </div>
     </div>
   )
 }
 
-function NotificationCard({
+function PriorityChip({ priority }: { priority: NotificationItem['priority'] }) {
+  const label = priorityLabel(priority)
+  const className =
+    priority === 'urgent'
+      ? 'bg-red-50 text-red-800'
+      : priority === 'high'
+        ? 'bg-amber-50 text-amber-900'
+        : priority === 'normal'
+          ? 'bg-amber-50/70 text-amber-800'
+          : 'bg-command-50 text-command-800'
+  return <span className={cn('rounded px-2 py-0.5 text-[11px] font-semibold', className)}>{label}</span>
+}
+
+function NotificationDetailDrawer({
   notification,
-  onMarkRead,
+  onMarkUnread,
+  onAcknowledge,
 }: {
-  notification: NotificationItem
-  onMarkRead: () => void
+  notification: NotificationItem | null
+  onMarkUnread: () => void
+  onAcknowledge: () => void
 }) {
+  if (!notification) {
+    return (
+      <SectionCard title="Notification detail" description="Select an alert to review">
+        <p className="text-sm text-slate-500">
+          Clicking a notification opens the linked record. Reading it is not the same as resolving the underlying issue.
+        </p>
+      </SectionCard>
+    )
+  }
+
   return (
-    <article
-      className={cn(
-        'rounded-xl border bg-white p-4 shadow-sm transition',
-        !notification.read && 'border-l-4 border-l-command-500',
-        notification.read ? 'border-slate-200' : 'border-slate-200 bg-command-50/30',
-      )}
+    <SectionCard
+      title={notification.title}
+      description={`${priorityLabel(notification.priority)} · ${notification.source ?? notification.category}`}
+      className="min-h-0 overflow-hidden"
+      flush
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <StatusBadge kind="priority" value={notification.priority} />
-          <span className="text-xs capitalize text-slate-500">{notification.category}</span>
-        </div>
-        <span className="text-xs text-slate-500">{notification.receivedAt}</span>
-      </div>
+      <div className="max-h-[560px] space-y-3 overflow-y-auto p-4 text-sm">
+        <p className="text-slate-700">{notification.body}</p>
+        <DetailRow label="Priority" value={priorityLabel(notification.priority)} />
+        <DetailRow label="Status" value={notification.read ? 'Read' : 'Unread'} />
+        <DetailRow label="Received" value={notification.receivedAt} />
+        <DetailRow label="Depot" value={notification.depot ?? '—'} />
+        <DetailRow label="Driver" value={notification.driverName ?? '—'} />
+        <DetailRow label="Vehicle" value={notification.vehicleRegistration ?? '—'} />
+        <DetailRow label="Run / booking" value={notification.runRef ?? notification.bookingRef ?? '—'} />
+        <DetailRow label="Source" value={notification.source ?? 'System'} />
 
-      <h3 className="mt-2 font-semibold text-slate-900">{notification.title}</h3>
-      <p className="mt-1 text-sm text-slate-600">{notification.body}</p>
+        {notification.actionRequired && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Action required — opening this alert marks it read, but the underlying issue stays open until resolved.
+          </p>
+        )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <ReadState read={notification.read} />
-        <AckState
-          acknowledged={notification.acknowledged}
-          actionRequired={notification.actionRequired}
-        />
-        {!notification.read && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {(notification.actions ?? []).map((action) =>
+            action.href ? (
+              <Link
+                key={action.label}
+                to={action.href}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-xs font-medium',
+                  action.variant === 'primary'
+                    ? 'border border-command-200 bg-command-50 text-command-800 hover:bg-command-100'
+                    : 'border border-slate-200 hover:bg-slate-50',
+                )}
+              >
+                {action.label}
+              </Link>
+            ) : (
+              <button
+                key={action.label}
+                type="button"
+                onClick={onAcknowledge}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+              >
+                {action.label}
+              </button>
+            ),
+          )}
           <button
             type="button"
-            onClick={onMarkRead}
-            className="text-xs font-medium text-command-600 hover:underline"
+            onClick={onMarkUnread}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
           >
-            Mark read
+            Mark unread
           </button>
-        )}
-      </div>
-
-      {notification.relatedHref && (
-        <div className="mt-3">
           <Link
-            to={notification.relatedHref}
-            className="text-xs font-medium text-command-600 hover:underline"
+            to="/exceptions"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
           >
-            Open related record →
+            Escalate to exception
           </Link>
         </div>
-      )}
-    </article>
-  )
-}
-
-function ReadState({ read }: { read: boolean }) {
-  return (
-    <span className={cn('text-xs', read ? 'text-slate-400' : 'font-medium text-command-700')}>
-      {read ? 'Read' : 'Unread'}
-    </span>
-  )
-}
-
-function AckState({
-  acknowledged,
-  actionRequired,
-}: {
-  acknowledged: boolean
-  actionRequired: boolean
-}) {
-  if (actionRequired && !acknowledged) {
-    return <span className="text-xs font-medium text-amber-700">Action required</span>
-  }
-  if (acknowledged) {
-    return <span className="text-xs text-emerald-700">Read</span>
-  }
-  return null
-}
-
-function PreferenceRow({
-  label,
-  inApp,
-  email,
-  push,
-  mandatory,
-}: {
-  label: string
-  inApp?: boolean
-  email?: boolean
-  push?: boolean
-  mandatory?: boolean
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2 last:border-0">
-      <span className="text-slate-700">{label}</span>
-      <div className="flex gap-2 text-[10px] text-slate-500">
-        {inApp && <span className="rounded bg-slate-100 px-1.5 py-0.5">In-app</span>}
-        {email && <span className="rounded bg-slate-100 px-1.5 py-0.5">Email</span>}
-        {push && <span className="rounded bg-slate-100 px-1.5 py-0.5">Push</span>}
-        {mandatory && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">Required</span>}
       </div>
+    </SectionCard>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3 border-b border-slate-100 pb-2">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-right font-medium text-slate-900">{value}</span>
     </div>
   )
-}
-
-function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(' ')
 }

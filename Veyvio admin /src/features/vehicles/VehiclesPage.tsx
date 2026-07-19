@@ -3,17 +3,21 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill, expiryTone, formatDate } from '@/components/ui/status'
-import { FLEET_DIRECTORY_CARDS, VEHICLE_CATEGORY_LABELS } from '@/lib/vehicles/constants'
-import { canCreateVehicle } from '@/lib/vehicles/permissions'
+import {
+  FLEET_PRIMARY_CARDS,
+  FLEET_SECONDARY_CARDS,
+  VEHICLE_CATEGORY_LABELS,
+} from '@/lib/vehicles/constants'
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
 
 type ListFilter =
   | 'all'
+  | 'active'
   | 'available'
   | 'allocated'
   | 'in_service'
+  | 'attention'
   | 'vor'
   | 'maintenance'
   | 'checks_overdue'
@@ -24,10 +28,15 @@ type ListFilter =
   | 'unknown_location'
 
 export function VehiclesPage() {
-  const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
+  const [stubNotice, setStubNotice] = useState<string | null>(null)
   const filter = (searchParams.get('filter') as ListFilter) || 'all'
+
+  function showStub(message: string) {
+    setStubNotice(message)
+    window.setTimeout(() => setStubNotice(null), 4000)
+  }
 
   const { data: vehicles = [], isLoading } = useQuery({
     queryKey: ['vehicle-profiles'],
@@ -40,7 +49,6 @@ export function VehiclesPage() {
   })
 
   const filtered = useMemo(() => filterVehicles(vehicles, filter, search), [vehicles, filter, search])
-  const canCreate = canCreateVehicle(user?.permissions ?? [])
 
   function setFilter(next: ListFilter) {
     if (next === 'all') {
@@ -57,45 +65,100 @@ export function VehiclesPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Vehicles</h1>
           <p className="text-sm text-slate-600">
-            Can this vehicle safely and compliantly leave the yard and complete its assigned work?
+            Master fleet register — availability, compliance, condition, equipment and readiness across Admin, Yard,
+            Maintenance and Driver.
           </p>
         </div>
-        {canCreate && (
-          <div className="flex flex-wrap gap-2">
-            <Link to="/vehicles/new" className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white hover:bg-command-700">
-              Add vehicle
-            </Link>
-            <Link to="/vehicles/vor" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              VOR board
-            </Link>
-            <Link to="/vehicles/compliance" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              Compliance
-            </Link>
-            <Link to="/vehicles/intelligence" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              Intelligence
-            </Link>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/vehicles/new"
+            className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white hover:bg-command-700"
+          >
+            Add vehicle
+          </Link>
+          <button
+            type="button"
+            onClick={() => showStub('Import will land in a later release.')}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Import
+          </button>
+          <button
+            type="button"
+            onClick={() => showStub('Export will land in a later release.')}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Export
+          </button>
+          <button
+            type="button"
+            onClick={() => showStub('Bulk actions will land in a later release.')}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Bulk
+          </button>
+          <Link
+            to="/vehicles/vor"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            VOR board
+          </Link>
+          <Link
+            to="/vehicles/compliance"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Compliance
+          </Link>
+        </div>
       </div>
 
+      {stubNotice && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{stubNotice}</div>
+      )}
+
       {summary && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {FLEET_DIRECTORY_CARDS.map((card) => (
-            <button
-              key={card.id}
-              type="button"
-              onClick={() => setFilter((card.filterKey as ListFilter) ?? 'all')}
-              className={`rounded-xl border p-4 text-left transition ${
-                filter === (card.filterKey ?? 'all')
-                  ? 'border-command-500 bg-command-50 ring-1 ring-command-500'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
-              }`}
-            >
-              <p className="text-2xl font-bold tabular-nums text-slate-900">{summary[card.id]}</p>
-              <p className="text-sm text-slate-600">{card.label}</p>
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {FLEET_PRIMARY_CARDS.map((card) => {
+              const key = (card.filterKey as ListFilter) ?? 'all'
+              const selected = filter === key || (card.id === 'total' && filter === 'all')
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() => setFilter(card.id === 'total' ? 'all' : key)}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    selected
+                      ? 'border-command-500 bg-command-50 ring-1 ring-command-500'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <p className="text-2xl font-bold tabular-nums text-slate-900">{summary[card.id]}</p>
+                  <p className="text-sm text-slate-600">{card.label}</p>
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {FLEET_SECONDARY_CARDS.map((card) => {
+              const key = (card.filterKey as ListFilter) ?? 'all'
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() => setFilter(key)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    filter === key
+                      ? 'border-command-500 bg-command-50 text-command-800'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  {card.label} · {summary[card.id]}
+                </button>
+              )
+            })}
+          </div>
+        </>
       )}
 
       <div className="flex flex-wrap items-center gap-3">
@@ -122,21 +185,25 @@ export function VehiclesPage() {
           <p className="text-sm text-slate-500">Loading…</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1200px] text-left text-sm">
+            <table className="w-full min-w-[1600px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
-                  <th className="pb-2 pr-4 font-medium">Registration</th>
-                  <th className="pb-2 pr-4 font-medium">Fleet no</th>
-                  <th className="pb-2 pr-4 font-medium">Vehicle</th>
-                  <th className="pb-2 pr-4 font-medium">Depot</th>
-                  <th className="pb-2 pr-4 font-medium">Location</th>
-                  <th className="pb-2 pr-4 font-medium">Capacity</th>
-                  <th className="pb-2 pr-4 font-medium">Operational</th>
-                  <th className="pb-2 pr-4 font-medium">Release</th>
-                  <th className="pb-2 pr-4 font-medium">Driver / run</th>
-                  <th className="pb-2 pr-4 font-medium">Last check</th>
-                  <th className="pb-2 pr-4 font-medium">Compliance</th>
-                  <th className="pb-2 font-medium">Defects</th>
+                  <th className="pb-2 pr-3 font-medium">Vehicle</th>
+                  <th className="pb-2 pr-3 font-medium">Type</th>
+                  <th className="pb-2 pr-3 font-medium">Depot</th>
+                  <th className="pb-2 pr-3 font-medium">Capacity</th>
+                  <th className="pb-2 pr-3 font-medium">Operational</th>
+                  <th className="pb-2 pr-3 font-medium">Readiness</th>
+                  <th className="pb-2 pr-3 font-medium">Lifecycle</th>
+                  <th className="pb-2 pr-3 font-medium">Condition</th>
+                  <th className="pb-2 pr-3 font-medium">Compliance</th>
+                  <th className="pb-2 pr-3 font-medium">Driver</th>
+                  <th className="pb-2 pr-3 font-medium">Duty</th>
+                  <th className="pb-2 pr-3 font-medium">MOT</th>
+                  <th className="pb-2 pr-3 font-medium">Defects</th>
+                  <th className="pb-2 pr-3 font-medium">Mileage</th>
+                  <th className="pb-2 pr-3 font-medium">Last seen</th>
+                  <th className="pb-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -154,55 +221,66 @@ export function VehiclesPage() {
 
 function VehicleRow({ vehicle }: { vehicle: VehicleProfile }) {
   const expiry = expiryTone(vehicle.nearestExpiryDate)
+  const lastSeen =
+    vehicle.telematics?.lastSyncAt ?? vehicle.lastCheckAt ?? vehicle.updatedAt
 
   return (
     <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-      <td className="py-2.5 pr-4">
+      <td className="py-2.5 pr-3">
         <Link to={`/vehicles/${vehicle.id}`} className="font-medium text-command-600 hover:underline">
           {vehicle.registrationNumber}
         </Link>
-        <p className="text-xs text-slate-500">{vehicle.reference}</p>
+        <p className="text-xs text-slate-500">
+          {vehicle.fleetNumber ? `${vehicle.fleetNumber} · ` : ''}
+          {vehicle.reference}
+        </p>
+        <p className="text-xs text-slate-500">
+          {vehicle.make} {vehicle.model}
+        </p>
       </td>
-      <td className="py-2.5 pr-4 text-slate-600">{vehicle.fleetNumber ?? '—'}</td>
-      <td className="py-2.5 pr-4 text-slate-600">
-        {vehicle.make} {vehicle.model}
-        <span className="ml-1 text-xs text-slate-400">({VEHICLE_CATEGORY_LABELS[vehicle.vehicleCategory]})</span>
-      </td>
-      <td className="py-2.5 pr-4 text-slate-600">{vehicle.currentDepotName}</td>
-      <td className="py-2.5 pr-4 text-xs text-slate-600">
-        {vehicle.currentLocationLabel ?? vehicle.parkingBay ?? '—'}
-      </td>
-      <td className="py-2.5 pr-4 text-slate-600">
-        {vehicle.seatingCapacity} seats
+      <td className="py-2.5 pr-3 text-slate-600">{VEHICLE_CATEGORY_LABELS[vehicle.vehicleCategory]}</td>
+      <td className="py-2.5 pr-3 text-slate-600">{vehicle.currentDepotName}</td>
+      <td className="py-2.5 pr-3 text-slate-600">
+        {vehicle.seatingCapacity}
         {vehicle.wheelchairCapacity > 0 && ` · ${vehicle.wheelchairCapacity} WC`}
       </td>
-      <td className="py-2.5 pr-4">
+      <td className="py-2.5 pr-3">
         <StatusPill status={vehicle.operationalStatus} />
       </td>
-      <td className="py-2.5 pr-4">
+      <td className="py-2.5 pr-3">
         <StatusPill status={vehicle.releaseDecision} />
-      </td>
-      <td className="py-2.5 pr-4 text-xs text-slate-600">
-        {vehicle.currentDriverName ?? vehicle.nextDriverName ?? '—'}
-        {(vehicle.currentRunReference || vehicle.nextRunReference) && (
-          <p className="text-slate-400">{vehicle.currentRunReference ?? vehicle.nextRunReference}</p>
+        {vehicle.readiness && !vehicle.readiness.assignmentEligible && (
+          <p className="mt-0.5 text-[11px] text-red-700">Not assignable</p>
         )}
       </td>
-      <td className="py-2.5 pr-4 text-xs text-slate-600">
-        {vehicle.lastCheckAt
-          ? new Date(vehicle.lastCheckAt).toLocaleString('en-GB', { day: 'numeric', month: 'short' })
-          : '—'}
-        {vehicle.checksOverdue && <p className="text-red-600">Overdue</p>}
+      <td className="py-2.5 pr-3">
+        <StatusPill status={vehicle.lifecycleStatus} />
       </td>
-      <td className="py-2.5 pr-4">
+      <td className="py-2.5 pr-3">
+        <StatusPill status={vehicle.conditionStatus} />
+      </td>
+      <td className="py-2.5 pr-3">
         <StatusPill status={vehicle.complianceStatus} />
         {vehicle.nearestExpiryDate && (
-          <p className={`text-xs ${expiry === 'expired' ? 'text-red-600' : expiry === 'warning' ? 'text-amber-600' : 'text-slate-400'}`}>
+          <p
+            className={`text-xs ${
+              expiry === 'expired' ? 'text-red-600' : expiry === 'warning' ? 'text-amber-600' : 'text-slate-400'
+            }`}
+          >
             {vehicle.nearestExpiryLabel}: {formatDate(vehicle.nearestExpiryDate)}
           </p>
         )}
       </td>
-      <td className="py-2.5 text-slate-600">
+      <td className="py-2.5 pr-3 text-xs text-slate-600">
+        {vehicle.currentDriverName ?? vehicle.nextDriverName ?? '—'}
+      </td>
+      <td className="py-2.5 pr-3 text-xs text-slate-600">
+        {vehicle.currentRunReference ?? vehicle.nextRunReference ?? '—'}
+      </td>
+      <td className="py-2.5 pr-3 text-xs text-slate-600">
+        {vehicle.motExpiry ? formatDate(vehicle.motExpiry) : '—'}
+      </td>
+      <td className="py-2.5 pr-3 text-slate-600">
         {vehicle.openDefectCount > 0 ? (
           <span className={vehicle.criticalDefectCount > 0 ? 'font-medium text-red-700' : ''}>
             {vehicle.openDefectCount}
@@ -211,6 +289,29 @@ function VehicleRow({ vehicle }: { vehicle: VehicleProfile }) {
         ) : (
           '—'
         )}
+      </td>
+      <td className="py-2.5 pr-3 text-slate-600 tabular-nums">
+        {vehicle.mileage != null ? vehicle.mileage.toLocaleString() : '—'}
+      </td>
+      <td className="py-2.5 pr-3 text-xs text-slate-600">
+        {lastSeen
+          ? new Date(lastSeen).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+          : '—'}
+      </td>
+      <td className="py-2.5">
+        <div className="flex flex-col gap-1">
+          <Link to={`/vehicles/${vehicle.id}`} className="text-xs font-medium text-command-600 hover:underline">
+            Open
+          </Link>
+          {vehicle.lifecycleStatus === 'awaiting_onboarding' && (
+            <Link
+              to={`/vehicles/${vehicle.id}/onboarding`}
+              className="text-xs font-medium text-amber-700 hover:underline"
+            >
+              Resume onboarding
+            </Link>
+          )}
+        </div>
       </td>
     </tr>
   )
@@ -222,6 +323,9 @@ function filterVehicles(vehicles: VehicleProfile[], filter: ListFilter, search: 
   let list = vehicles
 
   switch (filter) {
+    case 'active':
+      list = list.filter((v) => v.lifecycleStatus === 'active')
+      break
     case 'available':
       list = list.filter((v) => v.operationalStatus === 'available')
       break
@@ -230,6 +334,17 @@ function filterVehicles(vehicles: VehicleProfile[], filter: ListFilter, search: 
       break
     case 'in_service':
       list = list.filter((v) => v.operationalStatus === 'in_service')
+      break
+    case 'attention':
+      list = list.filter(
+        (v) =>
+          v.readiness?.assignmentEligible === false ||
+          (v.conditionStatus != null && v.conditionStatus !== 'no_known_issues') ||
+          v.complianceStatus === 'expiring_soon' ||
+          v.complianceStatus === 'non_compliant' ||
+          v.checksOverdue ||
+          v.openDefectCount > 0,
+      )
       break
     case 'vor':
       list = list.filter((v) => v.operationalStatus === 'vor')

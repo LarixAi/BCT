@@ -3,7 +3,16 @@ export function canViewVehicles(permissions: string[]): boolean {
 }
 
 export function canCreateVehicle(permissions: string[]): boolean {
-  return permissions.includes('vehicles.create') || permissions.includes('fleet.edit')
+  if (permissions.includes('*')) return true
+  return (
+    permissions.includes('vehicles.create') ||
+    permissions.includes('vehicles.edit') ||
+    permissions.includes('fleet.edit') ||
+    // Fleet register operators with view access can open the Add Vehicle wizard.
+    // The create API still enforces write authority server-side.
+    permissions.includes('fleet.view') ||
+    permissions.includes('vehicles.view')
+  )
 }
 
 export function canEditVehicle(permissions: string[]): boolean {

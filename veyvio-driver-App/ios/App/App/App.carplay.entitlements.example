@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Copy to App.entitlements and enable in Xcode after Apple grants CarPlay Transport entitlement.
+  See docs/DRIVER_CARPLAY_ENTITLEMENT.md
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.carplay-transport</key>
+	<true/>
+</dict>
+</plist>

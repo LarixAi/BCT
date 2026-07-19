@@ -11,6 +11,7 @@ import { getSectionDef, isManagerAuditCheck } from "@/domain/yard/check-template
 import { shouldAutoVorFromSection } from "@/domain/yard/check-vor";
 import { buildVorCaseFromDefect } from "@/domain/yard/vor-from-defect";
 import { applyVehicleMove } from "@/domain/yard/bay-zones";
+import { applyVehicleDeparture } from "@/domain/yard/departure-exit";
 import { applyResolveDefect, canResolveDefect } from "@/domain/yard/defect-workflow";
 import { buildHandoverSummary } from "@/domain/yard/handover-summary";
 import { recomputeAllTrips } from "@/domain/yard/trip-readiness";
@@ -157,6 +158,11 @@ interface State {
   clearEquipmentIssue: (vehicleId: string, kind: "fixed" | "assigned", itemId: string, note?: string) => void;
 
   releaseForDeparture: (tripId: string, checklist: { id: string; label: string; passed: boolean }[], note?: string) => void;
+  departVehicleForService: (
+    tripId: string,
+    source: "driver_journey_start" | "yard_confirmed",
+    externalEventId?: string,
+  ) => boolean;
   completeHandover: (notes: string) => ShiftHandover;
 
   acceptTask: (taskId: string) => void;
@@ -277,9 +283,6 @@ export const useYard = create<State>((set, get) => ({
   repairWorkOrders: cfx.repairWorkOrders,
 
   hydrateFromBootstrap: (payload) => {
-    void import("@/platform/ops/ingest-driver-ops-events").then((m) => {
-      m.ingestDriverOpsEventsForYard();
-    });
     set({
       bays: payload.bays,
       vehicles: payload.vehicles,
@@ -304,6 +307,14 @@ export const useYard = create<State>((set, get) => ({
       conditionSnapshots: payload.conditionSnapshots ?? get().conditionSnapshots,
       custodyTimeline: payload.custodyTimeline ?? get().custodyTimeline,
       repairWorkOrders: payload.repairWorkOrders ?? get().repairWorkOrders ?? cfx.repairWorkOrders,
+    });
+    void import("@/platform/ops/ingest-driver-ops-events").then((m) => {
+      const notices = m.ingestDriverOpsEventsForYard();
+      for (const notice of notices) {
+        if (notice.eventType !== "journey.started") continue;
+        const trip = get().trips.find(candidate => candidate.vehicleId === notice.vehicleId && !candidate.departedAt);
+        if (trip) get().departVehicleForService(trip.id, "driver_journey_start", notice.id);
+      }
     });
   },
 
@@ -338,6 +349,7 @@ export const useYard = create<State>((set, get) => ({
       id: uid("abr"),
       recordedAt,
       recordedBy: getActorName(),
+      recordedByRole: "Yard operative",
     });
 
     set({ adblueRefills: [record, ...st.adblueRefills] });
@@ -762,6 +774,50 @@ export const useYard = create<State>((set, get) => ({
       departureReleases: [release, ...st.departureReleases],
     });
     void enqueueYardMutation("departure.release", { releaseId: release.id, tripId, vehicleId: trip.vehicleId, checklist, note });
+  },
+
+  departVehicleForService: (tripId, source, externalEventId) => {
+    const st = get();
+    const trip = st.trips.find(candidate => candidate.id === tripId);
+    if (!trip?.vehicleId) return false;
+    const vehicle = st.vehicles.find(candidate => candidate.id === trip.vehicleId);
+    if (!vehicle) return false;
+
+    const at = nowIso();
+    const actor = source === "driver_journey_start" ? "Veyvio Driver" : getActorName();
+    const result = applyVehicleDeparture({
+      trip,
+      vehicle,
+      vehicles: st.vehicles,
+      bays: st.bays,
+      at,
+      by: actor,
+      source,
+      movementId: uid("m"),
+    });
+    if (!result) return false;
+
+    const markedTrips = st.trips.map(candidate =>
+      candidate.id === tripId ? result.trip : candidate,
+    );
+    const { trips, tasks } = commitTripState({ ...st, trips: markedTrips }, result.vehicles, st.equipment);
+
+    set({
+      vehicles: result.vehicles,
+      movements: [result.movement, ...st.movements],
+      trips,
+      tasks,
+    });
+    void enqueueYardMutation("departure.complete", {
+      tripId,
+      vehicleId: vehicle.id,
+      fromBayId: result.fromBayId,
+      movementId: result.movement.id,
+      departedAt: at,
+      source,
+      externalEventId,
+    });
+    return true;
   },
 
   completeHandover: (notes) => {

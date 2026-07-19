@@ -9,6 +9,9 @@ export const YARD_TABS: { id: YardTab; label: string }[] = [
   { id: 'movements', label: 'Movements' },
   { id: 'handover', label: 'Handover' },
   { id: 'exceptions', label: 'Exceptions' },
+  { id: 'checks', label: 'Vehicle checks' },
+  { id: 'bodywork', label: 'Bodywork' },
+  { id: 'messages', label: 'Driver messages' },
 ]
 
 export const YARD_TASK_TYPE_LABELS: Record<YardTaskType, string> = {

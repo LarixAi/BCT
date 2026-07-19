@@ -15,6 +15,14 @@ describe("yard-map", () => {
     expect(a01?.vehicle?.reg).toBe("SK23 FGH");
   });
 
+  it("frees the physical bay when a vehicle departs off-site", () => {
+    const departed = fx.vehicles.map(vehicle =>
+      vehicle.bayId === "A01" ? { ...vehicle, status: "Off-site" as const } : vehicle,
+    );
+    const occupancy = buildBayOccupancy(fx.bays, departed);
+    expect(occupancy.find(item => item.bay.id === "A01")?.vehicle).toBeNull();
+  });
+
   it("groups bays by zone in stable order", () => {
     const grouped = groupBaysByZone(fx.bays);
     expect(grouped.get("Parking")?.length).toBe(14);

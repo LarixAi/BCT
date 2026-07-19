@@ -1,9 +1,12 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api/client'
+import { tenantSetupPath } from '@/features/auth/SignupPages'
+import { requiresMfa } from '@/features/auth/InviteAuthPages'
 
 export function ProtectedRoute() {
   const { user, loading } = useAuth()
+  const location = useLocation()
 
   if (loading) {
     return (
@@ -27,6 +30,22 @@ export function ProtectedRoute() {
         Loading company context…
       </div>
     )
+  }
+
+  const setupPath = tenantSetupPath(user.tenantStatus)
+  const onSetupRoute =
+    location.pathname.startsWith('/company-verification') ||
+    location.pathname.startsWith('/setup/')
+  if (setupPath && !onSetupRoute) {
+    return <Navigate to={setupPath} replace />
+  }
+
+  if (
+    !setupPath &&
+    requiresMfa(user.role, user.mfaEnabled) &&
+    location.pathname !== '/setup/security'
+  ) {
+    return <Navigate to="/setup/security" replace />
   }
 
   return <Outlet />

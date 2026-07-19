@@ -11,6 +11,8 @@ import type {
   YardMovementRecord,
   YardTask,
 } from '@/lib/yard/types'
+import { yardTaskToResourceInput } from '@/lib/fleet-resources/cross-app'
+import { mockFleetResourcesApi } from './mock-fleet-resources'
 import { mockVehiclesApi } from './mock-vehicles'
 
 const DEPOTS = [
@@ -62,6 +64,26 @@ function seedTasks(): YardTask[] {
       blockingRelease: true,
       syncStatus: 'synced',
       createdAt: daysAgo(0.7),
+      completedAt: null,
+      createdBy: 'System',
+    },
+    {
+      id: 'yt-2b',
+      depotId: 'depot-wembley',
+      vehicleId: 'veh-6',
+      registrationNumber: 'EO71 NTJ',
+      taskType: 'replenish_equipment',
+      title: 'Fit replacement wheelchair restraint set',
+      priority: 'safety_critical',
+      status: 'open',
+      assignedStaffId: null,
+      assignedStaffName: null,
+      dueAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+      instructions: 'Equipment incomplete — wheelchair restraint set missing. Required before 07:35 release.',
+      evidenceRequired: true,
+      blockingRelease: true,
+      syncStatus: 'pending',
+      createdAt: daysAgo(0.5),
       completedAt: null,
       createdBy: 'System',
     },
@@ -230,7 +252,59 @@ let handovers: Record<string, YardHandover> = {}
 
 function hub(depotId = 'depot-wembley'): YardHubData {
   const handover = handovers[depotId] ?? null
-  return buildYardHub(mockVehiclesApi.list(), movements, auditEvents, tasks, handover, DEPOTS, depotId)
+  const base = buildYardHub(mockVehiclesApi.list(), movements, auditEvents, tasks, handover, DEPOTS, depotId)
+  const handoverExceptions =
+    depotId === 'depot-wembley'
+      ? [
+          {
+            id: 'ex-handover-receipt-veh-6',
+            severity: 'critical' as const,
+            vehicleId: 'veh-6',
+            registrationNumber: 'EO71 NTJ',
+            depotId,
+            title: 'Driver reported return — Yard has not confirmed physical receipt',
+            detail: 'Driver app marked EO71 NTJ returned 42 minutes ago. Yard custody still shows driver custody.',
+            detectedAt: daysAgo(0.7),
+            operationalImpact: 'Vehicle location and keys may be missing from yard control',
+            ownerName: null,
+            recommendedAction: 'Confirm physical receipt and start return inspection',
+            escalationStatus: 'open' as const,
+          },
+          {
+            id: 'ex-keys-veh-4',
+            severity: 'warning' as const,
+            vehicleId: 'veh-4',
+            registrationNumber: 'CD34 EFG',
+            depotId,
+            title: 'Keys marked returned — key cabinet has no confirmation',
+            detail: 'Driver handback recorded keys returned. Cabinet scan has not confirmed CD34 EFG keys.',
+            detectedAt: daysAgo(0.4),
+            operationalImpact: 'Key custody discrepancy between Driver and Yard',
+            ownerName: 'Michael Brown',
+            recommendedAction: 'Verify key cabinet and update custody',
+            escalationStatus: 'open' as const,
+          },
+          {
+            id: 'ex-damage-veh-4',
+            severity: 'warning' as const,
+            vehicleId: 'veh-4',
+            registrationNumber: 'CD34 EFG',
+            depotId,
+            title: 'Driver reports new damage — Yard return inspection not started',
+            detail: 'Passenger rear quarter damage reported on handback. Return inspection still open.',
+            detectedAt: daysAgo(1),
+            operationalImpact: 'Damage baseline comparison cannot complete',
+            ownerName: 'Michael Brown',
+            recommendedAction: 'Start return inspection and compare evidence',
+            escalationStatus: 'open' as const,
+          },
+        ]
+      : []
+
+  return {
+    ...base,
+    exceptions: [...handoverExceptions, ...base.exceptions],
+  }
 }
 
 function addAudit(event: Omit<YardAuditEvent, 'id'>) {
@@ -345,6 +419,16 @@ export const mockYardApi = {
       occurredAt: now(),
       detail: input.notes ?? task.title,
     })
+
+    const ledger = yardTaskToResourceInput(task, actorName)
+    if (ledger) {
+      const depotName = DEPOTS.find((d) => d.id === task.depotId)?.name ?? null
+      mockFleetResourcesApi.recordTransaction({
+        ...ledger,
+        depotName,
+        notes: input.notes ?? ledger.notes,
+      })
+    }
 
     return hub(task.depotId)
   },

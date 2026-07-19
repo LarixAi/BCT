@@ -1,9 +1,13 @@
 import { WORK_PERMISSION_OPTIONS } from '@/lib/drivers/constants'
 import { applyVerifiedDocumentToProfile, deriveComplianceStatus } from '@/lib/drivers/compliance'
+import { defaultTrainingExpiry, getTrainingCatalogDef } from '@/lib/drivers/training'
 import { evaluateDriverEligibility, syncProfileEligibility } from '@/lib/eligibility/engine'
 import type {
+  ActivateDriverInput,
   AddDriverRestrictionInput,
+  CreateDriverAppAccountInput,
   CreateDriverInput,
+  DriverAccount,
   DriverAuditEvent,
   DriverDirectorySummary,
   DriverDocument,
@@ -11,6 +15,12 @@ import type {
   DriverProfile,
   DriverWorkPermission,
   GrantEligibilityOverrideInput,
+  OffboardDriverInput,
+  RecordDriverTrainingInput,
+  ReinstateDriverInput,
+  RevokeDriverDeviceInput,
+  SuspendDriverInput,
+  UnlockDriverInput,
   UpdateDriverInput,
   UploadDriverDocumentInput,
 } from '@/lib/drivers/types'
@@ -97,6 +107,45 @@ function baseDocs(
   ]
 }
 
+function withAccountDefaults(account: Partial<DriverAccount> & Pick<DriverAccount, 'accountStatus' | 'invitationStatus'>): DriverAccount {
+  const devices = account.devices ?? []
+  const sessions = account.sessions ?? []
+  return {
+    userAccountId: account.userAccountId ?? null,
+    accountStatus: account.accountStatus,
+    invitationStatus: account.invitationStatus,
+    invitationSentAt: account.invitationSentAt ?? null,
+    invitationExpiresAt: account.invitationExpiresAt ?? null,
+    invitationDestination: account.invitationDestination ?? null,
+    invitationChannel: account.invitationChannel ?? null,
+    registrationCompletedAt: account.registrationCompletedAt ?? null,
+    emailVerified: account.emailVerified ?? false,
+    phoneVerified: account.phoneVerified ?? false,
+    mfaEnabled: account.mfaEnabled ?? false,
+    authenticationMethod: account.authenticationMethod ?? 'none',
+    passkeyEnabled: account.passkeyEnabled ?? false,
+    lastLoginAt: account.lastLoginAt ?? null,
+    lastFailedLoginAt: account.lastFailedLoginAt ?? null,
+    failedLoginCount: account.failedLoginCount ?? 0,
+    accountLocked: account.accountLocked ?? false,
+    lastPasswordResetAt: account.lastPasswordResetAt ?? null,
+    lastAppActivityAt: account.lastAppActivityAt ?? account.lastAppSyncAt ?? account.lastLoginAt ?? null,
+    activeSessionCount: account.activeSessionCount ?? sessions.length,
+    registeredDeviceCount: account.registeredDeviceCount ?? devices.length,
+    pushNotificationsEnabled: account.pushNotificationsEnabled ?? false,
+    appVersion: account.appVersion ?? null,
+    operatingSystem: account.operatingSystem ?? null,
+    lastAppSyncAt: account.lastAppSyncAt ?? null,
+    locationPermissionGranted: account.locationPermissionGranted ?? false,
+    cameraPermissionGranted: account.cameraPermissionGranted ?? false,
+    devices,
+    sessions,
+    invitationHistory: account.invitationHistory ?? [],
+    suspension: account.suspension ?? null,
+    devInvitationToken: account.devInvitationToken ?? null,
+  }
+}
+
 function nearestExpiry(profile: Pick<DriverProfile, 'licenceExpiry' | 'cpcExpiry' | 'dbsExpiry' | 'medicalExpiry'>) {
   const entries = [
     { label: 'Licence', date: profile.licenceExpiry },
@@ -113,16 +162,56 @@ function nearestExpiry(profile: Pick<DriverProfile, 'licenceExpiry' | 'cpcExpiry
 function buildProfile(
   partial: Omit<
     DriverProfile,
-    'eligibility' | 'nearestExpiryDate' | 'nearestExpiryLabel' | 'trainingRequirements' | 'documentVersions' | 'eligibilityOverrides'
-  > & {
-    trainingRequirements?: DriverProfile['trainingRequirements']
-    documentVersions?: DriverProfile['documentVersions']
-    eligibilityOverrides?: DriverProfile['eligibilityOverrides']
-  },
+    | 'eligibility'
+    | 'nearestExpiryDate'
+    | 'nearestExpiryLabel'
+    | 'trainingRequirements'
+    | 'documentVersions'
+    | 'eligibilityOverrides'
+    | 'dateOfBirth'
+    | 'operationalStatus'
+    | 'licenceCountry'
+    | 'licenceCategories'
+    | 'dqcNumber'
+    | 'rightToWorkStatus'
+    | 'tachoCardNumber'
+    | 'tachoCardExpiry'
+    | 'onboardingStep'
+    | 'account'
+  > &
+    Partial<
+      Pick<
+        DriverProfile,
+        | 'dateOfBirth'
+        | 'operationalStatus'
+        | 'licenceCountry'
+        | 'licenceCategories'
+        | 'dqcNumber'
+        | 'rightToWorkStatus'
+        | 'tachoCardNumber'
+        | 'tachoCardExpiry'
+        | 'onboardingStep'
+        | 'trainingRequirements'
+        | 'documentVersions'
+        | 'eligibilityOverrides'
+      >
+    > & {
+      account: Partial<DriverAccount> & Pick<DriverAccount, 'accountStatus' | 'invitationStatus'>
+    },
 ): DriverProfile {
   const nearest = nearestExpiry(partial)
   const withDefaults = {
+    dateOfBirth: partial.dateOfBirth ?? null,
+    operationalStatus: partial.operationalStatus ?? 'eligible',
+    licenceCountry: partial.licenceCountry ?? 'GB',
+    licenceCategories: partial.licenceCategories ?? null,
+    dqcNumber: partial.dqcNumber ?? null,
+    rightToWorkStatus: partial.rightToWorkStatus ?? null,
+    tachoCardNumber: partial.tachoCardNumber ?? null,
+    tachoCardExpiry: partial.tachoCardExpiry ?? null,
+    onboardingStep: partial.onboardingStep ?? 'review',
     ...partial,
+    account: withAccountDefaults(partial.account),
     documentVersions: partial.documentVersions ?? [],
     eligibilityOverrides: partial.eligibilityOverrides ?? [],
     trainingRequirements: partial.trainingRequirements ?? [],
@@ -176,14 +265,19 @@ const SEED_PROFILES: DriverProfile[] = [
       invitationSentAt: '2019-03-10T09:00:00Z',
       invitationExpiresAt: null,
       invitationDestination: 'j.smith@metrotransport.co.uk',
+      invitationChannel: 'email',
       registrationCompletedAt: '2019-03-12T14:30:00Z',
       emailVerified: true,
       phoneVerified: true,
       mfaEnabled: true,
+      authenticationMethod: 'passkey_and_biometric',
+      passkeyEnabled: true,
       lastLoginAt: daysAgo(0),
+      lastFailedLoginAt: null,
       failedLoginCount: 0,
       accountLocked: false,
       lastPasswordResetAt: '2025-11-01T08:00:00Z',
+      lastAppActivityAt: daysAgo(0),
       activeSessionCount: 1,
       registeredDeviceCount: 1,
       pushNotificationsEnabled: true,
@@ -192,12 +286,70 @@ const SEED_PROFILES: DriverProfile[] = [
       lastAppSyncAt: daysAgo(0),
       locationPermissionGranted: true,
       cameraPermissionGranted: true,
+      devices: [
+        {
+          id: 'dev-drv-1-1',
+          label: 'Pixel 8',
+          platform: 'Android',
+          appVersion: '3.4.2',
+          operatingSystem: 'Android 14',
+          registeredAt: '2024-06-12T09:42:00Z',
+          lastSeenAt: daysAgo(0),
+          trusted: true,
+          biometricUnlock: true,
+          pushNotificationsEnabled: true,
+          locationAccess: 'while_on_duty',
+          securityStatus: 'trusted',
+        },
+      ],
+      sessions: [
+        {
+          id: 'sess-drv-1-1',
+          deviceId: 'dev-drv-1-1',
+          deviceLabel: 'Pixel 8',
+          startedAt: daysAgo(0),
+          lastActiveAt: daysAgo(0),
+          current: true,
+          ipAddress: '86.12.45.10',
+        },
+      ],
+      invitationHistory: [
+        {
+          id: 'invh-drv-1-1',
+          stage: 'invitation_sent',
+          channel: 'email',
+          destination: 'j.smith@metrotransport.co.uk',
+          createdAt: '2019-03-10T09:00:00Z',
+          actor: 'Maria Santos',
+          detail: null,
+        },
+        {
+          id: 'invh-drv-1-2',
+          stage: 'identity_verified',
+          channel: 'email',
+          destination: 'j.smith@metrotransport.co.uk',
+          createdAt: '2019-03-11T10:12:00Z',
+          actor: null,
+          detail: null,
+        },
+        {
+          id: 'invh-drv-1-3',
+          stage: 'activated',
+          channel: 'email',
+          destination: 'j.smith@metrotransport.co.uk',
+          createdAt: '2019-03-12T14:30:00Z',
+          actor: 'Maria Santos',
+          detail: null,
+        },
+      ],
+      suspension: null,
     },
     restrictions: [],
     documents: baseDocs('2027-06-01', '2026-09-01', '2027-01-15', '2026-12-01'),
     notes: [],
     auditEvents: [
       { id: 'aud-1', action: 'Account activated', actor: 'Maria Santos', actorRole: 'Driver administrator', createdAt: '2019-03-12T14:30:00Z', previousValue: null, newValue: 'active', reason: null },
+      { id: 'aud-1b', action: 'Device registered', actor: 'Jane Smith', actorRole: 'Driver', createdAt: '2024-06-12T09:42:00Z', previousValue: null, newValue: 'Pixel 8', reason: null },
     ],
     nextDutyReference: 'SCH-AM-104',
     nextDutyTime: '07:30',
@@ -494,15 +646,17 @@ const SEED_PROFILES: DriverProfile[] = [
     workPermissions: workPerms('school', 'accessible'),
     account: {
       userAccountId: null,
-      accountStatus: 'invite_pending',
+      accountStatus: 'invitation_pending',
       invitationStatus: 'sent',
       invitationSentAt: daysAgo(2),
       invitationExpiresAt: daysFromNow(5),
       invitationDestination: 't.hughes@example.com',
+      invitationChannel: 'email',
       registrationCompletedAt: null,
       emailVerified: false,
       phoneVerified: false,
       mfaEnabled: false,
+      authenticationMethod: 'none',
       lastLoginAt: null,
       failedLoginCount: 0,
       accountLocked: false,
@@ -512,6 +666,17 @@ const SEED_PROFILES: DriverProfile[] = [
       pushNotificationsEnabled: false,
       appVersion: null,
       operatingSystem: null,
+      invitationHistory: [
+        {
+          id: 'invh-drv-6-1',
+          stage: 'invitation_sent',
+          channel: 'email',
+          destination: 't.hughes@example.com',
+          createdAt: daysAgo(2),
+          actor: 'Maria Santos',
+          detail: 'Expires in 5 days',
+        },
+      ],
       lastAppSyncAt: null,
       locationPermissionGranted: false,
       cameraPermissionGranted: false,
@@ -635,10 +800,16 @@ export const mockDriversApi = {
       eligibleToday: list.filter((d) => d.eligibility.canAssign).length,
       notEligible: list.filter((d) => d.operationalEligibility === 'not_eligible').length,
       documentsExpiringSoon: list.filter((d) => d.complianceStatus === 'documents_expiring_soon' || d.eligibility.warnings.some((w) => w.code.includes('expiring'))).length,
-      invitePending: list.filter((d) => d.account.accountStatus === 'invite_pending').length,
+      invitePending: list.filter((d) => d.account.accountStatus === 'invitation_pending').length,
       onDuty: list.filter((d) => ['assigned', 'on_trip', 'checking_in', 'finishing_duty'].includes(d.dutyStatus)).length,
       onTrip: list.filter((d) => d.dutyStatus === 'on_trip').length,
-      suspendedOrRestricted: list.filter((d) => d.operationalEligibility === 'restricted' || d.employmentStatus === 'suspended' || d.account.accountStatus === 'suspended').length,
+      suspendedOrRestricted: list.filter(
+        (d) =>
+          d.operationalEligibility === 'restricted' ||
+          d.employmentStatus === 'suspended' ||
+          d.account.accountStatus === 'temporarily_suspended' ||
+          d.account.accountStatus === 'compliance_restricted',
+      ).length,
       appNotRecentlySynced: list.filter((d) => {
         if (!d.account.lastAppSyncAt) return d.account.accountStatus === 'active'
         return Date.now() - new Date(d.account.lastAppSyncAt).getTime() > staleMs
@@ -664,6 +835,7 @@ export const mockDriversApi = {
       firstName: input.firstName,
       lastName: input.lastName,
       preferredName: input.preferredName ?? null,
+      dateOfBirth: input.dateOfBirth ?? null,
       email: input.email,
       phone: input.phone,
       depotId: input.depotId,
@@ -672,32 +844,36 @@ export const mockDriversApi = {
       secondaryDepotNames: [],
       employeeNumber: input.employeeNumber ?? null,
       employmentType: input.employmentType,
-      employmentStatus: 'onboarding',
+      employmentStatus: 'applicant',
+      operationalStatus: 'draft',
+      onboardingStep: 'personal',
       complianceStatus: 'missing_information',
       operationalEligibility: 'awaiting_approval',
       dutyStatus: 'off_duty',
       availabilityStatus: 'unavailable',
       startDate: input.startDate ?? null,
-      managerName: 'Maria Santos',
-      homeAddress: null,
-      emergencyContact: null,
+      managerName: null,
+      homeAddress: input.homeAddress ?? null,
+      emergencyContact: input.emergencyContact ?? null,
       licenceNumber: null,
       licenceExpiry: null,
       cpcExpiry: null,
       dbsExpiry: null,
       medicalExpiry: null,
-      workPermissions: workPerms(...input.workPermissionKeys),
+      workPermissions: workPerms(...(input.workPermissionKeys?.length ? input.workPermissionKeys : [])),
       account: {
         userAccountId: null,
-        accountStatus: input.sendInvitation ? 'invite_pending' : 'not_created',
+        accountStatus: input.sendInvitation ? 'invitation_pending' : 'draft',
         invitationStatus: input.sendInvitation ? 'sent' : 'not_sent',
         invitationSentAt: input.sendInvitation ? ts : null,
-        invitationExpiresAt: input.sendInvitation ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null,
+        invitationExpiresAt: input.sendInvitation ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() : null,
         invitationDestination: input.email,
+        invitationChannel: input.sendInvitation ? (input.invitationChannel ?? 'email') : null,
         registrationCompletedAt: null,
         emailVerified: false,
         phoneVerified: false,
         mfaEnabled: false,
+        authenticationMethod: 'none',
         lastLoginAt: null,
         failedLoginCount: 0,
         accountLocked: false,
@@ -706,6 +882,19 @@ export const mockDriversApi = {
         registeredDeviceCount: 0,
         pushNotificationsEnabled: false,
         appVersion: null,
+        invitationHistory: input.sendInvitation
+          ? [
+              {
+                id: `invh-${id}-1`,
+                stage: 'invitation_sent' as const,
+                channel: input.invitationChannel ?? 'email',
+                destination: input.email,
+                createdAt: ts,
+                actor: actorName,
+                detail: 'Default expiry 72 hours',
+              },
+            ]
+          : [],
         operatingSystem: null,
         lastAppSyncAt: null,
         locationPermissionGranted: false,
@@ -722,13 +911,13 @@ export const mockDriversApi = {
     })
 
     appendAudit(profile, {
-      action: 'Driver created',
+      action: 'Driver draft created',
       actor: actorName,
       actorRole: 'Driver administrator',
       createdAt: ts,
       previousValue: null,
       newValue: ref,
-      reason: null,
+      reason: 'No app login created at this stage',
     })
 
     if (input.sendInvitation) {
@@ -758,83 +947,420 @@ export const mockDriversApi = {
           ? 'Wembley Depot'
           : current.depotName
 
+    const secondaryDepotIds = input.secondaryDepotIds ?? current.secondaryDepotIds
+    const secondaryDepotNames = secondaryDepotIds.map((d) =>
+      d === 'depot-croydon' ? 'Croydon Depot' : d === 'depot-wembley' ? 'Wembley Depot' : d,
+    )
+
+    let operationalStatus = input.operationalStatus ?? current.operationalStatus
+    let employmentStatus = input.employmentStatus ?? current.employmentStatus
+    if (current.operationalStatus === 'draft' && input.onboardingStep && input.onboardingStep !== 'personal') {
+      operationalStatus = 'onboarding'
+      employmentStatus = 'onboarding'
+    }
+
+    const emailChanged =
+      input.email !== undefined &&
+      (input.email ?? '').trim().toLowerCase() !== (current.email ?? '').trim().toLowerCase()
+    const phoneChanged = input.phone !== undefined && (input.phone ?? '') !== (current.phone ?? '')
+
+    if ((emailChanged || phoneChanged) && !input.contactChangeReason?.trim()) {
+      throw new Error('A reason is required when changing the driver’s login email or mobile number.')
+    }
+    if (emailChanged && input.email) {
+      const duplicate = profiles.find(
+        (d) => d.id !== id && d.email?.toLowerCase() === input.email!.trim().toLowerCase(),
+      )
+      if (duplicate) throw new Error('Another driver already uses this email address.')
+    }
+
+    const nextEmail = input.email !== undefined ? input.email.trim().toLowerCase() || null : current.email
+    const { contactChangeReason: _reason, workPermissionKeys: _keys, ...profilePatch } = input
     const updated = syncProfileEligibility({
       ...current,
-      ...input,
+      ...profilePatch,
+      email: nextEmail,
       depotName: input.depotId ? depotName : current.depotName,
+      secondaryDepotIds,
+      secondaryDepotNames,
+      operationalStatus,
+      employmentStatus,
       workPermissions: input.workPermissionKeys ? workPerms(...input.workPermissionKeys) : current.workPermissions,
+      account: {
+        ...current.account,
+        invitationDestination: emailChanged ? nextEmail : current.account.invitationDestination,
+        emailVerified: emailChanged ? false : current.account.emailVerified,
+      },
       updatedAt: now(),
     })
 
     appendAudit(updated, {
-      action: 'Driver updated',
+      action: emailChanged || phoneChanged ? 'Driver login contact updated' : 'Driver updated',
       actor: actorName,
       actorRole: 'Driver administrator',
       createdAt: now(),
-      previousValue: current.reference,
-      newValue: updated.reference,
-      reason: null,
+      previousValue: emailChanged
+        ? current.email
+        : phoneChanged
+          ? current.phone
+          : current.reference,
+      newValue: emailChanged ? nextEmail : phoneChanged ? updated.phone : updated.reference,
+      reason:
+        input.contactChangeReason?.trim() ||
+        (input.onboardingStep ? `Onboarding step: ${input.onboardingStep}` : null),
     })
 
     profiles[idx] = updated
     return updated
   },
 
-  sendInvitation(id: string, actorName: string, channel: 'email' | 'sms' | 'both' = 'email'): DriverProfile {
+  createAppAccount(id: string, input: CreateDriverAppAccountInput, actorName: string): DriverProfile {
     const idx = profiles.findIndex((d) => d.id === id)
     if (idx < 0) throw new Error('Driver not found')
     const current = profiles[idx]!
-    if (!current.email && channel !== 'sms') throw new Error('Driver has no email address.')
+    if (!current.email && input.channel !== 'sms') throw new Error('Driver has no email address.')
+    if (!current.phone && input.channel !== 'email') throw new Error('Driver has no mobile number.')
 
     const ts = now()
+    const token = `drv-invite-${id}-${Date.now().toString(36)}`
+    const destination = input.channel === 'sms' ? current.phone : current.email
+    const historyEntry = {
+      id: `invh-${id}-${Date.now().toString(36)}`,
+      stage: 'invitation_sent' as const,
+      channel: input.channel,
+      destination,
+      createdAt: ts,
+      actor: actorName,
+      detail: 'Single-use link · expires in 72 hours',
+    }
     const updated = syncProfileEligibility({
       ...current,
+      operationalStatus: current.operationalStatus === 'draft' ? 'onboarding' : current.operationalStatus,
+      onboardingStep: 'account',
+      availabilityStatus: 'available',
       account: {
         ...current.account,
-        accountStatus: 'invite_pending',
+        userAccountId: current.account.userAccountId ?? `user-pending-${id}`,
+        accountStatus: 'invitation_pending',
         invitationStatus: 'sent',
         invitationSentAt: ts,
-        invitationExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        invitationDestination: channel === 'sms' ? current.phone : current.email,
+        invitationExpiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        invitationDestination: destination,
+        invitationChannel: input.channel,
+        suspension: null,
+        invitationHistory: [historyEntry, ...(current.account.invitationHistory ?? [])],
+        devInvitationToken: token,
       },
       updatedAt: ts,
     })
 
     appendAudit(updated, {
-      action: 'Invitation sent',
+      action: 'Driver app invitation sent',
       actor: actorName,
       actorRole: 'Driver administrator',
       createdAt: ts,
-      previousValue: current.account.invitationStatus,
-      newValue: `sent (${channel})`,
-      reason: null,
+      previousValue: current.account.accountStatus,
+      newValue: `invitation_pending (${input.channel})`,
+      reason: 'Driver creates their own password — never set by admin',
     })
 
     profiles[idx] = updated
     return updated
+  },
+
+  activate(id: string, input: ActivateDriverInput, actorName: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    const current = profiles[idx]!
+    const eligibility = evaluateDriverEligibility(current)
+    const blocks = eligibility.failures.filter((f) => f.severity === 'block')
+    if (blocks.length) {
+      throw new Error(`Cannot activate: ${blocks.map((b) => b.message).join('; ')}`)
+    }
+    const warnings = eligibility.warnings
+    const overrideCodes = new Set(input.overrideWarningCodes ?? [])
+    const unoverridden = warnings.filter((w) => !overrideCodes.has(w.code))
+    if (unoverridden.length && !(input.overrideWarningCodes?.length && input.overrideReason)) {
+      // warnings alone do not block if none require override; allow activate with warnings
+    }
+
+    const ts = now()
+    const updated = syncProfileEligibility({
+      ...current,
+      operationalStatus: current.restrictions.some((r) => r.status === 'active') ? 'restricted' : 'eligible',
+      employmentStatus: 'employed',
+      operationalEligibility: eligibility.operationalEligibility,
+      onboardingStep: 'review',
+      availabilityStatus: 'available',
+      updatedAt: ts,
+    })
+
+    appendAudit(updated, {
+      action: 'Driver activated',
+      actor: actorName,
+      actorRole: 'Driver administrator',
+      createdAt: ts,
+      previousValue: current.operationalStatus,
+      newValue: updated.operationalStatus,
+      reason: input.overrideReason ?? null,
+    })
+
+    profiles[idx] = updated
+    return updated
+  },
+
+  suspend(id: string, input: SuspendDriverInput, actorName: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    if (!input.reason?.trim()) throw new Error('A detailed reason is required to suspend access.')
+    if (!input.reasonCategory) throw new Error('A reason category is required to suspend access.')
+    if (input.duration === 'until_datetime' && !input.restoreAt) {
+      throw new Error('Restore date and time is required when suspension is time-limited.')
+    }
+    const current = profiles[idx]!
+    const ts = input.effectiveAt ?? now()
+    const updated = syncProfileEligibility({
+      ...current,
+      operationalStatus: 'suspended',
+      employmentStatus: 'suspended',
+      operationalEligibility: 'not_eligible',
+      availabilityStatus: 'unavailable',
+      account: {
+        ...current.account,
+        accountStatus: 'temporarily_suspended',
+        activeSessionCount: 0,
+        sessions: [],
+        suspension: {
+          reasonCategory: input.reasonCategory,
+          reason: input.reason.trim(),
+          driverMessage: input.driverMessage?.trim() || null,
+          suspendedAt: ts,
+          suspendedBy: actorName,
+          duration: input.duration,
+          restoreAt: input.duration === 'until_datetime' ? input.restoreAt ?? null : null,
+          reviewDate: input.reviewDate ?? null,
+        },
+      },
+      updatedAt: ts,
+    })
+
+    appendAudit(updated, {
+      action: 'Driver access suspended',
+      actor: actorName,
+      actorRole: 'Driver administrator',
+      createdAt: ts,
+      previousValue: current.account.accountStatus,
+      newValue: 'temporarily_suspended',
+      reason: `[${input.reasonCategory}] ${input.reason.trim()}${
+        input.duration === 'until_datetime' && input.restoreAt ? ` · restore ${input.restoreAt}` : ' · until manually restored'
+      }${input.reassignActiveTrips ? ' · reassign active trips' : ''}${input.notifyDriver ? ' · driver notified' : ''}`,
+    })
+
+    profiles[idx] = updated
+    return updated
+  },
+
+  reinstate(id: string, input: ReinstateDriverInput, actorName: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    if (!input.reason?.trim()) throw new Error('A reason is required to reinstate access.')
+    const current = profiles[idx]!
+    if (current.account.accountStatus !== 'temporarily_suspended' && current.account.accountStatus !== 'compliance_restricted') {
+      throw new Error('Only suspended or compliance-restricted accounts can be reinstated.')
+    }
+    const ts = now()
+    const updated = syncProfileEligibility({
+      ...current,
+      operationalStatus: current.restrictions.some((r) => r.status === 'active') ? 'restricted' : 'eligible',
+      employmentStatus: 'employed',
+      availabilityStatus: 'available',
+      account: {
+        ...current.account,
+        accountStatus: 'active',
+        suspension: null,
+      },
+      updatedAt: ts,
+    })
+    appendAudit(updated, {
+      action: 'Driver access reinstated',
+      actor: actorName,
+      actorRole: 'Driver administrator',
+      createdAt: ts,
+      previousValue: current.account.accountStatus,
+      newValue: 'active',
+      reason: input.reason.trim(),
+    })
+    profiles[idx] = updated
+    return updated
+  },
+
+  unlock(id: string, input: UnlockDriverInput, actorName: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    if (!input.reason?.trim()) throw new Error('A reason is required to unlock the account.')
+    const current = profiles[idx]!
+    if (current.account.accountStatus !== 'locked' && !current.account.accountLocked) {
+      throw new Error('Account is not locked.')
+    }
+    const ts = now()
+    const updated = syncProfileEligibility({
+      ...current,
+      account: {
+        ...current.account,
+        accountStatus: current.account.registrationCompletedAt ? 'active' : 'setup_incomplete',
+        accountLocked: false,
+        failedLoginCount: 0,
+      },
+      updatedAt: ts,
+    })
+    appendAudit(updated, {
+      action: 'Driver account unlocked',
+      actor: actorName,
+      actorRole: 'Driver administrator',
+      createdAt: ts,
+      previousValue: 'locked',
+      newValue: updated.account.accountStatus,
+      reason: input.reason.trim(),
+    })
+    profiles[idx] = updated
+    return updated
+  },
+
+  offboard(id: string, input: OffboardDriverInput, actorName: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    if (!input.reason?.trim()) throw new Error('A reason is required to offboard the driver.')
+    if (!input.employmentEndDate) throw new Error('Employment end date is required.')
+    const current = profiles[idx]!
+    const ts = now()
+    const updated = syncProfileEligibility({
+      ...current,
+      operationalStatus: 'left_company',
+      employmentStatus: 'employment_ended',
+      operationalEligibility: 'not_eligible',
+      availabilityStatus: 'unavailable',
+      account: {
+        ...current.account,
+        accountStatus: 'offboarded',
+        activeSessionCount: 0,
+        sessions: [],
+        devices: current.account.devices.map((d) => ({ ...d, trusted: false, securityStatus: 'revoked' as const })),
+        suspension: null,
+        devInvitationToken: null,
+      },
+      updatedAt: ts,
+    })
+    appendAudit(updated, {
+      action: 'Driver offboarded',
+      actor: actorName,
+      actorRole: 'Driver administrator',
+      createdAt: ts,
+      previousValue: current.account.accountStatus,
+      newValue: 'offboarded',
+      reason: `${input.reason.trim()} · end date ${input.employmentEndDate}${
+        input.reassignActiveTrips ? ' · reassign active trips' : ''
+      }${input.notifyDriver ? ' · driver notified' : ''}`,
+    })
+    profiles[idx] = updated
+    return updated
+  },
+
+  revokeDevice(id: string, deviceId: string, input: RevokeDriverDeviceInput, actorName: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    if (!input.reason?.trim()) throw new Error('A reason is required to revoke a device.')
+    const current = profiles[idx]!
+    const device = current.account.devices.find((d) => d.id === deviceId)
+    if (!device) throw new Error('Device not found')
+    const ts = now()
+    const devices = current.account.devices.map((d) =>
+      d.id === deviceId ? { ...d, trusted: false, securityStatus: 'revoked' as const } : d,
+    )
+    const sessions = current.account.sessions.filter((s) => s.deviceId !== deviceId)
+    const updated = syncProfileEligibility({
+      ...current,
+      account: {
+        ...current.account,
+        devices,
+        sessions,
+        activeSessionCount: sessions.length,
+        registeredDeviceCount: devices.filter((d) => d.securityStatus !== 'revoked').length,
+      },
+      updatedAt: ts,
+    })
+    appendAudit(updated, {
+      action: 'Driver device revoked',
+      actor: actorName,
+      actorRole: 'Driver administrator',
+      createdAt: ts,
+      previousValue: device.label,
+      newValue: 'revoked',
+      reason: input.reason.trim(),
+    })
+    profiles[idx] = updated
+    return updated
+  },
+
+  sendInvitation(id: string, actorName: string, channel: 'email' | 'sms' | 'both' = 'email'): DriverProfile {
+    return this.createAppAccount(id, { channel }, actorName)
   },
 
   cancelInvitation(id: string, actorName: string, reason: string): DriverProfile {
     const idx = profiles.findIndex((d) => d.id === id)
     if (idx < 0) throw new Error('Driver not found')
     const current = profiles[idx]!
+    const ts = now()
+    const historyEntry = {
+      id: `invh-${id}-cancel-${Date.now().toString(36)}`,
+      stage: 'invitation_cancelled' as const,
+      channel: current.account.invitationChannel,
+      destination: current.account.invitationDestination,
+      createdAt: ts,
+      actor: actorName,
+      detail: reason,
+    }
     const updated = syncProfileEligibility({
       ...current,
       account: {
         ...current.account,
-        accountStatus: 'not_created',
+        accountStatus: 'draft',
         invitationStatus: 'cancelled',
         invitationExpiresAt: null,
+        userAccountId: null,
+        devInvitationToken: null,
+        invitationHistory: [historyEntry, ...(current.account.invitationHistory ?? [])],
       },
-      updatedAt: now(),
+      updatedAt: ts,
     })
     appendAudit(updated, {
       action: 'Invitation cancelled',
       actor: actorName,
       actorRole: 'Driver administrator',
+      createdAt: ts,
+      previousValue: 'invitation_pending',
+      newValue: 'draft',
+      reason,
+    })
+    profiles[idx] = updated
+    return updated
+  },
+
+  revokeSessions(id: string, actorName: string, reason: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    const current = profiles[idx]!
+    const updated = syncProfileEligibility({
+      ...current,
+      account: { ...current.account, activeSessionCount: 0, sessions: [] },
+      updatedAt: now(),
+    })
+    appendAudit(updated, {
+      action: 'Sessions revoked',
+      actor: actorName,
+      actorRole: 'Driver administrator',
       createdAt: now(),
-      previousValue: 'sent',
-      newValue: 'cancelled',
+      previousValue: String(current.account.activeSessionCount),
+      newValue: '0',
       reason,
     })
     profiles[idx] = updated
@@ -858,28 +1384,6 @@ export const mockDriversApi = {
       previousValue: null,
       newValue: 'reset link sent',
       reason: null,
-    })
-    profiles[idx] = updated
-    return updated
-  },
-
-  revokeSessions(id: string, actorName: string, reason: string): DriverProfile {
-    const idx = profiles.findIndex((d) => d.id === id)
-    if (idx < 0) throw new Error('Driver not found')
-    const current = profiles[idx]!
-    const updated = syncProfileEligibility({
-      ...current,
-      account: { ...current.account, activeSessionCount: 0 },
-      updatedAt: now(),
-    })
-    appendAudit(updated, {
-      action: 'Sessions revoked',
-      actor: actorName,
-      actorRole: 'Driver administrator',
-      createdAt: now(),
-      previousValue: String(current.account.activeSessionCount),
-      newValue: '0',
-      reason,
     })
     profiles[idx] = updated
     return updated
@@ -944,8 +1448,22 @@ export const mockDriversApi = {
       ? current.documents.map((d) => (d.requirementType === input.requirementType ? newDoc : d))
       : [...current.documents, newDoc]
 
+    const expiryPatch: Partial<DriverProfile> = {}
+    if (input.expiryDate) {
+      if (input.requirementType === 'driving_licence' || input.requirementType === 'licence') {
+        expiryPatch.licenceExpiry = input.expiryDate
+      } else if (input.requirementType === 'dqc' || input.requirementType === 'cpc') {
+        expiryPatch.cpcExpiry = input.expiryDate
+      } else if (input.requirementType === 'dbs') {
+        expiryPatch.dbsExpiry = input.expiryDate
+      } else if (input.requirementType === 'medical') {
+        expiryPatch.medicalExpiry = input.expiryDate
+      }
+    }
+
     const updated = syncProfileEligibility({
       ...current,
+      ...expiryPatch,
       documents,
       documentVersions,
       complianceStatus: deriveComplianceStatus(documents),
@@ -1034,6 +1552,107 @@ export const mockDriversApi = {
       previousValue: doc.verificationStatus,
       newValue: 'rejected',
       reason,
+    })
+
+    profiles[idx] = updated
+    return updated
+  },
+
+  recordTraining(id: string, input: RecordDriverTrainingInput, actorName: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    const current = profiles[idx]!
+    const def = getTrainingCatalogDef(input.trainingKey)
+    if (!def) throw new Error('Unknown training course')
+
+    const ts = now()
+    let documents = [...current.documents]
+    let trainingRequirements = [...current.trainingRequirements]
+
+    if (input.clear) {
+      trainingRequirements = trainingRequirements.filter((t) => t.key !== input.trainingKey)
+      // Keep documents; clearing training record only removes the course completion claim
+      const updated = syncProfileEligibility({
+        ...current,
+        trainingRequirements,
+        updatedAt: ts,
+      })
+      appendAudit(updated, {
+        action: 'Training cleared',
+        actor: actorName,
+        actorRole: 'Transport manager',
+        createdAt: ts,
+        previousValue: def.label,
+        newValue: 'missing',
+        reason: input.notes ?? null,
+      })
+      profiles[idx] = updated
+      return updated
+    }
+
+    if (!input.completedAt) throw new Error('Completion date is required')
+    const completedAt = input.completedAt
+    const expiresAt =
+      input.expiresAt === undefined
+        ? defaultTrainingExpiry(input.trainingKey, completedAt)
+        : input.expiresAt
+    const trainer = input.trainer?.trim() || input.provider?.trim() || null
+
+    const record = {
+      id: `tr-${input.trainingKey}`,
+      key: input.trainingKey,
+      label: def.label,
+      requiredFor: def.requiredFor,
+      category: def.category,
+      status: 'complete' as const,
+      completedAt,
+      expiresAt,
+      trainer,
+    }
+
+    const existingIdx = trainingRequirements.findIndex((t) => t.key === input.trainingKey)
+    if (existingIdx >= 0) trainingRequirements[existingIdx] = record
+    else trainingRequirements.push(record)
+
+    if (input.attachCertificate && def.documentTypes?.[0]) {
+      const requirementType = def.documentTypes[0]
+      const existing = documents.find((d) => d.requirementType === requirementType)
+      const newDoc: DriverDocument = {
+        id: `doc-train-${Date.now()}`,
+        requirementType,
+        label: `${def.label} certificate`,
+        referenceNumber: input.certificateNumber ?? null,
+        issuingOrganisation: input.provider ?? trainer,
+        issueDate: completedAt,
+        expiryDate: expiresAt,
+        verificationStatus: 'verified',
+        verifiedBy: actorName,
+        verifiedAt: ts,
+        rejectionReason: null,
+        notes: input.notes ?? null,
+        fileName: `${requirementType}-certificate.pdf`,
+      }
+      documents = existing
+        ? documents.map((d) => (d.id === existing.id ? newDoc : d))
+        : [...documents, newDoc]
+    }
+
+    const updated = syncProfileEligibility({
+      ...current,
+      documents,
+      trainingRequirements,
+      complianceStatus: deriveComplianceStatus(documents),
+      updatedAt: ts,
+    })
+
+    appendAudit(updated, {
+      action: 'Training recorded',
+      actor: actorName,
+      actorRole: 'Transport manager',
+      createdAt: ts,
+      previousValue: null,
+      newValue: `${def.label} · ${completedAt}`,
+      reason: input.notes ?? null,
     })
 
     profiles[idx] = updated
@@ -1158,6 +1777,10 @@ export const mockDriversApi = {
           severity: driver.operationalEligibility === 'not_eligible' ? ('high' as const) : ('medium' as const),
           title: `Driver not eligible — ${driver.firstName} ${driver.lastName}`,
           category: 'compliance' as const,
+          typeCode: 'driver_eligibility_failed' as const,
+          source: 'Drivers',
+          driverName: `${driver.firstName} ${driver.lastName}`,
+          description: primaryBlock,
           relatedRecord: driver.reference,
           relatedHref: `/drivers/${driver.id}`,
           depot: driver.depotName ?? '—',

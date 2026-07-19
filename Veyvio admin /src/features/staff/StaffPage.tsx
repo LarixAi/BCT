@@ -39,6 +39,44 @@ export function StaffPage() {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load staff'}</p>
   }
 
+  const summary = {
+    total: hub.summary?.total ?? 0,
+    active: hub.summary?.active ?? 0,
+    onDuty: hub.summary?.onDuty ?? 0,
+    invitationsPending: hub.summary?.invitationsPending ?? 0,
+    accessIssues: hub.summary?.accessIssues ?? 0,
+    trainingExpiring: hub.summary?.trainingExpiring ?? 0,
+    unassigned: hub.summary?.unassigned ?? 0,
+  }
+
+  const safeHub = {
+    ...hub,
+    summary,
+    rows: hub.rows ?? [],
+    invitations: hub.invitations ?? [],
+    former: hub.former ?? [],
+    departments: hub.departments ?? [],
+    roles: hub.roles ?? [],
+    shiftsToday: hub.shiftsToday ?? [],
+    openTasks: hub.openTasks ?? [],
+    pendingHandovers: hub.pendingHandovers ?? [],
+    controllersOnDuty: hub.controllersOnDuty ?? [],
+    trainingGaps: hub.trainingGaps ?? [],
+    trainingCompliance: hub.trainingCompliance ?? { compliant: 0, expiringSoon: 0, expired: 0, missing: 0 },
+    requirementCatalog: hub.requirementCatalog ?? [],
+    pendingAccessReviews: hub.pendingAccessReviews ?? [],
+    segregationAlerts: hub.segregationAlerts ?? [],
+    contractorsExpiring: hub.contractorsExpiring ?? [],
+    governanceSummary: hub.governanceSummary ?? {
+      accessReviewsDue: 0,
+      segregationWarnings: 0,
+      contractorsExpiring: 0,
+      mfaNonCompliant: 0,
+      ssoEnabledCount: 0,
+    },
+    ssoPolicy: hub.ssoPolicy ?? { enabled: false, provider: 'None', enforcedForElevated: false },
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -70,7 +108,7 @@ export function StaffPage() {
                 : 'border-slate-200 bg-white hover:border-slate-300'
             }`}
           >
-            <p className="text-xl font-bold tabular-nums text-slate-900">{hub.summary[card.id]}</p>
+            <p className="text-xl font-bold tabular-nums text-slate-900">{summary[card.id]}</p>
             <p className="text-xs text-slate-600">{card.label}</p>
           </button>
         ))}
@@ -92,14 +130,14 @@ export function StaffPage() {
       </div>
 
       {tab === 'all' && (
-        <StaffAllTab hub={hub} filter={filter} onFilter={setFilter} search={search} onSearch={setSearch} />
+        <StaffAllTab hub={safeHub} filter={filter} onFilter={setFilter} search={search} onSearch={setSearch} />
       )}
-      {tab === 'invitations' && <StaffInvitationsTab invitations={hub.invitations} />}
-      {tab === 'access' && <StaffAccessTab hub={hub} />}
-      {tab === 'teams' && <StaffTeamsTab hub={hub} />}
-      {tab === 'training' && <StaffTrainingTab hub={hub} />}
-      {tab === 'availability' && <StaffAvailabilityTab hub={hub} />}
-      {tab === 'former' && <StaffFormerTab former={hub.former} />}
+      {tab === 'invitations' && <StaffInvitationsTab invitations={safeHub.invitations} />}
+      {tab === 'access' && <StaffAccessTab hub={safeHub} />}
+      {tab === 'teams' && <StaffTeamsTab hub={safeHub} />}
+      {tab === 'training' && <StaffTrainingTab hub={safeHub} />}
+      {tab === 'availability' && <StaffAvailabilityTab hub={safeHub} />}
+      {tab === 'former' && <StaffFormerTab former={safeHub.former} />}
     </div>
   )
 }
