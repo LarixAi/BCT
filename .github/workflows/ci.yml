@@ -45,10 +45,8 @@ jobs:
     name: Admin
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    defaults:
-      run:
-        # Directory name includes a trailing space in this monorepo.
-        working-directory: "Veyvio admin "
+    # Folder name includes a trailing space. Actions trims defaults.run.working-directory,
+    # so every step cd's explicitly instead.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,21 +56,29 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: "Veyvio admin /package-lock.json"
+          cache-dependency-path: ${{ format('{0} /package-lock.json', 'Veyvio admin') }}
 
       - name: Install
-        run: npm ci
+        run: |
+          cd "Veyvio admin "
+          npm ci
 
       - name: Lint
-        run: npm run lint
+        run: |
+          cd "Veyvio admin "
+          npm run lint
 
       - name: Unit tests
-        run: npm test
+        run: |
+          cd "Veyvio admin "
+          npm test
 
       - name: Build
         env:
           VITE_MOCK_API: "true"
-        run: npm run build
+        run: |
+          cd "Veyvio admin "
+          npm run build
 
   driver:
     name: Driver
