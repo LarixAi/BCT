@@ -4,12 +4,16 @@ import {
   getDriverOnboardingState,
   uploadDriverDocument,
 } from "@/services/onboarding.service";
+import { loadDriverDocumentMaps } from "@/services/driver-documents.service";
 import { getDriverOnboardingRequirements } from "@/services/driver-requirements.service";
 import { friendlyOnboardingError } from "@/lib/onboarding-errors";
 import { OnboardingUploadError } from "@/lib/onboarding-upload-error";
-import { countCompletedTasks, findNextReadyTask, getVisibleTasks, resolveTaskUiStatus } from "@/lib/onboarding-tasks";
+import { buildTaskExtras, countCompletedTasks, findNextReadyTask, getVisibleTasks, resolveTaskUiStatus } from "@/lib/onboarding-tasks";
 import { onboardingStatusLabel } from "@/lib/onboarding-status";
 import { dispatchReadinessLabel } from "@/lib/dispatch-readiness";
+import { DEFAULT_ONBOARDING_STEP_TEMPLATES } from "@/lib/onboarding-blueprint";
+import { mergeOnboardingFormFromPrefill } from "@/lib/onboarding-form-merge";
+import { withTimeout } from "@/lib/withTimeout";
 
 const EMPTY_FORM = {
   phone: "",
@@ -50,17 +54,64 @@ export function DriverOnboardingProvider({ driver, organisationId, onRefresh, ch
   const [uploadByStep, setUploadByStep] = useState({});
 
   const load = useCallback(async () => {
-    const [onboardingState, prefillData, req] = await Promise.all([
-      getDriverOnboardingState(driver),
-      getDriverOnboardingPrefill(driver.id),
-      getDriverOnboardingRequirements(driver.id),
+    const emptyPrefill = {
+      form: {},
+      documentsByStep: {},
+      documentsByType: {},
+      fullName: driver.fullName,
+      adminProvided: {},
+      hasAdminData: false,
+    };
+    const emptyState = {
+      steps: DEFAULT_ONBOARDING_STEP_TEMPLATES.map((t, i) => ({
+        id: `template-${i}`,
+        stepKey: t.stepKey,
+        stepLabel: t.stepLabel,
+        required: t.required,
+        status: "pending",
+        reviewStatus: null,
+      })),
+      isEditable: true,
+      canonicalOnboardingStatus: driver.onboardingStatus ?? "in_progress",
+      dispatchBand: "blocked",
+      resubmitRequestedItems: [],
+      rejectionReason: null,
+    };
+
+    const settled = await Promise.allSettled([
+      withTimeout(getDriverOnboardingState(driver), 8000, null),
+      withTimeout(getDriverOnboardingPrefill(driver.id), 8000, null),
+      withTimeout(getDriverOnboardingRequirements(driver.id), 5000, null),
     ]);
+
+    const onboardingState =
+      settled[0].status === "fulfilled" && settled[0].value ? settled[0].value : emptyState;
+    const prefillData =
+      settled[1].status === "fulfilled" && settled[1].value ? settled[1].value : emptyPrefill;
+    const req =
+      settled[2].status === "fulfilled" && settled[2].value
+        ? settled[2].value
+        : { requiresDbs: Boolean(driver.canDoSchoolRuns) };
+
+    if (settled[0].status === "rejected" || !settled[0].value) {
+      console.warn(
+        "[onboarding load] state unavailable — showing empty checklist",
+        settled[0].status === "rejected" ? settled[0].reason : "timeout",
+      );
+    }
+    if (settled[1].status === "rejected" || !settled[1].value) {
+      console.warn(
+        "[onboarding load] prefill unavailable",
+        settled[1].status === "rejected" ? settled[1].reason : "timeout",
+      );
+    }
+
     setState(onboardingState);
     setPrefill(prefillData);
     setRequirements(req);
-    setForm((prev) => ({ ...prev, ...prefillData.form }));
-    setDocumentsByStep(prefillData.documentsByStep ?? {});
-    setDocumentsByType(prefillData.documentsByType ?? {});
+    setForm((prev) => mergeOnboardingFormFromPrefill(prev, prefillData.form ?? {}));
+    setDocumentsByStep((prev) => ({ ...prev, ...(prefillData.documentsByStep ?? {}) }));
+    setDocumentsByType((prev) => ({ ...prev, ...(prefillData.documentsByType ?? {}) }));
     return { onboardingState, prefillData, req };
   }, [driver]);
 
@@ -77,21 +128,28 @@ export function DriverOnboardingProvider({ driver, organisationId, onRefresh, ch
     };
   }, [load]);
 
-  const refresh = useCallback(async () => {
-    const result = await load();
-    await onRefresh?.();
-    return result;
-  }, [load, onRefresh]);
+  const refresh = useCallback(
+    async (options = {}) => {
+      const { syncParent = true } = options;
+      const result = await load();
+      if (syncParent) await onRefresh?.();
+      return result;
+    },
+    [load, onRefresh],
+  );
 
   const visibleTasks = useMemo(() => getVisibleTasks(driver, requirements), [driver, requirements]);
 
   const taskExtras = useMemo(
-    () => ({
-      visibleTasks,
-      documentsByStep,
-      tachographComplete: Boolean(form.tachoCardNumber?.trim() && form.tachoCardExpiry),
-    }),
-    [visibleTasks, documentsByStep, form.tachoCardNumber, form.tachoCardExpiry],
+    () =>
+      buildTaskExtras({
+        visibleTasks,
+        documentsByStep,
+        form,
+        prefill,
+        state,
+      }),
+    [visibleTasks, documentsByStep, form, prefill, state],
   );
 
   const getTaskStatus = useCallback(
@@ -110,10 +168,21 @@ export function DriverOnboardingProvider({ driver, organisationId, onRefresh, ch
     [driver, state, prefill, documentsByStep, form, requirements],
   );
 
-  const nextTask = useMemo(
-    () => findNextReadyTask(driver, state, { ...prefill, documentsByStep, form }, requirements),
-    [driver, state, prefill, documentsByStep, form, requirements],
-  );
+  const nextTask = useMemo(() => {
+    const fromServer = prefill?.suggestedNextStepKey
+      ? visibleTasks.find((t) => t.stepKey === prefill.suggestedNextStepKey)
+      : null;
+    if (fromServer) {
+      const status = resolveTaskUiStatus(fromServer, {
+        steps: state?.steps,
+        resubmitRequestedItems: state?.resubmitRequestedItems ?? [],
+        isEditable: state?.isEditable !== false,
+        extras: taskExtras,
+      });
+      if (status === "ready" || status === "action_required") return fromServer;
+    }
+    return findNextReadyTask(driver, state, { ...prefill, documentsByStep, form }, requirements);
+  }, [driver, state, prefill, documentsByStep, form, requirements, visibleTasks, taskExtras]);
 
   const isEditable = state?.isEditable !== false;
   const adminProvided = prefill?.adminProvided ?? {};
@@ -128,14 +197,16 @@ export function DriverOnboardingProvider({ driver, organisationId, onRefresh, ch
     }));
     try {
       await uploadDriverDocument(driver, { documentType, file });
-      const prefillData = await getDriverOnboardingPrefill(driver.id);
-      setDocumentsByStep(prefillData.documentsByStep ?? {});
-      setDocumentsByType(prefillData.documentsByType ?? {});
+      const docMaps = await loadDriverDocumentMaps(driver.id);
+      setDocumentsByStep(docMaps.documentsByStep ?? {});
+      setDocumentsByType(docMaps.documentsByType ?? {});
       setUploadByStep((prev) => ({
         ...prev,
         [documentType]: { status: "success", error: "" },
       }));
-      await refresh();
+      // Sync checklist/documents only — avoid parent session refresh (can remount routes)
+      // and preserve unsaved form fields on this screen.
+      await refresh({ syncParent: false });
     } catch (err) {
       const context = err instanceof OnboardingUploadError && err.storageUploaded ? "upload-metadata" : "upload";
       const message =

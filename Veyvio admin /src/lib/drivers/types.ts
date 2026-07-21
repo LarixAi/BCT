@@ -168,9 +168,13 @@ export interface DriverDevice {
   lastSeenAt: string
   trusted: boolean
   biometricUnlock: boolean
+  biometricMethod?: string | null
+  biometricEnabledAt?: string | null
+  lastBiometricUnlockAt?: string | null
   pushNotificationsEnabled: boolean
   locationAccess: 'while_on_duty' | 'always' | 'denied' | 'unknown'
   securityStatus: 'trusted' | 'untrusted' | 'revoked'
+  requirePasswordNextLogin?: boolean
 }
 
 export interface DriverSession {
@@ -280,6 +284,10 @@ export interface DriverDocument {
   rejectionReason: string | null
   notes: string | null
   fileName: string | null
+  fileObjectId: string | null
+  createdAt?: string
+  updatedAt?: string
+  sourceApp?: string
 }
 
 export interface DriverDocumentVersion {
@@ -303,10 +311,14 @@ export interface TrainingRequirement {
   key: string
   label: string
   requiredFor: string
-  status: 'complete' | 'expired' | 'due_soon' | 'missing' | 'failed'
+  status: 'complete' | 'expired' | 'due_soon' | 'missing' | 'failed' | 'assigned' | 'in_progress'
   completedAt: string | null
   expiresAt: string | null
   trainer: string | null
+  /** 0–100 when the driver has started the Veyvio module */
+  progressPercentage?: number | null
+  /** Assessment / quiz score when recorded */
+  assessmentScore?: number | null
   /** Present when built from the Section 19/22 catalogue */
   category?: 'mandatory' | 'role'
 }

@@ -1,5 +1,7 @@
 # Routes
 
+Full multi-app page index (Admin + Yard + Driver): [`docs/pages-sitemap.md`](../pages-sitemap.md).
+
 TanStack Start uses **file-based routing**. See `src/routes/README.md` conventions.
 
 ## Layout structure (Phase 1)

@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import {
   Bus,
+  Bell,
   CalendarDays,
+  CalendarOff,
   ChevronRight,
   CircleHelp,
   ClipboardCheck,
@@ -10,6 +12,7 @@ import {
   GraduationCap,
   MessageSquare,
   Settings,
+  Shield,
   ShieldCheck,
   User,
   Wifi,
@@ -70,11 +73,17 @@ export default function DriverMorePage({ driver, onLogout }) {
       <DriverSectionTitle>Work</DriverSectionTitle>
       <div className={op.listCard}>
         <Row to="/duty" icon={Clock3} label="My duty" description="Published duties and acknowledgement" />
-        <Row to="/schedule" icon={CalendarDays} label="Schedule & availability" description="Calendar, duties and request time off" />
+        <Row
+          to="/holiday"
+          icon={CalendarOff}
+          label="Holiday & time off"
+          description="Balance, requests and leave year"
+        />
+        <Row to="/schedule" icon={CalendarDays} label="Schedule & availability" description="Calendar and published duties" />
         <Row to="/readiness" icon={ShieldCheck} label="Driver readiness" description="Compliance and eligibility to work" />
         <Row to="/training" icon={GraduationCap} label="Training centre" description="Mandatory modules and certificates" />
         <Row to="/working-time" icon={Clock3} label="Working time" description="Hours, breaks and WTD status" />
-        <Row to="/documents" icon={FileText} label="Documents" description="Credentials and uploaded evidence" />
+        <Row to="/documents" icon={FileText} label="Documents" description="Licence, CPC, DBS and other compliance evidence" />
       </div>
 
       <DriverSectionTitle>Vehicle & safety</DriverSectionTitle>
@@ -93,7 +102,8 @@ export default function DriverMorePage({ driver, onLogout }) {
 
       <DriverSectionTitle>Communication & support</DriverSectionTitle>
       <div className={op.listCard}>
-        <Row to="/messages" icon={MessageSquare} label="Messages" description="Conversations, alerts and notices" />
+        <Row to="/notifications" icon={Bell} label="Notifications" description="Training, compliance and ops alerts" />
+        <Row to="/messages" icon={MessageSquare} label="Messages" description="Dispatch and yard conversations" />
         <Row to="/sync" icon={Wifi} label="Offline & sync" description="Command bootstrap status" />
         <Row
           to="/profile/details"
@@ -106,6 +116,12 @@ export default function DriverMorePage({ driver, onLogout }) {
           icon={Settings}
           label="Settings"
           description="Notifications, navigation and contact"
+        />
+        <Row
+          to="/profile/security"
+          icon={Shield}
+          label="Security"
+          description="Biometric unlock and trusted device"
         />
         <Row to="/help" icon={CircleHelp} label="Help & support" />
       </div>

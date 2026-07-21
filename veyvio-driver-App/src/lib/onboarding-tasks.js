@@ -13,6 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { isStepCompleteForProgress, normalizeStepStatus } from "@/lib/onboarding-status";
+import { getLocalCompletedOnboardingSteps } from "@/lib/onboarding-progress-store";
 
 export const ONBOARDING_STEP_KEYS_ORDER = [
   "personal_profile",
@@ -169,6 +170,23 @@ function stepRecordForTask(task, stepsByKey) {
 
 function isTaskComplete(task, stepsByKey, extras = {}) {
   if (task.alwaysComplete) return true;
+
+  const completedKeys = extras.completedStepKeys ?? new Set();
+  if (task.stepKey && completedKeys.has(task.stepKey)) return true;
+
+  if (task.documentStepKey && extras.documentsByStep?.[task.documentStepKey]) return true;
+
+  const admin = extras.adminProvided ?? {};
+  if (task.id === "profile" && admin.phone && admin.dateOfBirth) return true;
+  if (task.id === "address-emergency" && admin.addressLine1 && admin.contactName && admin.emergencyPhone) {
+    return true;
+  }
+  if (task.id === "licence" && admin.licenceExpiry) return true;
+  if (task.id === "dvla" && admin.dvlaCheckCode) return true;
+  if (task.id === "dqc" && admin.dqcNumber && admin.cpcExpiry) return true;
+  if (task.id === "dbs" && admin.dbsExpiry) return true;
+  if (task.id === "tachograph" && extras.tachographComplete) return true;
+
   const record = stepRecordForTask(task, stepsByKey);
   if (!record) return false;
   if (isStepCompleteForProgress(record.status, record.review_status ?? record.reviewStatus)) return true;
@@ -224,6 +242,8 @@ function isTaskEditable(task, { isEditable, resubmitRequestedItems, stepsByKey }
 
 /**
  * Resolve UI status for hub rows.
+ * While the driver is still editing (`isEditable`), finished steps show as completed (green).
+ * Orange "pending review" is only for after formal submit, when the hub is read-only.
  */
 export function resolveTaskUiStatus(task, { steps, resubmitRequestedItems = [], isEditable, extras = {} }) {
   const stepsByKey = new Map(
@@ -244,12 +264,9 @@ export function resolveTaskUiStatus(task, { steps, resubmitRequestedItems = [], 
     return "action_required";
   }
 
-  if (!isEditable && isTaskComplete(task, stepsByKey, extras)) {
-    return "pending_review";
-  }
-
   if (isTaskComplete(task, stepsByKey, extras)) {
-    if (reviewStatus === "pending" || record?.status === "submitted") return "pending_review";
+    // Formal admin wait only when the driver can no longer edit (submitted / pending screen).
+    if (!isEditable) return "pending_review";
     return "completed";
   }
 
@@ -277,36 +294,63 @@ export function resolveTaskUiStatus(task, { steps, resubmitRequestedItems = [], 
   return "locked";
 }
 
+export function buildTaskExtras({ visibleTasks, documentsByStep, form, prefill, state }) {
+  const driverId = prefill?.driverId ?? state?.driverId;
+  const serverKeys = state?.serverCompletedStepKeys ?? prefill?.serverCompletedStepKeys ?? [];
+  const localKeys =
+    prefill?.localCompletedStepKeys ??
+    (driverId ? getLocalCompletedOnboardingSteps(driverId) : []);
+  return {
+    visibleTasks,
+    documentsByStep,
+    tachographComplete: Boolean(form.tachoCardNumber?.trim() && form.tachoCardExpiry),
+    adminProvided: prefill?.adminProvided ?? {},
+    completedStepKeys: new Set([...serverKeys, ...localKeys]),
+  };
+}
+
 export function countCompletedTasks(driver, state, prefill, requirements = {}) {
   const visible = getVisibleTasks(driver, requirements);
-  const stepsByKey = new Map((state?.steps ?? []).map((s) => [s.stepKey, s]));
-  const extras = {
+  const extras = buildTaskExtras({
     visibleTasks: visible,
     documentsByStep: prefill?.documentsByStep ?? {},
-    tachographComplete: Boolean(prefill?.form?.tachoCardNumber?.trim() && prefill?.form?.tachoCardExpiry),
-  };
+    form: prefill?.form ?? {},
+    prefill,
+    state,
+  });
+  const isEditable = state?.isEditable !== false;
 
-  const completed = visible.filter((task) => {
+  let completed = 0;
+  let awaitingReview = 0;
+  for (const task of visible) {
     const ui = resolveTaskUiStatus(task, {
       steps: state?.steps,
       resubmitRequestedItems: state?.resubmitRequestedItems ?? [],
-      isEditable: state?.isEditable !== false,
+      isEditable,
       extras,
     });
-    return ["completed", "pending_review", "approved"].includes(ui);
-  }).length;
+    if (ui === "pending_review") awaitingReview += 1;
+    if (["completed", "pending_review", "approved"].includes(ui)) completed += 1;
+  }
 
-  return { completed, total: visible.length };
+  return { completed, awaitingReview, total: visible.length };
 }
 
 export function findNextReadyTask(driver, state, prefill, requirements = {}) {
   const visible = getVisibleTasks(driver, requirements);
+  const extras = buildTaskExtras({
+    visibleTasks: visible,
+    documentsByStep: prefill?.documentsByStep ?? {},
+    form: prefill?.form ?? {},
+    prefill,
+    state,
+  });
   for (const task of visible) {
     const status = resolveTaskUiStatus(task, {
       steps: state?.steps,
       resubmitRequestedItems: state?.resubmitRequestedItems ?? [],
       isEditable: state?.isEditable !== false,
-      extras: { visibleTasks: visible, documentsByStep: prefill?.documentsByStep ?? {} },
+      extras,
     });
     if (status === "ready" || status === "action_required") return task;
   }

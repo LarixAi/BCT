@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import DriverMobileAuthLayout, {
   DriverAuthIdentifierField,
+  DriverAuthOrDivider,
   DriverAuthPrimaryButton,
   DriverAuthTextField,
   DriverAuthTrustLine,
@@ -14,6 +15,7 @@ import {
   readRateLimitUntil,
   rememberRateLimitUntil,
 } from "@/lib/auth-errors";
+import BiometricLoginButton from "@/features/auth/biometrics/BiometricLoginButton";
 
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60 * 1000;
 
@@ -28,8 +30,7 @@ function looksLikeEmail(value) {
 }
 
 /** Command Driver accounts are invite-only — email + password against command-api. */
-export default function DriverAuthEntry({ onLogin }) {
-  const navigate = useNavigate();
+export default function DriverAuthEntry({ onLogin, onBiometricLogin }) {
   const [step, setStep] = useState("identifier");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -95,7 +96,9 @@ export default function DriverAuthEntry({ onLogin }) {
     clearRateLimitStorage();
     setLoading(false);
     submitLock.current = false;
-    navigate("/", { replace: true });
+    // Do not navigate here — DriverApp switches trees from session `screen`
+    // (onboarding / app / …). Navigating while AuthRoutes is still mounted
+    // used to trap drivers on a loader or bounce them back to /auth.
   }
 
   if (step === "email-password") {
@@ -209,6 +212,13 @@ export default function DriverAuthEntry({ onLogin }) {
         <DriverAuthPrimaryButton type="submit" disabled={!isEmail} ready={isEmail}>
           Continue
         </DriverAuthPrimaryButton>
+
+        {onBiometricLogin ? (
+          <>
+            <DriverAuthOrDivider />
+            <BiometricLoginButton onLogin={onBiometricLogin} disabled={loading} />
+          </>
+        ) : null}
 
         <DriverAuthTrustLine>Secure login for your fleet account.</DriverAuthTrustLine>
 

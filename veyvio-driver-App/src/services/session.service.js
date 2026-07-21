@@ -13,8 +13,9 @@ import {
   invalidateDriverBootstrapCache,
   seedDriverBootstrapCache,
 } from "@/services/driver-bootstrap.service";
+import { withTimeout } from "@/lib/withTimeout";
 /** Map Command `driver_app_accounts.account_status` → fields the Ridova-shaped UI expects. */
-function mapAccountStatusToDriverFields(accountStatus) {
+export function mapAccountStatusToDriverFields(accountStatus) {
   const status = String(accountStatus ?? "active");
   if (["suspended", "temporarily_suspended", "locked"].includes(status)) {
     return { onboarding_status: "suspended", status: "suspended" };
@@ -25,14 +26,44 @@ function mapAccountStatusToDriverFields(accountStatus) {
   if (status === "pending_approval") {
     return { onboarding_status: "compliance_review", status: "pending" };
   }
-  if (["invitation_sent", "invitation_pending", "draft"].includes(status)) {
+  if (["invitation_sent", "invitation_pending", "draft", "not_created"].includes(status)) {
     return { onboarding_status: "invited", status: "pending" };
   }
-  // active | registration_started | setup_incomplete | compliance_restricted → enter operational shell
+  // Driver can sign in but must finish app onboarding before the operational shell.
+  if (["setup_incomplete", "registration_started"].includes(status)) {
+    return { onboarding_status: "documents_pending", status: "pending" };
+  }
+  // Password reset stays in the app shell (auth recovery), not the onboarding wizard.
+  if (status === "password_reset_required") {
+    return { onboarding_status: "active", status: "active" };
+  }
   if (status === "compliance_restricted") {
     return { onboarding_status: "active", status: "active" };
   }
-  return { onboarding_status: "active", status: "active" };
+  if (status === "active") {
+    return { onboarding_status: "active", status: "active" };
+  }
+  // Unknown statuses: prefer onboarding over silently opening the ops shell.
+  return { onboarding_status: "invited", status: "pending" };
+}
+
+
+function applyActivationPhaseToDriverRow(driverRow, sessionPayload) {
+  const phase = sessionPayload?.activationPhase;
+  const operationalStatus = String(sessionPayload?.operationalStatus ?? "");
+  // Admin "Activate for dispatch" — open the ops shell even if checklist still looks incomplete.
+  if (["eligible", "restricted"].includes(operationalStatus)) {
+    driverRow.onboarding_status = "active";
+    driverRow.status = "active";
+    return;
+  }
+  if (phase === "activation_training") {
+    driverRow.onboarding_status = "documents_pending";
+    driverRow.status = "pending";
+  } else if (phase === "awaiting_document_review") {
+    driverRow.onboarding_status = "compliance_review";
+    driverRow.status = "pending";
+  }
 }
 
 function mapCommandSessionToDriver(commandSession, userId) {
@@ -50,6 +81,7 @@ function mapCommandSessionToDriver(commandSession, userId) {
     full_name: fullName,
     email: commandSession.email ?? "",
     phone: commandSession.mobile ?? "",
+    date_of_birth: commandSession.dateOfBirth ?? null,
     onboarding_status: fields.onboarding_status,
     status: fields.status,
     home_depot_id: depot?.id ?? null,
@@ -71,6 +103,8 @@ function mapCommandSessionToDriver(commandSession, userId) {
     medical_expiry: null,
   };
 
+  applyActivationPhaseToDriverRow(row, commandSession);
+
   return {
     driverRow: row,
     driver: mapDriverRowToRecord(row, { depotName: depot?.name ?? null }),
@@ -81,8 +115,24 @@ function mapCommandSessionToDriver(commandSession, userId) {
   };
 }
 
+async function fetchDriverSessionWithRetry(accessToken, attempts = 2) {
+  const timeoutMs = 20000;
+  let last = { ok: false, status: 0, message: "Driver session timed out. Check your connection." };
+  for (let i = 0; i < attempts; i += 1) {
+    last = await withTimeout(
+      commandDriverSession(accessToken),
+      timeoutMs,
+      { ok: false, status: 0, message: "Driver session timed out. Check your connection." },
+    );
+    if (last.ok) return last;
+    // Retry cold Edge Function starts / transient network only.
+    if (last.status !== 0) return last;
+  }
+  return last;
+}
+
 async function ensureCompanyOnSession(supabase, accessToken, refreshToken) {
-  let sessionResult = await commandDriverSession(accessToken);
+  let sessionResult = await fetchDriverSessionWithRetry(accessToken);
   if (sessionResult.ok) return { accessToken, refreshToken, sessionResult };
 
   // 409 / company_required = JWT missing active_company_id — activate a membership.
@@ -96,15 +146,26 @@ async function ensureCompanyOnSession(supabase, accessToken, refreshToken) {
     } = await supabase.auth.getUser();
     if (!user) return { accessToken, refreshToken, sessionResult };
 
-    const { data: memberships } = await supabase
-      .from("company_memberships")
-      .select("company_id")
-      .eq("user_id", user.id)
-      .eq("status", "active");
+    // Ridova membership lookup can hang on network/RLS — never block sign-in forever.
+    const membershipsResult = await withTimeout(
+      supabase
+        .from("company_memberships")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .then((result) => result),
+      4000,
+      { data: null, error: { message: "timeout" } },
+    );
+    const memberships = membershipsResult?.data ?? null;
 
     const companyIds = (memberships ?? []).map((row) => String(row.company_id));
     for (const companyId of companyIds) {
-      const selected = await commandSelectTenant(accessToken, refreshToken, companyId);
+      const selected = await withTimeout(
+        commandSelectTenant(accessToken, refreshToken, companyId),
+        12000,
+        { ok: false },
+      );
       if (!selected.ok || !selected.accessToken) continue;
 
       await supabase.auth.setSession({
@@ -112,7 +173,7 @@ async function ensureCompanyOnSession(supabase, accessToken, refreshToken) {
         refresh_token: selected.refreshToken ?? refreshToken,
       });
 
-      const retry = await commandDriverSession(selected.accessToken);
+      const retry = await fetchDriverSessionWithRetry(selected.accessToken);
       if (retry.ok) {
         return {
           accessToken: selected.accessToken,
@@ -153,6 +214,14 @@ export async function getDriverSessionContext() {
         linkError: sessionResult.message,
       };
     }
+    if (sessionResult.status === 0) {
+      return {
+        userId: user.id,
+        routeTarget: "session_error",
+        driver: null,
+        linkError: sessionResult.message ?? "Could not reach Command. Check your connection and try again.",
+      };
+    }
     if (sessionResult.status === 409) {
       return {
         userId: user.id,
@@ -172,55 +241,141 @@ export async function getDriverSessionContext() {
   const mapped = mapCommandSessionToDriver(sessionResult.session, user.id);
   const driverRow = mapped.driverRow;
   const driver = mapped.driver;
+
+  // Prefer Command session fields; fall back to shared tables when API is behind.
+  let operationalStatus = String(sessionResult.session?.operationalStatus ?? "");
+  let accountStatus = String(mapped.accountStatus ?? sessionResult.session?.accountStatus ?? "");
+  // Always read operational status from shared table — Command session may lag behind deploys.
+  {
+    const { data: driverOps } = await withTimeout(
+      supabase
+        .from("drivers")
+        .select("operational_status")
+        .eq("id", driverRow.id)
+        .maybeSingle()
+        .then((result) => result),
+      3000,
+      { data: null },
+    );
+    if (driverOps?.operational_status) operationalStatus = String(driverOps.operational_status);
+  }
+  if (!accountStatus || accountStatus === "setup_incomplete") {
+    const { data: appRow } = await withTimeout(
+      supabase
+        .from("driver_app_accounts")
+        .select("account_status")
+        .eq("driver_id", driverRow.id)
+        .maybeSingle()
+        .then((result) => result),
+      3000,
+      { data: null },
+    );
+    if (appRow?.account_status) accountStatus = String(appRow.account_status);
+  }
+
+  // Re-apply activation mapping with the resolved operational status.
+  applyActivationPhaseToDriverRow(driverRow, {
+    ...sessionResult.session,
+    operationalStatus,
+    activationPhase: sessionResult.session?.activationPhase,
+  });
+  if (["eligible", "restricted"].includes(operationalStatus)) {
+    mapped.accountStatus = "active";
+    accountStatus = "active";
+  } else {
+    mapped.accountStatus = accountStatus || mapped.accountStatus;
+  }
+
+  // Rebuild driver record after mutating onboarding/account fields.
+  const refreshedDriver = mapDriverRowToRecord(driverRow, {
+    depotName: mapped.depots?.[0]?.name ?? null,
+  });
+  mapped.driver = refreshedDriver;
+
   const canonical = normalizeOnboardingStatus(driverRow.onboarding_status);
   const needsOnboarding =
     !["approved"].includes(canonical) && !["active", "temporary_access"].includes(driverRow.onboarding_status);
   const restrictedMode = isDriverRestricted(driverRow) || driverRow.status === "suspended";
 
-  const compliance = await loadDriverComplianceReadiness(driver).catch(() => null);
+  const compliance = await withTimeout(
+    loadDriverComplianceReadiness(refreshedDriver).catch(() => null),
+    2500,
+    null,
+  );
 
   const depotId = mapped.depots?.[0]?.id ?? null;
-  const bootstrapResult = await commandDriverBootstrap(ensured.accessToken, depotId).catch(() => null);
+  const bootstrapResult = await withTimeout(
+    commandDriverBootstrap(ensured.accessToken, depotId).catch(() => null),
+    8000,
+    null,
+  );
   const bootstrap = bootstrapResult?.ok ? bootstrapResult.bootstrap : null;
   // Prefer bootstrap identity depot when session depots were empty
   const activeDepotId = bootstrap?.identity?.activeDepotId ?? depotId;
   if (bootstrap) seedDriverBootstrapCache(bootstrap, activeDepotId);
 
   let routeTarget = "home";
-  if (canonical === "submitted") routeTarget = "pending";
-  else if (needsOnboarding && canonical !== "submitted") routeTarget = "onboarding";
-  else if (restrictedMode || canonical === "rejected") routeTarget = "restricted";
+  const activationPhase = sessionResult.session?.activationPhase;
+  const dispatchActivated = ["eligible", "restricted"].includes(operationalStatus);
 
-  // Command drivers with a linked account enter the app even when Ridova onboarding tables are empty.
-  if (bootstrap?.identity?.driverId && routeTarget === "onboarding" && !needsOnboarding) {
-    routeTarget = "home";
+  if (dispatchActivated) {
+    routeTarget = restrictedMode || canonical === "rejected" ? "restricted" : "home";
+    try {
+      sessionStorage.removeItem("veyvio.driver.forceAppShell");
+    } catch {
+      /* ignore */
+    }
+  } else if (activationPhase === "activation_training") {
+    routeTarget = "onboarding";
+  } else if (canonical === "submitted") {
+    routeTarget = "pending";
+  } else if (needsOnboarding && canonical !== "submitted") {
+    routeTarget = "onboarding";
+  } else if (restrictedMode || canonical === "rejected") {
+    routeTarget = "restricted";
   }
+
+  // Bootstrap `accessStatus` is broadly "active" for setup_incomplete too — do not use it
+  // to skip Driver onboarding. Only Command `active` / ops-restricted accounts open Home.
+  const commandAccountReady = ["active", "compliance_restricted"].includes(accountStatus);
   if (
-    bootstrap?.identity?.accessStatus === "active" ||
-    bootstrap?.identity?.accessStatus === "restricted"
+    !dispatchActivated &&
+    commandAccountReady &&
+    bootstrap?.identity?.driverId &&
+    routeTarget === "onboarding" &&
+    !needsOnboarding
   ) {
-    if (routeTarget === "onboarding" && driver) routeTarget = "home";
+    routeTarget = "home";
   }
 
   return {
     userId: user.id,
+    accessToken: ensured.accessToken ?? authSession.access_token,
+    driverId: refreshedDriver.id,
     organisationId: mapped.organisationId,
     organisationName: mapped.organisationName,
     membershipId: null,
     driver: bootstrap?.driver?.displayName
-      ? { ...driver, fullName: bootstrap.driver.displayName, organisationName: bootstrap.operator?.companyName }
-      : driver,
+      ? {
+          ...refreshedDriver,
+          fullName: bootstrap.driver.displayName,
+          organisationName: bootstrap.operator?.companyName,
+          operationalStatus,
+        }
+      : { ...refreshedDriver, operationalStatus },
     driverRow,
-    needsOnboarding,
+    needsOnboarding: dispatchActivated ? false : needsOnboarding,
     restrictedMode,
     routeTarget,
     onboardingStatus: driverRow.onboarding_status,
+    operationalStatus,
+    activationPhase: activationPhase ?? null,
     resubmitItems: [],
     outdatedPolicies: compliance?.outdatedPolicies ?? [],
     dispatchBlockers: compliance?.blockers ?? [],
     temporaryAccess: null,
     depots: mapped.depots,
-    accountStatus: mapped.accountStatus,
+    accountStatus,
     bootstrap,
     homeSummary: bootstrap?.legacy?.homeSummary ?? null,
     activeDepotId,
@@ -239,7 +394,11 @@ async function applyCommandTokens(supabase, accessToken, refreshToken) {
 export async function signInDriver(email, password) {
   const supabase = getSupabaseClient();
 
-  const login = await commandLogin(email, password);
+  const login = await withTimeout(
+    commandLogin(email, password),
+    15000,
+    { ok: false, message: "Sign-in timed out. Check your connection and try again." },
+  );
   if (!login.ok) {
     if (isRateLimitError(login.message)) markRateLimitCooldown();
     return { ok: false, message: formatAuthError(login.message) };
@@ -294,6 +453,13 @@ export async function signInDriver(email, password) {
   if (!applied.ok) return applied;
 
   const context = await getDriverSessionContext();
+  if (context?.routeTarget === "session_error") {
+    await supabase.auth.signOut().catch(() => undefined);
+    return {
+      ok: false,
+      message: context.linkError ?? "Could not finish signing in. Check your connection and try again.",
+    };
+  }
   if (context?.routeTarget === "not_driver") {
     await supabase.auth.signOut();
     return {
@@ -302,6 +468,7 @@ export async function signInDriver(email, password) {
     };
   }
   if (!context?.driver) {
+    await supabase.auth.signOut().catch(() => undefined);
     return {
       ok: false,
       message:

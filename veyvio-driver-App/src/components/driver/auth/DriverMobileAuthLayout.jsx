@@ -71,6 +71,7 @@ export function DriverAuthPrimaryButton({
   ready = undefined,
   type = "button",
   onClick = undefined,
+  className = "",
 }) {
   const isReady = ready ?? !disabled;
   return (
@@ -78,7 +79,7 @@ export function DriverAuthPrimaryButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`driver-auth-primary ${isReady && !disabled ? "driver-auth-primary--ready" : ""}`}
+      className={`driver-auth-primary ${isReady && !disabled ? "driver-auth-primary--ready" : ""} ${className}`.trim()}
     >
       <span>{children}</span>
       {isReady && !disabled ? <ArrowRight className="h-4 w-4 shrink-0" aria-hidden /> : null}

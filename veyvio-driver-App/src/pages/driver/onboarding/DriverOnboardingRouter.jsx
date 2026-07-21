@@ -17,24 +17,27 @@ import {
   DriverTrainingChecklistScreen,
 } from "@/pages/driver/onboarding/DriverOnboardingTaskScreens";
 
+/**
+ * Nested under `/onboarding/*` from DriverApp — routes are relative to that prefix.
+ */
 export default function DriverOnboardingRouter({ driver, organisationId, onSubmitted, onRefresh }) {
   return (
     <DriverOnboardingProvider driver={driver} organisationId={organisationId} onRefresh={onRefresh}>
       <Routes>
-        <Route path="/onboarding" element={<DriverOnboardingHomeScreen />} />
-        <Route path="/onboarding/profile" element={<DriverProfileDetailsScreen />} />
-        <Route path="/onboarding/address-emergency" element={<DriverAddressEmergencyScreen />} />
-        <Route path="/onboarding/licence" element={<DriverLicenceScreen />} />
-        <Route path="/onboarding/dvla" element={<DriverDvlaCheckScreen />} />
-        <Route path="/onboarding/dqc" element={<DriverDqcCpcScreen />} />
-        <Route path="/onboarding/tachograph" element={<DriverTachographCardScreen />} />
-        <Route path="/onboarding/dbs" element={<DriverDbsSafeguardingScreen />} />
-        <Route path="/onboarding/right-to-work" element={<DriverRightToWorkScreen />} />
-        <Route path="/onboarding/medical" element={<DriverMedicalDeclarationScreen />} />
-        <Route path="/onboarding/handbook" element={<DriverPolicyAcknowledgementScreen />} />
-        <Route path="/onboarding/training" element={<DriverTrainingChecklistScreen />} />
-        <Route path="/onboarding/defect-policy" element={<DriverDefectPolicyScreen />} />
-        <Route path="/onboarding/review" element={<DriverOnboardingReviewScreen onSubmitted={onSubmitted} />} />
+        <Route index element={<DriverOnboardingHomeScreen />} />
+        <Route path="profile" element={<DriverProfileDetailsScreen />} />
+        <Route path="address-emergency" element={<DriverAddressEmergencyScreen />} />
+        <Route path="licence" element={<DriverLicenceScreen />} />
+        <Route path="dvla" element={<DriverDvlaCheckScreen />} />
+        <Route path="dqc" element={<DriverDqcCpcScreen />} />
+        <Route path="tachograph" element={<DriverTachographCardScreen />} />
+        <Route path="dbs" element={<DriverDbsSafeguardingScreen />} />
+        <Route path="right-to-work" element={<DriverRightToWorkScreen />} />
+        <Route path="medical" element={<DriverMedicalDeclarationScreen />} />
+        <Route path="handbook" element={<DriverPolicyAcknowledgementScreen />} />
+        <Route path="training" element={<DriverTrainingChecklistScreen />} />
+        <Route path="defect-policy" element={<DriverDefectPolicyScreen />} />
+        <Route path="review" element={<DriverOnboardingReviewScreen onSubmitted={onSubmitted} />} />
         <Route path="*" element={<Navigate to="/onboarding" replace />} />
       </Routes>
     </DriverOnboardingProvider>

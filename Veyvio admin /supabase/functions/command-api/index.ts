@@ -29,7 +29,32 @@ import {
   listDriverRequirements,
   patchDriverRequirement,
   requestDriverRequirements,
+  syncDriverRequirementAfterDocumentRejected,
+  syncDriverRequirementAfterDocumentVerified,
 } from '../_shared/driver-requirements.ts'
+import {
+  listDriverTrainingCentre,
+  updateDriverTrainingProgress,
+} from '../_shared/driver-training-centre.ts'
+import {
+  adminDriverHolidayAccrue,
+  adminDriverHolidayAdjust,
+  adminDriverHolidayGet,
+  adminDriverHolidayPatchProfile,
+  driverHolidayBalance,
+  driverHolidayListRequests,
+  driverHolidaySubmitRequest,
+} from '../_shared/holiday-balance.ts'
+import {
+  maybeReleaseDriverForActivationTraining,
+  resolveDriverActivationPhase,
+} from '../_shared/driver-activation-release.ts'
+import {
+  getDriverDeviceStatus,
+  postDriverSecurityEvent,
+  revokeDriverDevice as revokeDriverDeviceRecord,
+  upsertDriverDevice,
+} from '../_shared/driver-devices.ts'
 import {
   DRIVER_ONBOARDING_NOTIFICATION,
   notifyCompanyAdmins,
@@ -445,7 +470,9 @@ async function driverSession(request: Request) {
   const [{ data: driver }, { data: company }, { data: membership }] = await Promise.all([
     admin
       .from('drivers')
-      .select('id, staff_members(first_name, last_name, email, phone)')
+      .select(
+        'id, onboarding_step, operational_status, staff_members(first_name, last_name, email, phone, date_of_birth, home_address, emergency_contact)',
+      )
       .eq('id', appAccount.driver_id)
       .eq('company_id', context.companyId)
       .maybeSingle(),
@@ -460,6 +487,18 @@ async function driverSession(request: Request) {
   ])
 
   const staff = (driver?.staff_members as Row | null) ?? null
+  const driverId = String(appAccount.driver_id)
+  const operationalStatus = String(driver?.operational_status ?? 'draft')
+  const onboardingStep = String(driver?.onboarding_step ?? '')
+
+  // Resolve phase + depots in parallel — keep driver-session under client timeouts.
+  const activationPhasePromise = resolveDriverActivationPhase(
+    context.companyId,
+    driverId,
+    operationalStatus,
+    onboardingStep,
+  ).catch(() => 'active' as const)
+
   let depotRows: Row[] = []
 
   if (membership?.id) {
@@ -482,7 +521,10 @@ async function driverSession(request: Request) {
     depotRows = companyDepots ?? []
   }
 
-  await admin
+  const activationPhase = await activationPhasePromise
+
+  // Non-blocking — do not delay the session response.
+  void admin
     .from('driver_app_accounts')
     .update({
       last_login_at: new Date().toISOString(),
@@ -493,15 +535,21 @@ async function driverSession(request: Request) {
     .eq('company_id', context.companyId)
 
   return json({
-    driverId: String(appAccount.driver_id),
+    driverId,
     companyId: context.companyId,
     companyName: company?.trading_name ?? company?.legal_name ?? 'Company',
     role: 'driver',
     accountStatus: String(appAccount.account_status ?? 'active'),
+    operationalStatus,
+    onboardingStep,
+    activationPhase,
     firstName: String(staff?.first_name ?? context.user.user_metadata?.first_name ?? ''),
     lastName: String(staff?.last_name ?? context.user.user_metadata?.last_name ?? ''),
     email: String(staff?.email ?? context.user.email ?? ''),
     mobile: staff?.phone ? String(staff.phone) : undefined,
+    dateOfBirth: staff?.date_of_birth ? String(staff.date_of_birth).slice(0, 10) : undefined,
+    homeAddress: staff?.home_address ? String(staff.home_address) : undefined,
+    emergencyContact: staff?.emergency_contact ? String(staff.emergency_contact) : undefined,
     depots: depotRows.map((depot) => ({
       id: String(depot.id),
       companyId: String(depot.company_id ?? context.companyId),
@@ -875,6 +923,611 @@ async function projectDriverMessagesInbox(input: { companyId: string; driverId: 
     console.error('messages inbox projection failed', error)
     return { unreadTotal: 0, conversations: [] as Row[] }
   }
+}
+
+
+async function driverUpdateOnboardingProfile(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const appAccount = resolved.appAccount!
+
+  const input = await readJson<Row>(request)
+  const phone = String(input.phone ?? '').trim()
+  if (!phone) return apiError(400, 'Please enter your phone number.')
+
+  let dateOfBirth: string | null = null
+  if (input.dateOfBirth != null && String(input.dateOfBirth).trim()) {
+    const raw = String(input.dateOfBirth).trim()
+    // Accept YYYY-MM-DD or DD/MM/YYYY from mobile date controls.
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? raw
+      : (() => {
+          const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+          if (!m) return null
+          return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+        })()
+    if (!iso) return apiError(400, 'Enter your date of birth as a valid date.')
+    dateOfBirth = iso
+  }
+
+  const { data: driver, error: driverError } = await admin
+    .from('drivers')
+    .select('id, staff_id, onboarding_step, operational_status, status, staff_members(id, phone, date_of_birth)')
+    .eq('company_id', context.companyId)
+    .eq('id', appAccount.driver_id)
+    .maybeSingle()
+  if (driverError || !driver) return apiError(404, driverError?.message ?? 'Driver not found')
+
+  const staff = (driver.staff_members as Row | null) ?? null
+  const staffId = staff?.id ?? driver.staff_id
+  if (!staffId) return apiError(400, 'Driver staff profile is missing. Ask your transport manager to fix your account.')
+
+  const now = new Date().toISOString()
+  const { error: staffError } = await admin
+    .from('staff_members')
+    .update({
+      phone,
+      date_of_birth: dateOfBirth,
+      updated_at: now,
+      updated_by: context.user.id,
+    })
+    .eq('id', staffId)
+    .eq('company_id', context.companyId)
+  if (staffError) return apiError(400, staffError.message)
+
+  const currentStep = String(driver.onboarding_step ?? 'personal')
+  // Admin wizard steps: personal → employment → documents → …
+  const nextStep = currentStep === 'personal' || currentStep === '' ? 'employment' : currentStep
+  const operationalStatus =
+    String(driver.operational_status ?? driver.status) === 'draft' ? 'onboarding' : driver.operational_status
+
+  const { error: driverUpdateError } = await admin
+    .from('drivers')
+    .update({
+      onboarding_step: nextStep,
+      operational_status: operationalStatus,
+      status:
+        operationalStatus === 'onboarding' || operationalStatus === 'pending_compliance'
+          ? 'onboarding'
+          : driver.status,
+      updated_at: now,
+      updated_by: context.user.id,
+    })
+    .eq('id', driver.id)
+    .eq('company_id', context.companyId)
+  if (driverUpdateError) return apiError(400, driverUpdateError.message)
+
+  await auditDriver(
+    context.companyId,
+    context.user.id,
+    'driver.onboarding_profile_updated',
+    String(driver.id),
+    {
+      phone: staff?.phone ?? null,
+      dateOfBirth: staff?.date_of_birth ?? null,
+      onboardingStep: currentStep,
+    },
+    {
+      phone,
+      dateOfBirth,
+      onboardingStep: nextStep,
+    },
+    'Driver updated personal profile in the Driver app',
+  )
+
+  return json({
+    ok: true,
+    phone,
+    dateOfBirth,
+    onboardingStep: nextStep,
+  })
+}
+
+async function upsertDriverOnboardingRequirement(
+  companyId: string,
+  driverId: string,
+  userId: string,
+  definitionKey: string,
+  requirementType: string,
+  internalNote: string | null,
+) {
+  const now = new Date().toISOString()
+  await admin.from('driver_requirements').upsert(
+    {
+      company_id: companyId,
+      driver_id: driverId,
+      definition_key: definitionKey,
+      requirement_type: requirementType,
+      status_override: 'submitted',
+      internal_note: internalNote,
+      updated_at: now,
+      updated_by: userId,
+      created_by: userId,
+    },
+    { onConflict: 'driver_id,definition_key' },
+  )
+}
+
+async function driverUpdateOnboardingContact(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const appAccount = resolved.appAccount!
+
+  const input = await readJson<Row>(request)
+  const line1 = String(input.addressLine1 ?? '').trim()
+  const city = String(input.addressCity ?? '').trim()
+  const postcode = String(input.addressPostcode ?? '').trim()
+  if (!line1 || !city || !postcode) {
+    return apiError(400, 'Enter your full home address (line, city and postcode).')
+  }
+
+  const contactName = String(input.contactName ?? '').trim()
+  const relationship = String(input.relationship ?? '').trim()
+  const emergencyPhone = String(input.emergencyPhone ?? input.phone ?? '').trim()
+  if (!contactName) return apiError(400, 'Enter your emergency contact’s name.')
+  if (!relationship) return apiError(400, 'Enter how this person is related to you.')
+  if (!emergencyPhone) return apiError(400, 'Enter an emergency contact phone number.')
+
+  const homeAddress = [line1, city, postcode].filter(Boolean).join(', ')
+  const secondary = String(input.emergencySecondaryPhone ?? '').trim()
+  const emergencyLines = [
+    `Name: ${contactName}`,
+    `Relationship: ${relationship}`,
+    `Phone: ${emergencyPhone}`,
+  ]
+  if (secondary) emergencyLines.push(`Secondary: ${secondary}`)
+  const emergencyContact = emergencyLines.join('\n')
+
+  const { data: driver, error: driverError } = await admin
+    .from('drivers')
+    .select('id, staff_id, onboarding_step, operational_status, status, staff_members(id)')
+    .eq('company_id', context.companyId)
+    .eq('id', appAccount.driver_id)
+    .maybeSingle()
+  if (driverError || !driver) return apiError(404, driverError?.message ?? 'Driver not found')
+
+  const staff = (driver.staff_members as Row | null) ?? null
+  const staffId = staff?.id ?? driver.staff_id
+  if (!staffId) return apiError(400, 'Driver staff profile is missing. Ask your transport manager to fix your account.')
+
+  const now = new Date().toISOString()
+  const { error: staffError } = await admin
+    .from('staff_members')
+    .update({
+      home_address: homeAddress,
+      emergency_contact: emergencyContact,
+      updated_at: now,
+      updated_by: context.user.id,
+    })
+    .eq('id', staffId)
+    .eq('company_id', context.companyId)
+  if (staffError) return apiError(400, staffError.message)
+
+  const currentStep = String(driver.onboarding_step ?? 'personal')
+  const nextStep =
+    currentStep === 'personal' || currentStep === 'employment' || currentStep === ''
+      ? 'documents'
+      : currentStep
+  const operationalStatus =
+    String(driver.operational_status ?? driver.status) === 'draft' ? 'onboarding' : driver.operational_status
+
+  const { error: driverUpdateError } = await admin
+    .from('drivers')
+    .update({
+      onboarding_step: nextStep,
+      operational_status: operationalStatus,
+      status:
+        operationalStatus === 'onboarding' || operationalStatus === 'pending_compliance'
+          ? 'onboarding'
+          : driver.status,
+      updated_at: now,
+      updated_by: context.user.id,
+    })
+    .eq('id', driver.id)
+    .eq('company_id', context.companyId)
+  if (driverUpdateError) return apiError(400, driverUpdateError.message)
+
+  await auditDriver(
+    context.companyId,
+    context.user.id,
+    'driver.onboarding_contact_updated',
+    String(driver.id),
+    null,
+    { homeAddress, emergencyContact, onboardingStep: nextStep },
+    'Driver updated home address and emergency contact in the Driver app',
+  )
+
+  return json({ ok: true, homeAddress, emergencyContact, onboardingStep: nextStep })
+}
+
+const DRIVER_ONBOARDING_STEP_ORDER = [
+  'personal_profile',
+  'emergency_contact',
+  'right_to_work',
+  'driving_licence',
+  'dvla_check',
+  'dqc_cpc',
+  'tacho_card',
+  'dbs_safeguarding',
+  'medical_declaration',
+  'driver_handbook',
+  'vehicle_check_training',
+  'defect_policy',
+  'review_submit',
+] as const
+
+function parseRequirementInternalNote(note: unknown): Row {
+  if (!note) return {}
+  if (typeof note === 'object' && note !== null) return note as Row
+  try {
+    return JSON.parse(String(note)) as Row
+  } catch {
+    return {}
+  }
+}
+
+function requirementKeysToCompletedSteps(keys: Set<string>, driver: Row): Set<string> {
+  const completed = new Set<string>()
+  const submitted = (key: string) => keys.has(key)
+
+  if (submitted('right_to_work')) completed.add('right_to_work')
+  if (submitted('driving_licence') || (submitted('licence_front') && submitted('licence_back'))) {
+    completed.add('driving_licence')
+  }
+  if (submitted('dvla_check')) completed.add('dvla_check')
+  if (submitted('dqc')) completed.add('dqc_cpc')
+  if (submitted('tachograph')) completed.add('tacho_card')
+  if (submitted('dbs')) completed.add('dbs_safeguarding')
+  if (submitted('medical')) completed.add('medical_declaration')
+  if (submitted('vehicle_check_training')) completed.add('vehicle_check_training')
+  if (submitted('driver_handbook')) completed.add('driver_handbook')
+  if (submitted('defect_policy') || submitted('incident_policy')) completed.add('defect_policy')
+  if (submitted('review_submit')) completed.add('review_submit')
+
+  if (driver.licence_expiry_date) completed.add('driving_licence')
+  if (driver.dqc_number && driver.cpc_expiry_date) completed.add('dqc_cpc')
+  if (driver.tacho_card_number && driver.tacho_card_expiry) completed.add('tacho_card')
+  if (driver.dbs_expiry_date) completed.add('dbs_safeguarding')
+
+  return completed
+}
+
+async function driverOnboardingProgress(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const driverId = String(resolved.appAccount!.driver_id)
+
+  const [{ data: driver }, { data: requirements }, { data: documents }, { data: auditRows }] =
+    await Promise.all([
+      admin
+        .from('drivers')
+        .select(
+          'id, onboarding_step, licence_expiry_date, licence_categories, dqc_number, cpc_expiry_date, dbs_expiry_date, tacho_card_number, tacho_card_expiry, staff_members(phone, date_of_birth, home_address, emergency_contact, first_name, last_name, email)',
+        )
+        .eq('company_id', context.companyId)
+        .eq('id', driverId)
+        .maybeSingle(),
+      admin
+        .from('driver_requirements')
+        .select('definition_key, status_override, internal_note')
+        .eq('company_id', context.companyId)
+        .eq('driver_id', driverId),
+      admin
+        .from('driver_documents')
+        .select('requirement_type, verification_status, file_object_id, file_name, created_at')
+        .eq('company_id', context.companyId)
+        .eq('driver_id', driverId)
+        .order('created_at', { ascending: false }),
+      admin
+        .from('audit_events')
+        .select('action, after_snapshot, occurred_at')
+        .eq('company_id', context.companyId)
+        .eq('entity_type', 'driver')
+        .eq('entity_id', driverId)
+        .like('action', 'driver.onboarding%')
+        .order('occurred_at', { ascending: false })
+        .limit(80),
+    ])
+
+  if (!driver) return apiError(404, 'Driver not found')
+
+  const staff = (driver.staff_members as Row | null) ?? {}
+  const submittedReqKeys = new Set<string>()
+  const formFromRequirements: Row = {}
+
+  for (const row of requirements ?? []) {
+    const key = String(row.definition_key ?? '')
+    const override = String(row.status_override ?? '')
+    if (override === 'submitted' || override === 'approved' || override === 'verified') {
+      submittedReqKeys.add(key)
+    }
+    const note = parseRequirementInternalNote(row.internal_note)
+    if (key === 'dvla_check' && note.dvlaCheckCode) {
+      formFromRequirements.dvlaCheckCode = String(note.dvlaCheckCode)
+    }
+    if (key === 'driving_licence' && note.penaltyPoints != null) {
+      formFromRequirements.penaltyPoints = String(note.penaltyPoints)
+    }
+    if (key === 'medical') {
+      if (note.fitToDrive != null) formFromRequirements.fitToDrive = Boolean(note.fitToDrive)
+      if (note.eyesight != null) formFromRequirements.eyesight = Boolean(note.eyesight)
+      if (note.fatigueAccepted != null) formFromRequirements.fatigueAccepted = Boolean(note.fatigueAccepted)
+    }
+  }
+
+  const completedStepKeys = requirementKeysToCompletedSteps(submittedReqKeys, driver as Row)
+
+  for (const event of auditRows ?? []) {
+    const action = String(event.action ?? '')
+    const after = (event.after_snapshot as Row | null) ?? {}
+    if (action === 'driver.onboarding_profile_updated') completedStepKeys.add('personal_profile')
+    if (action === 'driver.onboarding_contact_updated') completedStepKeys.add('emergency_contact')
+    if (action === 'driver.onboarding_step_completed' && after.stepKey) {
+      completedStepKeys.add(String(after.stepKey))
+    }
+    if (action === 'driver.onboarding_submitted') completedStepKeys.add('review_submit')
+  }
+
+  const phone = staff.phone ? String(staff.phone) : ''
+  const dateOfBirth = staff.date_of_birth ? String(staff.date_of_birth).slice(0, 10) : ''
+  if (phone.trim() && dateOfBirth) completedStepKeys.add('personal_profile')
+  if (staff.home_address && staff.emergency_contact) completedStepKeys.add('emergency_contact')
+
+  for (const doc of documents ?? []) {
+    const type = String(doc.requirement_type ?? '')
+    const hasFile = Boolean(doc.file_object_id)
+    const status = String(doc.verification_status ?? '')
+    if (!hasFile && !['awaiting_review', 'verified', 'uploaded'].includes(status)) continue
+    if (type === 'right_to_work') completedStepKeys.add('right_to_work')
+    if (type === 'driving_licence' || type === 'licence') completedStepKeys.add('driving_licence')
+    if (type === 'dqc' || type === 'cpc') completedStepKeys.add('dqc_cpc')
+    if (type === 'dbs') completedStepKeys.add('dbs_safeguarding')
+    if (type === 'medical') completedStepKeys.add('medical_declaration')
+  }
+
+  const nextStepKey =
+    DRIVER_ONBOARDING_STEP_ORDER.find((key) => !completedStepKeys.has(key)) ?? 'review_submit'
+
+  return json({
+    onboardingStep: String(driver.onboarding_step ?? nextStepKey),
+    suggestedNextStepKey: nextStepKey,
+    completedStepKeys: [...completedStepKeys],
+    submittedRequirementKeys: [...submittedReqKeys],
+    form: {
+      phone,
+      dateOfBirth,
+      licenceExpiry: driver.licence_expiry_date ? String(driver.licence_expiry_date).slice(0, 10) : '',
+      licenceCategories: driver.licence_categories ? String(driver.licence_categories) : '',
+      licenceOnFile: Boolean(driver.licence_expiry_date),
+      dqcNumber: driver.dqc_number ? String(driver.dqc_number) : '',
+      cpcExpiry: driver.cpc_expiry_date ? String(driver.cpc_expiry_date).slice(0, 10) : '',
+      dbsExpiry: driver.dbs_expiry_date ? String(driver.dbs_expiry_date).slice(0, 10) : '',
+      tachoCardNumber: driver.tacho_card_number ? String(driver.tacho_card_number) : '',
+      tachoCardExpiry: driver.tacho_card_expiry ? String(driver.tacho_card_expiry).slice(0, 10) : '',
+      ...formFromRequirements,
+    },
+    documents: (documents ?? []).map((d) => ({
+      requirementType: String(d.requirement_type ?? ''),
+      verificationStatus: String(d.verification_status ?? ''),
+      hasFile: Boolean(d.file_object_id),
+      fileName: d.file_name ? String(d.file_name) : null,
+    })),
+  })
+}
+
+async function driverUpdateOnboardingStep(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const appAccount = resolved.appAccount!
+
+  const input = await readJson<Row>(request)
+  const stepKey = String(input.stepKey ?? '').trim()
+  if (!stepKey) return apiError(400, 'Onboarding step is missing.')
+
+  const driverId = String(appAccount.driver_id)
+  const { data: driver, error: driverError } = await admin
+    .from('drivers')
+    .select('id, onboarding_step, operational_status, status')
+    .eq('company_id', context.companyId)
+    .eq('id', driverId)
+    .maybeSingle()
+  if (driverError || !driver) return apiError(404, driverError?.message ?? 'Driver not found')
+
+  const now = new Date().toISOString()
+  const driverPatch: Row = { updated_at: now, updated_by: context.user.id }
+
+  if (stepKey === 'driving_licence') {
+    const licenceNumber = String(input.licenceNumber ?? '').trim()
+    const licenceExpiry = String(input.licenceExpiry ?? '').trim()
+    if (!licenceNumber) return apiError(400, 'Please enter your driving licence number.')
+    if (!licenceExpiry) return apiError(400, 'Please enter your licence expiry date.')
+    driverPatch.licence_number_encrypted = licenceNumber
+    driverPatch.licence_expiry_date = licenceExpiry
+    driverPatch.licence_categories = input.licenceCategories ? String(input.licenceCategories).trim() : null
+    const penalty =
+      input.penaltyPoints != null && String(input.penaltyPoints).trim() !== ''
+        ? Number(input.penaltyPoints)
+        : null
+    await upsertDriverOnboardingRequirement(
+      context.companyId,
+      driverId,
+      context.user.id,
+      'driving_licence',
+      'document',
+      penalty != null && !Number.isNaN(penalty) ? JSON.stringify({ penaltyPoints: penalty }) : null,
+    )
+  } else if (stepKey === 'dvla_check') {
+    const code = String(input.dvlaCheckCode ?? '').trim()
+    if (!code) return apiError(400, 'Enter your DVLA check code.')
+    await upsertDriverOnboardingRequirement(
+      context.companyId,
+      driverId,
+      context.user.id,
+      'dvla_check',
+      'compliance',
+      JSON.stringify({ dvlaCheckCode: code }),
+    )
+  } else if (stepKey === 'tacho_card') {
+    driverPatch.tacho_card_number = input.tachoCardNumber ? String(input.tachoCardNumber).trim() : null
+    driverPatch.tacho_card_expiry = input.tachoCardExpiry ? String(input.tachoCardExpiry).trim() : null
+    await upsertDriverOnboardingRequirement(context.companyId, driverId, context.user.id, 'tachograph', 'document', null)
+  } else if (stepKey === 'dqc_cpc') {
+    const dqcNumber = String(input.dqcNumber ?? '').trim()
+    const cpcExpiry = String(input.cpcExpiry ?? '').trim()
+    if (!dqcNumber) return apiError(400, 'Please enter your DQC number.')
+    if (!cpcExpiry) return apiError(400, 'Please enter your DQC / CPC expiry date.')
+    driverPatch.dqc_number = dqcNumber
+    driverPatch.cpc_expiry_date = cpcExpiry
+    await upsertDriverOnboardingRequirement(context.companyId, driverId, context.user.id, 'dqc', 'document', null)
+  } else if (stepKey === 'dbs_safeguarding') {
+    const dbsExpiry = String(input.dbsExpiry ?? '').trim()
+    if (!dbsExpiry) return apiError(400, 'Please enter your DBS certificate expiry date.')
+    driverPatch.dbs_expiry_date = dbsExpiry
+    await upsertDriverOnboardingRequirement(context.companyId, driverId, context.user.id, 'dbs', 'document', null)
+  } else if (stepKey === 'medical_declaration') {
+    if (!input.fitToDrive || !input.eyesight || !input.fatigueAccepted) {
+      return apiError(400, 'Please confirm all medical declarations before continuing.')
+    }
+    await upsertDriverOnboardingRequirement(
+      context.companyId,
+      driverId,
+      context.user.id,
+      'medical',
+      'compliance',
+      JSON.stringify({
+        fitToDrive: Boolean(input.fitToDrive),
+        eyesight: Boolean(input.eyesight),
+        fatigueAccepted: Boolean(input.fatigueAccepted),
+        signedAt: now,
+        source: 'driver_mobile',
+      }),
+    )
+  } else if (stepKey === 'right_to_work') {
+    await upsertDriverOnboardingRequirement(
+      context.companyId,
+      driverId,
+      context.user.id,
+      'right_to_work',
+      'document',
+      null,
+    )
+  } else if (stepKey === 'vehicle_check_training') {
+    await upsertDriverOnboardingRequirement(
+      context.companyId,
+      driverId,
+      context.user.id,
+      'vehicle_check_training',
+      'training',
+      JSON.stringify({ completedAt: now, source: 'driver_mobile' }),
+    )
+  } else if (stepKey === 'policies' || stepKey === 'driver_handbook' || stepKey === 'defect_policy') {
+    const keys = Array.isArray(input.policyKeys)
+      ? input.policyKeys.map(String)
+      : stepKey === 'defect_policy'
+        ? ['defect_policy', 'incident_policy']
+        : ['driver_handbook']
+    for (const policyKey of keys) {
+      await upsertDriverOnboardingRequirement(
+        context.companyId,
+        driverId,
+        context.user.id,
+        policyKey,
+        'training',
+        JSON.stringify({ acceptedAt: now, source: 'driver_mobile' }),
+      )
+    }
+  } else {
+    return apiError(400, `This onboarding step cannot be saved yet (${stepKey}).`)
+  }
+
+  if (Object.keys(driverPatch).length > 2) {
+    const { error: updateError } = await admin
+      .from('drivers')
+      .update(driverPatch)
+      .eq('id', driverId)
+      .eq('company_id', context.companyId)
+    if (updateError) return apiError(400, updateError.message)
+  }
+
+  await auditDriver(
+    context.companyId,
+    context.user.id,
+    'driver.onboarding_step_completed',
+    driverId,
+    { stepKey },
+    { stepKey, savedAt: now },
+    `Driver completed ${stepKey.replace(/_/g, ' ')} in the Driver app`,
+  )
+
+  return json({ ok: true, stepKey })
+}
+
+async function driverSubmitOnboardingForReview(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const appAccount = resolved.appAccount!
+
+  const driverId = String(appAccount.driver_id)
+  const now = new Date().toISOString()
+
+  const { error: updateError } = await admin
+    .from('drivers')
+    .update({
+      onboarding_step: 'review',
+      operational_status: 'pending_compliance',
+      status: 'onboarding',
+      updated_at: now,
+      updated_by: context.user.id,
+    })
+    .eq('id', driverId)
+    .eq('company_id', context.companyId)
+  if (updateError) return apiError(400, updateError.message)
+
+  await upsertDriverOnboardingRequirement(
+    context.companyId,
+    driverId,
+    context.user.id,
+    'review_submit',
+    'compliance',
+    JSON.stringify({ submittedAt: now, source: 'driver_mobile' }),
+  )
+
+  const { data: staff } = await admin
+    .from('drivers')
+    .select('staff_members(first_name, last_name)')
+    .eq('id', driverId)
+    .eq('company_id', context.companyId)
+    .maybeSingle()
+  const member = (staff?.staff_members as Row | null) ?? {}
+  const driverName =
+    [member.first_name, member.last_name].filter(Boolean).join(' ').trim() || 'A driver'
+
+  await notifyCompanyAdmins({
+    companyId: context.companyId,
+    type: DRIVER_ONBOARDING_NOTIFICATION.evidenceSubmitted,
+    title: 'Driver onboarding ready for review',
+    body: `${driverName} submitted their profile for admin review.`,
+    severity: 'attention',
+    actionUrl: `/drivers/${driverId}?tab=Overview`,
+    sourceEntityId: driverId,
+  })
+
+  await auditDriver(
+    context.companyId,
+    context.user.id,
+    'driver.onboarding_submitted',
+    driverId,
+    null,
+    { submittedAt: now },
+    'Driver submitted onboarding for admin review',
+  )
+
+  return json({ ok: true, submittedAt: now })
 }
 
 async function resolveDriverAppAccount(context: Awaited<ReturnType<typeof authenticate>>) {
@@ -1268,6 +1921,33 @@ async function createBodyworkDefectsFromVehicleCheck(input: {
   return created
 }
 
+function normalizeDriverDocumentMimeType(mime: string | null, fileName: string | null): string {
+  const raw = String(mime ?? '').toLowerCase()
+  if (raw === 'image/jpg' || raw === 'image/pjpeg') return 'image/jpeg'
+  if (raw === 'image/heic' || raw === 'image/heif') return 'image/jpeg'
+  if (raw && raw !== 'application/octet-stream') return raw
+  const name = String(fileName ?? '').toLowerCase()
+  if (name.endsWith('.pdf')) return 'application/pdf'
+  if (name.endsWith('.png')) return 'image/png'
+  if (name.endsWith('.webp')) return 'image/webp'
+  if (name.endsWith('.jpeg') || name.endsWith('.jpg')) return 'image/jpeg'
+  return 'image/jpeg'
+}
+
+function decodeBase64FilePayload(value: string): Uint8Array | null {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return null
+  const b64 = trimmed.replace(/^data:[^;]+;base64,/, '')
+  try {
+    const binary = atob(b64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return bytes
+  } catch {
+    return null
+  }
+}
+
 function mapDriverDocumentRow(row: Row) {
   return {
     id: String(row.id),
@@ -1278,29 +1958,121 @@ function mapDriverDocumentRow(row: Row) {
     verificationStatus: String(row.verification_status ?? 'uploaded'),
     rejectionReason: row.rejection_reason ? String(row.rejection_reason) : null,
     fileName: row.file_name ? String(row.file_name) : null,
+    storagePath: row.storage_path ? String(row.storage_path) : null,
     createdAt: row.created_at ? String(row.created_at) : null,
     updatedAt: row.updated_at ? String(row.updated_at) : null,
   }
 }
 
-async function driverListDocuments(request: Request) {
-  const context = await authenticate(request)
-  const resolved = await resolveDriverAppAccount(context)
-  if ('error' in resolved && resolved.error) return resolved.error
-  const appAccount = resolved.appAccount!
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const hash = await crypto.subtle.digest('SHA-256', bytes)
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
 
-  const { data, error } = await admin
-    .from('driver_documents')
-    .select(
-      'id, requirement_type, label, reference_number, expiry_date, verification_status, rejection_reason, file_name, created_at, updated_at',
-    )
-    .eq('company_id', context.companyId)
-    .eq('driver_id', String(appAccount.driver_id))
-    .order('updated_at', { ascending: false })
-    .limit(100)
+async function persistDriverDocumentFile(
+  companyId: string,
+  driverId: string,
+  requirementType: string,
+  fileName: string,
+  mimeType: string,
+  bytes: Uint8Array,
+  userId: string,
+): Promise<{ fileObjectId: string | null; storagePath: string | null; error: string | null }> {
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_') || 'document.jpg'
+  const storageKey = `${companyId}/drivers/${driverId}/${requirementType}/${crypto.randomUUID()}-${safeName}`
+  const bucket = 'driver-documents'
 
-  if (error) return apiError(500, error.message, 'database_error')
-  return json((data ?? []).map((row: Row) => mapDriverDocumentRow(row)))
+  const { error: uploadError } = await admin.storage.from(bucket).upload(storageKey, bytes, {
+    contentType: normalizeDriverDocumentMimeType(mimeType, fileName),
+    upsert: true,
+  })
+  if (uploadError) {
+    return { fileObjectId: null, storagePath: null, error: uploadError.message }
+  }
+
+  const checksum = await sha256Hex(bytes)
+  const now = new Date().toISOString()
+  const { data: fileRow, error: fileError } = await admin
+    .from('file_objects')
+    .insert({
+      company_id: companyId,
+      storage_key: storageKey,
+      original_filename: fileName,
+      mime_type: normalizeDriverDocumentMimeType(mimeType, fileName),
+      size: bytes.length,
+      checksum,
+      uploaded_by: userId,
+      classification: 'identity',
+      source_app: 'DRIVER',
+      created_by: userId,
+      updated_by: userId,
+      updated_at: now,
+    })
+    .select('id')
+    .single()
+
+  if (fileError) {
+    console.error('file_objects insert failed', fileError)
+    return { fileObjectId: null, storagePath: storageKey, error: fileError.message }
+  }
+
+  return { fileObjectId: fileRow?.id ? String(fileRow.id) : null, storagePath: storageKey, error: null }
+}
+
+async function parseDriverDocumentSubmitInput(request: Request): Promise<{
+  requirementType: string
+  label: string
+  referenceNumber: string | null
+  expiryDate: string | null
+  notes: string | null
+  fileName: string | null
+  fileBytes: Uint8Array | null
+  mimeType: string | null
+}> {
+  const contentType = request.headers.get('content-type') ?? ''
+  if (contentType.includes('multipart/form-data')) {
+    const form = await request.formData()
+    const file = form.get('file')
+    const requirementType = String(form.get('requirementType') ?? form.get('documentType') ?? '').trim()
+    const label = String(form.get('label') ?? requirementType.replace(/_/g, ' '))
+    let fileBytes: Uint8Array | null = null
+    let mimeType: string | null = null
+    let fileName = String(form.get('fileName') ?? '')
+    if (file instanceof File) {
+      fileBytes = new Uint8Array(await file.arrayBuffer())
+      mimeType = normalizeDriverDocumentMimeType(file.type || null, fileName || file.name)
+      if (!fileName) fileName = file.name
+    }
+    return {
+      requirementType,
+      label,
+      referenceNumber: form.get('referenceNumber') ? String(form.get('referenceNumber')) : null,
+      expiryDate: form.get('expiryDate') ? String(form.get('expiryDate')) : null,
+      notes: form.get('notes') ? String(form.get('notes')) : null,
+      fileName: fileName || null,
+      fileBytes,
+      mimeType,
+    }
+  }
+
+  const input = await readJson<Row>(request)
+  const requirementType = String(input.requirementType ?? input.documentType ?? '').trim()
+  let fileBytes: Uint8Array | null = null
+  let mimeType: string | null = input.mimeType ? String(input.mimeType) : null
+  let fileName = input.fileName ? String(input.fileName) : null
+  if (input.fileBase64) {
+    fileBytes = decodeBase64FilePayload(String(input.fileBase64))
+  }
+  return {
+    requirementType,
+    label: String(input.label ?? requirementType.replace(/_/g, ' ')),
+    referenceNumber: input.referenceNumber ? String(input.referenceNumber) : null,
+    expiryDate: input.expiryDate ? String(input.expiryDate) : null,
+    notes: input.notes ? String(input.notes) : null,
+    fileName,
+    fileBytes,
+    mimeType,
+  }
 }
 
 async function driverSubmitDocument(request: Request) {
@@ -1309,23 +2081,58 @@ async function driverSubmitDocument(request: Request) {
   if ('error' in resolved && resolved.error) return resolved.error
   const appAccount = resolved.appAccount!
 
-  const input = await readJson<Row>(request)
-  const requirementType = String(input.requirementType ?? input.documentType ?? '').trim()
-  if (!requirementType) return apiError(400, 'Choose a document type before submitting.')
+  const parsed = await parseDriverDocumentSubmitInput(request).catch(() => null)
+  if (!parsed) return apiError(400, 'We could not read your photo. Take the picture again and retry.')
+  if (!parsed.requirementType) return apiError(400, 'Choose a document type before submitting.')
 
-  const label = String(input.label ?? requirementType.replace(/_/g, ' '))
+  const driverId = String(appAccount.driver_id)
+  let fileObjectId: string | null = null
+  let storagePath: string | null = null
+
+  if (!parsed.fileBytes?.length) {
+    return apiError(
+      400,
+      'We could not read your photo. Open the camera or gallery again and upload once more.',
+    )
+  }
+
+  if (parsed.fileBytes?.length) {
+    const normalizedMime = normalizeDriverDocumentMimeType(parsed.mimeType, parsed.fileName)
+    const stored = await persistDriverDocumentFile(
+      context.companyId,
+      driverId,
+      parsed.requirementType,
+      parsed.fileName ?? `${parsed.requirementType}.jpg`,
+      normalizedMime,
+      parsed.fileBytes,
+      context.user.id,
+    )
+    if (stored.error && !stored.storagePath) {
+      return apiError(
+        400,
+        'Your file could not be stored. Ask your transport manager to check document storage is set up.',
+      )
+    }
+    if (!stored.fileObjectId) {
+      return apiError(400, 'Your photo could not be saved. Please try uploading again.')
+    }
+    fileObjectId = stored.fileObjectId
+    storagePath = stored.storagePath
+  }
+
   const { data, error } = await admin
     .from('driver_documents')
     .insert({
       company_id: context.companyId,
-      driver_id: String(appAccount.driver_id),
-      requirement_type: requirementType,
-      label,
-      reference_number: input.referenceNumber ? String(input.referenceNumber) : null,
-      expiry_date: input.expiryDate ? String(input.expiryDate) : null,
+      driver_id: driverId,
+      requirement_type: parsed.requirementType,
+      label: parsed.label,
+      reference_number: parsed.referenceNumber,
+      expiry_date: parsed.expiryDate,
       verification_status: 'awaiting_review',
-      file_name: input.fileName ? String(input.fileName) : null,
-      notes: input.notes ? String(input.notes) : null,
+      file_name: parsed.fileName,
+      file_object_id: fileObjectId,
+      notes: parsed.notes,
       created_by: context.user.id,
       updated_by: context.user.id,
       source_app: 'DRIVER',
@@ -1337,13 +2144,12 @@ async function driverSubmitDocument(request: Request) {
 
   if (error) return apiError(500, error.message, 'database_error')
 
-  const driverId = String(appAccount.driver_id)
   const now = new Date().toISOString()
   await admin.from('driver_requirements').upsert(
     {
       company_id: context.companyId,
       driver_id: driverId,
-      definition_key: requirementType,
+      definition_key: parsed.requirementType,
       requirement_type: 'document',
       status_override: 'submitted',
       updated_at: now,
@@ -1367,13 +2173,33 @@ async function driverSubmitDocument(request: Request) {
     companyId: context.companyId,
     type: DRIVER_ONBOARDING_NOTIFICATION.evidenceSubmitted,
     title: 'Driver evidence ready for review',
-    body: `${driverName} uploaded ${label}. Submitted ${new Date().toLocaleString('en-GB')}.`,
+    body: `${driverName} uploaded ${parsed.label}. Submitted ${new Date().toLocaleString('en-GB')}.`,
     severity: 'attention',
     actionUrl: `/drivers/${driverId}?tab=Compliance`,
     sourceEntityId: driverId,
   })
 
-  return json(mapDriverDocumentRow(data as Row), 201)
+  return json({ ...mapDriverDocumentRow(data as Row), storagePath }, 201)
+}
+
+async function driverListDocuments(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const appAccount = resolved.appAccount!
+
+  const { data, error } = await admin
+    .from('driver_documents')
+    .select(
+      'id, requirement_type, label, reference_number, expiry_date, verification_status, rejection_reason, file_name, created_at, updated_at',
+    )
+    .eq('company_id', context.companyId)
+    .eq('driver_id', String(appAccount.driver_id))
+    .order('updated_at', { ascending: false })
+    .limit(100)
+
+  if (error) return apiError(500, error.message, 'database_error')
+  return json((data ?? []).map((row: Row) => mapDriverDocumentRow(row)))
 }
 
 function normalizeMessageAudience(value: unknown) {
@@ -1903,15 +2729,19 @@ async function unreadCount(request: Request) {
 
 async function updateNotification(request: Request, id?: string) {
   const context = await authenticate(request)
+  const now = new Date().toISOString()
   let query = admin
     .from('notifications')
-    .update({ read_at: new Date().toISOString(), status: 'read' })
+    .update({ read_at: now, status: 'read' })
     .eq('company_id', context.companyId)
     .eq('recipient_user_id', context.user.id)
-  if (id) query = query.eq('id', id)
-  const { error } = await query
+  if (id) {
+    query = query.eq('id', id)
+  }
+  // Mark-all updates every notification for this user in the active company.
+  const { data, error } = await query.select('id')
   if (error) return apiError(400, error.message)
-  return json({ ok: true })
+  return json({ ok: true, updated: (data ?? []).length })
 }
 
 async function resolveDriverAccount(context: { companyId: string; user: { id: string } }) {
@@ -3756,6 +4586,17 @@ async function activateDriver(request: Request, driverId: string) {
   }).eq('id', driverId).eq('company_id', context.companyId)
   if (driverUpdateError) return apiError(400, driverUpdateError.message)
 
+  // Unlock the Driver app shell — account was often still setup_incomplete after document review.
+  await admin
+    .from('driver_app_accounts')
+    .update({
+      account_status: 'active',
+      updated_at: now,
+      updated_by: context.user.id,
+    })
+    .eq('driver_id', driverId)
+    .eq('company_id', context.companyId)
+
   const { data: driverRow } = await admin
     .from('drivers')
     .select('staff_id')
@@ -3976,6 +4817,13 @@ async function initiateDriverPasswordReset(request: Request, driverId: string) {
   return json(profile)
 }
 
+
+async function revokeDriverDeviceHandler(request: Request, driverId: string, deviceId: string) {
+  const result = await revokeDriverDeviceRecord(request, driverId, deviceId)
+  if (result instanceof Response) return result
+  return json(await projectDriverProfile(result.companyId, result.driverId))
+}
+
 async function revokeDriverSessions(request: Request, driverId: string) {
   const context = await authenticate(request)
   const input = await readJson<Row>(request).catch(() => ({} as Row))
@@ -4128,6 +4976,44 @@ async function uploadDriverDocument(request: Request, driverId: string) {
   return json(await projectDriverProfile(context.companyId, driverId), 201)
 }
 
+async function getDriverDocumentDownloadUrl(request: Request, driverId: string, documentId: string) {
+  const context = await authenticate(request)
+  const { data: doc, error: loadError } = await admin
+    .from('driver_documents')
+    .select('id, file_object_id, file_name, requirement_type, label')
+    .eq('company_id', context.companyId)
+    .eq('driver_id', driverId)
+    .eq('id', documentId)
+    .maybeSingle()
+  if (loadError) return apiError(500, loadError.message)
+  if (!doc?.file_object_id) {
+    return apiError(404, 'No file is attached to this document yet.', 'no_file')
+  }
+
+  const { data: fileObj, error: fileError } = await admin
+    .from('file_objects')
+    .select('storage_key, mime_type, original_filename')
+    .eq('company_id', context.companyId)
+    .eq('id', String(doc.file_object_id))
+    .maybeSingle()
+  if (fileError) return apiError(500, fileError.message)
+  if (!fileObj?.storage_key) return apiError(404, 'Stored file could not be found.', 'not_found')
+
+  const { data: signed, error: signError } = await admin.storage
+    .from('driver-documents')
+    .createSignedUrl(String(fileObj.storage_key), 60 * 60)
+  if (signError || !signed?.signedUrl) {
+    return apiError(400, signError?.message ?? 'Could not open document file.', 'storage_error')
+  }
+
+  return json({
+    url: signed.signedUrl,
+    fileName: doc.file_name ?? fileObj.original_filename ?? `${doc.requirement_type}.jpg`,
+    mimeType: fileObj.mime_type ?? 'application/octet-stream',
+    label: doc.label ?? null,
+  })
+}
+
 async function verifyDriverDocument(request: Request, driverId: string, documentId: string) {
   const context = await authenticate(request)
   const { data: doc, error: loadError } = await admin
@@ -4179,6 +5065,17 @@ async function verifyDriverDocument(request: Request, driverId: string, document
     documentId,
     requirementType,
   })
+  await syncDriverRequirementAfterDocumentVerified({
+    companyId: context.companyId,
+    driverId,
+    userId: context.user.id,
+    requirementType,
+  })
+  await maybeReleaseDriverForActivationTraining({
+    companyId: context.companyId,
+    driverId,
+    actorUserId: context.user.id,
+  })
   await notifyCompanyAdmins({
     companyId: context.companyId,
     type: DRIVER_ONBOARDING_NOTIFICATION.evidenceApproved,
@@ -4196,10 +5093,12 @@ async function rejectDriverDocument(request: Request, driverId: string, document
   const context = await authenticate(request)
   const input = await readJson<Row>(request).catch(() => ({} as Row))
   const reason = String(input.reason ?? 'Evidence unclear or invalid')
+  const actorName = String(input.actorName ?? 'Admin')
+  const requestResubmit = input.requestResubmit !== false
 
   const { data: doc, error: loadError } = await admin
     .from('driver_documents')
-    .select('id')
+    .select('id, requirement_type, label')
     .eq('company_id', context.companyId)
     .eq('driver_id', driverId)
     .eq('id', documentId)
@@ -4222,9 +5121,24 @@ async function rejectDriverDocument(request: Request, driverId: string, document
     .eq('driver_id', driverId)
   if (error) return apiError(400, error.message)
 
+  const requirementType = String(doc.requirement_type ?? '')
+  const label = String(doc.label ?? requirementType.replace(/_/g, ' '))
+
+  await syncDriverRequirementAfterDocumentRejected({
+    companyId: context.companyId,
+    driverId,
+    userId: context.user.id,
+    requirementType,
+    label,
+    reason,
+    actorName,
+    requestResubmit,
+  })
+
   await auditDriver(context.companyId, context.user.id, 'driver.document_rejected', driverId, null, {
     documentId,
     reason,
+    requestResubmit,
   })
   return json(await projectDriverProfile(context.companyId, driverId))
 }
@@ -4646,10 +5560,12 @@ async function verifyMfa(request: Request) {
     if (options.length === 1) {
       return activateCompany(context.user.id, options[0].tenantId as string, input.refreshToken, request)
     }
+    const bearer = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? null
     return json({
       requiresTenantSelection: true,
       memberships: options,
-      accessToken: context.user ? undefined : undefined,
+      accessToken: bearer,
+      refreshToken: input.refreshToken ?? null,
     })
   } catch (error) {
     return apiError(401, error instanceof Error ? error.message : 'MFA verification failed', 'mfa_failed')
@@ -4778,7 +5694,15 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'auth/accept-invitation' && request.method === 'POST') return invitationAccept(request)
   if (path === 'auth/invitation-preview' && request.method === 'GET') return invitationPreview(request)
   if (path === 'auth/mfa/enable' && request.method === 'POST') return setupMfa(request)
-  if ((path === 'auth/mfa/verify' || path === 'auth/verify-factor') && request.method === 'POST') return verifyMfa(request)
+  // Prefer auth/login/confirm — paths containing "mfa" or "factor" are blocked by some browser privacy filters.
+  if (
+    (path === 'auth/login/confirm' ||
+      path === 'auth/mfa/verify' ||
+      path === 'auth/verify-factor') &&
+    request.method === 'POST'
+  ) {
+    return verifyMfa(request)
+  }
   if (path === 'settings/invitations' && request.method === 'GET') return invitationsList(request)
   if (path === 'settings/invitations' && request.method === 'POST') return createInvitation(request)
   if (path === 'settings/support-access' && request.method === 'GET') return supportGrantsList(request)
@@ -4839,8 +5763,17 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
     return listResource(request, 'maintenance', segments[2])
   }
   if (path === 'notifications/unread-count' && request.method === 'GET') return unreadCount(request)
-  if (path === 'notifications/read-all' && request.method === 'PATCH') return updateNotification(request)
-  if (segments[0] === 'notifications' && segments[2] === 'read' && request.method === 'PATCH') {
+  if (
+    path === 'notifications/read-all' &&
+    (request.method === 'PATCH' || request.method === 'POST')
+  ) {
+    return updateNotification(request)
+  }
+  if (
+    segments[0] === 'notifications' &&
+    segments[2] === 'read' &&
+    (request.method === 'PATCH' || request.method === 'POST')
+  ) {
     return updateNotification(request, segments[1])
   }
 
@@ -4885,11 +5818,28 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   ) {
     return revokeDriverSessions(request, segments[1])
   }
+  if (
+    segments[0] === 'drivers' &&
+    segments[2] === 'devices' &&
+    segments[3] &&
+    request.method === 'DELETE'
+  ) {
+    return revokeDriverDeviceHandler(request, segments[1], segments[3])
+  }
   if (segments[0] === 'drivers' && segments[2] === 'notes' && request.method === 'POST') {
     return addDriverNote(request, segments[1])
   }
   if (segments[0] === 'drivers' && segments[2] === 'incidents' && request.method === 'GET') {
     return driverIncidents(request, segments[1])
+  }
+  if (
+    segments[0] === 'drivers' &&
+    segments[2] === 'documents' &&
+    segments[3] &&
+    segments[4] === 'download' &&
+    request.method === 'GET'
+  ) {
+    return getDriverDocumentDownloadUrl(request, segments[1], segments[3])
   }
   if (
     segments[0] === 'drivers' &&
@@ -4914,6 +5864,33 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (segments[0] === 'drivers' && segments[2] === 'training' && request.method === 'POST') {
     return recordDriverTraining(request, segments[1])
+  }
+  if (segments[0] === 'drivers' && segments[2] === 'holiday' && !segments[3] && request.method === 'GET') {
+    return adminDriverHolidayGet(request, segments[1])
+  }
+  if (
+    segments[0] === 'drivers' &&
+    segments[2] === 'holiday' &&
+    segments[3] === 'profile' &&
+    request.method === 'PATCH'
+  ) {
+    return adminDriverHolidayPatchProfile(request, segments[1])
+  }
+  if (
+    segments[0] === 'drivers' &&
+    segments[2] === 'holiday' &&
+    segments[3] === 'adjustments' &&
+    request.method === 'POST'
+  ) {
+    return adminDriverHolidayAdjust(request, segments[1])
+  }
+  if (
+    segments[0] === 'drivers' &&
+    segments[2] === 'holiday' &&
+    segments[3] === 'accruals' &&
+    request.method === 'POST'
+  ) {
+    return adminDriverHolidayAccrue(request, segments[1])
   }
   if (
     segments[0] === 'drivers' &&
@@ -5038,12 +6015,31 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   ) {
     return driverSignOffDuty(request, segments[2])
   }
+  if (path === 'driver/devices' && request.method === 'POST') return upsertDriverDevice(request)
+  if (path === 'driver/profile' && (request.method === 'PATCH' || request.method === 'POST')) return driverUpdateOnboardingProfile(request)
+  if (path === 'driver/onboarding/contact' && request.method === 'POST') return driverUpdateOnboardingContact(request)
+  if (path === 'driver/onboarding/progress' && request.method === 'GET') return driverOnboardingProgress(request)
+  if (path === 'driver/onboarding/step' && request.method === 'POST') return driverUpdateOnboardingStep(request)
+  if (path === 'driver/onboarding/submit' && request.method === 'POST') return driverSubmitOnboardingForReview(request)
+  if (path === 'driver/devices/status' && request.method === 'GET') return getDriverDeviceStatus(request)
+  if (path === 'driver/security-events' && request.method === 'POST') return postDriverSecurityEvent(request)
   if (path === 'driver/defects' && request.method === 'POST') return driverReportDefect(request)
   if (path === 'driver/incidents' && request.method === 'POST') return driverReportIncident(request)
   if (path === 'driver/vehicle-checks' && request.method === 'GET') return driverListVehicleChecks(request)
   if (path === 'driver/vehicle-checks' && request.method === 'POST') return driverSubmitVehicleCheck(request)
   if (path === 'driver/documents' && request.method === 'GET') return driverListDocuments(request)
   if (path === 'driver/documents' && request.method === 'POST') return driverSubmitDocument(request)
+  if (path === 'driver/training' && request.method === 'GET') return listDriverTrainingCentre(request)
+  if (path === 'driver/training/progress' && request.method === 'POST') {
+    return updateDriverTrainingProgress(request)
+  }
+  if (path === 'driver/holiday/balance' && request.method === 'GET') return driverHolidayBalance(request)
+  if (path === 'driver/holiday/requests' && request.method === 'GET') {
+    return driverHolidayListRequests(request)
+  }
+  if (path === 'driver/holiday/requests' && request.method === 'POST') {
+    return driverHolidaySubmitRequest(request)
+  }
   if (path === 'driver/messages' && request.method === 'GET') return driverListMessages(request)
   if (path === 'driver/messages' && request.method === 'POST') return driverReplyMessage(request)
   if (path === 'driver/messages/start' && request.method === 'POST') return driverStartMessage(request)

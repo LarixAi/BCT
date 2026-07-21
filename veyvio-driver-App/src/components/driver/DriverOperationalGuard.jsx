@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { withTimeout } from "@/lib/withTimeout";
 import { loadDriverComplianceReadiness, canAccessDriverSection, getPrimaryComplianceFix } from "@/services/driver-compliance.service";
 import { Button } from "@/components/ui/button";
 import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
@@ -15,7 +16,7 @@ export default function DriverOperationalGuard({ driver, section, children }) {
       return;
     }
     setLoading(true);
-    void loadDriverComplianceReadiness(driver)
+    void withTimeout(loadDriverComplianceReadiness(driver), 12_000, null)
       .then(setReadiness)
       .catch(() => setReadiness(null))
       .finally(() => setLoading(false));

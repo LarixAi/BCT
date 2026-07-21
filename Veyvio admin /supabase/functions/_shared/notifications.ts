@@ -103,3 +103,42 @@ export async function notifyCompanyAdmins(input: {
   }
   return { inserted: rows.length }
 }
+
+/** In-app notification for the driver's linked app account (onboarding / evidence). */
+export async function notifyDriverAppUser(input: {
+  companyId: string
+  driverId: string
+  type: string
+  title: string
+  body: string
+  severity?: NotificationSeverity
+  actionUrl?: string | null
+}) {
+  const { data: account } = await admin
+    .from('driver_app_accounts')
+    .select('user_id')
+    .eq('company_id', input.companyId)
+    .eq('driver_id', input.driverId)
+    .maybeSingle()
+
+  const userId = account?.user_id ? String(account.user_id) : null
+  if (!userId) return { inserted: 0 }
+
+  const { error } = await admin.from('notifications').insert({
+    company_id: input.companyId,
+    recipient_user_id: userId,
+    notification_type: input.type,
+    title: input.title,
+    body: input.body,
+    severity: input.severity ?? 'attention',
+    source_entity_type: 'driver',
+    source_entity_id: input.driverId,
+    action_url: input.actionUrl ?? '/onboarding',
+    status: 'unread',
+  })
+  if (error) {
+    console.error('notifyDriverAppUser failed', error.message)
+    return { inserted: 0, error: error.message }
+  }
+  return { inserted: 1 }
+}

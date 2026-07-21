@@ -39,10 +39,23 @@ export function DriverDevicePanel({
                   </p>
                   <p className="mt-1 text-xs text-slate-600">
                     {device.securityStatus === 'trusted' ? 'Trusted' : device.securityStatus}
-                    {device.biometricUnlock ? ' · Biometric unlock enabled' : ' · Biometric unlock off'}
+                    {device.biometricUnlock
+                      ? ` · Biometric unlock: ${device.biometricMethod ?? 'enabled'}`
+                      : ' · Biometric unlock off'}
+                    {device.biometricEnabledAt
+                      ? ` · Enabled ${formatDateTime(device.biometricEnabledAt)}`
+                      : ''}
+                    {device.lastBiometricUnlockAt
+                      ? ` · Last biometric sign-in ${formatDateTime(device.lastBiometricUnlockAt)}`
+                      : ''}
                     {device.pushNotificationsEnabled ? ' · Push enabled' : ' · Push off'}
                     {` · Location: ${device.locationAccess.replace(/_/g, ' ')}`}
                   </p>
+                  {device.requirePasswordNextLogin ? (
+                    <p className="mt-1 text-xs font-medium text-amber-800">
+                      Password required at next login
+                    </p>
+                  ) : null}
                 </div>
                 {canManage && device.securityStatus !== 'revoked' ? (
                   <div className="flex min-w-[12rem] flex-col gap-1">

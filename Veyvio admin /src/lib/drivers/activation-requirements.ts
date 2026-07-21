@@ -156,6 +156,10 @@ export function markRequirementLocalStatus(
   requestStore.set(storeKey(driverId, definitionKey), {
     ...prev,
     statusOverride: status,
+    lastRequestedAt:
+      status === 'request_sent' || status === 'training_assigned'
+        ? prev.lastRequestedAt ?? new Date().toISOString()
+        : prev.lastRequestedAt,
   })
 }
 
@@ -233,22 +237,49 @@ function docStatus(doc: DriverDocument | undefined): RequirementStatus {
   }
 }
 
+/** Match Compliance / driver-app upload types onto Eligibility definition keys. */
+function documentMatchesDefinition(doc: DriverDocument, definitionKey: string): boolean {
+  const t = String(doc.requirementType ?? '').toLowerCase()
+  const key = definitionKey.toLowerCase()
+  if (t === key) return true
+  if (key === 'driving_licence') {
+    return ['licence', 'licence_front', 'licence_back', 'dvla_check', 'driving_licence'].includes(t)
+  }
+  if (key === 'dqc') return ['dqc', 'cpc', 'dqc_front', 'dqc_back', 'dqc_cpc'].includes(t)
+  if (key === 'tachograph') return ['tachograph', 'tacho', 'tacho_card'].includes(t)
+  if (key === 'medical') return ['medical', 'medical_certificate', 'medical_declaration'].includes(t)
+  if (key === 'dbs') return ['dbs', 'dbs_safeguarding'].includes(t)
+  if (key === 'right_to_work') return ['right_to_work', 'rtw'].includes(t)
+  return false
+}
+
+function findDocumentForDefinition(driver: DriverProfile, definitionKey: string): DriverDocument | undefined {
+  const matches = (driver.documents ?? []).filter((d) => documentMatchesDefinition(d, definitionKey))
+  if (!matches.length) return undefined
+  const rank = (status: string) => {
+    if (status === 'verified' || status === 'expiring_soon') return 0
+    if (status === 'awaiting_review' || status === 'uploaded') return 1
+    if (status === 'rejected' || status === 'expired') return 2
+    return 3
+  }
+  return [...matches].sort(
+    (a, b) =>
+      rank(String(a.verificationStatus)) - rank(String(b.verificationStatus)) ||
+      new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
+  )[0]
+}
+
 function trainingStatus(req: TrainingRequirement, meta: RequestMeta): RequirementStatus {
-  if (meta.statusOverride && !['approved', 'completed'].includes(req.status)) {
-    if (req.status === 'missing') return meta.statusOverride
-  }
-  switch (req.status) {
-    case 'complete':
-      return 'completed'
-    case 'due_soon':
-      return 'expiring_soon'
-    case 'expired':
-      return 'expired'
-    case 'failed':
-      return 'rejected'
-    default:
-      return meta.statusOverride ?? 'missing'
-  }
+  // Completion from driver_training / verified certificate always wins over workflow overrides.
+  if (req.status === 'complete') return 'completed'
+  if (req.status === 'due_soon') return 'expiring_soon'
+  if (req.status === 'expired') return 'expired'
+  if (req.status === 'failed') return 'rejected'
+
+  const override = meta.statusOverride
+  if (override === 'approved' || override === 'completed') return 'completed'
+  if (override) return override
+  return 'missing'
 }
 
 function responsibleFor(type: RequirementType, status: RequirementStatus): string {
@@ -311,10 +342,16 @@ export function buildActivationResolution(driver: DriverProfile): ActivationReso
 
   // Core compliance documents
   for (const def of DOCUMENT_REQUIREMENT_OPTIONS) {
-    const doc = driver.documents.find((d) => d.requirementType === def.type)
+    const doc = findDocumentForDefinition(driver, def.type)
     const meta = getRequirementRequestMeta(driver.id, def.type)
     let status = docStatus(doc)
-    if (status === 'missing' && meta.statusOverride) status = meta.statusOverride
+    // Prefer live document state; only use request overrides when no usable file exists yet.
+    if (status === 'missing' && meta.statusOverride) {
+      status = meta.statusOverride
+    } else if (meta.statusOverride === 'submitted' && status === 'approved') {
+      // Newer upload replaced a previously verified file — show as awaiting review queue.
+      status = 'submitted'
+    }
     requirements.push({
       id: `${driver.id}:${def.type}`,
       driverId: driver.id,

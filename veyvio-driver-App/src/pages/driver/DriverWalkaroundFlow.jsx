@@ -517,6 +517,7 @@ export default function DriverWalkaroundFlow({ driver }) {
       <WalkaroundResultScreen
         result={submitResult}
         profile={session?.profile}
+        driverId={driver?.id}
         onHome={() => navigate(returnTo)}
       />
     );

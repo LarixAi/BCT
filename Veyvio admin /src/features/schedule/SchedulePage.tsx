@@ -29,6 +29,7 @@ import {
   runDriverName,
   weekDates,
 } from '@/lib/ops/runs-trips-schedule'
+import { assertDriverAssignableOnDate } from '@/lib/holiday/assignment-guard'
 
 type ScheduleView = 'day' | 'week' | 'timeline'
 
@@ -107,20 +108,37 @@ export function SchedulePage() {
   })
 
   const assignCover = useMutation({
-    mutationFn: (candidate: CoverCandidate) =>
-      api.assignAttendanceCover({
+    mutationFn: (candidate: CoverCandidate) => {
+      const onDate = selected?.dutyDate ?? anchor
+      const check = assertDriverAssignableOnDate({
+        driverId: candidate.personId,
+        driverName: candidate.personName,
+        onDate,
+        leaveRequests: leave,
+      })
+      if (!check.ok && !overrideReason.trim()) {
+        throw new Error(`${check.message} Enter an override reason to force-assign.`)
+      }
+      return api.assignAttendanceCover({
         originalPersonName: runDriverName(selected!) ?? selectedAttendance?.personName ?? 'Unknown',
         coverPersonId: candidate.personId,
         coverPersonName: candidate.personName,
         dutyLabel: dutyLabelForCover,
         actorName,
-        overrideReason: candidate.selectable ? undefined : overrideReason || undefined,
-      }),
+        overrideReason:
+          !candidate.selectable || !check.ok
+            ? overrideReason.trim() || (!check.ok ? check.message : undefined)
+            : undefined,
+      })
+    },
     onSuccess: (result) => {
       setCoverMessage(result.message)
       setCoverOpen(false)
       setOverrideReason('')
       queryClient.invalidateQueries({ queryKey: ['attendance-hub'] })
+    },
+    onError: (err) => {
+      setCoverMessage(err instanceof Error ? err.message : 'Could not assign cover')
     },
   })
 

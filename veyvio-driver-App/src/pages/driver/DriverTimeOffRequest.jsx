@@ -10,19 +10,41 @@ import CommandBackendNotice from "@/components/driver/operational/CommandBackend
 import { Button } from "@/components/ui/button";
 import { localToday } from "@/lib/local-date";
 import { op } from "@/lib/driver-operational-theme";
+import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import {
   TYPE_LABELS,
   formatDateRange,
   submitDriverTimeOffRequest,
 } from "@/services/time-off.service";
 
-const STEPS = ["Type", "Dates", "Details", "Review"];
+/** Calendar-first flow: pick days on the month grid, then details, then review. */
+const STEPS = ["Dates", "Details", "Review"];
 
 const TYPES = [
   {
     id: "holiday",
-    label: "Holiday",
-    detail: "Annual leave / booked days off",
+    label: "Annual leave",
+    detail: "Paid holiday — deducts from your balance",
+  },
+  {
+    id: "unpaid",
+    label: "Unpaid leave",
+    detail: "Time off without using holiday entitlement",
+  },
+  {
+    id: "medical_appointment",
+    label: "Medical appointment",
+    detail: "GP, hospital, or occupational health",
+  },
+  {
+    id: "emergency",
+    label: "Emergency dependant leave",
+    detail: "Urgent care for a dependant",
+  },
+  {
+    id: "compassionate",
+    label: "Compassionate leave",
+    detail: "Bereavement or family emergency (paid where configured)",
   },
   {
     id: "sick",
@@ -30,14 +52,9 @@ const TYPES = [
     detail: "Unable to work — tell dispatch ASAP",
   },
   {
-    id: "training",
-    label: "Training",
-    detail: "Course, CPC, or operator training",
-  },
-  {
     id: "other",
     label: "Other",
-    detail: "Compassionate, appointment, or other absence",
+    detail: "Other authorised absence",
   },
 ];
 
@@ -89,11 +106,12 @@ function WizardProgress({ step }) {
 }
 
 export default function DriverTimeOffRequest({ driver }) {
+  const { session } = useDriverSupabaseAuth();
   const [searchParams] = useSearchParams();
-  const backTo = "/schedule";
+  const backTo = searchParams.get("from") === "schedule" ? "/schedule" : "/holiday";
   const presetStart = searchParams.get("start") || "";
 
-  const [step, setStep] = useState(presetStart ? 1 : 0);
+  const [step, setStep] = useState(0);
   const [absenceType, setAbsenceType] = useState("holiday");
   const [month, setMonth] = useState(() => {
     const base = presetStart || localToday();
@@ -136,8 +154,7 @@ export default function DriverTimeOffRequest({ driver }) {
   };
 
   const canContinueDates = Boolean(dateFrom && (dateTo || dateFrom));
-  const canContinueDetails =
-    absenceType !== "sick" || Boolean(reason.trim());
+  const canContinueDetails = absenceType !== "sick" || Boolean(reason.trim());
 
   const submit = async () => {
     setSaving(true);
@@ -149,6 +166,7 @@ export default function DriverTimeOffRequest({ driver }) {
       partOfDay,
       reason,
       notes,
+      session,
     });
     setSaving(false);
     if (!result.ok) {
@@ -163,7 +181,7 @@ export default function DriverTimeOffRequest({ driver }) {
       <OperationalPage
         title="Request sent"
         subtitle="Your transport manager will review this leave."
-        backTo="/schedule"
+        backTo="/holiday"
       >
         <div className={`mt-2 space-y-4 p-5 ${op.card}`}>
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
@@ -178,16 +196,16 @@ export default function DriverTimeOffRequest({ driver }) {
           </div>
           <StatusPill status="warning">Pending approval</StatusPill>
           {done.message ? (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
               {done.message}
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Approved leave will show on your schedule calendar.
+              Pending leave is shown on your holiday balance. Approved leave appears on your schedule.
             </p>
           )}
           <Button asChild className={`h-12 w-full ${op.primaryBtn}`}>
-            <Link to="/schedule">Back to schedule</Link>
+            <Link to="/holiday">Back to holiday balance</Link>
           </Button>
           <Button
             type="button"
@@ -213,7 +231,7 @@ export default function DriverTimeOffRequest({ driver }) {
   return (
     <OperationalPage
       title="Request time off"
-      subtitle="Book leave in a few steps — dates show on your schedule."
+      subtitle="Tap the calendar to choose the day or range you need off."
       backTo={backTo}
     >
       <WizardProgress step={step} />
@@ -231,34 +249,33 @@ export default function DriverTimeOffRequest({ driver }) {
       ) : null}
 
       {step === 0 ? (
-        <div className="mt-4 space-y-3">
-          <p className="text-sm font-semibold text-foreground">What type of leave?</p>
-          {TYPES.map((type) => {
-            const active = absenceType === type.id;
-            return (
-              <button
-                key={type.id}
-                type="button"
-                onClick={() => setAbsenceType(type.id)}
-                className={`w-full rounded-2xl border p-4 text-left transition-colors ${
-                  active
-                    ? "border-[var(--ridova-teal)] bg-[var(--ridova-teal)]/10"
-                    : "border-border bg-card"
-                }`}
-              >
-                <p className="text-[15px] font-semibold text-foreground">{type.label}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{type.detail}</p>
-              </button>
-            );
-          })}
-          <Button type="button" className={`mt-2 h-12 w-full ${op.primaryBtn}`} onClick={() => setStep(1)}>
-            Continue to dates
-          </Button>
-        </div>
-      ) : null}
-
-      {step === 1 ? (
         <div className="mt-4 space-y-4">
+          <div>
+            <p className="mb-2 text-sm font-semibold text-foreground">Leave type</p>
+            <div className="flex flex-wrap gap-2">
+              {TYPES.map((type) => {
+                const active = absenceType === type.id;
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => setAbsenceType(type.id)}
+                    className={`min-h-[40px] rounded-full border px-3.5 py-2 text-sm font-semibold ${
+                      active
+                        ? "border-[var(--ridova-teal)] bg-[var(--ridova-teal)] text-white"
+                        : "border-border bg-card text-foreground"
+                    }`}
+                  >
+                    {type.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {TYPES.find((t) => t.id === absenceType)?.detail}
+            </p>
+          </div>
+
           <div className={`p-3 ${op.card}`}>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Selected
@@ -266,14 +283,16 @@ export default function DriverTimeOffRequest({ driver }) {
             <p className="mt-1 text-base font-semibold text-foreground">
               {dateFrom
                 ? formatDateRange(dateFrom, dateTo || dateFrom)
-                : "Tap dates on the calendar"}
+                : "Tap a day on the calendar"}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {pickingEnd && dateFrom && !dateTo
-                ? "Now tap the end date"
+              {!dateFrom
+                ? "Choose one day, or tap a second day for a range"
                 : pickingEnd && dateFrom === dateTo
-                  ? "Tap another day for a range, or continue for a single day"
-                  : TYPE_LABELS[absenceType]}
+                  ? "Tap another day to extend the range, or continue for a single day"
+                  : pickingEnd
+                    ? "Now tap the end date"
+                    : TYPE_LABELS[absenceType]}
             </p>
           </div>
 
@@ -287,27 +306,29 @@ export default function DriverTimeOffRequest({ driver }) {
             minDate={absenceType === "sick" ? null : today}
           />
 
-          <div className="grid grid-cols-2 gap-3">
-            <Button type="button" variant="outline" className="h-12" onClick={() => setStep(0)}>
-              Back
-            </Button>
-            <Button
-              type="button"
-              disabled={!canContinueDates}
-              className={`h-12 ${op.primaryBtn}`}
-              onClick={() => {
-                if (!dateTo) setDateTo(dateFrom);
-                setStep(2);
-              }}
-            >
-              Continue
-            </Button>
-          </div>
+          <Button
+            type="button"
+            disabled={!canContinueDates}
+            className={`h-12 w-full ${op.primaryBtn}`}
+            onClick={() => {
+              if (!dateTo) setDateTo(dateFrom);
+              setStep(1);
+            }}
+          >
+            Continue
+          </Button>
         </div>
       ) : null}
 
-      {step === 2 ? (
+      {step === 1 ? (
         <div className="mt-4 space-y-4">
+          <div className={`p-3 ${op.card}`}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dates</p>
+            <p className="mt-1 text-base font-semibold text-foreground">
+              {formatDateRange(dateFrom, dateTo || dateFrom)} · {TYPE_LABELS[absenceType]}
+            </p>
+          </div>
+
           <div>
             <p className="mb-2 text-sm font-semibold text-foreground">Part of day</p>
             <div className="flex flex-wrap gap-2">
@@ -328,7 +349,8 @@ export default function DriverTimeOffRequest({ driver }) {
             </div>
             {dateFrom !== (dateTo || dateFrom) && partOfDay !== "full_day" ? (
               <p className="mt-2 text-xs text-amber-800">
-                Part-day applies best to a single day. For a range, full days are usually clearer for dispatch.
+                Part-day applies best to a single day. For a range, full days are usually clearer for
+                dispatch.
               </p>
             ) : null}
           </div>
@@ -360,14 +382,14 @@ export default function DriverTimeOffRequest({ driver }) {
           </label>
 
           <div className="grid grid-cols-2 gap-3">
-            <Button type="button" variant="outline" className="h-12" onClick={() => setStep(1)}>
+            <Button type="button" variant="outline" className="h-12" onClick={() => setStep(0)}>
               Back
             </Button>
             <Button
               type="button"
               disabled={!canContinueDetails}
               className={`h-12 ${op.primaryBtn}`}
-              onClick={() => setStep(3)}
+              onClick={() => setStep(2)}
             >
               Review
             </Button>
@@ -375,7 +397,7 @@ export default function DriverTimeOffRequest({ driver }) {
         </div>
       ) : null}
 
-      {step === 3 ? (
+      {step === 2 ? (
         <div className="mt-4 space-y-4">
           <div className={`space-y-3 p-4 ${op.card}`}>
             <Row label="Type" value={TYPE_LABELS[absenceType]} />
@@ -388,13 +410,24 @@ export default function DriverTimeOffRequest({ driver }) {
             {notes ? <Row label="Notes" value={notes} /> : null}
           </div>
 
+          {absenceType === "holiday" || absenceType === "compassionate" ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              This request uses paid leave and will be checked against your remaining balance when
+              approved. Pending leave does not reduce your official remaining days yet.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              This leave type does not deduct from your annual holiday balance by default.
+            </div>
+          )}
+
           <p className="text-xs leading-relaxed text-muted-foreground">
             By submitting, you confirm these dates are correct. If you already have a published duty on
-            these days, tell dispatch — they may need to reassign cover.
+            these days, Operations will be alerted to arrange cover.
           </p>
 
           <div className="grid grid-cols-2 gap-3">
-            <Button type="button" variant="outline" className="h-12" onClick={() => setStep(2)}>
+            <Button type="button" variant="outline" className="h-12" onClick={() => setStep(1)}>
               Back
             </Button>
             <Button

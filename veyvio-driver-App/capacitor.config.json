@@ -1,6 +1,6 @@
 {
-  "appId": "com.coresupport.fleet.driver",
-  "appName": "Veyvio",
+  "appId": "uk.veyvio.driver",
+  "appName": "Veyvio Driver",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

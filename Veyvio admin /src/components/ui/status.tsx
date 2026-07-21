@@ -31,6 +31,7 @@ const STATUS_STYLES: Record<string, string> = {
   inactive: 'bg-page text-muted',
   invite_pending: 'bg-command-50 text-command-700',
   invitation_pending: 'bg-command-50 text-command-700',
+  request_sent: 'bg-sky-100 text-sky-950',
   not_created: 'bg-page text-muted',
   draft: 'bg-page text-muted',
   registration_started: 'bg-command-50 text-command-700',

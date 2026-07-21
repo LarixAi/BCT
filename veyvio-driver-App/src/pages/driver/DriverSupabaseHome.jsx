@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Clock,
   FileText,
+  GraduationCap,
   MessageSquare,
   Package,
   Send,
@@ -31,6 +32,7 @@ import WalkaroundSafetyBanner from "@/components/driver/walkaround/WalkaroundSaf
 import { greetingForHour, op } from "@/lib/driver-operational-theme";
 import { getDriverOnboardingState } from "@/services/onboarding.service";
 import { getPrimaryComplianceFix, loadDriverComplianceReadiness } from "@/services/driver-compliance.service";
+import { loadDriverTrainingCentre, formatTrainingDue, eligibilityRestrictionCopy } from "@/services/training.service";
 import { getDriverWorkingTimeSummary } from "@/services/working-time.service";
 import { getTachographReminders } from "@/services/tachograph-reminders.service";
 import { countUnread } from "@/services/notifications.service";
@@ -51,6 +53,7 @@ import {
 } from "@/services/driver-bootstrap.service";
 import RemovedJobNotice from "@/components/jobs/RemovedJobNotice";
 import DriverSosModal from "@/components/driver/mobile/DriverSosModal";
+import BiometricEnrollmentHost from "@/features/auth/biometrics/BiometricEnrollmentHost";
 
 export default function DriverSupabaseHome({ driver }) {
   const { homeSummary: sessionHomeSummary, bootstrap: sessionBootstrap, session, refresh } =
@@ -78,6 +81,7 @@ export default function DriverSupabaseHome({ driver }) {
   const [nextLeave, setNextLeave] = useState(null);
   const [removedTransfers, setRemovedTransfers] = useState([]);
   const [bootstrapError, setBootstrapError] = useState("");
+  const [trainingHome, setTrainingHome] = useState(null);
   // Keep GPS flowing to Command whenever this duty is live — not only after local shift flags settle.
   const trackingActive = Boolean(
     dutyState?.dutyId &&
@@ -140,7 +144,7 @@ export default function DriverSupabaseHome({ driver }) {
     }
 
     // Soft enrichment — missing Ridova tables must never block tab paint.
-    const [nextState, readiness, reminders, safety, offers, wtd, duty, leave, removed] =
+    const [nextState, readiness, reminders, safety, offers, wtd, duty, leave, removed, training] =
       await Promise.all([
         getDriverOnboardingState(driver).catch(() => null),
         loadDriverComplianceReadiness(driver).catch(() => null),
@@ -149,8 +153,12 @@ export default function DriverSupabaseHome({ driver }) {
         getPendingJobOffers(driver.id).catch(() => []),
         getDriverWorkingTimeSummary(driver.id).catch(() => null),
         getDriverDutyState(driver).catch(() => null),
-        getNextApprovedLeave(driver.id).catch(() => null),
+        getNextApprovedLeave(driver.id, currentSession).catch(() => null),
         getRecentRemovedTransfers(driver.id).catch(() => []),
+        loadDriverTrainingCentre({
+          ...currentSession,
+          driverId: driver.id,
+        }).catch(() => null),
       ]);
     if (gen !== reloadGenRef.current) return;
 
@@ -165,6 +173,7 @@ export default function DriverSupabaseHome({ driver }) {
     setNextLeave(leave);
     setRemovedTransfers(Array.isArray(removed) ? removed : []);
     setPendingSync(getPendingSyncCount(driver.id));
+    setTrainingHome(training?.ok ? training : null);
   }, [driver]);
 
   useEffect(() => {
@@ -259,6 +268,9 @@ export default function DriverSupabaseHome({ driver }) {
     walkaroundSafety?.registration &&
     !walkaroundSafety?.checkComplete &&
     !walkaroundSafety?.vehicleBlocked;
+
+  // Offer Face ID / fingerprint once per session when the driver opens Home.
+  const enrollmentReady = Boolean(driver?.id);
 
   return (
     <DriverPageContainer>
@@ -416,7 +428,7 @@ export default function DriverSupabaseHome({ driver }) {
 
       <DriverSectionTitle>Compliance</DriverSectionTitle>
       <div className={op.listCard}>
-        <DriverActionCard to="/documents" icon={FileText} title="Documents" subtitle="Licences and uploads" compact inList />
+        <DriverActionCard to="/documents" icon={FileText} title="Documents" subtitle="Required compliance uploads" compact inList />
         <DriverActionCard
           to="/acknowledgements"
           icon={ClipboardList}
@@ -425,7 +437,49 @@ export default function DriverSupabaseHome({ driver }) {
           compact
           inList
         />
+        <DriverActionCard
+          to="/training"
+          icon={GraduationCap}
+          title="Training"
+          subtitle={
+            trainingHome?.summary
+              ? `${trainingHome.summary.requiredOpen} required · ${trainingHome.summary.dueSoon} due soon`
+              : "Mandatory modules and certificates"
+          }
+          badge={trainingHome?.summary?.overdue > 0 ? trainingHome.summary.overdue : null}
+          compact
+          inList
+        />
       </div>
+
+      {trainingHome?.urgent ? (
+        <div
+          className={`mt-4 rounded-2xl border p-4 ${
+            trainingHome.urgent.warningStatus === "overdue" ||
+            ["block_all_work", "block_specific_work"].includes(trainingHome.urgent.eligibilityEffect)
+              ? "border-red-200 bg-red-50"
+              : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+            {["block_all_work", "block_specific_work"].includes(trainingHome.urgent.eligibilityEffect)
+              ? "Training required before duty"
+              : "Training"}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{trainingHome.urgent.title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {eligibilityRestrictionCopy(trainingHome.urgent) ??
+              (trainingHome.urgent.dueAt
+                ? `Due ${formatTrainingDue(trainingHome.urgent.dueAt)}`
+                : "Complete this training to stay duty-ready.")}
+          </p>
+          <Button asChild className={`mt-3 h-11 min-h-[44px] ${op.primaryBtn}`}>
+            <Link to={`/training/${trainingHome.urgent.id}`}>
+              {trainingHome.urgent.progressPercentage > 0 ? "Continue" : "Start now"}
+            </Link>
+          </Button>
+        </div>
+      ) : null}
 
       <DriverSectionTitle>Messages</DriverSectionTitle>
       <div className={op.listCard}>
@@ -433,14 +487,16 @@ export default function DriverSupabaseHome({ driver }) {
           to="/notifications"
           icon={Bell}
           title="Notifications"
-          subtitle={unreadCount > 0 ? `${unreadCount} unread` : "Alerts from dispatch"}
+          subtitle={unreadCount > 0 ? `${unreadCount} unread from Command` : "Training and compliance alerts"}
           badge={unreadCount > 0 ? unreadCount : null}
           compact
           inList
         />
-        <DriverActionCard to="/threads" icon={MessageSquare} title="Conversations" subtitle="Message threads" compact inList />
+        <DriverActionCard to="/messages" icon={MessageSquare} title="Messages" subtitle="Dispatch and yard conversations" compact inList />
         <DriverActionCard to="/contact" icon={Send} title="Contact admin" subtitle="Reach dispatch or compliance" compact inList />
       </div>
+
+      <BiometricEnrollmentHost driverId={driver?.id} ready={enrollmentReady} delayMs={3500} />
     </DriverPageContainer>
   );
 }

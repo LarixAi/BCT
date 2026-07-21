@@ -1,8 +1,10 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import EnableBiometricsSheet from "@/features/auth/biometrics/EnableBiometricsSheet";
+import { useBiometricEnrollmentPrompt } from "@/features/auth/biometrics/use-biometric-enrollment-prompt";
 import { op } from "@/lib/driver-operational-theme";
 
-export default function WalkaroundResultScreen({ result, profile, onHome }) {
+export default function WalkaroundResultScreen({ result, profile, driverId, onHome }) {
   const isNilDefect = result?.result === "nil_defect";
   const outcome =
     result?.outcome ??
@@ -15,6 +17,16 @@ export default function WalkaroundResultScreen({ result, profile, onHome }) {
   const review = outcome === "review";
   const advisory = outcome === "advisory" || result?.result === "pass_with_advisory";
   const synced = !result?.queued && Boolean(result?.checkId);
+  const dutyReady =
+    !critical &&
+    !result?.queued &&
+    Boolean(result?.autoSignedOn || result?.alreadySignedOn);
+
+  const enrollment = useBiometricEnrollmentPrompt({
+    driverId,
+    ready: dutyReady,
+    delayMs: 2800,
+  });
 
   return (
     <div className={`${op.pageBg} min-h-[calc(100dvh-4rem)] flex flex-col items-center justify-center p-6 text-center`}>
@@ -109,6 +121,17 @@ export default function WalkaroundResultScreen({ result, profile, onHome }) {
       <Button className={`w-full max-w-xs mt-8 h-12 ${op.primaryBtn}`} onClick={onHome}>
         Back to home
       </Button>
+
+      <EnableBiometricsSheet
+        open={enrollment.open}
+        onOpenChange={enrollment.setOpen}
+        label={enrollment.label}
+        busy={enrollment.busy}
+        error={enrollment.error}
+        onEnable={enrollment.onEnable}
+        onRemindNextWeek={enrollment.onRemindNextWeek}
+        onDontAskAgain={enrollment.onDontAskAgain}
+      />
     </div>
   );
 }

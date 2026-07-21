@@ -1,4 +1,4 @@
-const WELCOME_KEY = "ridova.driver.welcome.v1";
+const WELCOME_KEY = "veyvio.driver.welcome.v2";
 
 /** Capacitor iOS/Android — splash/welcome on native installs only. */
 export const APP_DELIVERY = "installable";
@@ -16,6 +16,16 @@ export function hasSeenDriverWelcome() {
 export function markDriverWelcomeSeen() {
   try {
     localStorage.setItem(WELCOME_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Clears the “welcome seen” flag (dev / reinstall testing). */
+export function resetDriverWelcomeSeen() {
+  try {
+    localStorage.removeItem(WELCOME_KEY);
+    localStorage.removeItem("ridova.driver.welcome.v1");
   } catch {
     /* ignore */
   }

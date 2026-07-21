@@ -4,6 +4,7 @@ import { DriverSupabaseAuthProvider, useDriverSupabaseAuth } from "@/lib/DriverS
 import DriverOperationalGuard from "@/components/driver/DriverOperationalGuard";
 import DriverOperationalShell from "@/components/driver/operational/DriverOperationalShell";
 import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
+import DriverLaunchGate from "@/components/driver/launch/DriverLaunchGate";
 import DriverMobileAuthLayout, {
   DriverAuthPrimaryButton,
   driverAuthLinkClass,
@@ -14,6 +15,7 @@ import NotificationProvider from "@/components/driver/NotificationProvider";
 import DriverMatchedTripLayer from "@/components/driver/phv-job/DriverMatchedTripLayer";
 import ExternalNavReturnLayer from "@/components/driver/navigation/ExternalNavReturnLayer";
 import FloatingBubbleLayer from "@/components/driver/navigation/FloatingBubbleLayer";
+import BiometricLockLayer from "@/features/auth/biometrics/BiometricLockLayer";
 import { useDriverWebPresence } from "@/hooks/useDriverWebPresence";
 import { op } from "@/lib/driver-operational-theme";
 
@@ -34,6 +36,7 @@ const DriverDutyCloseout = lazy(() => import("./DriverDutyCloseout"));
 const DriverSupabaseJobView = lazy(() => import("./DriverSupabaseJobView"));
 const DriverIncomingOffer = lazy(() => import("./DriverIncomingOffer"));
 const DriverSupabaseMessages = lazy(() => import("./DriverSupabaseMessages"));
+const DriverNotificationsPage = lazy(() => import("./DriverNotificationsPage"));
 const DriverDefectReport = lazy(() => import("./DriverDefectReport"));
 const DriverSupabaseIncidentReport = lazy(() => import("./DriverSupabaseIncidentReport"));
 const DriverLicenceCompliance = lazy(() => import("./DriverLicenceCompliance"));
@@ -46,7 +49,9 @@ const DriverWorkingTime = lazy(() => import("./DriverWorkingTime"));
 const DriverMyDuty = lazy(() => import("./DriverMyDuty"));
 const DriverDutyNavigation = lazy(() => import("./DriverDutyNavigation"));
 const DriverTimeOffRequest = lazy(() => import("./DriverTimeOffRequest"));
+const DriverHolidayCentre = lazy(() => import("./DriverHolidayCentre"));
 const DriverSupabaseProfile = lazy(() => import("./DriverSupabaseProfile"));
+const DriverEditProfilePage = lazy(() => import("./DriverEditProfilePage"));
 const DriverSupabaseSettings = lazy(() => import("./DriverSupabaseSettings"));
 const DriverPolicyReack = lazy(() => import("./DriverPolicyReack"));
 const DriverHelpSupport = lazy(() => import("./DriverHelpSupport"));
@@ -54,6 +59,7 @@ const DriverReportFoundItem = lazy(() => import("./lost-property/DriverReportFou
 const DriverMyFoundItems = lazy(() => import("./lost-property/DriverMyFoundItems"));
 const DriverCompleteDbsPage = lazy(() => import("./DriverCompleteDbsPage"));
 const DriverMorePage = lazy(() => import("./DriverMorePage"));
+const DriverSecurityPage = lazy(() => import("./DriverSecurityPage"));
 const DriverReadiness = lazy(() => import("./DriverReadiness"));
 const DriverVehicleHub = lazy(() => import("./DriverVehicleHub"));
 const DriverVehicleEquipment = lazy(() => import("./DriverVehicleEquipment"));
@@ -62,11 +68,17 @@ const DriverVehicleHandback = lazy(() => import("./DriverVehicleHandback"));
 const DriverCompletedVehicleChecks = lazy(() => import("./DriverCompletedVehicleChecks"));
 const DriverSchedule = lazy(() => import("./DriverSchedule"));
 const DriverTrainingCentre = lazy(() => import("./DriverTrainingCentre"));
+const DriverTrainingAssignmentPage = lazy(() => import("./training/DriverTrainingAssignmentPage"));
+const DriverTrainingLessonPage = lazy(() => import("./training/DriverTrainingLessonPage"));
+const DriverTrainingDeclarationPage = lazy(() => import("./training/DriverTrainingDeclarationPage"));
+const DriverTrainingEvidencePage = lazy(() => import("./training/DriverTrainingEvidencePage"));
+const DriverTrainingCompletedPage = lazy(() => import("./training/DriverTrainingCompletedPage"));
 const DriverSyncCentre = lazy(() => import("./DriverSyncCentre"));
 const DriverSafetyHub = lazy(() => import("./DriverSafetyHub"));
 
 function DriverSupabaseRouter() {
-  const { session, driver, screen, loading, login, logout, refresh } = useDriverSupabaseAuth();
+  const { session, driver, screen, loading, login, loginWithBiometrics, logout, refresh } =
+    useDriverSupabaseAuth();
   const location = useLocation();
   const pathname = location.pathname;
   // Only real verify/reset routes — never the login page at /auth.
@@ -81,6 +93,8 @@ function DriverSupabaseRouter() {
     active: Boolean(session?.userId && driver?.id && screen !== "login"),
   });
 
+  const lockActive = Boolean(driver?.id && screen !== "login" && !onAuthCallbackRoute);
+
   if (loading && !onAuthCallbackRoute) {
     return (
       <div className={`min-h-dvh ${op.pageBg} flex items-center justify-center ${op.text}`}>
@@ -89,98 +103,159 @@ function DriverSupabaseRouter() {
     );
   }
 
+  if (screen === "unlinked" || session?.routeTarget === "session_error") {
+    return (
+      <>
+        <BiometricLockLayer driverId={driver?.id} active={lockActive} onUsePassword={() => void logout()} />
+        <DriverMobileAuthLayout
+          title={session?.routeTarget === "session_error" ? "Sign-in could not finish" : "Account not linked"}
+          subtitle={
+            session?.routeTarget === "session_error"
+              ? session?.linkError ||
+                "Could not reach Command in time. Wait a moment and tap Try again — the first request after idle can be slow."
+              : session?.linkError ||
+                "This login is not registered as a driver. Ask your transport manager to invite this email in Veyvio Command."
+          }
+          centerContent
+          stickyFooter={
+            <div className="space-y-3">
+              <DriverAuthPrimaryButton type="button" onClick={() => void refresh()}>
+                Try again
+              </DriverAuthPrimaryButton>
+              <button type="button" onClick={() => void logout()} className={`w-full py-2 text-sm ${driverAuthLinkClass}`}>
+                Sign out
+              </button>
+            </div>
+          }
+        />
+      </>
+    );
+  }
+
   if (screen === "login" || !session || onAuthCallbackRoute) {
     return (
       <Suspense fallback={<DriverPageLoader />}>
-        <DriverAuthRoutes login={login} refresh={refresh} />
+        <DriverAuthRoutes login={login} loginWithBiometrics={loginWithBiometrics} refresh={refresh} />
       </Suspense>
     );
   }
 
-  if (screen === "onboarding" && driver) {
+  const showOnboarding =
+    Boolean(driver) &&
+    screen !== "app" &&
+    screen !== "pending" &&
+    screen !== "restricted" &&
+    screen !== "policy_reack" &&
+    session?.routeTarget !== "home" &&
+    typeof window !== "undefined" &&
+    sessionStorage.getItem("veyvio.driver.forceAppShell") !== "1" &&
+    (screen === "onboarding" || session?.routeTarget === "onboarding");
+
+  const lockLayer = (
+    <BiometricLockLayer driverId={driver?.id} active={lockActive} onUsePassword={() => void logout()} />
+  );
+
+  if (showOnboarding) {
     return (
-      <Suspense fallback={<DriverPageLoader />}>
-        <Routes>
-          <Route path="/" element={<Navigate to="/onboarding" replace />} />
-          <Route
-            path="/*"
-            element={
-              <DriverOnboardingRouter
-                driver={driver}
-                organisationId={session.organisationId}
-                onSubmitted={() => refresh()}
-                onRefresh={() => refresh()}
-              />
-            }
-          />
-        </Routes>
-      </Suspense>
+      <>
+        {lockLayer}
+        <Suspense fallback={<DriverPageLoader />}>
+          <Routes>
+            <Route
+              path="/onboarding/*"
+              element={
+                <DriverOnboardingRouter
+                  driver={driver}
+                  organisationId={session.organisationId}
+                  onSubmitted={() => refresh()}
+                  onRefresh={() => refresh()}
+                />
+              }
+            />
+            <Route path="*" element={<Navigate to="/onboarding" replace />} />
+          </Routes>
+        </Suspense>
+      </>
     );
   }
 
   if (!driver && screen === "onboarding") {
     return (
-      <DriverMobileAuthLayout
-        title="No driver profile linked"
-        subtitle={
-          session?.linkError ||
-          "Ask your transport manager to invite you in Veyvio Command, accept the invite with this email, then sign in again."
-        }
-        centerContent
-        stickyFooter={
-          <div className="space-y-3">
-            <DriverAuthPrimaryButton type="button" onClick={() => void refresh()}>
-              Try again
-            </DriverAuthPrimaryButton>
-            <button type="button" onClick={() => void logout()} className={`w-full py-2 text-sm ${driverAuthLinkClass}`}>
-              Sign out
-            </button>
-          </div>
-        }
-      />
+      <>
+        {lockLayer}
+        <DriverMobileAuthLayout
+          title="No driver profile linked"
+          subtitle={
+            session?.linkError ||
+            "Ask your transport manager to invite you in Veyvio Command, accept the invite with this email, then sign in again."
+          }
+          centerContent
+          stickyFooter={
+            <div className="space-y-3">
+              <DriverAuthPrimaryButton type="button" onClick={() => void refresh()}>
+                Try again
+              </DriverAuthPrimaryButton>
+              <button type="button" onClick={() => void logout()} className={`w-full py-2 text-sm ${driverAuthLinkClass}`}>
+                Sign out
+              </button>
+            </div>
+          }
+        />
+      </>
     );
   }
 
   if (screen === "pending") {
     return (
-      <Suspense fallback={<DriverPageLoader />}>
-        <DriverPendingApprovalScreen driver={driver} onRefresh={refresh} onLogout={logout} />
-      </Suspense>
+      <>
+        {lockLayer}
+        <Suspense fallback={<DriverPageLoader />}>
+          <DriverPendingApprovalScreen driver={driver} onRefresh={refresh} onLogout={logout} />
+        </Suspense>
+      </>
     );
   }
 
   if (screen === "restricted") {
     return (
-      <Suspense fallback={<DriverPageLoader />}>
-        <DriverRestrictedScreen session={session} driver={driver} onLogout={logout} />
-      </Suspense>
+      <>
+        {lockLayer}
+        <Suspense fallback={<DriverPageLoader />}>
+          <DriverRestrictedScreen session={session} driver={driver} onLogout={logout} />
+        </Suspense>
+      </>
     );
   }
 
   if (screen === "policy_reack" && driver) {
     return (
-      <DriverSafeAreaRoot>
-        <Suspense fallback={<DriverPageLoader />}>
-          <Routes>
-            <Route
-              path="/*"
-              element={
-                <DriverPolicyReack
-                  blocking
-                  driver={driver}
-                  organisationId={session.organisationId}
-                  onComplete={() => refresh()}
-                />
-              }
-            />
-          </Routes>
-        </Suspense>
-      </DriverSafeAreaRoot>
+      <>
+        {lockLayer}
+        <DriverSafeAreaRoot>
+          <Suspense fallback={<DriverPageLoader />}>
+            <Routes>
+              <Route
+                path="/*"
+                element={
+                  <DriverPolicyReack
+                    blocking
+                    driver={driver}
+                    organisationId={session.organisationId}
+                    onComplete={() => refresh()}
+                  />
+                }
+              />
+            </Routes>
+          </Suspense>
+        </DriverSafeAreaRoot>
+      </>
     );
   }
 
   return (
-    <DriverSafeAreaRoot>
+    <>
+      {lockLayer}
+      <DriverSafeAreaRoot>
       <NotificationProvider>
         <ExternalNavReturnLayer />
         <FloatingBubbleLayer />
@@ -315,7 +390,7 @@ function DriverSupabaseRouter() {
             path="/notifications"
             element={
               <DriverOperationalGuard driver={driver} section="notifications">
-                <DriverSupabaseMessages />
+                <DriverNotificationsPage />
               </DriverOperationalGuard>
             }
           />
@@ -368,6 +443,14 @@ function DriverSupabaseRouter() {
             }
           />
           <Route
+            path="/holiday"
+            element={
+              <DriverOperationalGuard driver={driver} section="profile">
+                <DriverHolidayCentre driver={driver} />
+              </DriverOperationalGuard>
+            }
+          />
+          <Route
             path="/time-off"
             element={
               <DriverOperationalGuard driver={driver} section="profile">
@@ -378,6 +461,7 @@ function DriverSupabaseRouter() {
           <Route path="/more" element={<DriverMorePage driver={driver} onLogout={logout} />} />
           <Route path="/profile" element={<Navigate to="/more" replace />} />
           <Route path="/profile/details" element={<DriverSupabaseProfile driver={driver} onLogout={logout} />} />
+          <Route path="/profile/edit" element={<DriverEditProfilePage driver={driver} />} />
           <Route path="/readiness" element={<DriverReadiness driver={driver} />} />
           <Route path="/vehicle" element={<DriverVehicleHub driver={driver} />} />
           <Route path="/vehicle/equipment" element={<DriverVehicleEquipment driver={driver} />} />
@@ -389,10 +473,28 @@ function DriverSupabaseRouter() {
           />
           <Route path="/schedule" element={<DriverSchedule driver={driver} />} />
           <Route path="/training" element={<DriverTrainingCentre driver={driver} />} />
+          <Route path="/training/:assignmentId" element={<DriverTrainingAssignmentPage driver={driver} />} />
+          <Route
+            path="/training/:assignmentId/lesson/:lessonId"
+            element={<DriverTrainingLessonPage driver={driver} />}
+          />
+          <Route
+            path="/training/:assignmentId/declaration"
+            element={<DriverTrainingDeclarationPage driver={driver} />}
+          />
+          <Route
+            path="/training/:assignmentId/evidence"
+            element={<DriverTrainingEvidencePage driver={driver} />}
+          />
+          <Route
+            path="/training/:assignmentId/completed"
+            element={<DriverTrainingCompletedPage driver={driver} />}
+          />
           <Route path="/sync" element={<DriverSyncCentre driver={driver} />} />
           <Route path="/safety" element={<DriverSafetyHub driver={driver} />} />
           <Route path="/profile/licence" element={<DriverLicenceCompliance />} />
           <Route path="/profile/settings" element={<DriverSupabaseSettings driver={driver} />} />
+          <Route path="/profile/security" element={<DriverSecurityPage driver={driver} />} />
           <Route path="/settings" element={<Navigate to="/profile/settings" replace />} />
           <Route path="/policies" element={<DriverPolicyReack driver={driver} organisationId={session.organisationId} onComplete={() => refresh()} />} />
           <Route path="/help" element={<DriverHelpSupport />} />
@@ -413,6 +515,7 @@ function DriverSupabaseRouter() {
       </Suspense>
       </NotificationProvider>
     </DriverSafeAreaRoot>
+    </>
   );
 }
 
@@ -420,7 +523,10 @@ export default function DriverApp() {
   return (
     <DriverSupabaseAuthProvider>
       <DriverAuthDeepLinkListener />
-      <DriverSupabaseRouter />
+      {/* Splash + welcome once per install — before auth resolves and after cold start. */}
+      <DriverLaunchGate>
+        <DriverSupabaseRouter />
+      </DriverLaunchGate>
     </DriverSupabaseAuthProvider>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { RidovaDriverLogo } from "@/components/driver/brand/RidovaDriverLogo";
 import { DriverAuthPrimaryButton } from "@/components/driver/auth/DriverMobileAuthLayout";
 import { APP_DISPLAY_NAME } from "@/lib/app-branding";
-import { DRIVER_SCREEN_TOP } from "@/lib/driverSafeArea";
+import { DRIVER_SAFE_BOTTOM, DRIVER_SAFE_TOP } from "@/lib/driverSafeArea";
 import { markDriverWelcomeSeen } from "@/lib/driverLaunch";
 
 const SLIDES = [
@@ -34,21 +34,29 @@ export default function DriverWelcomeScreen({ onComplete }) {
   }
 
   return (
-    <div className="ridova-launch-screen min-h-dvh" style={{ paddingTop: DRIVER_SCREEN_TOP }}>
-      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6">
+    <div
+      className="ridova-launch-screen ridova-launch-screen--welcome"
+      style={{
+        paddingTop: `calc(${DRIVER_SAFE_TOP} + 8px)`,
+        paddingBottom: `calc(${DRIVER_SAFE_BOTTOM} + 12px)`,
+      }}
+    >
+      <div className="ridova-launch-shell">
         <header className="ridova-launch-header">
-          <RidovaDriverLogo size="sm" className="!h-9 !w-9" />
+          <RidovaDriverLogo size="sm" className="ridova-launch-logo" />
           <button type="button" className="ridova-launch-skip" onClick={finish}>
             Skip
           </button>
         </header>
 
         <div className="ridova-launch-body">
-          <p className="ridova-launch-eyebrow">
-            {slide.eyebrow} · {index + 1} of {SLIDES.length}
-          </p>
-          <h1 className="ridova-launch-title">{slide.title}</h1>
-          <p className="ridova-launch-copy">{slide.body}</p>
+          <div className="ridova-launch-copy-block">
+            <p className="ridova-launch-eyebrow">
+              {slide.eyebrow} · {index + 1} of {SLIDES.length}
+            </p>
+            <h1 className="ridova-launch-title">{slide.title}</h1>
+            <p className="ridova-launch-copy">{slide.body}</p>
+          </div>
 
           <div className="ridova-launch-footer">
             <div className="ridova-launch-dots" aria-hidden>
@@ -62,6 +70,7 @@ export default function DriverWelcomeScreen({ onComplete }) {
 
             <DriverAuthPrimaryButton
               type="button"
+              className="ridova-launch-cta"
               onClick={() => {
                 if (last) finish();
                 else setIndex((i) => i + 1);
@@ -70,7 +79,7 @@ export default function DriverWelcomeScreen({ onComplete }) {
               {last ? "Sign in" : "Continue"}
             </DriverAuthPrimaryButton>
 
-            <p className="mt-4 text-center text-xs text-[#9ca3af]">{APP_DISPLAY_NAME}</p>
+            <p className="ridova-launch-brand">{APP_DISPLAY_NAME}</p>
           </div>
         </div>
       </div>

@@ -103,3 +103,23 @@ export function moveLeaveRequest(
     ],
   }
 }
+
+/** Suggest alternative dates and attach an audit note (manager action). */
+export function suggestLeaveDates(
+  row: LeaveRequestRecord,
+  actorName: string,
+  next: { startDate: string; endDate: string },
+  note?: string,
+): LeaveRequestRecord {
+  return {
+    ...row,
+    audit: [
+      ...row.audit,
+      audit(
+        actorName,
+        'Suggested dates',
+        `Suggested ${next.startDate} → ${next.endDate}. ${note?.trim() || 'Please consider these alternative dates.'}`,
+      ),
+    ],
+  }
+}

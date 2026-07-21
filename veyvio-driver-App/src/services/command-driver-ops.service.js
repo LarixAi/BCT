@@ -153,8 +153,8 @@ export async function listDocumentsViaCommand() {
   return commandListDocuments(token);
 }
 
-export async function submitDocumentViaCommand(input) {
+export async function submitDocumentViaCommand(input, file) {
   const token = await accessToken();
   if (!token) return { ok: false, message: "Not signed in." };
-  return commandSubmitDocument(token, input);
+  return commandSubmitDocument(token, input, file);
 }

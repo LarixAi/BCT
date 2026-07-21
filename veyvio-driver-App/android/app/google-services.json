@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:590158999464:android:f86a49b76d1e102079779d",
         "android_client_info": {
-          "package_name": "com.coresupport.fleet.driver"
+          "package_name": "uk.veyvio.driver"
         }
       },
       "oauth_client": [],

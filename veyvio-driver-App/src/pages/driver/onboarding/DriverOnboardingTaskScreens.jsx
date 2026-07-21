@@ -13,7 +13,7 @@ import { useDriverOnboarding } from "@/contexts/DriverOnboardingContext";
 import { friendlyOnboardingError } from "@/lib/onboarding-errors";
 import { VEHICLE_CHECK_TRAINING_ACKS } from "@/lib/dailyVehicleChecks";
 import { CARD_DOCUMENT_UPLOADS, hasAllRequiredDocuments } from "@/lib/onboarding-document-requirements";
-import { taskRoute } from "@/lib/onboarding-tasks";
+import { findNextReadyTask, taskRoute } from "@/lib/onboarding-tasks";
 import { DRIVER_POLICIES } from "@/lib/onboarding-blueprint";
 import DriverPolicyAcceptRow from "@/components/driver/policies/DriverPolicyAcceptRow";
 import DriverPolicyViewer from "@/components/driver/policies/DriverPolicyViewer";
@@ -38,18 +38,37 @@ import {
 } from "@/services/onboarding.service";
 
 function useTaskSave() {
-  const { refresh } = useDriverOnboarding();
+  const { refresh, driver, form, documentsByStep, requirements } = useDriverOnboarding();
   const navigate = useNavigate();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
-  async function run(saveFn, { backToHub = true, onSuccess } = {}) {
+  async function run(saveFn, { backToHub = true, goToNext = true, onSuccess } = {}) {
     setPending(true);
     setError("");
     try {
       await saveFn();
-      await refresh();
+      const result = await refresh();
       if (onSuccess) await onSuccess();
+      if (goToNext) {
+        const onboardingState = result?.onboardingState;
+        const prefillData = result?.prefillData;
+        const req = result?.req ?? requirements;
+        const next = findNextReadyTask(
+          driver,
+          onboardingState,
+          {
+            ...(prefillData ?? {}),
+            documentsByStep: prefillData?.documentsByStep ?? documentsByStep,
+            form: { ...form, ...(prefillData?.form ?? {}) },
+          },
+          req,
+        );
+        if (next && next.id !== "create_account") {
+          navigate(taskRoute(next.id));
+          return;
+        }
+      }
       if (backToHub) navigate("/onboarding");
     } catch (err) {
       setError(friendlyOnboardingError(err, "save"));
@@ -536,19 +555,30 @@ export function DriverOnboardingReviewScreen({ onSubmitted }) {
       helper="Check everything looks correct. After you submit, your details will be locked until the transport team approves you."
       onBack={() => navigate("/onboarding")}
       onSecondary={() => navigate("/onboarding")}
-      primaryLabel={pending ? "Submitting…" : "Submit for admin review"}
+      primaryDisabled={false}
+      primaryLabel={
+        pending
+          ? "Submitting…"
+          : !isEditable
+            ? "Already submitted — refresh status"
+            : "Submit for admin review"
+      }
       onPrimary={() => {
         if (incomplete.length > 0) {
           setError(`Please complete: ${incomplete.map((t) => t.title).join(", ")}`);
           return;
         }
+        if (!isEditable) {
+          void refresh().then(() => onSubmitted?.());
+          return;
+        }
         void run(() => submitOnboardingForReview(driver.id, organisationId, form), {
           backToHub: false,
+          goToNext: false,
           onSuccess: onSubmitted,
         });
       }}
       primaryPending={pending}
-      primaryDisabled={!isEditable}
       error={error}
       footerNote={
         incomplete.length > 0

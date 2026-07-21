@@ -45,6 +45,7 @@ import {
 } from '@/lib/transfers/operational-trip'
 import { normalizeAdBlueRecords } from '@/lib/adblue/normalize'
 import { normalizeVehicleProfile } from '@/lib/vehicles/readiness-projection'
+import { normalizeDriverProfileDocuments } from '@/lib/drivers/document-display'
 
 const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
@@ -371,8 +372,8 @@ export class ApiClient {
     refreshToken?: string
     accessToken?: string
   }) {
-    // Use a dedicated auth fetch (same pattern as login). Avoid paths containing
-    // "/mfa/" — some browser privacy filters block them and surface "Failed to fetch".
+    // Same public-auth fetch pattern as login. Avoid "/mfa/" and "/factor" in the path —
+    // Safari / privacy filters often block those and surface TypeError "Load failed".
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (SUPABASE_ANON_KEY) {
       headers.apikey = SUPABASE_ANON_KEY
@@ -380,7 +381,7 @@ export class ApiClient {
     const bearer = input.accessToken || this.getToken() || SUPABASE_ANON_KEY
     if (bearer) headers.Authorization = `Bearer ${bearer}`
 
-    return fetch(apiUrl('/auth/verify-factor'), {
+    return fetch(apiUrl('/auth/login/confirm'), {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -408,7 +409,10 @@ export class ApiClient {
       })
       .catch((error: unknown) => {
         if (error instanceof TypeError) {
-          throw new Error('Could not reach Command to verify MFA. Check your connection and try again.')
+          const detail = error.message && error.message !== 'Failed to fetch' ? ` (${error.message})` : ''
+          throw new Error(
+            `Could not reach Command to verify MFA${detail}. Check your connection and try again.`,
+          )
         }
         throw error
       })
@@ -510,11 +514,15 @@ export class ApiClient {
   }
 
   getDriverProfile(id: string) {
-    return this.fetch<import('@/lib/drivers/types').DriverProfile>(`/drivers/${id}/profile`)
+    return this.fetch<import('@/lib/drivers/types').DriverProfile>(`/drivers/${id}/profile`).then(
+      (profile) => normalizeDriverProfileDocuments(profile),
+    )
   }
 
   getDriverProfiles() {
-    return this.fetch<import('@/lib/drivers/types').DriverProfile[]>('/drivers/profiles')
+    return this.fetch<import('@/lib/drivers/types').DriverProfile[]>('/drivers/profiles').then(
+      (profiles) => profiles.map((p) => normalizeDriverProfileDocuments(p)),
+    )
   }
 
   getDriverDirectorySummary() {
@@ -636,7 +644,13 @@ export class ApiClient {
     return this.fetch<import('@/lib/drivers/types').DriverProfile>(`/drivers/${id}/documents`, {
       method: 'POST',
       body: JSON.stringify({ ...input, actorName }),
-    })
+    }).then((profile) => normalizeDriverProfileDocuments(profile))
+  }
+
+  getDriverDocumentDownloadUrl(driverId: string, documentId: string) {
+    return this.fetch<{ url: string; fileName: string; mimeType: string; label: string | null }>(
+      `/drivers/${driverId}/documents/${documentId}/download`,
+    )
   }
 
   recordDriverTraining(
@@ -753,14 +767,24 @@ export class ApiClient {
     return this.fetch<import('@/lib/drivers/types').DriverProfile>(`/drivers/${id}/documents/${documentId}/verify`, {
       method: 'POST',
       body: JSON.stringify({ actorName }),
-    })
+    }).then((profile) => normalizeDriverProfileDocuments(profile))
   }
 
-  rejectDriverDocument(id: string, documentId: string, reason: string, actorName: string) {
+  rejectDriverDocument(
+    id: string,
+    documentId: string,
+    reason: string,
+    actorName: string,
+    options?: { requestResubmit?: boolean },
+  ) {
     return this.fetch<import('@/lib/drivers/types').DriverProfile>(`/drivers/${id}/documents/${documentId}/reject`, {
       method: 'POST',
-      body: JSON.stringify({ actorName, reason }),
-    })
+      body: JSON.stringify({
+        actorName,
+        reason,
+        requestResubmit: options?.requestResubmit !== false,
+      }),
+    }).then((profile) => normalizeDriverProfileDocuments(profile))
   }
 
   addDriverRestriction(id: string, input: import('@/lib/drivers/types').AddDriverRestrictionInput, actorName: string) {
@@ -1353,6 +1377,54 @@ export class ApiClient {
       const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
       return mockAttendanceApi.updateLeave(row)
     }
+  }
+
+  async getDriverHoliday(driverId: string) {
+    return this.fetch<import('@/lib/holiday/types').DriverHolidayBundle>(
+      `/drivers/${driverId}/holiday`,
+    )
+  }
+
+  async updateDriverHolidayProfile(
+    driverId: string,
+    input: import('@/lib/holiday/types').UpdateDriverHolidayProfileInput,
+    actorName: string,
+  ) {
+    return this.fetch<import('@/lib/holiday/types').DriverHolidayBundle>(
+      `/drivers/${driverId}/holiday/profile`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ ...input, actorName }),
+      },
+    )
+  }
+
+  async adjustDriverHoliday(
+    driverId: string,
+    input: import('@/lib/holiday/types').AdjustDriverHolidayInput,
+    actorName: string,
+  ) {
+    return this.fetch<import('@/lib/holiday/types').DriverHolidayBundle>(
+      `/drivers/${driverId}/holiday/adjustments`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...input, actorName }),
+      },
+    )
+  }
+
+  async accrueDriverHoliday(
+    driverId: string,
+    input: { hoursWorked: number; reason?: string },
+    actorName: string,
+  ) {
+    return this.fetch<import('@/lib/holiday/types').DriverHolidayBundle>(
+      `/drivers/${driverId}/holiday/accruals`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...input, actorName }),
+      },
+    )
   }
 
   async getAttendancePersonProfile(input: { personId?: string | null; personName?: string | null }) {

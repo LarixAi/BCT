@@ -1,11 +1,10 @@
-/**
- * Reject if a promise does not settle within `ms` milliseconds.
- */
-export function withTimeout(promise, ms, message = "Request timed out") {
+/** Resolve with fallback if the promise does not settle in time. */
+export function withTimeout(promise, ms, fallback) {
   let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms);
+  const timeout = new Promise((resolve) => {
+    timer = globalThis.setTimeout(() => resolve(fallback), ms);
   });
-
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) globalThis.clearTimeout(timer);
+  });
 }

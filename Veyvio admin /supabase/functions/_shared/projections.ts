@@ -8,6 +8,23 @@ function iso(value: unknown, fallback = new Date().toISOString()) {
   return String(value)
 }
 
+function projectedDocumentExpiry(row: Row, requirementType: unknown, docExpiry: unknown): string | null {
+  if (docExpiry) return String(docExpiry).slice(0, 10)
+  const t = String(requirementType ?? '').toLowerCase()
+  if (['driving_licence', 'licence', 'licence_front', 'licence_back', 'dvla_check'].includes(t)) {
+    return row.licence_expiry_date ? String(row.licence_expiry_date).slice(0, 10) : null
+  }
+  if (['dqc', 'cpc', 'dqc_front', 'dqc_back', 'dqc_cpc'].includes(t)) {
+    return row.cpc_expiry_date ? String(row.cpc_expiry_date).slice(0, 10) : null
+  }
+  if (t === 'dbs') return row.dbs_expiry_date ? String(row.dbs_expiry_date).slice(0, 10) : null
+  if (t === 'medical') return row.medical_expiry_date ? String(row.medical_expiry_date).slice(0, 10) : null
+  if (t === 'tachograph' || t === 'tacho') {
+    return row.tacho_card_expiry ? String(row.tacho_card_expiry).slice(0, 10) : null
+  }
+  return null
+}
+
 function mapEmploymentType(value: unknown): string {
   const v = String(value ?? 'employee')
   if (['employee', 'contractor', 'agency', 'temporary'].includes(v)) return v
@@ -78,6 +95,27 @@ function mapDriverAccountStatus(status: unknown): string {
   if (s === 'suspended') return 'temporarily_suspended'
   if (s === 'disabled') return 'archived'
   return s
+}
+
+
+function formatDriverAuditAction(action: string): string {
+  const labels: Record<string, string> = {
+    'driver.biometric_enabled': 'Biometric sign-in enabled',
+    'driver.biometric_disabled': 'Biometric sign-in disabled',
+    'driver.biometric_unlock_succeeded': 'Biometric unlock succeeded',
+    'driver.biometric_unlock_failed': 'Biometric unlock failed',
+    'driver.biometric_fallback_used': 'Biometric fallback used',
+    'driver.biometric_credential_invalidated': 'Biometric credential invalidated',
+    'driver.device_revoked': 'Driver device revoked',
+    'driver.password_reauthentication_required': 'Password re-authentication required',
+    'driver.onboarding_profile_updated': 'Onboarding: personal profile saved (Driver app)',
+    'driver.onboarding_contact_updated': 'Onboarding: address and emergency contact saved (Driver app)',
+    'driver.onboarding_step_completed': 'Onboarding: step completed (Driver app)',
+    'driver.onboarding_submitted': 'Onboarding submitted (Driver app)',
+    'driver.onboarding.evidence_submitted': 'Onboarding evidence submitted (Driver app)',
+  }
+  if (labels[action]) return labels[action]
+  return action.replace(/^driver\./, '').replaceAll('_', ' ')
 }
 
 function emptyDriverAccount(overrides: Row = {}) {
@@ -255,8 +293,15 @@ function buildProjectedTrainingRequirements(
       completedAt: status === 'missing' ? null : completedAt,
       expiresAt: status === 'missing' ? null : expiresAt,
       trainer: status === 'missing' ? null : trainer,
+      progressPercentage:
+        record?.progress_percentage != null ? Number(record.progress_percentage) : null,
+      assessmentScore: record?.assessment_score != null ? Number(record.assessment_score) : null,
     }
   })
+}
+
+function isDocumentPendingAdminReview(status: string): boolean {
+  return status === 'awaiting_review' || status === 'uploaded'
 }
 
 function deriveProjectedComplianceStatus(docs: Row[]): string {
@@ -264,7 +309,7 @@ function deriveProjectedComplianceStatus(docs: Row[]): string {
   const statuses = docs.map((d) => String(d.verificationStatus ?? d.verification_status ?? ''))
   if (statuses.some((s) => s === 'rejected')) return 'verification_failed'
   if (statuses.some((s) => s === 'expired')) return 'non_compliant'
-  if (statuses.some((s) => s === 'awaiting_review' || s === 'uploaded')) return 'under_review'
+  if (statuses.some((s) => isDocumentPendingAdminReview(s))) return 'under_review'
   if (statuses.some((s) => s === 'expiring_soon')) return 'documents_expiring_soon'
   if (statuses.every((s) => s === 'verified' || s === 'expiring_soon')) return 'compliant'
   return 'missing_information'
@@ -287,6 +332,18 @@ function buildDriverEligibility(profile: Row) {
       : null
   const op = String(profile.operationalStatus ?? 'draft')
 
+  const pendingReview = docs.filter((d) =>
+    isDocumentPendingAdminReview(String(d.verificationStatus ?? d.verification_status ?? '')),
+  )
+  if (pendingReview.length) {
+    failures.push({
+      code: 'documents_pending_review',
+      message: `${name}: ${pendingReview.length} document${pendingReview.length === 1 ? '' : 's'} awaiting admin review — open Compliance to approve or decline`,
+      severity: 'block',
+      category: 'compliance',
+    })
+  }
+
   if (!licenceExpiry) {
     failures.push({ code: 'licence_missing', message: `${name}: driving licence expiry is required`, severity: 'block', category: 'compliance' })
   } else if (new Date(licenceExpiry).getTime() < Date.now()) {
@@ -300,34 +357,41 @@ function buildDriverEligibility(profile: Row) {
   if (op === 'draft' || op === 'onboarding' || op === 'pending_compliance') {
     failures.push({
       code: 'onboarding_incomplete',
-      message: `${name}: onboarding is not complete — finish onboarding and activate for dispatch`,
+      message: pendingReview.length
+        ? `${name}: finish onboarding after admin review in Compliance`
+        : pendingReview.length === 0 && docs.some((d) => String(d.verificationStatus ?? d.verification_status) === 'verified')
+          ? `${name}: completing activation training in the Driver app — not yet eligible for dispatch`
+          : `${name}: onboarding is not complete — finish onboarding and activate for dispatch`,
       severity: 'block',
       category: 'employment',
     })
   }
 
-  // Mandatory training gaps (MiDAS etc.) — assignment blockers once activated
+  // Mandatory training gaps (MiDAS etc.)
   const training = Array.isArray(profile.trainingRequirements) ? (profile.trainingRequirements as Row[]) : []
-  for (const req of training) {
-    if (String(req.category) !== 'mandatory') continue
+  const mandatoryGaps = training.filter((req) => {
+    if (String(req.category) !== 'mandatory') return false
     const status = String(req.status ?? '')
-    if (status === 'missing' || status === 'expired' || status === 'failed') {
-      // Soft during onboarding so activation is not blocked by every course at once
-      if (op === 'draft' || op === 'onboarding' || op === 'pending_compliance') {
-        warnings.push({
-          code: `training_${req.key}`,
-          message: `${name}: ${req.label} — ${status.replace(/_/g, ' ')}`,
-          severity: 'warning',
-          category: 'compliance',
-        })
-      } else {
-        failures.push({
-          code: `training_${req.key}`,
-          message: `${name}: ${req.label} — ${status.replace(/_/g, ' ')}`,
-          severity: 'block',
-          category: 'compliance',
-        })
-      }
+    return status === 'missing' || status === 'expired' || status === 'failed'
+  })
+  const onboardingPhase = op === 'draft' || op === 'onboarding' || op === 'pending_compliance'
+  const dispatchActivated = op === 'eligible' || op === 'restricted'
+  if (mandatoryGaps.length && (onboardingPhase || dispatchActivated)) {
+    // Soft while onboarding, and after Activate for dispatch — admin already released the driver.
+    warnings.push({
+      code: 'training_not_started',
+      message: `${mandatoryGaps.length} mandatory training items not started — assign from Training`,
+      severity: 'warning',
+      category: 'compliance',
+    })
+  } else {
+    for (const req of mandatoryGaps) {
+      failures.push({
+        code: `training_${req.key}`,
+        message: `${name}: ${req.label} — ${String(req.status ?? 'missing').replace(/_/g, ' ')}`,
+        severity: 'block',
+        category: 'compliance',
+      })
     }
   }
 
@@ -417,7 +481,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
   const driverIds = data.map((row) => String(row.id))
   const today = new Date().toISOString().slice(0, 10)
 
-  const [dutiesRes, docsRes, restrictionsRes, accountsRes, trainingRes, auditRes] = await Promise.all([
+  const [dutiesRes, docsRes, restrictionsRes, accountsRes, trainingRes, auditRes, devicesRes] = await Promise.all([
     admin
       .from('duties')
       .select('id, driver_id, service_date, planned_sign_on_at, status')
@@ -448,6 +512,14 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
           .order('occurred_at', { ascending: false })
           .limit(100)
       : Promise.resolve({ data: [] as Row[], error: null }),
+    driverIds.length
+      ? admin
+          .from('driver_app_devices')
+          .select('*')
+          .eq('company_id', companyId)
+          .in('driver_id', driverIds)
+          .order('last_seen_at', { ascending: false })
+      : Promise.resolve({ data: [] as Row[], error: null }),
   ])
 
   const duties = dutiesRes.error ? [] : dutiesRes.data ?? []
@@ -456,6 +528,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
   const appAccounts = accountsRes.error ? [] : accountsRes.data ?? []
   const trainingRows = trainingRes.error ? [] : trainingRes.data ?? []
   const auditRows = auditRes.error ? [] : auditRes.data ?? []
+  const deviceRows = devicesRes.error ? [] : devicesRes.data ?? []
 
   const actorIds = [...new Set(auditRows.map((a) => a.actor_id).filter(Boolean).map(String))]
   const { data: actorUsers } = actorIds.length
@@ -501,7 +574,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
             : null
     return {
       id: String(a.id),
-      action: String(a.action).replace(/^driver\./, '').replaceAll('_', ' '),
+      action: formatDriverAuditAction(String(a.action)),
       actor: actorNameById.get(String(a.actor_id ?? '')) ?? 'Administrator',
       actorRole: 'Command',
       createdAt: iso(a.occurred_at ?? a.created_at),
@@ -541,6 +614,13 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
     list.push(t)
     trainingByDriver.set(id, list)
   }
+  const devicesByDriver = new Map<string, Row[]>()
+  for (const d of deviceRows ?? []) {
+    const id = String(d.driver_id)
+    const list = devicesByDriver.get(id) ?? []
+    list.push(d)
+    devicesByDriver.set(id, list)
+  }
 
   const profiles = data.map((row: Row) => {
     const staff = (row.staff_members as Row | null) ?? {}
@@ -549,24 +629,48 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
     const operationalStatus = mapOperationalStatus(row)
     const firstName = String(staff.first_name ?? 'Driver')
     const lastName = String(staff.last_name ?? row.driver_number ?? '')
-    const docs = (docsByDriver.get(String(row.id)) ?? []).map((d) => ({
-      id: d.id,
-      requirementType: d.requirement_type,
-      label: d.label,
-      referenceNumber: d.reference_number ?? null,
-      issuingOrganisation: d.issuing_organisation ?? null,
-      issueDate: d.issue_date ?? null,
-      expiryDate: d.expiry_date ?? null,
-      verificationStatus: d.verification_status,
-      verifiedBy: d.verified_by ?? null,
-      verifiedAt: d.verified_at ? iso(d.verified_at) : null,
-      rejectionReason: d.rejection_reason ?? null,
-      notes: d.notes ?? null,
-      fileName: d.file_name ?? null,
-    }))
+    const docs = (docsByDriver.get(String(row.id)) ?? [])
+      .map((d) => ({
+        id: d.id,
+        requirementType: d.requirement_type,
+        label: d.label,
+        referenceNumber: d.reference_number ?? null,
+        issuingOrganisation: d.issuing_organisation ?? null,
+        issueDate: d.issue_date ?? null,
+        expiryDate: projectedDocumentExpiry(row, d.requirement_type, d.expiry_date),
+        verificationStatus: d.verification_status,
+        verifiedBy: d.verified_by ?? null,
+        verifiedAt: d.verified_at ? iso(d.verified_at) : null,
+        rejectionReason: d.rejection_reason ?? null,
+        notes: d.notes ?? null,
+        fileName: d.file_name ?? null,
+        fileObjectId: d.file_object_id ?? null,
+        createdAt: iso(d.created_at),
+        updatedAt: d.updated_at ? iso(d.updated_at) : iso(d.created_at),
+        sourceApp: d.source_app ? String(d.source_app) : d.file_object_id ? 'DRIVER' : 'COMMAND',
+      }))
+      .sort(
+        (a, b) => new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime(),
+      )
     const app = accountByDriver.get(String(row.id))
     const rawAccountStatus = String(app?.account_status ?? row.account_status ?? 'not_created')
-    const accountStatus = mapDriverAccountStatus(rawAccountStatus)
+    // Once Command has activated for dispatch, directory must not keep showing Setup incomplete.
+    let accountStatus = mapDriverAccountStatus(rawAccountStatus)
+    if (
+      (operationalStatus === 'eligible' || operationalStatus === 'restricted') &&
+      ['setup_incomplete', 'registration_started', 'invitation_pending', 'draft'].includes(accountStatus)
+    ) {
+      accountStatus = 'active'
+      if (app?.id && String(app.account_status) !== 'active') {
+        void admin
+          .from('driver_app_accounts')
+          .update({
+            account_status: 'active',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', app.id)
+      }
+    }
     const invitationSent =
       rawAccountStatus === 'invitation_sent' ||
       accountStatus === 'invitation_pending' ||
@@ -622,11 +726,31 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
       lastLoginAt: app?.last_login_at ? iso(app.last_login_at) : null,
       lastAppActivityAt: app?.last_app_sync_at ? iso(app.last_app_sync_at) : app?.last_login_at ? iso(app.last_login_at) : null,
       activeSessionCount: Number(app?.active_session_count ?? 0),
-      registeredDeviceCount: Number(app?.registered_device_count ?? 0),
+      registeredDeviceCount: (devicesByDriver.get(String(row.id)) ?? []).filter(
+        (d) => String(d.security_status) !== 'revoked',
+      ).length || Number(app?.registered_device_count ?? 0),
       appVersion: app?.app_version ?? null,
       operatingSystem: app?.operating_system ?? null,
       lastAppSyncAt: app?.last_app_sync_at ? iso(app.last_app_sync_at) : null,
       invitationHistory,
+      devices: (devicesByDriver.get(String(row.id)) ?? []).map((d) => ({
+        id: String(d.id),
+        label: String(d.label ?? 'Driver phone'),
+        platform: String(d.platform ?? 'unknown'),
+        appVersion: d.app_version ? String(d.app_version) : null,
+        operatingSystem: d.operating_system ? String(d.operating_system) : null,
+        registeredAt: iso(d.registered_at ?? d.created_at),
+        lastSeenAt: iso(d.last_seen_at ?? d.updated_at ?? d.registered_at),
+        trusted: String(d.security_status) === 'trusted',
+        biometricUnlock: Boolean(d.biometric_unlock),
+        biometricMethod: d.biometric_method ? String(d.biometric_method) : null,
+        biometricEnabledAt: d.biometric_enabled_at ? iso(d.biometric_enabled_at) : null,
+        lastBiometricUnlockAt: d.last_biometric_unlock_at ? iso(d.last_biometric_unlock_at) : null,
+        pushNotificationsEnabled: Boolean(d.push_notifications_enabled),
+        locationAccess: String(d.location_access ?? 'unknown'),
+        securityStatus: String(d.security_status ?? 'trusted'),
+        requirePasswordNextLogin: Boolean(d.require_password_next_login),
+      })),
     })
 
     const profile: Row = {

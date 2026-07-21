@@ -85,6 +85,16 @@ export function ActivationResolutionCentre({
     return buildActivationResolution(driver)
   }, [driver, tick])
 
+  /** Documents are owned by Compliance; Training owns assign/progress. Eligibility focuses on blockers + activation. */
+  const hideDocumentRows = mode === 'profile'
+  const tableRequirements = useMemo(
+    () =>
+      hideDocumentRows
+        ? model.requirements.filter((r) => r.type !== 'document')
+        : model.requirements,
+    [hideDocumentRows, model.requirements],
+  )
+
   const [requestOpen, setRequestOpen] = useState(false)
   const [resendOpen, setResendOpen] = useState(false)
   const [assignFor, setAssignFor] = useState<ActivationRequirement | null>(null)
@@ -93,7 +103,7 @@ export function ActivationResolutionCentre({
   const [message, setMessage] = useState<string | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
 
-  const missing = model.requirements.filter(
+  const missing = tableRequirements.filter(
     (r) =>
       r.mandatory &&
       !['approved', 'completed', 'waived', 'not_applicable', 'expiring_soon'].includes(r.status),
@@ -102,6 +112,9 @@ export function ActivationResolutionCentre({
   const outstandingRequests = missing.filter((r) =>
     ['request_sent', 'opened'].includes(r.status),
   )
+
+  const documentAttention =
+    model.summary.documentsMissing + model.summary.documentsUnderReview
 
   const openRequestDrawer = (keys?: string[]) => {
     setSelectedKeys(keys ?? missing.map((r) => r.definitionKey))
@@ -189,11 +202,22 @@ export function ActivationResolutionCentre({
   const assignTraining = useMutation({
     mutationFn: (input: AssignDriverTrainingInput) =>
       api.assignDriverRequirementTraining(driver.id, input, actorName),
-    onSuccess: (_data, input) => {
-      markRequirementLocalStatus(driver.id, input.definitionKey, 'training_assigned')
+    onSuccess: (data, input) => {
+      if (data?.requirement) {
+        hydrateRequirementStore(driver.id, [data.requirement])
+      } else {
+        markRequirementLocalStatus(driver.id, input.definitionKey, 'training_assigned')
+      }
       setAssignFor(null)
-      setMessage('Training assigned.')
+      setMessage('Training assigned — driver should see it in Training centre.')
       refresh()
+    },
+    onError: (err) => {
+      setMessage(
+        err instanceof Error
+          ? `Could not assign training: ${err.message}`
+          : 'Could not assign training. Check Command API and try again.',
+      )
     },
   })
 
@@ -382,6 +406,42 @@ export function ActivationResolutionCentre({
           />
         </div>
 
+        {hideDocumentRows ? (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            {documentAttention > 0 ? (
+              <>
+                {documentAttention} document requirement
+                {documentAttention === 1 ? '' : 's'} need attention — manage uploads and review on{' '}
+                <Link
+                  to={`/drivers/${driver.id}?tab=Compliance`}
+                  className="font-medium text-command-700 hover:underline"
+                >
+                  Compliance
+                </Link>
+                . Assign courses on{' '}
+                <Link
+                  to={`/drivers/${driver.id}?tab=Training`}
+                  className="font-medium text-command-700 hover:underline"
+                >
+                  Training
+                </Link>
+                .
+              </>
+            ) : (
+              <>
+                Core documents are on{' '}
+                <Link
+                  to={`/drivers/${driver.id}?tab=Compliance`}
+                  className="font-medium text-command-700 hover:underline"
+                >
+                  Compliance
+                </Link>
+                . This list covers account, training and qualifications that affect going online.
+              </>
+            )}
+          </div>
+        ) : null}
+
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -395,7 +455,7 @@ export function ActivationResolutionCentre({
               </tr>
             </thead>
             <tbody>
-              {model.requirements.map((row) => (
+              {tableRequirements.map((row) => (
                 <RequirementRow
                   key={row.id}
                   row={row}
@@ -541,7 +601,17 @@ export function ActivationResolutionCentre({
           requirement={assignFor}
           actorName={actorName}
           pending={assignTraining.isPending}
-          onClose={() => setAssignFor(null)}
+          error={
+            assignTraining.error instanceof Error
+              ? assignTraining.error.message
+              : assignTraining.error
+                ? String(assignTraining.error)
+                : null
+          }
+          onClose={() => {
+            assignTraining.reset()
+            setAssignFor(null)
+          }}
           onAssign={(input) => assignTraining.mutate(input)}
         />
       )}
@@ -948,12 +1018,14 @@ function AssignTrainingDrawer({
   requirement,
   actorName,
   pending,
+  error,
   onClose,
   onAssign,
 }: {
   requirement: ActivationRequirement
   actorName: string
   pending: boolean
+  error?: string | null
   onClose: () => void
   onAssign: (input: AssignDriverTrainingInput) => void
 }) {
@@ -1048,6 +1120,11 @@ function AssignTrainingDrawer({
             </div>
           </div>
         </div>
+        {error ? (
+          <div className="mx-5 mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+            {error}
+          </div>
+        ) : null}
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
           <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
             Cancel
@@ -1068,7 +1145,7 @@ function AssignTrainingDrawer({
             }
             className="rounded-lg bg-command-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           >
-            {pending ? 'Assigning…' : 'Assign training'}
+            {pending ? 'Assigning…' : error ? 'Try again' : 'Assign training'}
           </button>
         </div>
       </div>

@@ -11,6 +11,7 @@ export type AttendanceLiveStatus =
 
 export type LeaveRequestType =
   | 'annual_leave'
+  | 'unpaid_leave'
   | 'sick_leave'
   | 'emergency_leave'
   | 'medical_appointment'

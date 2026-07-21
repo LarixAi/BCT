@@ -11,6 +11,12 @@ import { getDriverOnboardingRequirements } from "@/services/driver-requirements.
 export async function loadDriverComplianceReadiness(driver) {
   const supabase = getSupabaseClient();
 
+  const dispatchActivated =
+    ["eligible", "restricted"].includes(String(driver.operationalStatus ?? "")) ||
+    driver.onboardingStatus === "active" ||
+    driver.onboardingStatus === "temporary_access" ||
+    (typeof window !== "undefined" && sessionStorage.getItem("veyvio.driver.forceAppShell") === "1");
+
   const [stepsRes, recordRes, documentsRes, requirements] = await Promise.all([
     supabase
       .from("driver_onboarding_steps")
@@ -37,10 +43,18 @@ export async function loadDriverComplianceReadiness(driver) {
     (s) => s.required && !isStepCompleteForProgress(s.status, s.review_status),
   );
 
+  // When Command has activated for dispatch, do not block on legacy Ridova onboarding status.
+  const effectiveOnboardingStatus = dispatchActivated ? "active" : driver.onboardingStatus;
+  const effectiveEmploymentStatus = dispatchActivated
+    ? "active"
+    : driver.status === "active"
+      ? "active"
+      : driver.status;
+
   const dispatchReadiness = evaluateDriverDispatchReadiness({
-    onboardingStatus: driver.onboardingStatus,
-    employmentStatus: driver.status === "active" ? "active" : driver.status,
-    missingStepLabels: missingRequiredSteps.map((s) => s.step_label),
+    onboardingStatus: effectiveOnboardingStatus,
+    employmentStatus: effectiveEmploymentStatus,
+    missingStepLabels: dispatchActivated ? [] : missingRequiredSteps.map((s) => s.step_label),
   });
 
   const blockers = [...dispatchReadiness.blockers];
@@ -51,14 +65,16 @@ export async function loadDriverComplianceReadiness(driver) {
     blockers.push("DBS certificate expiry is required for your role");
   }
 
-  const onboardingCanonical = normalizeOnboardingStatus(driver.onboardingStatus);
-  const accountStatus = normalizeAccountStatus({
-    status: driver.status,
-    onboarding_status: driver.onboardingStatus,
-  });
+  const onboardingCanonical = normalizeOnboardingStatus(effectiveOnboardingStatus);
+  const accountStatus = dispatchActivated
+    ? "active"
+    : normalizeAccountStatus({
+        status: driver.status,
+        onboarding_status: driver.onboardingStatus,
+      });
 
   const dispatchBand = computeDispatchReadinessBand({
-    onboardingStatus: driver.onboardingStatus,
+    onboardingStatus: effectiveOnboardingStatus,
     accountStatus,
     blockers,
     warnings: dispatchReadiness.warnings ?? [],
@@ -66,6 +82,7 @@ export async function loadDriverComplianceReadiness(driver) {
   });
 
   const onboardingApproved =
+    dispatchActivated ||
     onboardingCanonical === "approved" ||
     driver.onboardingStatus === "active" ||
     driver.onboardingStatus === "temporary_access";
@@ -76,10 +93,11 @@ export async function loadDriverComplianceReadiness(driver) {
     band: dispatchBand,
     blockers,
     warnings: dispatchReadiness.warnings ?? [],
-    missingSteps: missingRequiredSteps.map((s) => s.step_label),
+    missingSteps: dispatchActivated ? [] : missingRequiredSteps.map((s) => s.step_label),
     dispatchBlocked:
-      (record?.dispatch_blocked ?? false) === true ||
-      (blockers.length > 0 && driver.onboardingStatus !== "active"),
+      !dispatchActivated &&
+      ((record?.dispatch_blocked ?? false) === true ||
+        (blockers.length > 0 && driver.onboardingStatus !== "active")),
     outdatedPolicies,
     requirements,
     expiringDocuments: (documents ?? []).filter((d) => d.expires_on).slice(0, 5),
@@ -146,28 +164,35 @@ export function getPrimaryComplianceFix(readiness) {
   return null;
 }
 
+const DEGRADED_ACCESS_SECTIONS = [
+  "home",
+  "help",
+  "policies",
+  "profile",
+  "settings",
+  "working-time",
+  "duty",
+  "documents",
+  "lost-property",
+  "schedule",
+  "vehicle",
+  "check",
+  "jobs",
+  "job",
+  "defects",
+  "incidents",
+  "messages",
+  "notifications",
+  "contact",
+  "threads",
+  "thread",
+  "acknowledgements",
+];
+
 export function canAccessDriverSection(section, readiness) {
   // Degraded / Command path: compliance tables may be unavailable — still allow core ops screens.
   if (!readiness) {
-    return [
-      "home",
-      "help",
-      "policies",
-      "profile",
-      "settings",
-      "working-time",
-      "duty",
-      "documents",
-      "lost-property",
-      "schedule",
-      "vehicle",
-      "check",
-      "jobs",
-      "job",
-      "defects",
-      "incidents",
-      "messages",
-    ].includes(section);
+    return DEGRADED_ACCESS_SECTIONS.includes(section);
   }
   if (
     section === "home" ||
@@ -199,7 +224,9 @@ export function canAccessDriverSection(section, readiness) {
   if (section === "documents") {
     return true;
   }
-  if (section === "messages") return operational;
+  if (section === "messages") {
+    return operational || readiness.canAccessDuty || readiness.band === "ready" || readiness.band === "warning";
+  }
   if (section === "check") return readiness.canAccessVehicleCheck;
   if (section === "jobs" || section === "job") return readiness.canAccessJobs;
   return false;

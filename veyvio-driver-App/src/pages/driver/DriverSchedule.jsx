@@ -43,7 +43,7 @@ export default function DriverSchedule({ driver }) {
       const depotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
       const [boot, leave] = await Promise.all([
         refreshCommandBootstrap(depotId).catch(() => ({ ok: false, message: "Could not load schedule." })),
-        listDriverTimeOffRequests(driver?.id).catch(() => ({ items: [], source: "empty" })),
+        listDriverTimeOffRequests(driver?.id, { session }).catch(() => ({ items: [], source: "empty" })),
       ]);
 
       if (boot.ok) {
@@ -57,7 +57,7 @@ export default function DriverSchedule({ driver }) {
       setSource(leave.source || "empty");
       setLoading(false);
     })();
-  }, [session?.activeDepotId, session?.depots, driver?.id]);
+  }, [session?.activeDepotId, session?.depots, session, driver?.id]);
 
   const markersByDate = useMemo(() => {
     const map = {};
@@ -100,17 +100,20 @@ export default function DriverSchedule({ driver }) {
       backTo="/more"
     >
       <CommandBackendNotice
-        status={source === "remote" ? "partial" : "partial"}
-        title="Duties from Command · leave for your manager"
-        description="Published duties are live from Admin. Time-off requests are sent for manager review — Command leave approval may still be on-device until Admin leave is live."
+        status={source === "command" ? "live" : "partial"}
+        title="Duties and leave from Command"
+        description="Published duties and holiday requests sync with Admin. Open Holiday & time off to see your balance."
       />
 
-      <div className="mt-4">
+      <div className="mt-4 grid gap-2">
         <Button asChild className={`h-12 w-full ${op.primaryBtn}`}>
           <Link to={`/time-off?from=schedule${selectedDate ? `&start=${selectedDate}` : ""}`}>
             <CalendarPlus className="mr-2 h-5 w-5" />
             Request time off
           </Link>
+        </Button>
+        <Button asChild variant="outline" className="h-11 w-full">
+          <Link to="/holiday">View holiday balance</Link>
         </Button>
       </div>
 

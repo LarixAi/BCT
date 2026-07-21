@@ -1,12 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
-import { RESTRICTION_TYPE_OPTIONS } from '@/lib/drivers/compliance'
-import { isAggregateOnboardingFailure } from '@/lib/drivers/activation-requirements'
 import { formatDate } from '@/components/ui/status'
+import { RESTRICTION_TYPE_OPTIONS, countDocumentsPendingAdminReview } from '@/lib/drivers/compliance'
+import {
+  buildActivationResolution,
+  isAggregateOnboardingFailure,
+} from '@/lib/drivers/activation-requirements'
 import type { DriverProfile } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
 import { ActivationResolutionCentre } from './ActivationResolutionCentre'
+import { EligibilityPanel } from './EligibilityPanel'
 
 export function DriverEligibilityTab({
   driver,
@@ -37,6 +42,46 @@ export function DriverEligibilityTab({
     mutationFn: () => api.activateDriver(driver.id, {}, actorName),
     onSuccess: invalidate,
   })
+
+  const resolution = useMemo(() => buildActivationResolution(driver), [driver])
+  const docsPending = countDocumentsPendingAdminReview(driver.documents)
+  const appOnline =
+    driver.operationalStatus === 'eligible' || driver.operationalStatus === 'restricted'
+  const dispatchReady = driver.eligibility.canAssign || driver.eligibility.canStartTrip
+
+  const blockingReasons = useMemo(() => {
+    const items: { label: string; href?: string }[] = []
+    for (const reason of resolution.activateBlockedReasons) {
+      const lower = reason.toLowerCase()
+      items.push({
+        label: reason,
+        href: lower.includes('document')
+          ? `/drivers/${driver.id}?tab=Compliance`
+          : lower.includes('training')
+            ? `/drivers/${driver.id}?tab=Training`
+            : undefined,
+      })
+    }
+    for (const failure of driver.eligibility.failures) {
+      if (isAggregateOnboardingFailure(failure.code)) continue
+      if (items.some((i) => i.label === failure.message)) continue
+      items.push({
+        label: failure.message,
+        href: failure.category === 'compliance'
+          ? failure.code.startsWith('training_') || failure.code === 'training_not_started'
+            ? `/drivers/${driver.id}?tab=Training`
+            : `/drivers/${driver.id}?tab=Compliance`
+          : undefined,
+      })
+    }
+    if (docsPending > 0 && !items.some((i) => i.href?.includes('Compliance'))) {
+      items.push({
+        label: `${docsPending} document${docsPending === 1 ? '' : 's'} awaiting review on Compliance`,
+        href: `/drivers/${driver.id}?tab=Compliance`,
+      })
+    }
+    return items
+  }, [driver, docsPending, resolution.activateBlockedReasons])
 
   const otherChecks = driver.eligibility.failures
     .concat(driver.eligibility.warnings)
@@ -88,6 +133,91 @@ export function DriverEligibilityTab({
 
   return (
     <div className="space-y-4">
+      <SectionCard
+        title="Can this driver go online?"
+        description="Answers whether the Driver app unlocks ops, and what still blocks dispatch."
+      >
+        <div className="grid gap-3 lg:grid-cols-2">
+          <EligibilityPanel
+            eligibility={driver.eligibility}
+            onboardingPhase={['draft', 'onboarding', 'pending_compliance'].includes(
+              driver.operationalStatus,
+            )}
+            documentsPendingReview={docsPending}
+          />
+          <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
+            <dl className="space-y-3">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Driver app (go online)
+                </dt>
+                <dd className="mt-1 font-medium text-slate-900">
+                  {appOnline
+                    ? 'Unlocked — driver can use the live ops shell'
+                    : 'Locked — still in onboarding / pending activation'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Dispatch / take work
+                </dt>
+                <dd className="mt-1 font-medium text-slate-900">
+                  {dispatchReady ? 'Ready for assignment' : 'Blocked until requirements clear'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Operational status
+                </dt>
+                <dd className="mt-1 font-medium capitalize text-slate-900">
+                  {driver.operationalStatus.replace(/_/g, ' ')}
+                </dd>
+              </div>
+            </dl>
+
+            {blockingReasons.length > 0 ? (
+              <div className="mt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Why it is blocked
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {blockingReasons.map((item) => (
+                    <li key={item.label} className="rounded-lg bg-red-50 px-3 py-2 text-red-900">
+                      {item.href ? (
+                        <Link to={item.href} className="font-medium underline-offset-2 hover:underline">
+                          {item.label}
+                        </Link>
+                      ) : (
+                        item.label
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">
+                No blockers — driver can go online and take eligible work.
+              </p>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link
+                to={`/drivers/${driver.id}?tab=Compliance`}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
+              >
+                Open Compliance
+              </Link>
+              <Link
+                to={`/drivers/${driver.id}?tab=Training`}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
+              >
+                Open Training
+              </Link>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
       <ActivationResolutionCentre
         driver={driver}
         actorName={actorName}

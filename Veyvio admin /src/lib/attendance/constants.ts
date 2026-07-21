@@ -61,11 +61,12 @@ export const ATTENDANCE_STRIP_CLASS: Record<
 
 export const LEAVE_TYPE_LABEL: Record<LeaveRequestType, string> = {
   annual_leave: 'Annual leave',
+  unpaid_leave: 'Unpaid leave',
   sick_leave: 'Sick leave',
   emergency_leave: 'Emergency leave',
   medical_appointment: 'Medical appointment',
   family_emergency: 'Family emergency',
-  bereavement: 'Bereavement',
+  bereavement: 'Bereavement / compassionate',
   jury_service: 'Jury service',
   training: 'Training',
   other: 'Other',

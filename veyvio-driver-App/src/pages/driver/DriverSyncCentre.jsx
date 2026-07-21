@@ -4,6 +4,7 @@ import CommandBackendNotice from "@/components/driver/operational/CommandBackend
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { op } from "@/lib/driver-operational-theme";
 import { refreshCommandBootstrap } from "@/services/command-driver-ops.service";
+import { probeDriverTrainingConnection } from "@/services/training.service";
 import { formatUkDateTime } from "@/lib/uk-locale";
 
 const CAPABILITIES = [
@@ -23,23 +24,29 @@ export default function DriverSyncCentre() {
   const { session } = useDriverSupabaseAuth();
   const [bootstrap, setBootstrap] = useState(null);
   const [error, setError] = useState("");
+  const [trainingProbe, setTrainingProbe] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void (async () => {
       setLoading(true);
       const depotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
-      const result = await refreshCommandBootstrap(depotId);
+      const [result, training] = await Promise.all([
+        refreshCommandBootstrap(depotId),
+        probeDriverTrainingConnection(session ?? {}),
+      ]);
       if (!result.ok) {
         setError(result.message ?? "Sync failed");
         setLoading(false);
+        setTrainingProbe(training);
         return;
       }
       setBootstrap(result.bootstrap);
+      setTrainingProbe(training);
       setError("");
       setLoading(false);
     })();
-  }, [session?.activeDepotId, session?.depots]);
+  }, [session?.activeDepotId, session?.depots, session?.accessToken, session?.driverId]);
 
   const serverTime = bootstrap?.serverTime;
   const dutyCount = bootstrap?.duties?.length ?? 0;
@@ -54,6 +61,14 @@ export default function DriverSyncCentre() {
       <DriverSectionTitle>Overview</DriverSectionTitle>
       <div className={op.listCard}>
         <InfoRow label={`Connection · ${error ? "Error" : "Online"}`} to="/contact" />
+        <InfoRow
+          label={`Training centre · ${
+            trainingProbe?.ok
+              ? `${trainingProbe.assignmentCount} courses (${trainingProbe.requiredOpen ?? 0} open)`
+              : trainingProbe?.message ?? (loading ? "…" : "Not checked")
+          }`}
+          to="/training"
+        />
         <InfoRow
           label={`Last successful sync · ${loading ? "…" : serverTime ? formatUkDateTime(serverTime) : "Not yet"}`}
           to="/"
@@ -72,7 +87,13 @@ export default function DriverSyncCentre() {
           />
         ))}
       </div>
-      {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="mt-4 text-sm text-destructive">
+          {error.includes("not configured")
+            ? "Command API is not in this build. Reinstall from a build that includes veyvio-driver-App/.env.local."
+            : error}
+        </p>
+      ) : null}
     </OperationalPage>
   );
 }

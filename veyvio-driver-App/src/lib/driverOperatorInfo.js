@@ -3,12 +3,12 @@
 export const DRIVER_APP_VERSION = "1.0.0";
 
 export const DRIVER_OPERATOR_INFO = {
-  name: import.meta.env.VITE_OPERATOR_NAME || "Core Support Fleet",
+  name: import.meta.env.VITE_OPERATOR_NAME || "Veyvio",
   tagline: "Private hire · TfL licensed operator",
   tflOperatorLicence: import.meta.env.VITE_OPERATOR_TFL_LICENCE || "",
   supportPhone: import.meta.env.VITE_OPERATOR_SUPPORT_PHONE || "",
   supportEmail:
-    import.meta.env.VITE_OPERATOR_SUPPORT_EMAIL || "drivers@coresupportfleet.com",
+    import.meta.env.VITE_OPERATOR_SUPPORT_EMAIL || "support@veyvio.com",
   website: import.meta.env.VITE_OPERATOR_WEBSITE || "",
   officeHours: "Mon–Fri, 9:00–18:00 · Emergency line 24/7 for active incidents",
 };

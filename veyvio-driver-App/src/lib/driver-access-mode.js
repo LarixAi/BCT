@@ -7,7 +7,7 @@ import { computeDispatchReadinessBand } from "@/lib/dispatch-readiness";
 
 /**
  * App modes returned to DriverApp / DriverSupabaseAuthContext.
- * @returns {"login"|"onboarding"|"pending"|"restricted"|"app"|"policy_reack"}
+ * @returns {"login"|"unlinked"|"onboarding"|"pending"|"restricted"|"app"|"policy_reack"}
  */
 export function resolveDriverAccessMode(input) {
   const {
@@ -22,11 +22,20 @@ export function resolveDriverAccessMode(input) {
     dispatchBlockers = [],
     dispatchWarnings = [],
     temporaryAccess = null,
+    operationalStatus = null,
   } = input;
 
   if (!signedIn) return "login";
-  if (!isDriverMember) return "login";
+  // Signed in but Command says this account is not a driver — do not recycle the
+  // password screen (that looks like "stuck on auth" after a successful Auth call).
+  if (!isDriverMember) return "unlinked";
   if (!driverProfileLinked || !driver) return "onboarding";
+
+  // Admin activated for dispatch — open the ops shell.
+  if (["eligible", "restricted"].includes(String(operationalStatus ?? ""))) {
+    if (policyReackRequired) return "policy_reack";
+    return "app";
+  }
 
   const onboardingRaw = driverRow?.onboarding_status ?? driver.onboardingStatus ?? "invited";
   const onboardingStatus = normalizeOnboardingStatus(onboardingRaw);
@@ -138,6 +147,16 @@ export function buildAccessContext(session, driver, extras = {}) {
     temporaryAccessExpired: extras.temporaryAccessExpired ?? false,
   });
 
+  if (session?.routeTarget === "session_error") {
+    return {
+      mode: "unlinked",
+      onboardingStatus: normalizeOnboardingStatus(onboardingRaw),
+      accountStatus: normalizeAccountStatus({ status: driver?.status, onboarding_status: onboardingRaw }),
+      dispatchBand,
+      isOnboardingEditable: false,
+    };
+  }
+
   return {
     mode: resolveDriverAccessMode({
       signedIn: Boolean(session?.userId),
@@ -150,6 +169,7 @@ export function buildAccessContext(session, driver, extras = {}) {
       policyReackRequired: (extras.outdatedPolicies ?? []).length > 0,
       dispatchBlockers: extras.dispatchBlockers ?? [],
       temporaryAccess: extras.temporaryAccess ?? null,
+      operationalStatus: session?.operationalStatus ?? extras.operationalStatus ?? null,
     }),
     onboardingStatus: normalizeOnboardingStatus(onboardingRaw),
     accountStatus: normalizeAccountStatus({ status: driver?.status, onboarding_status: onboardingRaw }),

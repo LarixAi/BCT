@@ -2,6 +2,8 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import { friendlyOnboardingError } from "@/lib/onboarding-errors";
 import { OnboardingUploadError } from "@/lib/onboarding-upload-error";
 import { normalizeDocumentStatus } from "@/lib/onboarding-status";
+import { getCommandApiBaseUrl } from "@/lib/command-api";
+import { hasAllRequiredDocuments, STEP_DOCUMENT_TYPES } from "@/lib/onboarding-document-requirements";
 import {
   listDocumentsViaCommand,
   submitDocumentViaCommand,
@@ -95,12 +97,33 @@ async function logDriverDocumentAction(supabase, payload) {
   if (error) console.warn("fleet_audit_logs insert failed:", error.message);
 }
 
+function isCameraStyleFilename(name) {
+  return /^\d{10,}\.(jpe?g|png|webp|heic|heif)$/i.test(String(name ?? "").trim());
+}
+
+function friendlyDocumentTitle(documentType) {
+  const label = String(documentType ?? "")
+    .replace(/_/g, " ")
+    .trim();
+  return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)}` : "Document";
+}
+
 export function documentDisplayName(doc) {
   if (!doc) return "";
+  const explicit = doc.displayName && !isCameraStyleFilename(doc.displayName) ? doc.displayName : "";
+  if (explicit) return explicit;
+
+  const fromFileName = doc.file_name ?? doc.fileName ?? "";
+  if (fromFileName && !isCameraStyleFilename(fromFileName)) return fromFileName;
+
   const segment = String(doc.storage_path ?? "").split("/").pop() ?? "";
-  if (!segment) return doc.document_type?.replace(/_/g, " ") ?? "Document";
-  const dash = segment.indexOf("-");
-  return dash >= 0 ? segment.slice(dash + 1) : segment;
+  if (segment) {
+    const dash = segment.indexOf("-");
+    const tail = dash >= 0 ? segment.slice(dash + 1) : segment;
+    if (tail && !isCameraStyleFilename(tail)) return tail;
+  }
+
+  return `${friendlyDocumentTitle(doc.document_type ?? doc.requirementType)} photo`;
 }
 
 export function mapDocumentRow(doc) {
@@ -127,13 +150,49 @@ function mapCommandDocumentRow(doc) {
   return mapDocumentRow({
     id: doc.id,
     document_type: doc.requirementType,
+    requirementType: doc.requirementType,
+    verificationStatus: status,
     storage_path: doc.fileName ?? doc.label,
+    file_name: doc.fileName ?? null,
     status: mappedStatus,
     created_at: doc.createdAt,
     expires_on: doc.expiryDate,
     rejection_reason: doc.rejectionReason,
     displayName: doc.fileName || doc.label,
+    sourceApp: doc.sourceApp ?? "DRIVER",
   });
+}
+
+function findDocumentForStep(documents, stepKey) {
+  const types = STEP_DOCUMENT_TYPES[stepKey] ?? [];
+  return (documents ?? []).find((d) => types.includes(d.document_type)) ?? null;
+}
+
+/** Build onboarding hub maps from Command or legacy document rows. */
+export function buildDriverDocumentMaps(documents) {
+  const documentsByType = {};
+  for (const doc of documents ?? []) {
+    if (!ON_FILE_DOC_STATUSES.has(doc.status)) continue;
+    if (!documentsByType[doc.document_type]) {
+      documentsByType[doc.document_type] = { ...doc, displayName: documentDisplayName(doc) };
+    }
+  }
+
+  const documentsByStep = {};
+  for (const stepKey of Object.keys(STEP_DOCUMENT_TYPES)) {
+    const doc = findDocumentForStep(documents, stepKey);
+    documentsByStep[stepKey] =
+      hasAllRequiredDocuments(stepKey, documentsByType) && doc && ON_FILE_DOC_STATUSES.has(doc.status)
+        ? { ...doc, displayName: documentDisplayName(doc) }
+        : null;
+  }
+
+  return { documentsByType, documentsByStep };
+}
+
+export async function loadDriverDocumentMaps(driverId) {
+  const documents = await loadDriverDocuments(driverId);
+  return { documents, ...buildDriverDocumentMaps(documents) };
 }
 
 export async function loadDriverDocuments(driverId) {
@@ -182,20 +241,23 @@ function resolveUploadTarget(driverOrId, organisationIdOrPayload, maybePayload) 
 export async function uploadDriverDocument(driverOrId, organisationIdOrPayload, maybePayload) {
   const { driver, payload } = resolveUploadTarget(driverOrId, organisationIdOrPayload, maybePayload);
   const { documentType, file, expiryDate, referenceNumber } = payload ?? {};
-  const { safeName } = await readUploadFileBody(file);
+  const { body, contentType, safeName } = await readUploadFileBody(file);
 
-  const command = await submitDocumentViaCommand({
-    requirementType: documentType,
-    documentType,
-    label: String(documentType ?? "").replace(/_/g, " "),
-    fileName: safeName,
-    expiryDate: expiryDate ?? null,
-    referenceNumber: referenceNumber ?? null,
-    notes: "Submitted from Veyvio Driver for operator review.",
-  });
+  const command = await submitDocumentViaCommand(
+    {
+      requirementType: documentType,
+      documentType,
+      label: String(documentType ?? "").replace(/_/g, " "),
+      fileName: safeName,
+      expiryDate: expiryDate ?? null,
+      referenceNumber: referenceNumber ?? null,
+      notes: "Submitted from Veyvio Driver for operator review.",
+    },
+    { body, contentType, fileName: safeName },
+  );
   if (command.ok) {
     return {
-      storagePath: null,
+      storagePath: command.document?.storagePath ?? null,
       documentType,
       reviewStatus: "pending_review",
       displayName: safeName,
@@ -204,10 +266,16 @@ export async function uploadDriverDocument(driverOrId, organisationIdOrPayload, 
     };
   }
 
+  if (getCommandApiBaseUrl()) {
+    throw new OnboardingUploadError(command.message ?? "We couldn't upload your document. Please try again.", {
+      phase: "storage",
+      storageUploaded: false,
+    });
+  }
+
   const supabase = getSupabaseClient();
   const driverId = driver.id;
   const organisationId = driver.organisationId ?? null;
-  const { body, contentType } = await readUploadFileBody(file);
 
   const { data: pathResult, error: pathError } = await supabase.rpc("driver_build_document_storage_path", {
     p_document_type: documentType,

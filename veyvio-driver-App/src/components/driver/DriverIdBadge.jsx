@@ -19,7 +19,7 @@ export default function DriverIdBadge({ driver, organisationName, compact = fals
           <div className="min-w-0">
             <p className={`${op.appLabel} !text-[10px]`}>Digital driver ID</p>
             <p className="truncate font-semibold text-foreground">{driver.fullName}</p>
-            <p className="truncate text-xs text-muted-foreground">{organisationName ?? "Core Support Fleet"}</p>
+            <p className="truncate text-xs text-muted-foreground">{organisationName ?? "Veyvio"}</p>
           </div>
         </div>
         <ShieldCheck className={`h-5 w-5 shrink-0 ${op.limeAccent}`} aria-hidden="true" />

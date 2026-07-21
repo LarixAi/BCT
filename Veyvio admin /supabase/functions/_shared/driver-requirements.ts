@@ -4,7 +4,13 @@ import { apiError, json, readJson } from './http.ts'
 import {
   DRIVER_ONBOARDING_NOTIFICATION,
   notifyCompanyAdmins,
+  notifyDriverAppUser,
 } from './notifications.ts'
+import {
+  ensureTrainingAssignmentRow,
+  notifyDriverTrainingAssigned,
+  TRAINING_COURSE_META,
+} from './driver-training-centre.ts'
 
 type Row = Record<string, unknown>
 
@@ -41,6 +47,220 @@ function requirementTypeFor(key: string): string {
   if (QUALIFICATION_KEYS.has(key)) return 'qualification'
   if (TRAINING_KEYS.has(key)) return 'internal_training'
   return 'document'
+}
+
+/** Maps driver_documents.requirement_type to driver_requirements.definition_key. */
+export function definitionKeyForDocumentRequirementType(requirementType: string): string {
+  const aliases: Record<string, string> = {
+    licence_front: 'driving_licence',
+    licence_back: 'driving_licence',
+    dvla_check: 'driving_licence',
+    dqc_front: 'dqc',
+    dqc_back: 'dqc',
+    dqc_cpc: 'dqc',
+    cpc: 'dqc',
+  }
+  return aliases[requirementType] ?? requirementType
+}
+
+async function applyRequirementRequest(input: {
+  companyId: string
+  driverId: string
+  userId: string
+  definitionKey: string
+  channels: string[]
+  dueAt: string | null
+  message: string | null
+  actorName: string
+  mode: 'request' | 'resend'
+}) {
+  const now = new Date()
+  const req = await ensureRequirement(input.companyId, input.driverId, input.definitionKey, input.userId)
+  const isReminder = input.mode === 'resend' || Number(req.request_count ?? 0) > 0
+  const reqType = requirementTypeFor(input.definitionKey)
+  const label =
+    TRAINING_COURSE_META[input.definitionKey]?.label ??
+    input.definitionKey.replace(/_/g, ' ')
+
+  const patch: Row = {
+    last_requested_at: now.toISOString(),
+    last_requested_by: input.userId,
+    last_requested_channels: input.channels,
+    request_count: Number(req.request_count ?? 0) + 1,
+    due_at: input.dueAt,
+    updated_at: now.toISOString(),
+    updated_by: input.userId,
+  }
+  if (isReminder) {
+    patch.reminder_count = Number(req.reminder_count ?? 0) + 1
+    patch.last_reminder_at = now.toISOString()
+  }
+
+  // Internal training → Training Centre (not onboarding document upload).
+  if (reqType === 'internal_training' && TRAINING_COURSE_META[input.definitionKey]) {
+    patch.status_override = 'training_assigned'
+    patch.assigned_to_name = input.actorName
+
+    const { error: updateError } = await admin.from('driver_requirements').update(patch).eq('id', req.id)
+    if (updateError) throw new Error(updateError.message)
+
+    const { error: historyError } = await admin.from('driver_requirement_requests').insert({
+      company_id: input.companyId,
+      driver_id: input.driverId,
+      requirement_id: req.id,
+      definition_key: input.definitionKey,
+      requested_by: input.userId,
+      requested_by_name: input.actorName,
+      channels: input.channels,
+      status: 'sent',
+      message: input.message,
+      due_at: input.dueAt,
+      sent_at: now.toISOString(),
+      delivered_at: now.toISOString(),
+      reminder_count: isReminder ? 1 : 0,
+      last_reminder_at: isReminder ? now.toISOString() : null,
+    })
+    if (historyError) throw new Error(historyError.message)
+
+    try {
+      await ensureTrainingAssignmentRow({
+        companyId: input.companyId,
+        driverId: input.driverId,
+        trainingKey: input.definitionKey,
+        userId: input.userId,
+        assignedByName: input.actorName,
+        dueAt: input.dueAt,
+      })
+      await notifyDriverTrainingAssigned({
+        companyId: input.companyId,
+        driverId: input.driverId,
+        label,
+        dueAt: input.dueAt,
+      })
+    } catch (err) {
+      console.error('training request materialise failed', err)
+    }
+    return
+  }
+
+  patch.status_override = 'request_sent'
+
+  const { error: updateError } = await admin.from('driver_requirements').update(patch).eq('id', req.id)
+  if (updateError) throw new Error(updateError.message)
+
+  const { error: historyError } = await admin.from('driver_requirement_requests').insert({
+    company_id: input.companyId,
+    driver_id: input.driverId,
+    requirement_id: req.id,
+    definition_key: input.definitionKey,
+    requested_by: input.userId,
+    requested_by_name: input.actorName,
+    channels: input.channels,
+    status: 'sent',
+    message: input.message,
+    due_at: input.dueAt,
+    sent_at: now.toISOString(),
+    delivered_at: now.toISOString(),
+    reminder_count: isReminder ? 1 : 0,
+    last_reminder_at: isReminder ? now.toISOString() : null,
+  })
+  if (historyError) throw new Error(historyError.message)
+
+  const actionUrl = reqType === 'account_setup' ? '/onboarding' : '/documents'
+  const title = isReminder
+    ? `Reminder: ${label}`
+    : reqType === 'qualification'
+      ? `Certificate required: ${label}`
+      : `Upload required: ${label}`
+  const defaultBody =
+    reqType === 'qualification'
+      ? 'Upload your certificate in Documents in the Driver app, or complete company training if your operator arranged it.'
+      : 'Open Documents in the Driver app and upload what your operator requested.'
+
+  try {
+    await notifyDriverAppUser({
+      companyId: input.companyId,
+      driverId: input.driverId,
+      type: isReminder
+        ? DRIVER_ONBOARDING_NOTIFICATION.reminderSent
+        : DRIVER_ONBOARDING_NOTIFICATION.requestSent,
+      title,
+      body: input.message ?? defaultBody,
+      severity: 'attention',
+      actionUrl,
+    })
+  } catch (err) {
+    console.error('document request notify failed', err)
+  }
+}
+
+export async function syncDriverRequirementAfterDocumentVerified(input: {
+  companyId: string
+  driverId: string
+  userId: string
+  requirementType: string
+}) {
+  const definitionKey = definitionKeyForDocumentRequirementType(input.requirementType)
+  const req = await ensureRequirement(input.companyId, input.driverId, definitionKey, input.userId)
+  const now = new Date().toISOString()
+  await admin
+    .from('driver_requirements')
+    .update({
+      status_override: 'approved',
+      rejection_reason: null,
+      updated_at: now,
+      updated_by: input.userId,
+    })
+    .eq('id', req.id)
+}
+
+export async function syncDriverRequirementAfterDocumentRejected(input: {
+  companyId: string
+  driverId: string
+  userId: string
+  requirementType: string
+  label: string
+  reason: string
+  actorName: string
+  requestResubmit: boolean
+}) {
+  const definitionKey = definitionKeyForDocumentRequirementType(input.requirementType)
+  const req = await ensureRequirement(input.companyId, input.driverId, definitionKey, input.userId)
+  const now = new Date().toISOString()
+  await admin
+    .from('driver_requirements')
+    .update({
+      status_override: 'rejected',
+      rejection_reason: input.reason,
+      updated_at: now,
+      updated_by: input.userId,
+    })
+    .eq('id', req.id)
+
+  const docLabel = input.label.trim() || definitionKey.replace(/_/g, ' ')
+  await notifyDriverAppUser({
+    companyId: input.companyId,
+    driverId: input.driverId,
+    type: DRIVER_ONBOARDING_NOTIFICATION.evidenceRejected,
+    title: `${docLabel} was declined`,
+    body: input.reason,
+    severity: 'attention',
+    actionUrl: '/onboarding',
+  })
+
+  if (input.requestResubmit) {
+    await applyRequirementRequest({
+      companyId: input.companyId,
+      driverId: input.driverId,
+      userId: input.userId,
+      definitionKey,
+      channels: ['in_app', 'email'],
+      dueAt: null,
+      message: input.reason,
+      actorName: input.actorName,
+      mode: 'resend',
+    })
+  }
 }
 
 function toCamelState(row: Row) {
@@ -97,13 +317,19 @@ async function ensureRequirement(
 async function assertDriver(companyId: string, driverId: string) {
   const { data, error } = await admin
     .from('drivers')
-    .select('id, first_name, last_name')
+    .select('id, staff_members(first_name, last_name)')
     .eq('company_id', companyId)
     .eq('id', driverId)
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
-  return data as Row
+  const staff = (data.staff_members as Row | Row[] | null) ?? null
+  const staffRow = Array.isArray(staff) ? staff[0] ?? null : staff
+  return {
+    id: data.id,
+    first_name: staffRow?.first_name ?? null,
+    last_name: staffRow?.last_name ?? null,
+  } as Row
 }
 
 export async function listDriverRequirements(request: Request, driverId: string) {
@@ -128,7 +354,12 @@ export async function listDriverRequirements(request: Request, driverId: string)
 export async function requestDriverRequirements(request: Request, driverId: string) {
   const context = await authenticate(request)
   const input = await readJson<Row>(request)
-  const driver = await assertDriver(context.companyId, driverId)
+  let driver: Row | null
+  try {
+    driver = await assertDriver(context.companyId, driverId)
+  } catch (err) {
+    return apiError(500, err instanceof Error ? err.message : 'Driver could not be loaded')
+  }
   if (!driver) return apiError(404, 'Driver not found', 'not_found')
 
   const keys = Array.isArray(input.definitionKeys)
@@ -139,7 +370,9 @@ export async function requestDriverRequirements(request: Request, driverId: stri
   const channels = Array.isArray(input.channels)
     ? input.channels.map(String).filter(Boolean)
     : ['in_app', 'email']
-  const dueAt = input.dueAt ? String(input.dueAt) : null
+  const dueAt = input.dueAt
+    ? String(input.dueAt).slice(0, 10)
+    : null
   const message = input.message ? String(input.message) : null
   const mode = String(input.mode ?? 'request')
   const minHours = Number(input.minHoursSinceLastRequest ?? 0)
@@ -150,7 +383,12 @@ export async function requestDriverRequirements(request: Request, driverId: stri
   const skipped: string[] = []
 
   for (const key of keys) {
-    const req = await ensureRequirement(context.companyId, driverId, key, context.user.id)
+    let req: Row
+    try {
+      req = await ensureRequirement(context.companyId, driverId, key, context.user.id)
+    } catch (err) {
+      return apiError(400, err instanceof Error ? err.message : `Could not create requirement ${key}`)
+    }
     const lastAt = req.last_requested_at ? new Date(String(req.last_requested_at)) : null
     if (
       mode === 'resend' &&
@@ -162,45 +400,22 @@ export async function requestDriverRequirements(request: Request, driverId: stri
       continue
     }
 
-    const isReminder = mode === 'resend' || Number(req.request_count ?? 0) > 0
-    const patch: Row = {
-      last_requested_at: now.toISOString(),
-      last_requested_by: context.user.id,
-      last_requested_channels: channels,
-      request_count: Number(req.request_count ?? 0) + 1,
-      due_at: dueAt,
-      status_override: 'request_sent',
-      updated_at: now.toISOString(),
-      updated_by: context.user.id,
+    try {
+      await applyRequirementRequest({
+        companyId: context.companyId,
+        driverId,
+        userId: context.user.id,
+        definitionKey: key,
+        channels,
+        dueAt,
+        message,
+        actorName,
+        mode: mode === 'resend' ? 'resend' : 'request',
+      })
+      applied.push(key)
+    } catch (err) {
+      return apiError(400, err instanceof Error ? err.message : 'Request failed')
     }
-    if (isReminder) {
-      patch.reminder_count = Number(req.reminder_count ?? 0) + 1
-      patch.last_reminder_at = now.toISOString()
-    }
-
-    const { error: updateError } = await admin
-      .from('driver_requirements')
-      .update(patch)
-      .eq('id', req.id)
-    if (updateError) return apiError(400, updateError.message)
-
-    await admin.from('driver_requirement_requests').insert({
-      company_id: context.companyId,
-      driver_id: driverId,
-      requirement_id: req.id,
-      definition_key: key,
-      requested_by: context.user.id,
-      requested_by_name: actorName,
-      channels,
-      status: 'sent',
-      message,
-      due_at: dueAt,
-      sent_at: now.toISOString(),
-      delivered_at: now.toISOString(),
-      reminder_count: isReminder ? 1 : 0,
-      last_reminder_at: isReminder ? now.toISOString() : null,
-    })
-    applied.push(key)
   }
 
   const { data: states } = await admin
@@ -225,7 +440,12 @@ export async function patchDriverRequirement(
 ) {
   const context = await authenticate(request)
   const input = await readJson<Row>(request)
-  const driver = await assertDriver(context.companyId, driverId)
+  let driver: Row | null
+  try {
+    driver = await assertDriver(context.companyId, driverId)
+  } catch (err) {
+    return apiError(500, err instanceof Error ? err.message : 'Driver could not be loaded')
+  }
   if (!driver) return apiError(404, 'Driver not found', 'not_found')
 
   const req = await ensureRequirement(context.companyId, driverId, definitionKey, context.user.id)
@@ -331,7 +551,25 @@ export async function patchDriverRequirement(
       excludeUserId: context.user.id,
     })
   } else if (action === 'assign_training') {
-    // Do not notify admins on assign — they initiated it.
+    // Do not notify admins on assign — they initiated it. Create Training Centre row + notify driver.
+    try {
+      await ensureTrainingAssignmentRow({
+        companyId: context.companyId,
+        driverId,
+        trainingKey: definitionKey,
+        userId: context.user.id,
+        assignedByName: String(input.trainer ?? input.actorName ?? 'Training lead'),
+        dueAt: patch.due_at ? String(patch.due_at) : null,
+      })
+      await notifyDriverTrainingAssigned({
+        companyId: context.companyId,
+        driverId,
+        label,
+        dueAt: patch.due_at ? String(patch.due_at) : null,
+      })
+    } catch (err) {
+      console.error('assign_training materialise failed', err)
+    }
   } else if (action === 'approve' || action === 'waive' || action === 'mark_not_applicable') {
     const { data: open } = await admin
       .from('driver_requirements')

@@ -775,6 +775,14 @@ export async function attendanceLeaveUpsert(request: Request) {
   try {
     const body = (await request.json()) as Row
     const id = body.id ? String(body.id) : crypto.randomUUID()
+
+    const { data: previous } = await admin
+      .from('attendance_leave_requests')
+      .select('status')
+      .eq('company_id', context.companyId)
+      .eq('id', id)
+      .maybeSingle()
+
     const payload = {
       id,
       company_id: context.companyId,
@@ -818,6 +826,21 @@ export async function attendanceLeaveUpsert(request: Request) {
         action: latest.action ?? 'updated',
         detail: latest.detail ?? '',
       })
+    }
+
+    try {
+      const { syncLeaveDecisionToHolidayLedger } = await import('./holiday-balance.ts')
+      await syncLeaveDecisionToHolidayLedger({
+        companyId: context.companyId,
+        previousStatus: previous?.status ? String(previous.status) : null,
+        next: data as Row,
+        userId: context.user.id,
+        actorName: String(
+          body.decidedBy ?? latest?.actorName ?? context.user.email ?? 'Operations',
+        ),
+      })
+    } catch (err) {
+      console.error('holiday ledger sync failed', err)
     }
 
     const rows = await loadLeaveRows(context.companyId)

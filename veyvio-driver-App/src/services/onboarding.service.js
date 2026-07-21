@@ -1,5 +1,13 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
 import {
+  commandDriverOnboardingProgress,
+  commandDriverSession,
+  commandSubmitDriverOnboarding,
+  commandUpdateDriverContact,
+  commandUpdateDriverOnboardingStep,
+  commandUpdateDriverProfile,
+} from "@/lib/command-api";
+import {
   DEFAULT_ONBOARDING_STEP_TEMPLATES,
   DRIVER_POLICIES,
   groupOnboardingStatus,
@@ -9,6 +17,14 @@ import { onboardingLockMessage } from "@/lib/onboarding-editability";
 import { friendlyOnboardingError } from "@/lib/onboarding-errors";
 import { hasAllRequiredDocuments } from "@/lib/onboarding-document-requirements";
 import {
+  applyOnboardingStepCompletions,
+  attachLocalOnboardingProgress,
+  clearLocalOnboardingSteps,
+  getLocalCompletedOnboardingSteps,
+  markLocalOnboardingStepsComplete,
+  syncServerOnboardingSteps,
+} from "@/lib/onboarding-progress-store";
+import {
   isOnboardingEditableStatus,
   isStepCompleteForProgress,
   normalizeOnboardingStatus,
@@ -17,16 +33,10 @@ import {
 import { getPreviousRequiredStepKeys } from "@/lib/onboarding-tasks";
 import { getDriverOnboardingRequirements } from "@/services/driver-requirements.service";
 import { loadDriverComplianceReadiness } from "@/services/driver-compliance.service";
-import { uploadDriverDocument as uploadDriverDocumentRaw, documentDisplayName, loadDriverDocuments, ON_FILE_DOC_STATUSES } from "@/services/driver-documents.service";
+import { uploadDriverDocument as uploadDriverDocumentRaw, documentDisplayName, loadDriverDocuments, loadDriverDocumentMaps, ON_FILE_DOC_STATUSES } from "@/services/driver-documents.service";
+import { STEP_DOCUMENT_TYPES } from "@/lib/onboarding-document-requirements";
 
 const COMPLETE_STEP_STATUSES = new Set(["submitted", "verified", "complete", "approved"]);
-
-const STEP_DOCUMENT_TYPES = {
-  right_to_work: ["right_to_work"],
-  driving_licence: ["licence_front", "licence_back", "driving_licence"],
-  dqc_cpc: ["dqc_front", "dqc_back", "dqc", "dqc_cpc"],
-  dbs_safeguarding: ["dbs", "safeguarding", "dbs_certificate"],
-};
 
 const WIZARD_STEP_KEYS = [
   "personal_profile",
@@ -79,14 +89,17 @@ async function logDriverAction(supabase, payload) {
 
 async function assertOnboardingEditable(supabase, driverId) {
   const [{ data, error }, { data: record }] = await Promise.all([
-    supabase.from("drivers").select("onboarding_status, rejection_reason").eq("id", driverId).single(),
+    supabase.from("drivers").select("onboarding_status, rejection_reason").eq("id", driverId).maybeSingle(),
     supabase
       .from("driver_onboarding_records")
       .select("resubmit_requested_items")
       .eq("driver_id", driverId)
       .maybeSingle(),
   ]);
-  if (error) throw error;
+  // Command drivers: legacy Ridova row may be missing or blocked by RLS — still allow app onboarding.
+  if (error || !data) {
+    return "documents_pending";
+  }
   if (
     !isOnboardingEditableStatus(data?.onboarding_status, {
       rejectionReason: data?.rejection_reason,
@@ -98,6 +111,66 @@ async function assertOnboardingEditable(supabase, driverId) {
   return data.onboarding_status;
 }
 
+async function requireDriverAccessToken() {
+  const supabase = getSupabaseClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Your session expired. Sign in again and try saving.");
+  }
+  return session.access_token;
+}
+
+function assertCommandOk(result, fallbackMessage) {
+  if (!result?.ok) {
+    throw new Error(result?.message || fallbackMessage);
+  }
+}
+
+async function finishOnboardingStep(driverId, stepKeys, organisationId, options = {}) {
+  markLocalOnboardingStepsComplete(driverId, stepKeys);
+  try {
+    await completeOnboardingStep(driverId, stepKeys, organisationId, options);
+  } catch (legacyError) {
+    console.warn("[onboarding] legacy step sync skipped", stepKeys, legacyError);
+  }
+}
+
+function parseCommandHomeAddress(homeAddress) {
+  if (!homeAddress?.trim()) return {};
+  const parts = String(homeAddress)
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 3) {
+    return {
+      addressLine1: parts.slice(0, -2).join(", "),
+      addressCity: parts[parts.length - 2],
+      addressPostcode: parts[parts.length - 1],
+    };
+  }
+  if (parts.length === 2) {
+    return { addressLine1: parts[0], addressCity: parts[1], addressPostcode: "" };
+  }
+  return { addressLine1: parts[0] ?? "", addressCity: "", addressPostcode: "" };
+}
+
+function parseCommandEmergencyContact(text) {
+  if (!text?.trim()) return {};
+  const lines = String(text).split("\n");
+  const read = (prefix) => {
+    const line = lines.find((l) => l.toLowerCase().startsWith(prefix));
+    return line ? line.slice(line.indexOf(":") + 1).trim() : "";
+  };
+  return {
+    contactName: read("name:"),
+    relationship: read("relationship:"),
+    emergencyPhone: read("phone:"),
+    emergencySecondaryPhone: read("secondary:"),
+  };
+}
+
 async function completeOnboardingStep(driverId, stepKeys, organisationId, options = {}) {
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
@@ -107,6 +180,7 @@ async function completeOnboardingStep(driverId, stepKeys, organisationId, option
   for (const stepKey of keys) {
     const previousKeys = getPreviousRequiredStepKeys(stepKey, requirements);
     if (previousKeys.length > 0) {
+      const localCompleted = new Set(getLocalCompletedOnboardingSteps(driverId));
       const { data: prevSteps } = await supabase
         .from("driver_onboarding_steps")
         .select("step_key, status, review_status")
@@ -114,6 +188,7 @@ async function completeOnboardingStep(driverId, stepKeys, organisationId, option
         .in("step_key", previousKeys);
 
       const incomplete = previousKeys.filter((key) => {
+        if (localCompleted.has(key)) return false;
         const row = (prevSteps ?? []).find((s) => s.step_key === key);
         if (!row) return true;
         return !isStepCompleteForProgress(row.status, row.review_status);
@@ -246,6 +321,120 @@ export async function getOutdatedPoliciesForDriver(driver) {
   return required.filter((p) => accepted.get(p.policyKey) !== p.policyVersion);
 }
 
+async function mergeCommandDocumentPrefill(driverId, base) {
+  try {
+    const maps = await loadDriverDocumentMaps(driverId);
+    const hasDocs = Object.keys(maps.documentsByType ?? {}).length > 0;
+    return attachLocalOnboardingProgress(driverId, {
+      ...base,
+      documentsByStep: { ...(base.documentsByStep ?? {}), ...maps.documentsByStep },
+      documentsByType: { ...(base.documentsByType ?? {}), ...maps.documentsByType },
+      hasAdminData: Boolean(base.hasAdminData) || hasDocs,
+    });
+  } catch (err) {
+    console.warn("[onboarding] command document prefill skipped", err?.message);
+    return attachLocalOnboardingProgress(driverId, base);
+  }
+}
+
+async function fetchCommandOnboardingProgress(supabase, driverId) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) return null;
+
+  const result = await commandDriverOnboardingProgress(session.access_token);
+  if (!result.ok || !result.progress) return null;
+
+  const progress = result.progress;
+  if (driverId && Array.isArray(progress.completedStepKeys)) {
+    syncServerOnboardingSteps(driverId, progress.completedStepKeys);
+  }
+  return progress;
+}
+
+async function getCommandOnboardingPrefill(supabase, driverId) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    return attachLocalOnboardingProgress(driverId, {
+      form: { phone: "", dateOfBirth: "" },
+      adminProvided: {},
+      documentsByStep: {},
+      documentsByType: {},
+      fullName: "",
+      email: "",
+      onboardingStatus: "in_progress",
+      hasAdminData: false,
+      isEditable: true,
+    });
+  }
+
+  const result = await commandDriverSession(session.access_token);
+  const cmd = result.ok ? result.session : null;
+  const progress = await fetchCommandOnboardingProgress(supabase, driverId);
+  const progressForm = progress?.form ?? {};
+
+  const phone = progressForm.phone || (cmd?.mobile ? String(cmd.mobile) : "");
+  const dateOfBirth = toDateInput(progressForm.dateOfBirth ?? cmd?.dateOfBirth);
+  const fullName =
+    [cmd?.firstName, cmd?.lastName].filter(Boolean).join(" ").trim() || cmd?.email || "";
+  const addressFields = parseCommandHomeAddress(cmd?.homeAddress);
+  const emergencyFields = parseCommandEmergencyContact(cmd?.emergencyContact);
+
+  const base = {
+    form: {
+      phone,
+      dateOfBirth,
+      ...addressFields,
+      ...emergencyFields,
+      licenceExpiry: toDateInput(progressForm.licenceExpiry),
+      licenceCategories: progressForm.licenceCategories ?? "D",
+      licenceOnFile: Boolean(progressForm.licenceOnFile),
+      dvlaCheckCode: progressForm.dvlaCheckCode ?? "",
+      penaltyPoints: progressForm.penaltyPoints ?? "",
+      dqcNumber: progressForm.dqcNumber ?? "",
+      cpcExpiry: toDateInput(progressForm.cpcExpiry),
+      dbsExpiry: toDateInput(progressForm.dbsExpiry),
+      tachoCardNumber: progressForm.tachoCardNumber ?? "",
+      tachoCardExpiry: toDateInput(progressForm.tachoCardExpiry),
+      fitToDrive: Boolean(progressForm.fitToDrive),
+      eyesight: Boolean(progressForm.eyesight),
+      fatigueAccepted: Boolean(progressForm.fatigueAccepted),
+    },
+    adminProvided: {
+      phone: Boolean(phone.trim()),
+      dateOfBirth: Boolean(dateOfBirth),
+      addressLine1: Boolean(addressFields.addressLine1?.trim()),
+      addressCity: Boolean(addressFields.addressCity?.trim()),
+      addressPostcode: Boolean(addressFields.addressPostcode?.trim()),
+      contactName: Boolean(emergencyFields.contactName?.trim()),
+      relationship: Boolean(emergencyFields.relationship?.trim()),
+      emergencyPhone: Boolean(emergencyFields.emergencyPhone?.trim()),
+      emergencySecondaryPhone: Boolean(emergencyFields.emergencySecondaryPhone?.trim()),
+      licenceExpiry: Boolean(progressForm.licenceOnFile || progressForm.licenceExpiry),
+      dvlaCheckCode: Boolean(String(progressForm.dvlaCheckCode ?? "").trim()),
+      dqcNumber: Boolean(String(progressForm.dqcNumber ?? "").trim()),
+      cpcExpiry: Boolean(progressForm.cpcExpiry),
+      dbsExpiry: Boolean(progressForm.dbsExpiry),
+      tachoCardNumber: Boolean(String(progressForm.tachoCardNumber ?? "").trim()),
+      tachoCardExpiry: Boolean(progressForm.tachoCardExpiry),
+    },
+    documentsByStep: {},
+    documentsByType: {},
+    fullName,
+    email: cmd?.email ?? "",
+    onboardingStatus: "in_progress",
+    hasAdminData: Boolean(phone.trim() || dateOfBirth),
+    isEditable: true,
+    driverId,
+    serverCompletedStepKeys: progress?.completedStepKeys ?? [],
+    suggestedNextStepKey: progress?.suggestedNextStepKey ?? null,
+  };
+  return mergeCommandDocumentPrefill(driverId, base);
+}
+
 export async function getDriverOnboardingPrefill(driverId) {
   const supabase = getSupabaseClient();
 
@@ -269,7 +458,11 @@ export async function getDriverOnboardingPrefill(driverId) {
       .order("created_at", { ascending: false }),
   ]);
 
-  if (rowError) throw rowError;
+  // Command stores phone/DOB on staff_members — Ridova drivers columns often missing.
+  if (rowError || !row) {
+    console.warn("[onboarding] drivers prefill unavailable, using Command session", rowError?.message);
+    return getCommandOnboardingPrefill(supabase, driverId);
+  }
 
   const address = readJsonObject(row?.address_json);
   const emergJson = readJsonObject(row?.emergency_contact_json);
@@ -337,7 +530,7 @@ export async function getDriverOnboardingPrefill(driverId) {
     Object.values(adminProvided).some(Boolean) ||
     Object.values(documentsByType).some(Boolean);
 
-  return {
+  return mergeCommandDocumentPrefill(driverId, {
     form,
     adminProvided,
     documentsByStep,
@@ -349,7 +542,7 @@ export async function getDriverOnboardingPrefill(driverId) {
     isEditable: isOnboardingEditableStatus(row?.onboarding_status, {
       rejectionReason: row?.rejection_reason,
     }),
-  };
+  });
 }
 
 export async function getDriverOnboardingState(driver) {
@@ -371,8 +564,19 @@ export async function getDriverOnboardingState(driver) {
   ]);
 
   const documents = await loadDriverDocuments(driver.id);
+  const commandProgress = await fetchCommandOnboardingProgress(supabase, driver.id);
+  let serverCompletedStepKeys = commandProgress?.completedStepKeys ?? [];
 
-  const mappedSteps =
+  // After documents are approved, Command points at activation training — clear stale
+  // local "done" flags so handbook / vehicle-check / defect show as ready again.
+  const ACTIVATION_STEPS = ["driver_handbook", "vehicle_check_training", "defect_policy", "policies"];
+  const suggested = commandProgress?.suggestedNextStepKey;
+  if (suggested && ACTIVATION_STEPS.includes(suggested)) {
+    clearLocalOnboardingSteps(driver.id, ACTIVATION_STEPS);
+    serverCompletedStepKeys = serverCompletedStepKeys.filter((k) => !ACTIVATION_STEPS.includes(k));
+  }
+
+  const baseSteps =
     (steps ?? []).length > 0
       ? steps.map((s) => ({
           id: s.id,
@@ -390,6 +594,13 @@ export async function getDriverOnboardingState(driver) {
           status: "pending",
           reviewStatus: null,
         }));
+
+  // Command does not use Ridova onboarding step tables — merge local + server signals.
+  const mappedSteps = applyOnboardingStepCompletions(baseSteps, {
+    completedStepKeys: [...getLocalCompletedOnboardingSteps(driver.id), ...serverCompletedStepKeys],
+    inferPersonalFromPhone: true,
+    phone: driver.phone,
+  });
 
   const missingRequiredSteps = mappedSteps.filter(
     (s) => s.required && !isStepCompleteForProgress(s.status, s.reviewStatus),
@@ -420,6 +631,8 @@ export async function getDriverOnboardingState(driver) {
     resubmitRequestedItems: record?.resubmit_requested_items ?? [],
     steps: mappedSteps,
     missingRequiredSteps,
+    serverCompletedStepKeys,
+    suggestedNextStepKey: commandProgress?.suggestedNextStepKey ?? null,
     policies: DRIVER_POLICIES,
     requirements,
     canAccessDuty: compliance.canAccessDuty,
@@ -436,58 +649,65 @@ export async function getDriverOnboardingState(driver) {
 
 export async function updateDriverProfile(driverId, organisationId, payload) {
   const supabase = getSupabaseClient();
-  const currentStatus = await assertOnboardingEditable(supabase, driverId);
-
-  const updates = {
-    phone: payload.phone,
-    date_of_birth: payload.dateOfBirth || null,
-    updated_at: new Date().toISOString(),
-  };
-  if (currentStatus === "invited") {
-    updates.onboarding_status = "profile_submitted";
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Your session expired. Sign in again and try saving.");
   }
 
-  const { error } = await supabase
-    .from("drivers")
-    .update(updates)
-    .eq("id", driverId)
-    .eq("organisation_id", organisationId);
-  if (error) throw new Error(friendlyOnboardingError(error, "save"));
+  const phone = String(payload.phone ?? "").trim();
+  if (!phone) {
+    throw new Error("Please enter your phone number.");
+  }
 
-  await completeOnboardingStep(driverId, "personal_profile", organisationId);
-  await transitionOnboardingInProgress(driverId, currentStatus);
+  let dateOfBirth = payload.dateOfBirth ? String(payload.dateOfBirth).trim() : "";
+  if (dateOfBirth) {
+    const uk = dateOfBirth.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (uk) {
+      dateOfBirth = `${uk[3]}-${uk[2].padStart(2, "0")}-${uk[1].padStart(2, "0")}`;
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+      throw new Error("Enter your date of birth using the date picker.");
+    }
+  }
+
+  const result = await commandUpdateDriverProfile(session.access_token, {
+    phone,
+    dateOfBirth: dateOfBirth || null,
+  });
+  if (!result.ok) {
+    throw new Error(result.message || "Your profile could not be saved.");
+  }
+
+  // Persist checklist progress for the hub (Command has no driver_onboarding_steps).
+  markLocalOnboardingStepsComplete(driverId, "personal_profile");
+
+  // Best-effort legacy Ridova tables when present.
+  try {
+    const currentStatus = await assertOnboardingEditable(supabase, driverId);
+    await completeOnboardingStep(driverId, "personal_profile", organisationId);
+    await transitionOnboardingInProgress(driverId, currentStatus);
+  } catch (legacyError) {
+    console.warn("[onboarding] local personal_profile step sync skipped", legacyError);
+  }
 }
 
 export async function updateAddressAndEmergency(driverId, organisationId, payload) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-
-  const { error: driverError } = await supabase
-    .from("drivers")
-    .update({
-      address_json: {
-        line1: payload.addressLine1 ?? "",
-        city: payload.addressCity ?? "",
-        postcode: payload.addressPostcode ?? "",
-      },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", driverId)
-    .eq("organisation_id", organisationId);
-  if (driverError) throw new Error(friendlyOnboardingError(driverError, "save"));
-
-  await upsertEmergencyContact(driverId, organisationId, {
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverContact(token, {
+    addressLine1: payload.addressLine1,
+    addressCity: payload.addressCity,
+    addressPostcode: payload.addressPostcode,
     contactName: payload.contactName,
     relationship: payload.relationship,
-    phone: payload.emergencyPhone,
-    secondaryPhone: payload.emergencySecondaryPhone?.trim() || null,
+    emergencyPhone: payload.emergencyPhone,
+    emergencySecondaryPhone: payload.emergencySecondaryPhone,
   });
+  assertCommandOk(result, "Your address and emergency contact could not be saved.");
+  await finishOnboardingStep(driverId, "emergency_contact", organisationId);
 }
 
 export async function updateLicenceDetails(driverId, organisationId, payload) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-
   const licenceNumber = payload.licenceNumber?.trim();
   const licenceExpiry = payload.licenceExpiry?.trim();
   if (!licenceNumber) {
@@ -497,76 +717,46 @@ export async function updateLicenceDetails(driverId, organisationId, payload) {
     throw new Error("Please enter your licence expiry date.");
   }
 
-  const { error } = await supabase
-    .from("drivers")
-    .update({
-      license_no: licenceNumber,
-      licence_categories: payload.licenceCategories?.trim() || null,
-      license_expiry: licenceExpiry,
-      penalty_points: payload.penaltyPoints != null && payload.penaltyPoints !== "" ? Number(payload.penaltyPoints) : null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", driverId)
-    .eq("organisation_id", organisationId);
-  if (error) throw new Error(friendlyOnboardingError(error, "save"));
-
   const documents = await loadDriverDocuments(driverId);
   const documentsByType = Object.fromEntries(documents.map((d) => [d.document_type, d]));
   if (!hasAllRequiredDocuments("driving_licence", documentsByType)) {
     throw new Error("Please upload photos of the front and back of your driving licence.");
   }
 
-  await completeOnboardingStep(driverId, "driving_licence", organisationId);
-
-  await logDriverAction(supabase, {
-    organisation_id: organisationId,
-    entity_table: "drivers",
-    entity_id: driverId,
-    action: "driver_licence_uploaded",
-    reason: "Driving licence details and photos saved",
-    metadata: { source: "driver_mobile", review_status: "pending_review" },
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverOnboardingStep(token, {
+    stepKey: "driving_licence",
+    licenceNumber,
+    licenceCategories: payload.licenceCategories,
+    licenceExpiry,
+    penaltyPoints: payload.penaltyPoints,
   });
+  assertCommandOk(result, "Your licence details could not be saved.");
+  await finishOnboardingStep(driverId, "driving_licence", organisationId);
 }
 
 export async function updateDvlaCheckCode(driverId, organisationId, dvlaCheckCode) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-
-  const { error } = await supabase
-    .from("drivers")
-    .update({
-      dvla_check_code: dvlaCheckCode || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", driverId)
-    .eq("organisation_id", organisationId);
-  if (error) throw new Error(friendlyOnboardingError(error, "save"));
-
-  await completeOnboardingStep(driverId, "dvla_check", organisationId);
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverOnboardingStep(token, {
+    stepKey: "dvla_check",
+    dvlaCheckCode,
+  });
+  assertCommandOk(result, "Your DVLA check code could not be saved.");
+  await finishOnboardingStep(driverId, "dvla_check", organisationId);
 }
 
 export async function updateTachographDetails(driverId, organisationId, payload) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-
-  const { error } = await supabase
-    .from("drivers")
-    .update({
-      tacho_card_number: payload.tachoCardNumber || null,
-      tacho_card_expiry: payload.tachoCardExpiry || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", driverId)
-    .eq("organisation_id", organisationId);
-  if (error) throw new Error(friendlyOnboardingError(error, "save"));
-
-  await completeOnboardingStep(driverId, "tacho_card", organisationId);
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverOnboardingStep(token, {
+    stepKey: "tacho_card",
+    tachoCardNumber: payload.tachoCardNumber,
+    tachoCardExpiry: payload.tachoCardExpiry,
+  });
+  assertCommandOk(result, "Your tachograph card details could not be saved.");
+  await finishOnboardingStep(driverId, "tacho_card", organisationId);
 }
 
 export async function updateDqcDetails(driverId, organisationId, payload) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-
   const dqcNumber = payload.dqcNumber?.trim();
   const cpcExpiry = payload.cpcExpiry?.trim();
   if (!dqcNumber) {
@@ -576,40 +766,29 @@ export async function updateDqcDetails(driverId, organisationId, payload) {
     throw new Error("Please enter your DQC / CPC expiry date.");
   }
 
-  const { error } = await supabase
-    .from("drivers")
-    .update({
-      dqc_number: dqcNumber,
-      cpc_expiry: cpcExpiry,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", driverId)
-    .eq("organisation_id", organisationId);
-  if (error) throw new Error(friendlyOnboardingError(error, "save"));
-
-  await completeOnboardingStep(driverId, "dqc_cpc", organisationId);
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverOnboardingStep(token, {
+    stepKey: "dqc_cpc",
+    dqcNumber,
+    cpcExpiry,
+  });
+  assertCommandOk(result, "Your DQC details could not be saved.");
+  await finishOnboardingStep(driverId, "dqc_cpc", organisationId);
 }
 
 export async function updateDbsDetails(driverId, organisationId, payload) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-
   const dbsExpiry = payload.dbsExpiry?.trim();
   if (!dbsExpiry) {
     throw new Error("Please enter your DBS certificate expiry date.");
   }
 
-  const { error } = await supabase
-    .from("drivers")
-    .update({
-      dbs_expiry: dbsExpiry,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", driverId)
-    .eq("organisation_id", organisationId);
-  if (error) throw new Error(friendlyOnboardingError(error, "save"));
-
-  await completeOnboardingStep(driverId, "dbs_safeguarding", organisationId);
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverOnboardingStep(token, {
+    stepKey: "dbs_safeguarding",
+    dbsExpiry,
+  });
+  assertCommandOk(result, "Your DBS details could not be saved.");
+  await finishOnboardingStep(driverId, "dbs_safeguarding", organisationId);
 }
 
 /** Active drivers missing DBS expiry can self-serve without reopening full onboarding. */
@@ -675,68 +854,41 @@ export async function updateDbsDetailsForComplianceGap(driverId, organisationId,
 }
 
 export async function upsertEmergencyContact(driverId, organisationId, payload) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-
-  const { error } = await supabase.from("driver_emergency_contacts").upsert(
-    {
-      driver_id: driverId,
-      organisation_id: organisationId,
-      contact_name: payload.contactName,
-      relationship: payload.relationship,
-      phone: payload.phone,
-      secondary_phone: payload.secondaryPhone,
-      notes: payload.notes,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "driver_id" },
-  );
-  if (error) throw new Error(friendlyOnboardingError(error, "save"));
-
-  await supabase
-    .from("drivers")
-    .update({
-      emergency_contact_json: {
-        name: payload.contactName,
-        phone: payload.phone,
-        secondary_phone: payload.secondaryPhone?.trim() || "",
-      },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", driverId);
-
-  await completeOnboardingStep(driverId, "emergency_contact", organisationId);
+  await updateAddressAndEmergency(driverId, organisationId, {
+    addressLine1: payload.addressLine1 ?? "",
+    addressCity: payload.addressCity ?? "",
+    addressPostcode: payload.addressPostcode ?? "",
+    contactName: payload.contactName,
+    relationship: payload.relationship,
+    emergencyPhone: payload.phone,
+    emergencySecondaryPhone: payload.secondaryPhone,
+  });
 }
 
 export async function saveMedicalDeclaration(driverId, organisationId, payload) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverOnboardingStep(token, {
+    stepKey: "medical_declaration",
+    fitToDrive: payload.fitToDrive,
+    eyesight: payload.eyesight,
+    fatigueAccepted: payload.fatigueAccepted,
+  });
+  assertCommandOk(result, "Your medical declaration could not be saved.");
+  await finishOnboardingStep(driverId, "medical_declaration", organisationId);
+}
 
-  const { error } = await supabase.from("driver_medical_declarations").upsert(
-    {
-      driver_id: driverId,
-      organisation_id: organisationId,
-      fit_to_drive_confirmed: payload.fitToDrive,
-      eyesight_confirmed: payload.eyesight,
-      medication_declared: payload.medicationDeclared,
-      medical_condition_declared: payload.conditionDeclared,
-      fatigue_policy_accepted: payload.fatigueAccepted,
-      signed_at: new Date().toISOString(),
-      signature_metadata: { source: "driver_mobile" },
-    },
-    { onConflict: "driver_id" },
-  );
-  if (error) throw new Error(friendlyOnboardingError(error, "save"));
-
-  await completeOnboardingStep(driverId, "medical_declaration", organisationId);
+async function acceptPoliciesViaCommand(driverId, organisationId, acceptedKeys, stepKey) {
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverOnboardingStep(token, {
+    stepKey,
+    policyKeys: acceptedKeys,
+  });
+  assertCommandOk(result, "Your policy acceptances could not be saved.");
+  await finishOnboardingStep(driverId, stepKey, organisationId);
 }
 
 export async function acceptPolicies(driverId, organisationId, acceptedKeys) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-
-  await upsertDriverPolicyAcceptances(supabase, driverId, acceptedKeys);
-  await completeOnboardingStep(driverId, "policies", organisationId);
+  await acceptPoliciesViaCommand(driverId, organisationId, acceptedKeys, "policies");
 }
 
 /** Active drivers re-acknowledging updated policies — onboarding is already complete. */
@@ -779,39 +931,25 @@ async function upsertDriverPolicyAcceptances(supabase, driverId, acceptedKeys) {
 }
 
 export async function acceptHandbookPolicies(driverId, organisationId, acceptedKeys) {
-  await acceptPolicies(driverId, organisationId, acceptedKeys);
-  await completeOnboardingStep(driverId, "driver_handbook", organisationId);
+  await acceptPoliciesViaCommand(driverId, organisationId, acceptedKeys, "driver_handbook");
 }
 
 export async function acceptDefectReportingPolicy(driverId, organisationId) {
-  await acceptPolicies(driverId, organisationId, ["defect_policy", "incident_policy"]);
-  await completeOnboardingStep(driverId, "defect_policy", organisationId);
+  await acceptPoliciesViaCommand(driverId, organisationId, ["defect_policy", "incident_policy"], "defect_policy");
 }
 
 export async function completeVehicleCheckTraining(driverId, organisationId) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-
-  const { error } = await supabase.from("driver_training_records").upsert(
-    {
-      organisation_id: organisationId,
-      driver_id: driverId,
-      training_type: "vehicle_check_training",
-      training_title: "Vehicle check & defect reporting training",
-      status: "completed",
-      completed_at: new Date().toISOString(),
-    },
-    { onConflict: "driver_id,training_type" },
-  );
-  if (error) throw error;
-
-  await completeOnboardingStep(driverId, "vehicle_check_training", organisationId);
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverOnboardingStep(token, { stepKey: "vehicle_check_training" });
+  assertCommandOk(result, "Training could not be saved.");
+  await finishOnboardingStep(driverId, "vehicle_check_training", organisationId);
 }
 
 export async function markDocumentStepComplete(driverId, stepKey, organisationId) {
-  const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-  await completeOnboardingStep(driverId, stepKey, organisationId);
+  const token = await requireDriverAccessToken();
+  const result = await commandUpdateDriverOnboardingStep(token, { stepKey });
+  assertCommandOk(result, "This step could not be saved.");
+  await finishOnboardingStep(driverId, stepKey, organisationId);
 }
 
 function buildSubmissionSnapshot(form) {
@@ -895,68 +1033,32 @@ async function persistFullSubmission(driverId, organisationId, form) {
 }
 
 export async function submitOnboardingForReview(driverId, organisationId, form) {
+  const token = await requireDriverAccessToken();
+  const result = await commandSubmitDriverOnboarding(token);
+  assertCommandOk(result, "Your onboarding could not be submitted.");
+
+  await finishOnboardingStep(driverId, WIZARD_STEP_KEYS, organisationId);
+  await finishOnboardingStep(driverId, "review_submit", organisationId);
+
   const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-  const now = new Date().toISOString();
-
-  if (form) {
-    await persistFullSubmission(driverId, organisationId, form);
-  }
-
-  const submissionSnapshot = form ? buildSubmissionSnapshot(form) : {};
-
-  await supabase
-    .from("drivers")
-    .update({ onboarding_status: "compliance_review", rejection_reason: null, updated_at: now })
-    .eq("id", driverId);
-
-  await completeOnboardingStep(driverId, WIZARD_STEP_KEYS, organisationId);
-  await completeOnboardingStep(driverId, "review_submit", organisationId);
-
-  const recordPayload = {
-    organisation_id: organisationId,
-    driver_id: driverId,
-    status: "submitted_for_review",
-    submitted_at: now,
-    dispatch_blocked: true,
-    progress_percentage: 100,
-    current_step_key: "review_submit",
-    submission_snapshot: submissionSnapshot,
-    rejection_reason: null,
-    resubmit_requested_items: null,
-    updated_at: now,
-  };
-
-  const { data: existingRecord } = await supabase
-    .from("driver_onboarding_records")
-    .select("id")
-    .eq("driver_id", driverId)
-    .maybeSingle();
-
-  if (existingRecord?.id) {
-    const { error: recordError } = await supabase
-      .from("driver_onboarding_records")
-      .update(recordPayload)
-      .eq("id", existingRecord.id);
-    if (recordError) throw new Error(friendlyOnboardingError(recordError, "save"));
-  } else {
-    const { error: recordError } = await supabase.from("driver_onboarding_records").insert(recordPayload);
-    if (recordError) throw new Error(friendlyOnboardingError(recordError, "save"));
-  }
-
   await logDriverAction(supabase, {
     organisation_id: organisationId,
     entity_table: "drivers",
     entity_id: driverId,
     action: "driver_onboarding_submitted",
     reason: "Driver submitted onboarding for admin review",
-    metadata: { source: "driver_mobile" },
+    metadata: { source: "driver_mobile", snapshot: form ? buildSubmissionSnapshot(form) : {} },
   });
 }
 
 /** Upload with onboarding editability guard — use from driver UI. */
-export async function uploadDriverDocument(driverId, organisationId, payload) {
+export async function uploadDriverDocument(driver, payload) {
   const supabase = getSupabaseClient();
-  await assertOnboardingEditable(supabase, driverId);
-  return uploadDriverDocumentRaw({ id: driverId, organisationId }, payload);
+  try {
+    await assertOnboardingEditable(supabase, driver?.id);
+  } catch (err) {
+    // Command onboarding: legacy status row may be absent — still allow uploads.
+    console.warn("[onboarding] upload editability check skipped", err?.message);
+  }
+  return uploadDriverDocumentRaw(driver, payload);
 }

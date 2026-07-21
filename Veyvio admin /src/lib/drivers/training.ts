@@ -21,6 +21,8 @@ export interface DriverTrainingRecord {
   completedAt?: string | null
   expiresAt?: string | null
   trainer?: string | null
+  progressPercentage?: number | null
+  assessmentScore?: number | null
 }
 
 export interface TrainingRequirementWithCategory extends TrainingRequirement {
@@ -276,6 +278,8 @@ export function buildDriverTrainingRequirements(
         completedAt: existing.completedAt,
         expiresAt: existing.expiresAt,
         trainer: existing.trainer,
+        progressPercentage: existing.progressPercentage ?? null,
+        assessmentScore: existing.assessmentScore ?? null,
       })
     }
   }
@@ -291,6 +295,8 @@ export function buildDriverTrainingRequirements(
       requiredFor: def.requiredFor,
       category: def.category,
       ...evidence,
+      progressPercentage: record?.progressPercentage ?? null,
+      assessmentScore: record?.assessmentScore ?? null,
     }
   })
 }
@@ -316,9 +322,12 @@ export type TrainingSummary = {
 export function summariseDriverTraining(reqs: TrainingRequirementWithCategory[]): TrainingSummary {
   const mandatory = reqs.filter((r) => r.category === 'mandatory')
   const role = reqs.filter((r) => r.category === 'role')
-  const isDone = (r: TrainingRequirement) => r.status === 'complete' || r.status === 'due_soon'
+  const isDone = (r: TrainingRequirement) =>
+    r.status === 'complete' || r.status === 'due_soon'
   const mandatoryComplete = mandatory.filter(isDone).length
-  const mandatoryMissing = mandatory.filter((r) => r.status === 'missing' || r.status === 'expired' || r.status === 'failed').length
+  const mandatoryMissing = mandatory.filter(
+    (r) => r.status === 'missing' || r.status === 'expired' || r.status === 'failed' || r.status === 'assigned' || r.status === 'in_progress',
+  ).length
   return {
     mandatoryTotal: mandatory.length,
     mandatoryComplete,

@@ -1415,7 +1415,23 @@ export class MockApiClient {
     return mockDriversApi.verifyDocument(id, documentId, actorName)
   }
 
-  async rejectDriverDocument(id: string, documentId: string, reason: string, actorName: string) {
+  async getDriverDocumentDownloadUrl(driverId: string, documentId: string) {
+    await delay(40)
+    return {
+      url: '#',
+      fileName: 'document.pdf',
+      mimeType: 'application/pdf',
+      label: 'Sample document',
+    }
+  }
+
+  async rejectDriverDocument(
+    id: string,
+    documentId: string,
+    reason: string,
+    actorName: string,
+    _options?: { requestResubmit?: boolean },
+  ) {
     await delay(80)
     return mockDriversApi.rejectDocument(id, documentId, reason, actorName)
   }
@@ -2057,6 +2073,64 @@ export class MockApiClient {
   async updateLeaveRequest(row: import('@/lib/attendance/types').LeaveRequestRecord) {
     await delay(40)
     return mockAttendanceApi.updateLeave(row)
+  }
+
+  async getDriverHoliday(driverId: string) {
+    await delay(40)
+    const { buildMockDriverHoliday } = await import('@/lib/holiday/mock-holiday')
+    return buildMockDriverHoliday(driverId)
+  }
+
+  async updateDriverHolidayProfile(
+    driverId: string,
+    input: import('@/lib/holiday/types').UpdateDriverHolidayProfileInput,
+    _actorName: string,
+  ) {
+    await delay(60)
+    const { buildMockDriverHoliday } = await import('@/lib/holiday/mock-holiday')
+    return buildMockDriverHoliday(driverId, input)
+  }
+
+  async adjustDriverHoliday(
+    driverId: string,
+    input: import('@/lib/holiday/types').AdjustDriverHolidayInput,
+    _actorName: string,
+  ) {
+    await delay(60)
+    const { buildMockDriverHoliday } = await import('@/lib/holiday/mock-holiday')
+    const base = buildMockDriverHoliday(driverId)
+    const dayMinutes = base.standardDayMinutes || 480
+    const delta =
+      input.minutes != null
+        ? Number(input.minutes)
+        : Math.round(Number(input.days ?? 0) * dayMinutes)
+    if (delta >= 0) base.minutes.positiveAdjustments += delta
+    else base.minutes.negativeAdjustments += Math.abs(delta)
+    base.minutes.remaining += delta
+    base.days.remaining = Math.round((base.minutes.remaining / dayMinutes) * 100) / 100
+    base.days.remainingIfPendingApproved =
+      Math.round(((base.minutes.remaining - base.minutes.pending) / dayMinutes) * 100) / 100
+    return base
+  }
+
+  async accrueDriverHoliday(
+    driverId: string,
+    input: { hoursWorked: number; reason?: string },
+    _actorName: string,
+  ) {
+    await delay(60)
+    const { buildMockDriverHoliday } = await import('@/lib/holiday/mock-holiday')
+    const { accrueIrregularHours } = await import('@/lib/holiday/engine')
+    const base = buildMockDriverHoliday(driverId, { calculationMethod: 'irregular_hours' })
+    const minutes = accrueIrregularHours(Number(input.hoursWorked))
+    base.minutes.accrued += minutes
+    base.minutes.remaining += minutes
+    base.minutes.entitlementTotal += minutes
+    const day = base.standardDayMinutes || 480
+    base.days.accrued = Math.round((base.minutes.accrued / day) * 100) / 100
+    base.days.remaining = Math.round((base.minutes.remaining / day) * 100) / 100
+    base.days.entitlementTotal = Math.round((base.minutes.entitlementTotal / day) * 100) / 100
+    return base
   }
 
   async getAttendancePersonProfile(input: { personId?: string | null; personName?: string | null }) {

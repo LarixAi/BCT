@@ -9,6 +9,7 @@ import {
   OPERATIONAL_STATUS_LABELS,
 } from '@/lib/drivers/constants'
 import type { DriverProfile } from '@/lib/drivers/types'
+import { countDocumentsPendingAdminReview } from '@/lib/drivers/compliance'
 import { EligibilityPanel } from './EligibilityPanel'
 
 export function DriverProfileHeader({
@@ -49,7 +50,11 @@ export function DriverProfileHeader({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <EligibilityPanel eligibility={driver.eligibility} />
+        <EligibilityPanel
+          eligibility={driver.eligibility}
+          onboardingPhase={['draft', 'onboarding', 'pending_compliance'].includes(driver.operationalStatus)}
+          documentsPendingReview={countDocumentsPendingAdminReview(driver.documents)}
+        />
         <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm lg:col-span-2">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Meta label="Operational" value={OPERATIONAL_STATUS_LABELS[driver.operationalStatus]} />

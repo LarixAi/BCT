@@ -51,6 +51,24 @@ export function findLeaveForPerson(
   )
 }
 
+/** Approved leave only — use when deciding if a driver can be assigned. */
+export function findApprovedLeaveForPerson(
+  personId: string | null | undefined,
+  leave: LeaveRequestRecord[],
+  onDate: string,
+): LeaveRequestRecord | null {
+  if (!personId) return null
+  return (
+    leave.find(
+      (r) =>
+        r.personId === personId &&
+        (r.status === 'approved' || r.status === 'moved') &&
+        r.startDate <= onDate &&
+        r.endDate >= onDate,
+    ) ?? null
+  )
+}
+
 export function dutyMatchesAttendanceFilter(
   duty: DutyRecord,
   board: AttendanceBoardRow[],

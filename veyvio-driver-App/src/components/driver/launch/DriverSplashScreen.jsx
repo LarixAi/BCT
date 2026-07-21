@@ -11,6 +11,7 @@ export default function DriverSplashScreen() {
       aria-label="Loading Veyvio"
     >
       <DriverSplashWordmark />
+      <div className="ridova-launch-splash-bar" aria-hidden />
     </div>
   );
 }

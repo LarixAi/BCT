@@ -1,3 +1,11 @@
+/** Document types grouped by onboarding step (Command + legacy). */
+export const STEP_DOCUMENT_TYPES = {
+  right_to_work: ["right_to_work"],
+  driving_licence: ["licence_front", "licence_back", "driving_licence"],
+  dqc_cpc: ["dqc_front", "dqc_back", "dqc", "dqc_cpc"],
+  dbs_safeguarding: ["dbs", "safeguarding", "dbs_certificate"],
+};
+
 /** Card-style onboarding uploads — front and back required per step. */
 export const CARD_DOCUMENT_UPLOADS = {
   driving_licence: [

@@ -8,8 +8,10 @@ import {
   cancelLeaveRequest,
   moveLeaveRequest,
   rejectLeaveRequest,
+  suggestLeaveDates,
 } from '@/lib/attendance/leave-workflow'
 import type { LeaveRequestRecord } from '@/lib/attendance/types'
+import { suggestAlternativeDates } from '@/lib/holiday/engine'
 import { api } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth-context'
 import { cn } from '@/lib/cn'
@@ -195,6 +197,32 @@ export function TimeOffPage() {
                   >
                     Reject
                   </button>
+                  {(() => {
+                    const alt = suggestAlternativeDates({
+                      startDate: selected.startDate,
+                      endDate: selected.endDate,
+                    })
+                    if (!alt) return null
+                    return (
+                      <button
+                        type="button"
+                        disabled={mutateLeave.isPending}
+                        onClick={() =>
+                          mutateLeave.mutate(
+                            suggestLeaveDates(
+                              selected,
+                              actorName,
+                              alt,
+                              'Please consider these alternative dates.',
+                            ),
+                          )
+                        }
+                        className="rounded-lg border border-command-200 px-3 py-1.5 text-sm font-medium text-command-800 hover:bg-command-50 disabled:opacity-60"
+                      >
+                        Suggest {alt.startDate} → {alt.endDate}
+                      </button>
+                    )
+                  })()}
                 </div>
               )}
               {(selected.status === 'pending' || selected.status === 'moved') && (

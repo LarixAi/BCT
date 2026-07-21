@@ -10,18 +10,49 @@ const ELIGIBILITY_STYLES: Record<OperationalEligibility, string> = {
   emergency_override_active: 'border-purple-200 bg-purple-50 text-purple-900',
 }
 
-export function EligibilityPanel({ eligibility }: { eligibility: DriverEligibilityResult }) {
+export function EligibilityPanel({
+  eligibility,
+  onboardingPhase,
+  documentsPendingReview,
+}: {
+  eligibility: DriverEligibilityResult
+  onboardingPhase?: boolean
+  documentsPendingReview?: number
+}) {
   const style = ELIGIBILITY_STYLES[eligibility.operationalEligibility]
+
+  const canGoOnline =
+    eligibility.operationalEligibility === 'eligible' ||
+    eligibility.operationalEligibility === 'eligible_with_warning' ||
+    eligibility.operationalEligibility === 'emergency_override_active'
 
   return (
     <div className={`rounded-xl border p-4 ${style}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Eligible for work</p>
-      <p className="mt-1 text-lg font-semibold">{ELIGIBILITY_LABELS[eligibility.operationalEligibility]}</p>
-      <p className="mt-1 text-sm opacity-90">{eligibility.summary}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Can go online?</p>
+      <p className="mt-1 text-lg font-semibold">
+        {canGoOnline ? 'Yes — eligible for work' : 'No — app / dispatch blocked'}
+      </p>
+      <p className="mt-1 text-sm opacity-90">
+        {ELIGIBILITY_LABELS[eligibility.operationalEligibility]} · {eligibility.summary}
+      </p>
+
+      {onboardingPhase && (documentsPendingReview ?? 0) > 0 ? (
+        <p className="mt-2 rounded-lg bg-white/60 px-2 py-1.5 text-xs leading-relaxed">
+          Documents are waiting on Compliance. Approve or decline them there — that is what unlocks the next step in
+          the Driver app. Assign courses separately under Training.
+        </p>
+      ) : null}
+
+      {onboardingPhase && (documentsPendingReview ?? 0) === 0 ? (
+        <p className="mt-2 rounded-lg bg-white/60 px-2 py-1.5 text-xs leading-relaxed">
+          Training warnings are course records — assign or complete them under Training. Licence, DBS and similar
+          files stay on Compliance.
+        </p>
+      ) : null}
 
       {eligibility.failures.length > 0 && (
         <div className="mt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide">Blocking reasons</p>
+          <p className="text-xs font-semibold uppercase tracking-wide">Why the app is blocking</p>
           <ul className="mt-1 list-inside list-disc text-sm">
             {eligibility.failures.map((f) => (
               <li key={f.code}>{f.message}</li>

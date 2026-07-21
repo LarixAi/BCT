@@ -1,7 +1,7 @@
 import { isDriverNativeApp } from "@/lib/driverAppSurface";
 
 /** Custom URL scheme for native auth callbacks (OAuth + email links). */
-export const DRIVER_NATIVE_AUTH_SCHEME = "com.coresupport.fleet.driver";
+export const DRIVER_NATIVE_AUTH_SCHEME = "uk.veyvio.driver";
 
 export function getDriverAppBaseUrl() {
   if (import.meta.env.VITE_DRIVER_APP_URL) {

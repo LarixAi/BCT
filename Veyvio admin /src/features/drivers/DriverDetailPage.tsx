@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
@@ -9,6 +9,7 @@ import {
   OPERATIONAL_STATUS_LABELS,
 } from '@/lib/drivers/constants'
 import { canInviteAccountStatus, isAccountOffboarded, isAccountSuspended } from '@/lib/drivers/account-access'
+import { countDocumentsPendingAdminReview } from '@/lib/drivers/compliance'
 import {
   canEditDriver,
   canInviteDriver,
@@ -25,6 +26,7 @@ import { DriverEligibilityTab } from './components/DriverEligibilityTab'
 import { DriverTrainingTab } from './components/DriverTrainingTab'
 import { DriverScheduleTab } from './components/DriverScheduleTab'
 import { DriverAttendanceTab } from './components/DriverAttendanceTab'
+import { DriverTimeOffTab } from './components/DriverTimeOffTab'
 import { DriverAssignmentsTab } from './components/DriverAssignmentsTab'
 import { DriverMessagesTab } from './components/DriverMessagesTab'
 import { DriverNotesAuditTab } from './components/DriverNotesAuditTab'
@@ -41,6 +43,7 @@ const TABS = [
   'Eligibility',
   'Schedule',
   'Attendance',
+  'Time off',
   'Assignments',
   'Access & Security',
   'Training',
@@ -144,6 +147,18 @@ export function DriverDetailPage() {
     mutationFn: () => api.cancelDriverInvitation(id!, actorName, 'Revoked by administrator'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['driver-profile', id] }),
   })
+
+  const driverAppEvents = useMemo(
+    () =>
+      (driver?.auditEvents ?? [])
+        .filter((e) =>
+          /onboarding|evidence submitted|profile updated|contact updated|step completed|document uploaded/i.test(
+            e.action,
+          ),
+        )
+        .slice(0, 10),
+    [driver?.auditEvents],
+  )
 
   if (isLoading) return <p className="text-sm text-slate-500">Loading driver…</p>
   if (isError || !driver) {
@@ -326,6 +341,7 @@ export function DriverDetailPage() {
             <dl className="grid gap-3 text-sm sm:grid-cols-3">
               <Row label="Operational status" value={OPERATIONAL_STATUS_LABELS[driver.operationalStatus]} />
               <Row label="Account status" value={ACCOUNT_STATUS_LABELS[driver.account.accountStatus]} />
+              <Row label="Compliance" value={driver.complianceStatus.replace(/_/g, ' ')} />
               <Row label="Eligibility" value={driver.eligibility.summary} />
               <Row label="Primary depot" value={driver.depotName ?? '—'} />
               <Row label="Next assignment" value={driver.nextDutyReference ?? '—'} />
@@ -343,12 +359,28 @@ export function DriverDetailPage() {
             <dl className="space-y-2 text-sm">
               <Row label="Legal name" value={`${driver.firstName} ${driver.lastName}`} />
               <Row label="Preferred name" value={driver.preferredName ?? '—'} />
+              <Row label="Date of birth" value={formatDate(driver.dateOfBirth)} />
               <Row label="Email" value={driver.email ?? '—'} />
               <Row label="Phone" value={driver.phone ?? '—'} />
               <Row label="Home address" value={driver.homeAddress ?? '—'} />
               <Row label="Emergency contact" value={driver.emergencyContact ?? '—'} />
             </dl>
           </SectionCard>
+          {driverAppEvents.length > 0 ? (
+            <SectionCard title="Driver app activity" className="lg:col-span-2">
+              <p className="mb-3 text-xs text-slate-500">
+                Recent updates from the Driver mobile app (onboarding and evidence).
+              </p>
+              <ul className="space-y-2 text-sm">
+                {driverAppEvents.map((event) => (
+                  <li key={event.id} className="flex flex-col gap-0.5 border-b border-slate-50 pb-2 last:border-0">
+                    <span className="font-medium text-slate-900">{event.action}</span>
+                    <span className="text-xs text-slate-500">{formatDate(event.createdAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          ) : null}
           <SectionCard title="Employment">
             <dl className="space-y-2 text-sm">
               <Row label="Type" value={EMPLOYMENT_TYPE_LABELS[driver.employmentType]} />
@@ -381,8 +413,8 @@ export function DriverDetailPage() {
                 value={String(driver.restrictions.filter((r) => r.status === 'active').length)}
               />
               <Row
-                label="Open documents pending"
-                value={String(driver.documents.filter((d) => d.verificationStatus === 'awaiting_review').length)}
+                label="Documents awaiting review"
+                value={String(countDocumentsPendingAdminReview(driver.documents))}
               />
             </dl>
           </SectionCard>
@@ -408,6 +440,14 @@ export function DriverDetailPage() {
       {tab === 'Schedule' && <DriverScheduleTab driver={driver} />}
 
       {tab === 'Attendance' && <DriverAttendanceTab driver={driver} />}
+
+      {tab === 'Time off' && (
+        <DriverTimeOffTab
+          driver={driver}
+          actorName={actorName}
+          canManage={canEditDriver(permissions) || canRestrictDriver(permissions)}
+        />
+      )}
 
       {tab === 'Assignments' && <DriverAssignmentsTab driver={driver} />}
 

@@ -134,6 +134,23 @@ export async function commandDriverSession(accessToken) {
   return { ok: true, session: await response.json() };
 }
 
+export async function commandDriverOnboardingProgress(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/onboarding/progress`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Onboarding progress could not be loaded.") };
+  }
+
+  return { ok: true, progress: await response.json() };
+}
+
 export async function commandAcknowledgeDuty(accessToken, dutyId) {
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };
@@ -382,16 +399,86 @@ export async function commandListDocuments(accessToken) {
   return { ok: true, documents: await response.json() };
 }
 
-export async function commandSubmitDocument(accessToken, input) {
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+export async function commandSubmitDocument(accessToken, input, fileOrPrepared) {
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };
 
-  const response = await fetch(`${base}/driver/documents`, {
-    method: "POST",
-    credentials: "omit",
-    headers: bearerHeaders(accessToken),
-    body: JSON.stringify(input),
-  });
+  const anon = getSupabaseAnonKey();
+  let response;
+
+  const prepared =
+    fileOrPrepared?.body instanceof ArrayBuffer
+      ? {
+          body: fileOrPrepared.body,
+          contentType: fileOrPrepared.contentType ?? "image/jpeg",
+          uploadName: input.fileName ?? fileOrPrepared.fileName ?? "document.jpg",
+        }
+      : null;
+
+  if ((prepared || fileOrPrepared) && typeof FormData !== "undefined") {
+    const form = new FormData();
+    const uploadName = prepared?.uploadName ?? input.fileName ?? fileOrPrepared?.name ?? "document.jpg";
+    if (prepared?.body) {
+      form.append("file", new Blob([prepared.body], { type: prepared.contentType }), uploadName);
+    } else {
+      form.append("file", fileOrPrepared, uploadName);
+    }
+    form.append("requirementType", input.requirementType ?? input.documentType ?? "");
+    form.append("documentType", input.documentType ?? input.requirementType ?? "");
+    if (input.label) form.append("label", input.label);
+    if (input.expiryDate) form.append("expiryDate", input.expiryDate);
+    if (input.referenceNumber) form.append("referenceNumber", input.referenceNumber);
+    if (input.notes) form.append("notes", input.notes);
+
+    const headers = {
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    };
+    if (anon) headers.apikey = anon;
+
+    response = await fetch(`${base}/driver/documents`, {
+      method: "POST",
+      credentials: "omit",
+      headers,
+      body: form,
+    });
+  } else {
+    response = await fetch(`${base}/driver/documents`, {
+      method: "POST",
+      credentials: "omit",
+      headers: bearerHeaders(accessToken),
+      body: JSON.stringify(input),
+    });
+  }
+
+  if (!response.ok && prepared?.body) {
+    const message = await readError(response, "Document could not be submitted.");
+    const retry = await fetch(`${base}/driver/documents`, {
+      method: "POST",
+      credentials: "omit",
+      headers: bearerHeaders(accessToken),
+      body: JSON.stringify({
+        ...input,
+        fileName: prepared.uploadName,
+        mimeType: prepared.contentType,
+        fileBase64: arrayBufferToBase64(prepared.body),
+      }),
+    });
+    if (retry.ok) {
+      return { ok: true, document: await retry.json() };
+    }
+    return { ok: false, message: message || (await readError(retry, "Document could not be submitted.")) };
+  }
 
   if (!response.ok) {
     return { ok: false, message: await readError(response, "Document could not be submitted.") };
@@ -420,4 +507,337 @@ export async function commandListVehicleChecks(accessToken, { today = true, limi
   }
 
   return { ok: true, checks: await response.json() };
+}
+
+export async function commandUpdateDriverProfile(accessToken, payload) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/profile`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Your profile could not be saved.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandUpdateDriverContact(accessToken, payload) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/onboarding/contact`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Your address could not be saved.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandUpdateDriverOnboardingStep(accessToken, payload) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/onboarding/step`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "This step could not be saved.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandSubmitDriverOnboarding(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/onboarding/submit`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Your onboarding could not be submitted.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandUpsertDriverDevice(accessToken, payload) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/devices`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status,
+      code: response.status === 403 ? "device_revoked" : undefined,
+      message: await readError(response, "Trusted device could not be updated."),
+    };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandGetDriverDeviceStatus(accessToken, deviceKey) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const qs = `?deviceKey=${encodeURIComponent(deviceKey)}`;
+  const response = await fetch(`${base}/driver/devices/status${qs}`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Device security status could not be loaded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandPostDriverSecurityEvent(accessToken, payload) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/security-events`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Security event could not be recorded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandListDriverTraining(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/training`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Training could not be loaded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandUpdateDriverTrainingProgress(accessToken, payload) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/training/progress`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Training progress could not be saved.") };
+  }
+
+  return { ok: true, assignment: await response.json() };
+}
+
+export async function commandGetDriverHolidayBalance(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/holiday/balance`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Holiday balance could not be loaded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandListDriverHolidayRequests(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/holiday/requests`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Time-off requests could not be loaded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandSubmitDriverHolidayRequest(accessToken, payload) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/holiday/requests`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Time-off request could not be submitted.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+function mapCommandNotification(row) {
+  return {
+    id: String(row.id ?? ""),
+    title: String(row.title ?? "Notification"),
+    message: row.body != null ? String(row.body) : row.message != null ? String(row.message) : "",
+    body: row.body != null ? String(row.body) : row.message != null ? String(row.message) : "",
+    severity: String(row.severity ?? "info"),
+    status: String(row.status ?? (row.readAt ? "read" : "unread")),
+    created_at: String(row.createdAt ?? row.created_at ?? ""),
+    createdAt: String(row.createdAt ?? row.created_at ?? ""),
+    read_at: row.readAt != null ? String(row.readAt) : row.read_at != null ? String(row.read_at) : null,
+    readAt: row.readAt != null ? String(row.readAt) : row.read_at != null ? String(row.read_at) : null,
+    notification_type: String(row.notificationType ?? row.notification_type ?? "system"),
+    notificationType: String(row.notificationType ?? row.notification_type ?? "system"),
+    action_url: row.actionUrl != null ? String(row.actionUrl) : row.action_url != null ? String(row.action_url) : null,
+    actionUrl: row.actionUrl != null ? String(row.actionUrl) : row.action_url != null ? String(row.action_url) : null,
+    entity_type: row.sourceEntityType != null ? String(row.sourceEntityType) : null,
+    entity_id: row.sourceEntityId != null ? String(row.sourceEntityId) : null,
+  };
+}
+
+export async function commandListNotifications(accessToken, { unreadOnly = false } = {}) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const qs = unreadOnly ? "?unread_only=true" : "";
+  const response = await fetch(`${base}/notifications${qs}`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Notifications could not be loaded.") };
+  }
+
+  const rows = await response.json();
+  return {
+    ok: true,
+    notifications: (Array.isArray(rows) ? rows : []).map(mapCommandNotification),
+  };
+}
+
+export async function commandNotificationUnreadCount(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/notifications/unread-count`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Unread count could not be loaded.") };
+  }
+
+  const body = await response.json();
+  return { ok: true, count: Number(body?.count ?? 0) };
+}
+
+export async function commandMarkNotificationRead(accessToken, notificationId) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  let response = await fetch(`${base}/notifications/${notificationId}/read`, {
+    method: "PATCH",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: "{}",
+  });
+
+  if (!response.ok) {
+    response = await fetch(`${base}/notifications/${notificationId}/read`, {
+      method: "POST",
+      credentials: "omit",
+      headers: bearerHeaders(accessToken),
+      body: "{}",
+    });
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Notification could not be marked read.") };
+  }
+
+  return { ok: true, ...(await response.json().catch(() => ({}))) };
+}
+
+export async function commandMarkAllNotificationsRead(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  let response = await fetch(`${base}/notifications/read-all`, {
+    method: "PATCH",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: "{}",
+  });
+
+  if (!response.ok) {
+    response = await fetch(`${base}/notifications/read-all`, {
+      method: "POST",
+      credentials: "omit",
+      headers: bearerHeaders(accessToken),
+      body: "{}",
+    });
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Notifications could not be marked read.") };
+  }
+
+  return { ok: true, ...(await response.json().catch(() => ({}))) };
 }
