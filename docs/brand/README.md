@@ -7,6 +7,7 @@ Shared brand docs for Command, Yard and Driver. Same parent platform; each produ
 | Document | Purpose |
 |----------|---------|
 | [veyvio-command-brand-foundation.md](./veyvio-command-brand-foundation.md) | Command brand: naming, tokens, chrome, auth |
+| [canvases/veyvio-command-brand.canvas.tsx](./canvases/veyvio-command-brand.canvas.tsx) | Web app brand canvas: navigation, workflows, auth, page gallery |
 
 **Primary chrome:** Veyvio Midnight `#0B1526`  
 **Primary accent:** Veyvio Blue `#2F6BFF` (COMMAND wordmark, active nav, links)

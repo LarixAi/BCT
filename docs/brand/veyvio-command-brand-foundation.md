@@ -2,7 +2,7 @@
 
 Web-app product brand for planning, control, monitoring and administration. Companion to [Veyvio Driver](./veyvio-driver-brand-foundation.md) and [Veyvio Yard](./veyvio-yard-brand-foundation.md). Same parent platform, different product colour and role.
 
-**Reference canvas:** Cursor IDE canvas `veyvio-command-brand.canvas.tsx` (Veyvio Command — web app brand)
+**Reference canvas:** [canvases/veyvio-command-brand.canvas.tsx](./canvases/veyvio-command-brand.canvas.tsx) (Veyvio Command — web app brand)
 
 ---
 
