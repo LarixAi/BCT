@@ -5,21 +5,21 @@ export function CostsTab({ hub }: { hub: FleetResourcesHubData }) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Operating costs</h2>
-        <p className="text-sm text-slate-600">
+        <h2 className="text-lg font-semibold text-ink">Operating costs</h2>
+        <p className="text-sm text-ink-soft">
           Fuel, fluids and linked ledger spend by vehicle. Maintenance labour stays in Maintenance.
         </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Spend this month</p>
+        <div className="rounded-xl border border-border bg-surface px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Spend this month</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
             £{hub.summary.spendThisMonth.toFixed(2)}
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <div className="rounded-xl border border-border bg-surface px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">
             Avg resource cost / vehicle (proxy)
           </p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
@@ -30,9 +30,9 @@ export function CostsTab({ hub }: { hub: FleetResourcesHubData }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-3 py-2">Vehicle</th>
               <th className="px-3 py-2">Depot</th>
@@ -46,13 +46,13 @@ export function CostsTab({ hub }: { hub: FleetResourcesHubData }) {
           <tbody>
             {hub.vehicleCosts.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={7} className="px-3 py-6 text-center text-muted">
                   No vehicle cost rows yet.
                 </td>
               </tr>
             ) : (
               hub.vehicleCosts.map((v) => (
-                <tr key={v.vehicleId} className="border-t border-slate-100">
+                <tr key={v.vehicleId} className="border-t border-border">
                   <td className="px-3 py-2">
                     <Link
                       to={`/vehicles/${v.vehicleId}`}
@@ -61,7 +61,7 @@ export function CostsTab({ hub }: { hub: FleetResourcesHubData }) {
                       {v.registrationNumber}
                     </Link>
                     {v.fleetNumber && (
-                      <div className="text-xs text-slate-500">{v.fleetNumber}</div>
+                      <div className="text-xs text-muted">{v.fleetNumber}</div>
                     )}
                   </td>
                   <td className="px-3 py-2">{v.depot}</td>

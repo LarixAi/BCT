@@ -33,8 +33,8 @@ export function BookingsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Bookings</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Bookings</h1>
+          <p className="text-sm text-ink-soft">
             Customer transport orders — each booking contains trips and stops for dispatch
           </p>
         </div>
@@ -67,7 +67,7 @@ export function BookingsPage() {
             type="button"
             onClick={() => setView(v.id)}
             className={`rounded-full px-3 py-1 text-xs font-medium ${
-              view === v.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'
+              view === v.id ? 'bg-command-600 text-white' : 'bg-surface text-ink-soft ring-1 ring-border'
             }`}
           >
             {v.label}
@@ -80,7 +80,7 @@ export function BookingsPage() {
         placeholder="Search reference, customer, passenger…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full max-w-md rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+        className="w-full max-w-md rounded-lg border border-border px-3 py-1.5 text-sm"
       />
 
       {isError && (
@@ -91,10 +91,10 @@ export function BookingsPage() {
 
       <SectionCard title="Booking register" description={`${filtered.length} bookings`}>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : filtered.length === 0 ? (
           <div className="py-8 text-center">
-            <p className="text-sm text-slate-500">No bookings in this view.</p>
+            <p className="text-sm text-muted">No bookings in this view.</p>
             <Link to="/bookings/new" className="mt-2 inline-block text-sm font-medium text-command-600 hover:underline">
               Create your first booking
             </Link>
@@ -102,7 +102,7 @@ export function BookingsPage() {
         ) : (
           <table className="w-full min-w-[1000px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                 <th className="pb-2 pr-4 font-medium">Reference</th>
                 <th className="pb-2 pr-4 font-medium">Customer</th>
                 <th className="pb-2 pr-4 font-medium">Passenger</th>
@@ -116,21 +116,21 @@ export function BookingsPage() {
             </thead>
             <tbody>
               {filtered.map((b) => (
-                <tr key={b.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                <tr key={b.id} className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
                   <td className="py-2.5 pr-4">
                     <Link to={`/bookings/${b.id}`} className="font-medium text-command-600 hover:underline">
                       {b.reference}
                     </Link>
                   </td>
-                  <td className="py-2.5 pr-4 text-slate-600">{b.customerName}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{b.passengerSummary}</td>
-                  <td className="py-2.5 pr-4 capitalize text-slate-600">{b.bookingType.replace(/_/g, ' ')}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{b.firstJourneyDate}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{b.tripCount}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{b.customerName}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{b.passengerSummary}</td>
+                  <td className="py-2.5 pr-4 capitalize text-ink-soft">{b.bookingType.replace(/_/g, ' ')}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{b.firstJourneyDate}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{b.tripCount}</td>
                   <td className="py-2.5 pr-4">
                     <StatusPill status={b.status} />
                   </td>
-                  <td className="py-2.5 pr-4 capitalize text-slate-600">{b.schedulingStatus}</td>
+                  <td className="py-2.5 pr-4 capitalize text-ink-soft">{b.schedulingStatus}</td>
                   <td className="py-2.5">
                     {b.warningCount > 0 ? (
                       <span className="text-amber-700">{b.warningCount}</span>
@@ -150,9 +150,9 @@ export function BookingsPage() {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <p className="text-2xl font-bold tabular-nums">{value}</p>
-      <p className="text-sm text-slate-600">{label}</p>
+      <p className="text-sm text-ink-soft">{label}</p>
     </div>
   )
 }

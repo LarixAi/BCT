@@ -80,7 +80,7 @@ export function FleetResourcesPage() {
   }
 
   if (isLoading || !hub) {
-    return <p className="text-sm text-slate-500">Loading fleet resources…</p>
+    return <p className="text-sm text-muted">Loading fleet resources…</p>
   }
 
   return (
@@ -93,8 +93,8 @@ export function FleetResourcesPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Fleet Resources</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Fleet Resources</h1>
+          <p className="text-sm text-ink-soft">
             Fuel, tyres, equipment, stock and operating costs — one ledger for what the fleet consumes.
           </p>
         </div>
@@ -107,7 +107,7 @@ export function FleetResourcesPage() {
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200">
+      <div className="flex flex-wrap gap-1 border-b border-border">
         {FLEET_RESOURCES_TABS.map((t) => (
           <button
             key={t.id}
@@ -116,7 +116,7 @@ export function FleetResourcesPage() {
             className={`border-b-2 px-3 py-2 text-sm font-medium ${
               tab === t.id
                 ? 'border-command-600 text-command-700'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                : 'border-transparent text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}

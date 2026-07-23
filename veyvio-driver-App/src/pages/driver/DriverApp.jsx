@@ -1,6 +1,7 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { DriverSupabaseAuthProvider, useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
+import { DriverComplianceReadinessProvider } from "@/lib/driverComplianceReadinessContext";
 import DriverOperationalGuard from "@/components/driver/DriverOperationalGuard";
 import DriverOperationalShell from "@/components/driver/operational/DriverOperationalShell";
 import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
@@ -18,6 +19,42 @@ import FloatingBubbleLayer from "@/components/driver/navigation/FloatingBubbleLa
 import BiometricLockLayer from "@/features/auth/biometrics/BiometricLockLayer";
 import { useDriverWebPresence } from "@/hooks/useDriverWebPresence";
 import { op } from "@/lib/driver-operational-theme";
+
+function DriverBootLoader({ onRetry, onSignOut }) {
+  const [showEscape, setShowEscape] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowEscape(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className={`min-h-dvh ${op.pageBg} flex flex-col items-center justify-center gap-4 px-6 ${op.text}`}>
+      <DriverPageLoader />
+      {showEscape ? (
+        <div className="mt-4 w-full max-w-xs space-y-3 text-center">
+          <p className="text-sm text-ink-soft">
+            Taking longer than usual. Check your connection, or sign out and try again.
+          </p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className={`w-full rounded-full py-3 text-sm font-semibold ${op.primaryBtn}`}
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className={`w-full py-2 text-sm ${driverAuthLinkClass}`}
+          >
+            Sign out
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 // Route-level pages are lazy-loaded so the initial bundle (and every cold page
 // load) doesn't have to download/parse every screen — including map-heavy
@@ -42,7 +79,6 @@ const DriverSupabaseIncidentReport = lazy(() => import("./DriverSupabaseIncident
 const DriverLicenceCompliance = lazy(() => import("./DriverLicenceCompliance"));
 const DriverSupabaseDocuments = lazy(() => import("./DriverSupabaseDocuments"));
 const DriverContactAdmin = lazy(() => import("./DriverContactAdmin"));
-const DriverMessageThreads = lazy(() => import("./DriverMessageThreads"));
 const DriverMessageThread = lazy(() => import("./DriverMessageThread"));
 const DriverAcknowledgements = lazy(() => import("./DriverAcknowledgements"));
 const DriverWorkingTime = lazy(() => import("./DriverWorkingTime"));
@@ -59,7 +95,6 @@ const DriverReportFoundItem = lazy(() => import("./lost-property/DriverReportFou
 const DriverMyFoundItems = lazy(() => import("./lost-property/DriverMyFoundItems"));
 const DriverCompleteDbsPage = lazy(() => import("./DriverCompleteDbsPage"));
 const DriverMorePage = lazy(() => import("./DriverMorePage"));
-const DriverSecurityPage = lazy(() => import("./DriverSecurityPage"));
 const DriverReadiness = lazy(() => import("./DriverReadiness"));
 const DriverVehicleHub = lazy(() => import("./DriverVehicleHub"));
 const DriverVehicleEquipment = lazy(() => import("./DriverVehicleEquipment"));
@@ -97,9 +132,25 @@ function DriverSupabaseRouter() {
 
   if (loading && !onAuthCallbackRoute) {
     return (
-      <div className={`min-h-dvh ${op.pageBg} flex items-center justify-center ${op.text}`}>
-        <DriverPageLoader />
-      </div>
+      <DriverBootLoader
+        onRetry={() => void refresh()}
+        onSignOut={() => void logout()}
+      />
+    );
+  }
+
+  if (session?.routeTarget === "module_unavailable") {
+    return (
+      <DriverMobileAuthLayout
+        title="Driver is not on this plan"
+        subtitle="Your company licence does not include the Driver workforce module. Ask your transport manager or Veyvio support if this should be enabled."
+        centerContent
+        stickyFooter={
+          <button type="button" onClick={() => void logout()} className={`w-full py-2 text-sm ${driverAuthLinkClass}`}>
+            Sign out
+          </button>
+        }
+      />
     );
   }
 
@@ -256,6 +307,7 @@ function DriverSupabaseRouter() {
     <>
       {lockLayer}
       <DriverSafeAreaRoot>
+      <DriverComplianceReadinessProvider driver={driver}>
       <NotificationProvider>
         <ExternalNavReturnLayer />
         <FloatingBubbleLayer />
@@ -411,14 +463,6 @@ function DriverSupabaseRouter() {
             }
           />
           <Route
-            path="/threads"
-            element={
-              <DriverOperationalGuard driver={driver} section="threads">
-                <DriverMessageThreads driver={driver} organisationId={session.organisationId} />
-              </DriverOperationalGuard>
-            }
-          />
-          <Route
             path="/threads/:threadId"
             element={
               <DriverOperationalGuard driver={driver} section="thread">
@@ -494,7 +538,7 @@ function DriverSupabaseRouter() {
           <Route path="/safety" element={<DriverSafetyHub driver={driver} />} />
           <Route path="/profile/licence" element={<DriverLicenceCompliance />} />
           <Route path="/profile/settings" element={<DriverSupabaseSettings driver={driver} />} />
-          <Route path="/profile/security" element={<DriverSecurityPage driver={driver} />} />
+          <Route path="/profile/security" element={<Navigate to="/profile/settings" replace />} />
           <Route path="/settings" element={<Navigate to="/profile/settings" replace />} />
           <Route path="/policies" element={<DriverPolicyReack driver={driver} organisationId={session.organisationId} onComplete={() => refresh()} />} />
           <Route path="/help" element={<DriverHelpSupport />} />
@@ -514,6 +558,7 @@ function DriverSupabaseRouter() {
       </Routes>
       </Suspense>
       </NotificationProvider>
+      </DriverComplianceReadinessProvider>
     </DriverSafeAreaRoot>
     </>
   );

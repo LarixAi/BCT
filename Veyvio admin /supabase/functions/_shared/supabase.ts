@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supabase-js@2'
 import { HttpError } from './http.ts'
+import { resolveEntitlements, resolvePlatformRole, type EntitlementSnapshot } from './entitlements.ts'
+import { enforceTenantLifecycle } from './tenant-auth.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
@@ -29,6 +31,9 @@ export type RequestContext = {
   membershipId: string
   roleKey: string
   permissions: string[]
+  platformRole: string | null
+  entitlements: EntitlementSnapshot | null
+  tenantStatus: string
   db: SupabaseClient
 }
 
@@ -81,6 +86,8 @@ export async function authenticate(request: Request, requireCompany = true): Pro
     throw new HttpError(409, 'Select a company before continuing', 'company_required')
   }
 
+  const platformRole = await resolvePlatformRole(data.user.id)
+
   if (!companyId) {
     return {
       user: data.user,
@@ -89,6 +96,9 @@ export async function authenticate(request: Request, requireCompany = true): Pro
       membershipId: '',
       roleKey: '',
       permissions: [],
+      platformRole,
+      entitlements: null,
+      tenantStatus: '',
       db: admin,
     }
   }
@@ -100,25 +110,35 @@ export async function authenticate(request: Request, requireCompany = true): Pro
     .eq('user_id', data.user.id)
     .maybeSingle()
 
-  if (membershipError || !membership || membership.status !== 'active') {
+  const hasActiveMembership = !membershipError && membership?.status === 'active'
+  // Platform staff may call platform routes without a tenant membership.
+  if (!hasActiveMembership && !platformRole) {
     throw new HttpError(403, 'Company access is unavailable', 'forbidden')
   }
 
-  const roleIds = (membership.role_ids as string[] | null) ?? []
-  let roleKey = 'member'
+  const entitlements = companyId ? await resolveEntitlements(companyId) : null
+  if (entitlements && hasActiveMembership) {
+    enforceTenantLifecycle(entitlements.tenantStatus, request.method)
+  }
+
+  const roleIds = (membership?.role_ids as string[] | null) ?? []
+  let roleKey = platformRole && !hasActiveMembership ? 'platform' : 'member'
   if (roleIds.length) {
     const { data: roles } = await admin.from('roles').select('id, name').in('id', roleIds).limit(1)
-    roleKey = roles?.[0]?.name ?? 'member'
+    roleKey = roles?.[0]?.name ?? roleKey
   }
-  const permissions = await resolvePermissions(roleIds)
+  const permissions = roleIds.length ? await resolvePermissions(roleIds) : []
 
   return {
     user: data.user,
     companyId,
     tenantId: companyId,
-    membershipId: membership.id,
+    membershipId: membership?.id ?? '',
     roleKey,
     permissions,
+    platformRole,
+    entitlements,
+    tenantStatus: entitlements?.tenantStatus ?? '',
     db: admin,
   }
 }

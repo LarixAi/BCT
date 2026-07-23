@@ -83,12 +83,12 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
           <div>
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">Health score</p>
-                <p className="text-3xl font-bold tabular-nums text-slate-900">{health.score}%</p>
+                <p className="text-xs uppercase tracking-wide text-muted">Health score</p>
+                <p className="text-3xl font-bold tabular-nums text-ink">{health.score}%</p>
               </div>
               <StatusPill status={health.roadworthy ? 'compliant' : 'vor'} />
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-muted">
               <div
                 className={`h-full rounded-full ${
                   health.score >= 80 ? 'bg-emerald-500' : health.score >= 50 ? 'bg-amber-500' : 'bg-red-500'
@@ -96,7 +96,7 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
                 style={{ width: `${health.score}%` }}
               />
             </div>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-ink-soft">
               {health.upcomingServiceLabel ?? 'No upcoming service scheduled'}
               {health.upcomingServiceDate
                 ? ` · ${new Date(health.upcomingServiceDate).toLocaleDateString('en-GB')}`
@@ -112,7 +112,7 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
             <HealthStat label="Availability" value={health.availabilityLabel} />
           </dl>
         </div>
-        <p className="mt-3 text-xs text-slate-500">
+        <p className="mt-3 text-xs text-muted">
           Availability feeds Dispatch readiness. Completing a work order alone does not return the vehicle to road —
           use Return to service with verification.
         </p>
@@ -121,19 +121,19 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
       <SectionCard title="Scheduled maintenance" description="PMI, MOT and calibration windows">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {schedule.map((card) => (
-            <div key={card.id} className="rounded-xl border border-slate-200 bg-white p-3">
+            <div key={card.id} className="rounded-xl border border-border bg-surface p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-semibold text-slate-900">{card.title}</p>
-                  <p className="text-xs text-slate-500">{card.cadence}</p>
+                  <p className="font-semibold text-ink">{card.title}</p>
+                  <p className="text-xs text-muted">{card.cadence}</p>
                 </div>
                 <StatusPill status={SCHEDULE_STATUS[card.status] ?? 'warning'} />
               </div>
               <p className="mt-3 text-sm">
-                <span className="text-slate-500">Next </span>
+                <span className="text-muted">Next </span>
                 <span className="font-medium tabular-nums">{card.nextLabel}</span>
               </p>
-              {card.detail && <p className="mt-1 text-xs text-slate-600">{card.detail}</p>}
+              {card.detail && <p className="mt-1 text-xs text-ink-soft">{card.detail}</p>}
             </div>
           ))}
         </div>
@@ -155,18 +155,18 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
         description={`${defectsAwaiting.length} open — from Driver, Yard and Command`}
       >
         {defectsAwaiting.length === 0 ? (
-          <p className="text-sm text-slate-500">No open defects.</p>
+          <p className="text-sm text-muted">No open defects.</p>
         ) : (
           <ul className="space-y-2">
             {defectsAwaiting.map((d) => (
-              <li key={d.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <li key={d.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="font-medium">
                       {d.component || d.category} · {DEFECT_SEVERITY_LABELS[d.severity] ?? d.severity}
                     </p>
-                    <p className="text-slate-600">{d.description}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-ink-soft">{d.description}</p>
+                    <p className="text-xs text-muted">
                       {d.reportedBy} · {new Date(d.reportedAt).toLocaleString('en-GB')} · {d.source}
                     </p>
                   </div>
@@ -202,12 +202,12 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Work order title"
-            className="min-w-[200px] flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="min-w-[200px] flex-1 rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm"
           >
             <option value="repair">Repair</option>
             <option value="routine_service">Routine service</option>
@@ -224,15 +224,15 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
         </div>
 
         {vehicle.workOrders.length === 0 ? (
-          <p className="text-sm text-slate-500">No work orders.</p>
+          <p className="text-sm text-muted">No work orders.</p>
         ) : (
           <ul className="space-y-2">
             {vehicle.workOrders.map((w) => (
-              <li key={w.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <li key={w.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="font-medium">{w.title}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-muted">
                       {WORK_ORDER_STATUS_LABELS[w.status]} · {w.provider ?? 'Unassigned'}
                       {w.partsCost != null && w.partsCost > 0 && ` · Parts £${w.partsCost}`}
                       {w.diagnosis ? ` · ${w.diagnosis}` : ''}
@@ -253,9 +253,9 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
                 </div>
 
                 {expandedWo === w.id && (
-                  <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                  <div className="mt-3 space-y-2 border-t border-border pt-3">
                     {(w.workCompleted || w.notes || w.technicianName) && (
-                      <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      <div className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-soft">
                         {w.technicianName && <p>Technician: {w.technicianName}</p>}
                         {w.workCompleted && <p>Work: {w.workCompleted}</p>}
                         {w.notes && <p>Notes: {w.notes}</p>}
@@ -268,7 +268,7 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
                           type="button"
                           disabled={transition.isPending}
                           onClick={() => transition.mutate({ workOrderId: w.id, status: next })}
-                          className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+                          className="rounded border border-border px-2 py-1 text-xs hover:bg-surface-muted"
                         >
                           → {WORK_ORDER_STATUS_LABELS[next]}
                         </button>
@@ -282,7 +282,7 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
                       </button>
                     </div>
                     {w.parts.length > 0 && (
-                      <ul className="text-xs text-slate-600">
+                      <ul className="text-xs text-ink-soft">
                         {w.parts.map((p) => (
                           <li key={p.id}>
                             {p.quantity}× {p.partName} — £{(p.quantity * p.unitCost).toFixed(2)}
@@ -295,20 +295,20 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
                         value={partName}
                         onChange={(e) => setPartName(e.target.value)}
                         placeholder="Part name"
-                        className="rounded border border-slate-200 px-2 py-1 text-xs"
+                        className="rounded border border-border px-2 py-1 text-xs"
                       />
                       <input
                         type="number"
                         value={partQty}
                         onChange={(e) => setPartQty(Number(e.target.value))}
-                        className="w-16 rounded border border-slate-200 px-2 py-1 text-xs"
+                        className="w-16 rounded border border-border px-2 py-1 text-xs"
                       />
                       <input
                         type="number"
                         value={partCost}
                         onChange={(e) => setPartCost(Number(e.target.value))}
                         placeholder="£"
-                        className="w-20 rounded border border-slate-200 px-2 py-1 text-xs"
+                        className="w-20 rounded border border-border px-2 py-1 text-xs"
                       />
                       <button
                         type="button"
@@ -331,7 +331,7 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
         <SectionCard title="Downtime milestones" description="VOR and workshop stages">
           <ul className="space-y-1 text-sm">
             {vehicle.downtimeEvents.slice(-8).map((e) => (
-              <li key={e.id} className="flex justify-between gap-2 text-slate-600">
+              <li key={e.id} className="flex justify-between gap-2 text-ink-soft">
                 <span>{e.stage.replace(/_/g, ' ')}</span>
                 <span className="text-xs">{new Date(e.occurredAt).toLocaleString('en-GB')}</span>
               </li>
@@ -345,9 +345,9 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
 
 function HealthStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-semibold text-slate-900">{value}</dd>
+    <div className="rounded-lg border border-border bg-surface-muted px-3 py-2">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-semibold text-ink">{value}</dd>
     </div>
   )
 }

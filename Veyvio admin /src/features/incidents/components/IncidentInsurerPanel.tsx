@@ -36,16 +36,16 @@ export function IncidentInsurerPanel({ incident }: { incident: IncidentDetailRec
         {submission && (
           <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-slate-500">Insurer</dt>
+              <dt className="text-muted">Insurer</dt>
               <dd className="font-medium">{submission.insurerName}</dd>
             </div>
             <div>
-              <dt className="text-slate-500">Status</dt>
+              <dt className="text-muted">Status</dt>
               <dd className="font-medium capitalize">{submission.status.replace(/_/g, ' ')}</dd>
             </div>
             {submission.externalReference && (
               <div className="sm:col-span-2">
-                <dt className="text-slate-500">External reference</dt>
+                <dt className="text-muted">External reference</dt>
                 <dd className="font-mono text-sm">{submission.externalReference}</dd>
               </div>
             )}
@@ -54,7 +54,7 @@ export function IncidentInsurerPanel({ incident }: { incident: IncidentDetailRec
 
         {canSubmit && submission?.status !== 'submitted' && (
           <div className="space-y-2">
-            <p className="text-sm text-slate-600">Select connector to submit:</p>
+            <p className="text-sm text-ink-soft">Select connector to submit:</p>
             <div className="flex flex-wrap gap-2">
               {connectors.map((conn) => (
                 <button
@@ -62,7 +62,7 @@ export function IncidentInsurerPanel({ incident }: { incident: IncidentDetailRec
                   type="button"
                   disabled={conn.status !== 'connected' || submit.isPending}
                   onClick={() => submit.mutate(conn.id)}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
                   data-testid={`submit-insurer-${conn.id}`}
                 >
                   Submit via {conn.name}

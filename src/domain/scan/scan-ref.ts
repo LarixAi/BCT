@@ -1,14 +1,23 @@
 import type { Bay } from "@/types/yard";
 import type { YardTask } from "@/types/tasks";
+import type { VehicleEquipment } from "@/types/equipment";
+import { findAssignedEquipmentAsset } from "@/domain/equipment/equipment-lookup";
+import { normalizeScanInput } from "@/domain/scan/normalize-scan-input";
 
 export interface ScanEntityRef {
-  kind: "task" | "defect" | "vehicle" | "bay";
+  kind: "task" | "defect" | "vehicle" | "bay" | "equipment";
   id: string;
 }
 
 export interface ScanTarget {
   to: string;
   params?: Record<string, string>;
+  /** Yard-only follow-up after navigation (e.g. open transfer sheet). */
+  action?: {
+    type: "transfer-equipment";
+    vehicleId: string;
+    itemId: string;
+  };
 }
 
 interface ResolveScanContext {
@@ -16,9 +25,11 @@ interface ResolveScanContext {
   defects: { id: string }[];
   tasks: YardTask[];
   bays: Bay[];
+  equipment?: Record<string, VehicleEquipment>;
 }
 
 const ENTITY_PATTERNS: { kind: ScanEntityRef["kind"]; pattern: RegExp }[] = [
+  { kind: "equipment", pattern: /^(?:veyvio:)?equipment[:/]([A-Za-z0-9_-]+)$/i },
   { kind: "task", pattern: /^(?:veyvio:)?task[:/]([a-z0-9_]+)$/i },
   { kind: "defect", pattern: /^(?:veyvio:)?defect[:/]([a-z0-9_]+)$/i },
   { kind: "vehicle", pattern: /^(?:veyvio:)?vehicle[:/]([a-z0-9_]+)$/i },
@@ -35,10 +46,30 @@ export function parseScanEntityRef(input: string): ScanEntityRef | null {
 }
 
 export function resolveScanTarget(input: string, ctx: ResolveScanContext): ScanTarget | null {
-  const trimmed = input.trim();
+  const trimmed = normalizeScanInput(input);
+  if (!trimmed) return null;
+
+  if (ctx.equipment) {
+    const located = findAssignedEquipmentAsset(ctx.equipment, ctx.vehicles, trimmed);
+    if (located) {
+      return {
+        to: "/yard/$vehicleId/equipment",
+        params: { vehicleId: located.vehicleId },
+        action: {
+          type: "transfer-equipment",
+          vehicleId: located.vehicleId,
+          itemId: located.item.id,
+        },
+      };
+    }
+  }
+
   const entity = parseScanEntityRef(trimmed);
   if (entity) {
     switch (entity.kind) {
+      case "equipment":
+        if (!ctx.equipment) return null;
+        return resolveScanTarget(`veyvio:equipment:${entity.id}`, ctx);
       case "task":
         if (!ctx.tasks.some(t => t.id === entity.id)) return null;
         return { to: "/tasks/$taskId", params: { taskId: entity.id } };
@@ -68,4 +99,13 @@ export function resolveScanTarget(input: string, ctx: ResolveScanContext): ScanT
 
 export function isBarcodeDetectorSupported(): boolean {
   return typeof window !== "undefined" && "BarcodeDetector" in window;
+}
+
+/** True when the device can open a camera for QR scanning (incl. jsQR fallback). */
+export function isCameraScanSupported(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof navigator !== "undefined" &&
+    !!navigator.mediaDevices?.getUserMedia
+  );
 }

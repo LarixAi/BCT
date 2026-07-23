@@ -20,8 +20,6 @@ interface AuthContextValue {
     challengeId: string
     code: string
     companyId?: string | null
-    accessToken?: string | null
-    refreshToken?: string | null
   }) => Promise<void>
   selectTenant: (tenantId: string) => Promise<void>
   logout: () => void
@@ -62,16 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string, rememberMe = false) => {
     const result = await api.login(email, password, rememberMe)
-    if (result.refreshToken && typeof window !== 'undefined') {
-      // already stored by real-client
-    }
     if (result.requiresMfaChallenge) {
-      // Keep a short-lived token for factor verification only — never mark tenant as selected.
+      // No token exists yet on this client — the backend holds the verified
+      // password session against the challenge and only releases it once the
+      // MFA code is confirmed (see verifyMfa below).
       setUser(null)
-      if (result.accessToken) api.setToken(result.accessToken, false)
-      if (result.refreshToken && typeof window !== 'undefined') {
-        localStorage.setItem('refresh_token', result.refreshToken)
-      }
       if (result.memberships?.length) api.setPendingMemberships(result.memberships)
       return {
         requiresTenantSelection: Boolean(result.requiresTenantSelection),
@@ -79,8 +72,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         mfaChallengeId: result.mfaChallengeId,
         devMfaCode: result.devMfaCode,
         pendingCompanyId: result.pendingCompanyId,
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
         memberships: result.memberships ?? [],
       }
     }
@@ -111,21 +102,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     challengeId: string
     code: string
     companyId?: string | null
-    accessToken?: string | null
-    refreshToken?: string | null
   }) => {
-    const refreshToken =
-      input.refreshToken ||
-      (typeof window === 'undefined' ? null : localStorage.getItem('refresh_token'))
-    if (!refreshToken) {
-      throw new Error('Your sign-in session expired before MFA could complete. Sign in again.')
-    }
+    // No token to carry here — the challengeId + code is the credential. The
+    // backend exchanges it for the session it held server-side since login.
     const result = await api.verifyMfa({
       challengeId: input.challengeId,
       code: input.code,
       companyId: input.companyId ?? undefined,
-      refreshToken,
-      accessToken: input.accessToken ?? undefined,
     })
     if (result.requiresTenantSelection) {
       const memberships = 'memberships' in result ? result.memberships : undefined

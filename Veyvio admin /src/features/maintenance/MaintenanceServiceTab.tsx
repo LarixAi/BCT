@@ -29,7 +29,7 @@ export function MaintenanceServiceTab({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3">Vehicle</th>
                 <th className="pb-2 pr-3">Requirement</th>
                 <th className="pb-2">Due</th>
@@ -38,13 +38,13 @@ export function MaintenanceServiceTab({
             <tbody>
               {statutory.flatMap(({ v, items }) =>
                 items.map((item) => (
-                  <tr key={`${v.id}-${item.label}`} className="border-b border-slate-50">
+                  <tr key={`${v.id}-${item.label}`} className="border-b border-border/60">
                     <td className="py-2 pr-3">
                       <Link to={`/vehicles/${v.id}`} className="font-medium text-command-600 hover:underline">
                         {v.registrationNumber}
                       </Link>
                     </td>
-                    <td className="py-2 pr-3 text-slate-600">{item.label}</td>
+                    <td className="py-2 pr-3 text-ink-soft">{item.label}</td>
                     <td className="py-2 text-xs tabular-nums">{formatDate(item.date)}</td>
                   </tr>
                 )),
@@ -60,12 +60,12 @@ export function MaintenanceServiceTab({
       <SectionCard title="Scheduled maintenance" description="From vehicle profiles and work orders">
         <ul className="space-y-2 text-sm">
           {schedule.slice(0, 30).map((s) => (
-            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-50 py-2">
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2">
               <Link to={`/vehicles/${s.vehicleId}?tab=Maintenance`} className="font-medium text-command-600 hover:underline">
                 {s.registrationNumber}
               </Link>
-              <span className="text-slate-600">{s.serviceType}</span>
-              <span className="text-xs text-slate-500">{s.dueDate?.slice(0, 10) ?? '—'}</span>
+              <span className="text-ink-soft">{s.serviceType}</span>
+              <span className="text-xs text-muted">{s.dueDate?.slice(0, 10) ?? '—'}</span>
               <StatusPill status={s.status} />
             </li>
           ))}

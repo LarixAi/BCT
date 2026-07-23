@@ -68,7 +68,7 @@ export function MoveJourneyPanel({
   if (selectedJobIds.length === 0) {
     return (
       <SectionCard title="Move journey" description="Select one or more pickup stops first">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted">
           Click a passenger pickup in the sequence, then choose where to move their journey leg.
         </p>
       </SectionCard>
@@ -91,24 +91,24 @@ export function MoveJourneyPanel({
                 'rounded-xl border px-3 py-2 text-left',
                 action === a.id
                   ? 'border-command-500 ring-1 ring-command-500 bg-command-50/40'
-                  : 'border-slate-200 hover:border-slate-300',
+                  : 'border-border hover:border-border-strong',
               )}
             >
-              <p className="font-medium text-slate-900">{a.label}</p>
-              <p className="text-xs text-slate-500">{a.description}</p>
+              <p className="font-medium text-ink">{a.label}</p>
+              <p className="text-xs text-muted">{a.description}</p>
             </button>
           ))}
         </div>
 
         {action === 'move_to_run' && (
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted">
               Destination run
             </label>
             <select
               value={destinationTripId}
               onChange={(e) => setDestinationTripId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5 text-sm"
             >
               <option value="">Select run…</option>
               {destinations.map((d) => (
@@ -125,7 +125,7 @@ export function MoveJourneyPanel({
           <div
             className={cn(
               'rounded-xl border px-3 py-2',
-              preview.blocked ? 'border-red-200 bg-red-50 text-red-950' : 'border-slate-200 bg-slate-50',
+              preview.blocked ? 'border-red-200 bg-red-50 text-red-950' : 'border-border bg-surface-muted',
             )}
           >
             <p className="text-xs font-semibold uppercase tracking-wide">

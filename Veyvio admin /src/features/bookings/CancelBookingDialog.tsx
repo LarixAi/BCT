@@ -43,9 +43,9 @@ export function CancelBookingDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">Cancel booking</h2>
-        <p className="text-sm text-slate-600">{booking.reference}</p>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-ink">Cancel booking</h2>
+        <p className="text-sm text-ink-soft">{booking.reference}</p>
 
         <div className="mt-4 space-y-4">
           <SectionCard title="What to cancel">
@@ -68,7 +68,7 @@ export function CancelBookingDialog({
               <select
                 value={tripId}
                 onChange={(e) => setTripId(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+                className="mt-2 w-full rounded-lg border border-border px-3 py-1.5 text-sm"
               >
                 {booking.trips.map((t) => (
                   <option key={t.id} value={t.id}>{t.label}</option>
@@ -78,21 +78,21 @@ export function CancelBookingDialog({
           </SectionCard>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Reason</span>
+            <span className="text-ink-soft">Reason</span>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={2}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Requested by</span>
+            <span className="text-ink-soft">Requested by</span>
             <input
               value={requestedBy}
               onChange={(e) => setRequestedBy(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
 
@@ -117,7 +117,7 @@ export function CancelBookingDialog({
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm">
+          <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm">
             Close
           </button>
           <button

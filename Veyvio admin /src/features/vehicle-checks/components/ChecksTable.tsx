@@ -5,7 +5,7 @@ import type { ChecksOperationalRow } from '@/lib/checks/types'
 
 export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperationalRow[]; showActions?: boolean }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-slate-500">No checks match these filters.</p>
+    return <p className="text-sm text-muted">No checks match these filters.</p>
   }
 
   return (
@@ -18,8 +18,8 @@ export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperatio
         return (
         <div
           key={row.checkId}
-          className={`rounded-xl border p-4 transition hover:border-slate-300 ${
-            urgencyScore >= 80 ? 'border-red-300 bg-red-50/60' : urgencyScore >= 40 ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200 bg-white'
+          className={`rounded-xl border p-4 transition hover:border-border-strong ${
+            urgencyScore >= 80 ? 'border-red-300 bg-red-50/60' : urgencyScore >= 40 ? 'border-amber-200 bg-amber-50/40' : 'border-border bg-surface'
           }`}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -31,7 +31,7 @@ export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperatio
                 <StatusPill status={row.operationalStatus} />
                 {row.result && <StatusPill status={row.result} />}
               </div>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink-soft">
                 {row.makeModel ?? '—'} · {row.fleetNumber ?? '—'} · {row.checkTypeLabel ?? 'Vehicle check'}
               </p>
               {exceptionLabels.length > 0 && (
@@ -40,13 +40,13 @@ export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperatio
               {suspiciousFlagCount > 0 && (
                 <p className="text-xs text-purple-800">{suspiciousFlagCount} review flag(s)</p>
               )}
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-muted">
                 {row.completedBy ? `Completed by ${row.completedBy}` : 'Not completed'}
                 {row.submittedAt ? ` · ${new Date(row.submittedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}
                 {row.depotName ? ` · ${row.depotName}` : ''}
               </p>
             </div>
-            <div className="text-right text-xs text-slate-500">
+            <div className="text-right text-xs text-muted">
               <p>{RELEASE_STATUS_LABELS[row.operationalStatus] ?? row.operationalStatus}</p>
               {row.validUntil && <p>Valid until {new Date(row.validUntil).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>}
               {defectCount > 0 && <p className="font-medium text-red-800">{defectCount} defect(s)</p>}
@@ -54,10 +54,10 @@ export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperatio
           </div>
           {showActions && (
             <div className="mt-3 flex flex-wrap gap-2">
-              <Link to={`/vehicle-checks/${row.checkId}`} className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium hover:bg-slate-50">
+              <Link to={`/vehicle-checks/${row.checkId}`} className="rounded-lg border border-border px-3 py-1 text-xs font-medium hover:bg-surface-muted">
                 Review check
               </Link>
-              <Link to={`/vehicles/${row.vehicleId}`} className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium hover:bg-slate-50">
+              <Link to={`/vehicles/${row.vehicleId}`} className="rounded-lg border border-border px-3 py-1 text-xs font-medium hover:bg-surface-muted">
                 Open vehicle
               </Link>
             </div>

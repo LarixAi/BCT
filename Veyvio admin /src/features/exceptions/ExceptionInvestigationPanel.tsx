@@ -28,7 +28,7 @@ export function ExceptionInvestigationPanel({
   if (!exception) {
     return (
       <SectionCard title="Investigation" description="Select an exception to open the case drawer">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted">
           Select an exception to open the full case — facts, timeline, and recovery actions.
         </p>
       </SectionCard>
@@ -44,7 +44,7 @@ export function ExceptionInvestigationPanel({
       className="min-h-0 overflow-hidden"
       flush
     >
-      <div className="flex gap-1 border-b border-slate-200 bg-slate-50 p-2">
+      <div className="flex gap-1 border-b border-border bg-surface-muted p-2">
         {(['overview', 'timeline', 'actions', 'notes'] as DrawerTab[]).map((t) => (
           <button
             key={t}
@@ -52,7 +52,7 @@ export function ExceptionInvestigationPanel({
             onClick={() => setTab(t)}
             className={cn(
               'rounded-md px-2.5 py-1 text-xs font-medium capitalize',
-              tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600',
+              tab === t ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft',
             )}
           >
             {t}
@@ -65,9 +65,9 @@ export function ExceptionInvestigationPanel({
           <>
             <div className="flex items-center justify-between gap-2">
               <StatusBadge kind="severity" value={exception.severity} />
-              <span className="capitalize text-slate-600">{exception.status.replace(/_/g, ' ')}</span>
+              <span className="capitalize text-ink-soft">{exception.status.replace(/_/g, ' ')}</span>
             </div>
-            <p className="text-slate-700">{exception.description ?? exception.recommendedAction}</p>
+            <p className="text-ink-soft">{exception.description ?? exception.recommendedAction}</p>
             <Row label="Raised" value={exception.raisedAt} />
             <Row label="Source" value={exception.source ?? '—'} />
             <Row label="Vehicle" value={exception.vehicleRegistration ?? '—'} />
@@ -93,10 +93,10 @@ export function ExceptionInvestigationPanel({
             )}
             {exception.attachments && exception.attachments.length > 0 && (
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Attachments</p>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted">Attachments</p>
                 <ul className="mt-1 space-y-1">
                   {exception.attachments.map((a) => (
-                    <li key={a.id} className="rounded border border-slate-100 px-2 py-1.5 text-xs text-slate-700">
+                    <li key={a.id} className="rounded border border-border px-2 py-1.5 text-xs text-ink-soft">
                       {a.name}
                     </li>
                   ))}
@@ -105,7 +105,7 @@ export function ExceptionInvestigationPanel({
             )}
             <Link
               to={exception.relatedHref}
-              className="block rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-medium text-command-700 hover:bg-command-50"
+              className="block rounded-lg border border-border px-3 py-2 text-center text-sm font-medium text-command-700 hover:bg-command-50"
             >
               Open related record →
             </Link>
@@ -115,20 +115,20 @@ export function ExceptionInvestigationPanel({
         {tab === 'timeline' && (
           <ul className="space-y-2">
             {(exception.timeline ?? []).length === 0 && (
-              <li className="text-slate-500">No timeline events yet.</li>
+              <li className="text-muted">No timeline events yet.</li>
             )}
             {(exception.timeline ?? []).map((item) => (
-              <li key={`${item.at}-${item.label}`} className="border-b border-slate-100 pb-2">
-                <p className="text-[11px] text-slate-500">{item.at}</p>
-                <p className="font-medium text-slate-900">{item.label}</p>
+              <li key={`${item.at}-${item.label}`} className="border-b border-border pb-2">
+                <p className="text-[11px] text-muted">{item.at}</p>
+                <p className="font-medium text-ink">{item.label}</p>
               </li>
             ))}
             {(exception.audit ?? []).map((entry) => (
-              <li key={entry.id} className="border-b border-slate-100 pb-2">
-                <p className="text-[11px] text-slate-500">
+              <li key={entry.id} className="border-b border-border pb-2">
+                <p className="text-[11px] text-muted">
                   {entry.at} · {entry.actor}
                 </p>
-                <p className="font-medium text-slate-900">{entry.action}</p>
+                <p className="font-medium text-ink">{entry.action}</p>
               </li>
             ))}
           </ul>
@@ -138,13 +138,13 @@ export function ExceptionInvestigationPanel({
           <div className="space-y-3">
             {suggestions.length > 0 && (
               <div className="space-y-2">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
                   Suggested actions
                 </p>
                 {suggestions.map((action) => (
-                  <div key={action.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    <p className="font-medium text-slate-900">{action.title}</p>
-                    <p className="mt-0.5 text-xs text-slate-600">{action.detail}</p>
+                  <div key={action.id} className="rounded-lg border border-border bg-surface-muted px-3 py-2">
+                    <p className="font-medium text-ink">{action.title}</p>
+                    <p className="mt-0.5 text-xs text-ink-soft">{action.detail}</p>
                     {action.href && (
                       <Link to={action.href} className="mt-1 inline-block text-xs font-medium text-command-700 hover:underline">
                         Open →
@@ -170,14 +170,14 @@ export function ExceptionInvestigationPanel({
               <button
                 type="button"
                 onClick={onAssignMe}
-                className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-lg border border-border px-2 py-2 text-xs font-medium text-ink-soft hover:bg-surface-muted"
               >
                 Assign to me
               </button>
               <button
                 type="button"
                 onClick={onInvestigate}
-                className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-lg border border-border px-2 py-2 text-xs font-medium text-ink-soft hover:bg-surface-muted"
               >
                 Investigating
               </button>
@@ -196,14 +196,14 @@ export function ExceptionInvestigationPanel({
           <div className="space-y-3">
             <ul className="space-y-2">
               {(exception.notes ?? []).length === 0 && (
-                <li className="text-slate-500">No notes yet.</li>
+                <li className="text-muted">No notes yet.</li>
               )}
               {(exception.notes ?? []).map((n) => (
-                <li key={n.id} className="border-b border-slate-100 pb-2">
-                  <p className="text-[11px] text-slate-500">
+                <li key={n.id} className="border-b border-border pb-2">
+                  <p className="text-[11px] text-muted">
                     {n.at} · {n.author}
                   </p>
-                  <p className="font-medium text-slate-900">{n.body}</p>
+                  <p className="font-medium text-ink">{n.body}</p>
                 </li>
               ))}
             </ul>
@@ -221,11 +221,11 @@ export function ExceptionInvestigationPanel({
                 onChange={(e) => setNote(e.target.value)}
                 rows={3}
                 placeholder="Add an investigation note…"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm"
               />
               <button
                 type="submit"
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
               >
                 Add note
               </button>
@@ -239,9 +239,9 @@ export function ExceptionInvestigationPanel({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-2">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-medium capitalize text-slate-900">{value}</span>
+    <div className="flex items-start justify-between gap-3 border-b border-border pb-2">
+      <span className="text-muted">{label}</span>
+      <span className="text-right font-medium capitalize text-ink">{value}</span>
     </div>
   )
 }
@@ -250,7 +250,7 @@ function ActionLink({ label, href }: { label: string; href: string }) {
   return (
     <Link
       to={href}
-      className="rounded-lg border border-slate-200 px-2 py-2 text-center text-xs font-medium text-slate-700 hover:bg-slate-50"
+      className="rounded-lg border border-border px-2 py-2 text-center text-xs font-medium text-ink-soft hover:bg-surface-muted"
     >
       {label}
     </Link>

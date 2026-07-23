@@ -6,17 +6,17 @@ export function FinanceTab({ hub }: { hub: FleetResourcesHubData }) {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Budgets & whole-life cost</h2>
-        <p className="text-sm text-slate-600">
+        <h2 className="text-lg font-semibold text-ink">Budgets & whole-life cost</h2>
+        <p className="text-sm text-ink-soft">
           Phase 5 stubs — cost centres, budget health and replacement signals from resource spend.
         </p>
       </div>
 
       <section className="space-y-3">
-        <h3 className="text-base font-semibold text-slate-900">Cost centre budgets</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <h3 className="text-base font-semibold text-ink">Cost centre budgets</h3>
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-3 py-2">Cost centre</th>
                 <th className="px-3 py-2">Category</th>
@@ -29,7 +29,7 @@ export function FinanceTab({ hub }: { hub: FleetResourcesHubData }) {
             </thead>
             <tbody>
               {hub.budgets.map((b) => (
-                <tr key={b.id} className="border-t border-slate-100">
+                <tr key={b.id} className="border-t border-border">
                   <td className="px-3 py-2 font-medium">{b.costCentre}</td>
                   <td className="px-3 py-2">{b.category}</td>
                   <td className="px-3 py-2 tabular-nums">{b.period}</td>
@@ -55,10 +55,10 @@ export function FinanceTab({ hub }: { hub: FleetResourcesHubData }) {
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-base font-semibold text-slate-900">Whole-life / replacement</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <h3 className="text-base font-semibold text-ink">Whole-life / replacement</h3>
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-3 py-2">Vehicle</th>
                 <th className="px-3 py-2">Resource spend YTD</th>
@@ -68,7 +68,7 @@ export function FinanceTab({ hub }: { hub: FleetResourcesHubData }) {
             </thead>
             <tbody>
               {hub.wholeLife.map((w) => (
-                <tr key={w.vehicleId} className="border-t border-slate-100">
+                <tr key={w.vehicleId} className="border-t border-border">
                   <td className="px-3 py-2">
                     <Link
                       to={`/vehicles/${w.vehicleId}`}
@@ -89,7 +89,7 @@ export function FinanceTab({ hub }: { hub: FleetResourcesHubData }) {
                         Review replacement — {w.reason}
                       </span>
                     ) : (
-                      <span className="text-slate-600">No replacement signal</span>
+                      <span className="text-ink-soft">No replacement signal</span>
                     )}
                   </td>
                 </tr>

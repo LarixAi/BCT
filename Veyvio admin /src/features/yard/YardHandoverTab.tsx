@@ -37,7 +37,7 @@ export function YardHandoverTab({ hub }: { hub: YardHubData }) {
   })
 
   if (!handover) {
-    return <p className="text-sm text-slate-500">No handover data for this depot.</p>
+    return <p className="text-sm text-muted">No handover data for this depot.</p>
   }
 
   const canSubmit = handover.status === 'draft'
@@ -51,16 +51,16 @@ export function YardHandoverTab({ hub }: { hub: YardHubData }) {
       >
         <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-slate-500">Outgoing supervisor</dt>
+            <dt className="text-muted">Outgoing supervisor</dt>
             <dd className="font-medium">{handover.outgoingSupervisor}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Incoming supervisor</dt>
+            <dt className="text-muted">Incoming supervisor</dt>
             <dd className="font-medium">{handover.incomingSupervisor ?? '—'}</dd>
           </div>
           {handover.acceptedAt && (
             <div className="sm:col-span-2">
-              <dt className="text-slate-500">Accepted</dt>
+              <dt className="text-muted">Accepted</dt>
               <dd className="font-medium">
                 {handover.acceptedBy} · {new Date(handover.acceptedAt).toLocaleString('en-GB')}
               </dd>
@@ -70,15 +70,15 @@ export function YardHandoverTab({ hub }: { hub: YardHubData }) {
 
         <div className="grid gap-4 lg:grid-cols-2">
           {handover.sections.map((section) => (
-            <div key={section.label} className="rounded-lg border border-slate-200 p-3">
-              <p className="text-sm font-medium text-slate-900">
+            <div key={section.label} className="rounded-lg border border-border p-3">
+              <p className="text-sm font-medium text-ink">
                 {section.label}
-                <span className="ml-2 text-xs font-normal text-slate-500">({section.items.length})</span>
+                <span className="ml-2 text-xs font-normal text-muted">({section.items.length})</span>
               </p>
               {section.items.length === 0 ? (
-                <p className="mt-1 text-xs text-slate-500">None</p>
+                <p className="mt-1 text-xs text-muted">None</p>
               ) : (
-                <ul className="mt-2 space-y-1 text-xs text-slate-700">
+                <ul className="mt-2 space-y-1 text-xs text-ink-soft">
                   {section.items.map((item) => (
                     <li key={item.id}>· {item.label}</li>
                   ))}
@@ -89,25 +89,25 @@ export function YardHandoverTab({ hub }: { hub: YardHubData }) {
         </div>
 
         <label className="mt-4 block text-sm">
-          <span className="text-slate-600">Handover notes</span>
+          <span className="text-ink-soft">Handover notes</span>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
             disabled={handover.status === 'accepted'}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50"
+            className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:bg-surface-muted"
             placeholder="Notes from outgoing shift…"
           />
         </label>
 
         {canAccept && (
           <label className="mt-3 block text-sm">
-            <span className="text-slate-600">Incoming supervisor name</span>
+            <span className="text-ink-soft">Incoming supervisor name</span>
             <input
               value={incomingName}
               onChange={(e) => setIncomingName(e.target.value)}
               placeholder={actorName}
-              className="mt-1 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1 w-full max-w-xs rounded-lg border border-border px-3 py-2 text-sm"
             />
           </label>
         )}

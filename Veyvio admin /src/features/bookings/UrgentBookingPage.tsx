@@ -32,7 +32,7 @@ export function UrgentBookingPage() {
   })
 
   if (!draft) {
-    return <p className="p-6 text-sm text-slate-500">Preparing urgent booking…</p>
+    return <p className="p-6 text-sm text-muted">Preparing urgent booking…</p>
   }
 
   const trip = draft.trips[0]!
@@ -44,10 +44,10 @@ export function UrgentBookingPage() {
           ← Back to bookings
         </Link>
         <div className="mt-2 flex items-center gap-2">
-          <h1 className="text-2xl font-semibold text-slate-900">Create urgent booking</h1>
+          <h1 className="text-2xl font-semibold text-ink">Create urgent booking</h1>
           <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">URGENT</span>
         </div>
-        <p className="text-sm text-slate-600">Shortened workflow — safety checks still apply</p>
+        <p className="text-sm text-ink-soft">Shortened workflow — safety checks still apply</p>
       </div>
 
       <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
@@ -57,14 +57,14 @@ export function UrgentBookingPage() {
       <SectionCard title="Urgent details">
         <div className="space-y-3">
           <label className="block text-sm">
-            <span className="text-slate-600">Customer</span>
+            <span className="text-ink-soft">Customer</span>
             <select
               value={draft.customerId ?? ''}
               onChange={(e) => {
                 const c = customers.find((x) => x.id === e.target.value)
                 setDraft({ ...draft, customerId: c?.id ?? null, customerName: c?.name ?? null })
               }}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             >
               <option value="">Select customer…</option>
               {customers.map((c) => (
@@ -74,14 +74,14 @@ export function UrgentBookingPage() {
           </label>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Passenger</span>
+            <span className="text-ink-soft">Passenger</span>
             <select
               value={draft.passengers[0]?.passengerId ?? ''}
               onChange={(e) => {
                 const p = passengers.find((x) => x.id === e.target.value)
                 setDraft({ ...draft, passengers: p ? [enrichPassenger(p)] : [] })
               }}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             >
               <option value="">Select passenger…</option>
               {passengers.map((p) => (
@@ -91,7 +91,7 @@ export function UrgentBookingPage() {
           </label>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Pickup address</span>
+            <span className="text-ink-soft">Pickup address</span>
             <input
               value={trip.stops[0]?.address ?? ''}
               onChange={(e) => {
@@ -102,12 +102,12 @@ export function UrgentBookingPage() {
                 }
                 setDraft({ ...draft, trips })
               }}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Destination</span>
+            <span className="text-ink-soft">Destination</span>
             <input
               value={trip.stops[1]?.address ?? ''}
               onChange={(e) => {
@@ -118,13 +118,13 @@ export function UrgentBookingPage() {
                 }
                 setDraft({ ...draft, trips })
               }}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="text-sm">
-              <span className="text-slate-600">Required pickup time</span>
+              <span className="text-ink-soft">Required pickup time</span>
               <input
                 type="time"
                 value={trip.requestedPickupTime ?? ''}
@@ -132,18 +132,18 @@ export function UrgentBookingPage() {
                   const trips = [{ ...trip, requestedPickupTime: e.target.value }]
                   setDraft({ ...draft, trips })
                 }}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               />
             </label>
             <label className="text-sm">
-              <span className="text-slate-600">Pickup date</span>
+              <span className="text-ink-soft">Pickup date</span>
               <input
                 type="date"
                 value={trip.pickupDate}
                 onChange={(e) => {
                   setDraft({ ...draft, trips: [{ ...trip, pickupDate: e.target.value }] })
                 }}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               />
             </label>
           </div>
@@ -163,21 +163,21 @@ export function UrgentBookingPage() {
           </label>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Reason for urgency</span>
+            <span className="text-ink-soft">Reason for urgency</span>
             <textarea
               value={draft.urgencyReason ?? ''}
               onChange={(e) => setDraft({ ...draft, urgencyReason: e.target.value })}
               rows={2}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Authorisation confirmed by</span>
+            <span className="text-ink-soft">Authorisation confirmed by</span>
             <input
               value={draft.authorisedBy ?? ''}
               onChange={(e) => setDraft({ ...draft, authorisedBy: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
         </div>
@@ -194,7 +194,7 @@ export function UrgentBookingPage() {
         >
           Confirm urgent booking
         </button>
-        <Link to="/bookings/new" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium">
+        <Link to="/bookings/new" className="rounded-lg border border-border px-4 py-2 text-sm font-medium">
           Use full wizard
         </Link>
       </div>

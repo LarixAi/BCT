@@ -63,8 +63,8 @@ export function VehiclesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Vehicles</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Vehicles</h1>
+          <p className="text-sm text-ink-soft">
             Master fleet register — availability, compliance, condition, equipment and readiness across Admin, Yard,
             Maintenance and Driver.
           </p>
@@ -79,33 +79,33 @@ export function VehiclesPage() {
           <button
             type="button"
             onClick={() => showStub('Import will land in a later release.')}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Import
           </button>
           <button
             type="button"
             onClick={() => showStub('Export will land in a later release.')}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Export
           </button>
           <button
             type="button"
             onClick={() => showStub('Bulk actions will land in a later release.')}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Bulk
           </button>
           <Link
             to="/vehicles/vor"
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             VOR board
           </Link>
           <Link
             to="/vehicles/compliance"
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Compliance
           </Link>
@@ -130,11 +130,11 @@ export function VehiclesPage() {
                   className={`rounded-xl border p-4 text-left transition ${
                     selected
                       ? 'border-command-500 bg-command-50 ring-1 ring-command-500'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
+                      : 'border-border bg-surface hover:border-border-strong'
                   }`}
                 >
-                  <p className="text-2xl font-bold tabular-nums text-slate-900">{summary[card.id]}</p>
-                  <p className="text-sm text-slate-600">{card.label}</p>
+                  <p className="text-2xl font-bold tabular-nums text-ink">{summary[card.id]}</p>
+                  <p className="text-sm text-ink-soft">{card.label}</p>
                 </button>
               )
             })}
@@ -150,7 +150,7 @@ export function VehiclesPage() {
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                     filter === key
                       ? 'border-command-500 bg-command-50 text-command-800'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      : 'border-border bg-surface text-ink-soft hover:border-border-strong'
                   }`}
                 >
                   {card.label} · {summary[card.id]}
@@ -167,13 +167,13 @@ export function VehiclesPage() {
           placeholder="Search registration, fleet no, make, depot…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="min-w-[240px] flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          className="min-w-[240px] flex-1 rounded-lg border border-border px-3 py-1.5 text-sm"
         />
         {filter !== 'all' && (
           <button
             type="button"
             onClick={() => setFilter('all')}
-            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
+            className="rounded-full bg-surface-muted px-3 py-1 text-xs font-medium text-ink-soft"
           >
             Clear filter
           </button>
@@ -182,12 +182,12 @@ export function VehiclesPage() {
 
       <SectionCard title="Fleet register" description={`${filtered.length} vehicles`}>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1600px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                   <th className="pb-2 pr-3 font-medium">Vehicle</th>
                   <th className="pb-2 pr-3 font-medium">Type</th>
                   <th className="pb-2 pr-3 font-medium">Depot</th>
@@ -225,22 +225,22 @@ function VehicleRow({ vehicle }: { vehicle: VehicleProfile }) {
     vehicle.telematics?.lastSyncAt ?? vehicle.lastCheckAt ?? vehicle.updatedAt
 
   return (
-    <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+    <tr className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
       <td className="py-2.5 pr-3">
         <Link to={`/vehicles/${vehicle.id}`} className="font-medium text-command-600 hover:underline">
           {vehicle.registrationNumber}
         </Link>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted">
           {vehicle.fleetNumber ? `${vehicle.fleetNumber} · ` : ''}
           {vehicle.reference}
         </p>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted">
           {vehicle.make} {vehicle.model}
         </p>
       </td>
-      <td className="py-2.5 pr-3 text-slate-600">{VEHICLE_CATEGORY_LABELS[vehicle.vehicleCategory]}</td>
-      <td className="py-2.5 pr-3 text-slate-600">{vehicle.currentDepotName}</td>
-      <td className="py-2.5 pr-3 text-slate-600">
+      <td className="py-2.5 pr-3 text-ink-soft">{VEHICLE_CATEGORY_LABELS[vehicle.vehicleCategory]}</td>
+      <td className="py-2.5 pr-3 text-ink-soft">{vehicle.currentDepotName}</td>
+      <td className="py-2.5 pr-3 text-ink-soft">
         {vehicle.seatingCapacity}
         {vehicle.wheelchairCapacity > 0 && ` · ${vehicle.wheelchairCapacity} WC`}
       </td>
@@ -264,23 +264,23 @@ function VehicleRow({ vehicle }: { vehicle: VehicleProfile }) {
         {vehicle.nearestExpiryDate && (
           <p
             className={`text-xs ${
-              expiry === 'expired' ? 'text-red-600' : expiry === 'warning' ? 'text-amber-600' : 'text-slate-400'
+              expiry === 'expired' ? 'text-red-600' : expiry === 'warning' ? 'text-amber-600' : 'text-muted'
             }`}
           >
             {vehicle.nearestExpiryLabel}: {formatDate(vehicle.nearestExpiryDate)}
           </p>
         )}
       </td>
-      <td className="py-2.5 pr-3 text-xs text-slate-600">
+      <td className="py-2.5 pr-3 text-xs text-ink-soft">
         {vehicle.currentDriverName ?? vehicle.nextDriverName ?? '—'}
       </td>
-      <td className="py-2.5 pr-3 text-xs text-slate-600">
+      <td className="py-2.5 pr-3 text-xs text-ink-soft">
         {vehicle.currentRunReference ?? vehicle.nextRunReference ?? '—'}
       </td>
-      <td className="py-2.5 pr-3 text-xs text-slate-600">
+      <td className="py-2.5 pr-3 text-xs text-ink-soft">
         {vehicle.motExpiry ? formatDate(vehicle.motExpiry) : '—'}
       </td>
-      <td className="py-2.5 pr-3 text-slate-600">
+      <td className="py-2.5 pr-3 text-ink-soft">
         {vehicle.openDefectCount > 0 ? (
           <span className={vehicle.criticalDefectCount > 0 ? 'font-medium text-red-700' : ''}>
             {vehicle.openDefectCount}
@@ -290,10 +290,10 @@ function VehicleRow({ vehicle }: { vehicle: VehicleProfile }) {
           '—'
         )}
       </td>
-      <td className="py-2.5 pr-3 text-slate-600 tabular-nums">
+      <td className="py-2.5 pr-3 text-ink-soft tabular-nums">
         {vehicle.mileage != null ? vehicle.mileage.toLocaleString() : '—'}
       </td>
-      <td className="py-2.5 pr-3 text-xs text-slate-600">
+      <td className="py-2.5 pr-3 text-xs text-ink-soft">
         {lastSeen
           ? new Date(lastSeen).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
           : '—'}

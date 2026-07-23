@@ -135,9 +135,9 @@ export function MaintenanceWorkOrdersTab({
       <SectionCard title="Workshop pipeline" description="Open work orders by lifecycle stage">
         <div className="flex flex-wrap gap-2">
           {pipelineCounts.map((stage) => (
-            <div key={stage.id} className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm">
-              <p className="text-lg font-bold tabular-nums text-slate-900">{stage.count}</p>
-              <p className="text-xs text-slate-600">{stage.label}</p>
+            <div key={stage.id} className="rounded-lg border border-border px-3 py-2 text-center text-sm">
+              <p className="text-lg font-bold tabular-nums text-ink">{stage.count}</p>
+              <p className="text-xs text-ink-soft">{stage.label}</p>
             </div>
           ))}
         </div>
@@ -155,7 +155,7 @@ export function MaintenanceWorkOrdersTab({
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
               >
                 <div>
-                  <p className="font-medium text-slate-900">
+                  <p className="font-medium text-ink">
                     {w.registrationNumber} · {w.title}
                   </p>
                   <p className="text-xs text-amber-900">
@@ -186,7 +186,7 @@ export function MaintenanceWorkOrdersTab({
             className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
               view === 'board'
                 ? 'border-command-500 bg-command-50 text-command-800'
-                : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                : 'border-border text-ink-soft hover:bg-surface-muted'
             }`}
           >
             Board
@@ -197,7 +197,7 @@ export function MaintenanceWorkOrdersTab({
             className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
               view === 'table'
                 ? 'border-command-500 bg-command-50 text-command-800'
-                : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                : 'border-border text-ink-soft hover:bg-surface-muted'
             }`}
           >
             Table
@@ -209,11 +209,11 @@ export function MaintenanceWorkOrdersTab({
             {WORK_ORDER_KANBAN_LANES.map((lane) => {
               const cards = lanes[lane.id]
               return (
-                <div key={lane.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <div key={lane.id} className="rounded-xl border border-border bg-surface-muted/50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                     {lane.label}
                   </p>
-                  <p className="mb-2 text-lg font-bold tabular-nums text-slate-900">{cards.length}</p>
+                  <p className="mb-2 text-lg font-bold tabular-nums text-ink">{cards.length}</p>
                   <ul className="space-y-2">
                     {cards.map((w) => {
                       const highlighted =
@@ -221,8 +221,8 @@ export function MaintenanceWorkOrdersTab({
                       return (
                         <li
                           key={w.workOrderId}
-                          className={`rounded-lg border bg-white p-2 text-sm ${
-                            highlighted ? 'border-command-400 ring-1 ring-command-400' : 'border-slate-200'
+                          className={`rounded-lg border bg-surface p-2 text-sm ${
+                            highlighted ? 'border-command-400 ring-1 ring-command-400' : 'border-border'
                           }`}
                         >
                           <Link
@@ -231,24 +231,24 @@ export function MaintenanceWorkOrdersTab({
                           >
                             {w.registrationNumber}
                           </Link>
-                          <p className="mt-0.5 text-slate-800">{w.title}</p>
-                          <p className="text-xs text-slate-500">
+                          <p className="mt-0.5 text-ink">{w.title}</p>
+                          <p className="text-xs text-muted">
                             {WORK_ORDER_TYPE_LABELS[w.type] ?? w.type} · {w.depot}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <StatusPill status={w.status} />
-                            <span className="text-[11px] text-slate-500">
+                            <span className="text-[11px] text-muted">
                               {WORK_ORDER_STATUS_LABELS[w.status]}
                             </span>
                           </div>
-                          <p className="mt-1 text-xs text-slate-600">
+                          <p className="mt-1 text-xs text-ink-soft">
                             {estimateLabel(w)}
                             {w.estimateStatus === 'submitted' && ' · estimate submitted'}
                             {w.scheduledDate &&
                               ` · ${new Date(w.scheduledDate).toLocaleDateString('en-GB')}`}
                           </p>
                           {w.technicianName && (
-                            <p className="text-[11px] text-slate-500">Tech: {w.technicianName}</p>
+                            <p className="text-[11px] text-muted">Tech: {w.technicianName}</p>
                           )}
                           <button
                             type="button"
@@ -260,7 +260,7 @@ export function MaintenanceWorkOrdersTab({
                         </li>
                       )
                     })}
-                    {cards.length === 0 && <li className="text-xs text-slate-400">None</li>}
+                    {cards.length === 0 && <li className="text-xs text-muted">None</li>}
                   </ul>
                 </div>
               )
@@ -270,7 +270,7 @@ export function MaintenanceWorkOrdersTab({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+                <tr className="border-b border-border text-xs uppercase text-muted">
                   <th className="pb-2 pr-3 font-medium">WO</th>
                   <th className="pb-2 pr-3 font-medium">Vehicle</th>
                   <th className="pb-2 pr-3 font-medium">Title</th>
@@ -285,13 +285,13 @@ export function MaintenanceWorkOrdersTab({
                 {filtered.map((w) => (
                   <tr
                     key={w.workOrderId}
-                    className={`border-b border-slate-50 hover:bg-slate-50 ${
+                    className={`border-b border-border/60 hover:bg-surface-muted ${
                       highlightWorkOrderId && w.workOrderId === highlightWorkOrderId
                         ? 'bg-command-50'
                         : ''
                     }`}
                   >
-                    <td className="py-2.5 pr-3 font-mono text-xs text-slate-500">{w.workOrderId}</td>
+                    <td className="py-2.5 pr-3 font-mono text-xs text-muted">{w.workOrderId}</td>
                     <td className="py-2.5 pr-3">
                       <Link
                         to={`/vehicles/${w.vehicleId}?tab=Maintenance`}
@@ -299,26 +299,26 @@ export function MaintenanceWorkOrdersTab({
                       >
                         {w.registrationNumber}
                       </Link>
-                      <p className="text-xs text-slate-500">{w.depot}</p>
+                      <p className="text-xs text-muted">{w.depot}</p>
                     </td>
                     <td className="py-2.5 pr-3">{w.title}</td>
-                    <td className="py-2.5 pr-3 text-slate-600">
+                    <td className="py-2.5 pr-3 text-ink-soft">
                       {WORK_ORDER_TYPE_LABELS[w.type] ?? w.type}
                     </td>
                     <td className="py-2.5 pr-3">
                       <StatusPill status={w.status} />
-                      <p className="text-xs text-slate-500">{WORK_ORDER_STATUS_LABELS[w.status]}</p>
+                      <p className="text-xs text-muted">{WORK_ORDER_STATUS_LABELS[w.status]}</p>
                     </td>
-                    <td className="py-2.5 pr-3 text-slate-600">
+                    <td className="py-2.5 pr-3 text-ink-soft">
                       {estimateLabel(w)}
                       {w.estimateStatus && (
-                        <p className="text-xs capitalize text-slate-500">{w.estimateStatus}</p>
+                        <p className="text-xs capitalize text-muted">{w.estimateStatus}</p>
                       )}
                       {w.partsCount > 0 && (
-                        <p className="text-xs text-slate-500">{w.partsCount} part(s)</p>
+                        <p className="text-xs text-muted">{w.partsCount} part(s)</p>
                       )}
                     </td>
-                    <td className="py-2.5 pr-3 text-slate-600">
+                    <td className="py-2.5 pr-3 text-ink-soft">
                       {w.scheduledDate ? new Date(w.scheduledDate).toLocaleDateString('en-GB') : '—'}
                     </td>
                     <td className="py-2.5">
@@ -343,17 +343,17 @@ export function MaintenanceWorkOrdersTab({
       {selected && (
         <SectionCard title={`Work order ${selected.workOrderId}`} description={selected.title}>
           <div className="space-y-3 text-sm">
-            <p className="text-slate-600">
+            <p className="text-ink-soft">
               {selected.registrationNumber} · {WORK_ORDER_STATUS_LABELS[selected.status]}
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted">
               Status changes use allowed lifecycle transitions — cards do not move by dragging.
             </p>
-            {selected.diagnosis && <p className="text-slate-700">Diagnosis: {selected.diagnosis}</p>}
+            {selected.diagnosis && <p className="text-ink-soft">Diagnosis: {selected.diagnosis}</p>}
             {selected.estimateStatus && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="font-medium text-slate-900">Workshop estimate</p>
-                <p className="text-slate-700">
+              <div className="rounded-lg border border-border bg-surface-muted px-3 py-2">
+                <p className="font-medium text-ink">Workshop estimate</p>
+                <p className="text-ink-soft">
                   Total £{selected.estimateTotal?.toFixed(2) ?? '—'} · {selected.estimateStatus}
                 </p>
                 {selected.estimateStatus === 'submitted' && (
@@ -391,11 +391,11 @@ export function MaintenanceWorkOrdersTab({
               </div>
             )}
             <label className="block">
-              <span className="text-slate-600">Diagnosis / notes</span>
+              <span className="text-ink-soft">Diagnosis / notes</span>
               <textarea
                 value={diagnosis}
                 onChange={(e) => setDiagnosis(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 rows={2}
               />
             </label>
@@ -412,7 +412,7 @@ export function MaintenanceWorkOrdersTab({
                       status: next,
                     })
                   }
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface-muted"
                 >
                   → {WORK_ORDER_STATUS_LABELS[next]}
                 </button>
@@ -420,7 +420,7 @@ export function MaintenanceWorkOrdersTab({
               <button
                 type="button"
                 onClick={() => setSelected(null)}
-                className="rounded-lg px-3 py-1.5 text-xs text-slate-500"
+                className="rounded-lg px-3 py-1.5 text-xs text-muted"
               >
                 Close
               </button>

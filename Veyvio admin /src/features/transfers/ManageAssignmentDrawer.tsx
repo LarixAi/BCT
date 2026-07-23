@@ -207,15 +207,15 @@ export function ManageAssignmentDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
-      <div className="flex h-full w-full max-w-xl flex-col bg-white shadow-2xl">
-        <header className="border-b border-slate-200 px-5 py-4">
+      <div className="flex h-full w-full max-w-xl flex-col bg-surface shadow-2xl">
+        <header className="border-b border-border px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-command-600">Manage assignment</p>
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="text-lg font-semibold text-ink">
                 {resolvedTrip?.reference ?? (isBootstrapping ? 'Loading…' : 'Assignment')}
               </h2>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink-soft">
                 {resolvedTrip?.runReference
                   ? `Run ${resolvedTrip.runReference}`
                   : resolvedTrip
@@ -223,7 +223,7 @@ export function ManageAssignmentDrawer({
                     : 'Duty assignment'}
               </p>
             </div>
-            <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <button type="button" onClick={onClose} className="text-muted hover:text-ink-soft">
               ✕
             </button>
           </div>
@@ -232,7 +232,7 @@ export function ManageAssignmentDrawer({
               <li
                 key={label}
                 className={`shrink-0 rounded-full px-2 py-0.5 ${
-                  i === step ? 'bg-command-600 text-white' : i < step ? 'bg-command-100 text-command-800' : 'bg-slate-100 text-slate-500'
+                  i === step ? 'bg-command-600 text-white' : i < step ? 'bg-command-100 text-command-800' : 'bg-surface-muted text-muted'
                 }`}
               >
                 {i + 1}. {label}
@@ -243,7 +243,7 @@ export function ManageAssignmentDrawer({
 
         <div className="flex-1 overflow-y-auto p-5">
           {isBootstrapping && (
-            <p className="text-sm text-slate-600">Loading the current assignment…</p>
+            <p className="text-sm text-ink-soft">Loading the current assignment…</p>
           )}
 
           {!isBootstrapping && !resolvedTrip && (
@@ -255,7 +255,7 @@ export function ManageAssignmentDrawer({
 
           {step === 0 && resolvedTrip && (
             <div className="space-y-2">
-              <p className="text-sm text-slate-600">Select exactly what is being moved — not a generic reassignment.</p>
+              <p className="text-sm text-ink-soft">Select exactly what is being moved — not a generic reassignment.</p>
               {scopeOptions.length === 0 ? (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                   Your role cannot change assignments. Ask a dispatcher or company owner.
@@ -265,20 +265,20 @@ export function ManageAssignmentDrawer({
                   <label
                     key={opt.id}
                     className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${
-                      scope === opt.id ? 'border-command-500 bg-command-50' : 'border-slate-200'
+                      scope === opt.id ? 'border-command-500 bg-command-50' : 'border-border'
                     }`}
                   >
                     <input type="radio" name="scope" checked={scope === opt.id} onChange={() => setScope(opt.id)} className="mt-1" />
                     <div>
-                      <p className="font-medium text-slate-900">{opt.label}</p>
-                      <p className="text-sm text-slate-600">{opt.description}</p>
+                      <p className="font-medium text-ink">{opt.label}</p>
+                      <p className="text-sm text-ink-soft">{opt.description}</p>
                     </div>
                   </label>
                 ))
               )}
               {scope === 'selected_jobs' && (
                 <SectionCard title="Select passengers to move">
-                  <p className="mb-2 text-xs text-slate-500">
+                  <p className="mb-2 text-xs text-muted">
                     Select any passenger — onboard or not yet collected. Onboard moves are recorded as a handover.
                   </p>
                   <ul className="space-y-2 text-sm">
@@ -294,7 +294,7 @@ export function ManageAssignmentDrawer({
                             />
                             <span>
                               {j.passengerName}
-                              <span className="ml-1 text-slate-500">({j.status})</span>
+                              <span className="ml-1 text-muted">({j.status})</span>
                               {j.status === 'onboard' && (
                                 <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
                                   onboard — handover recorded
@@ -306,7 +306,7 @@ export function ManageAssignmentDrawer({
                       ))}
                     {(resolvedTrip.jobs ?? []).filter((j) => j.status !== 'completed' && j.status !== 'transferred')
                       .length === 0 && (
-                      <li className="text-slate-500">No passenger jobs on this assignment yet.</li>
+                      <li className="text-muted">No passenger jobs on this assignment yet.</li>
                     )}
                   </ul>
                 </SectionCard>
@@ -356,7 +356,7 @@ export function ManageAssignmentDrawer({
             <div className="space-y-4">
               {scope !== 'return_to_queue' && (
                 <>
-                  <p className="text-sm text-slate-600">Ranked candidates — safest operational choices first.</p>
+                  <p className="text-sm text-ink-soft">Ranked candidates — safest operational choices first.</p>
                   <div className="space-y-2">
                     {candidates.map((c) => (
                       <button
@@ -366,18 +366,18 @@ export function ManageAssignmentDrawer({
                         className={`w-full rounded-lg border p-3 text-left text-sm ${
                           selectedCandidate?.driverId === c.driverId
                             ? 'border-command-500 bg-command-50'
-                            : 'border-slate-200 hover:border-slate-300'
+                            : 'border-border hover:border-border-strong'
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <p className="font-medium">{c.driverName}</p>
-                          <span className="text-xs text-slate-500">#{c.rank}</span>
+                          <span className="text-xs text-muted">#{c.rank}</span>
                         </div>
-                        <p className="mt-1 text-slate-600">
+                        <p className="mt-1 text-ink-soft">
                           {c.vehicleRegistration ?? 'No vehicle'} · ETA {c.estimatedTravelMinutes} min ·{' '}
                           {c.isOnline ? 'Online' : 'Offline'}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-muted">
                           Punctuality {c.punctualityScore}% · WC {c.wheelchairCapacity} · Duty {c.remainingDutyHours.toFixed(1)}h left
                           {c.hasScheduleConflict && ' · Schedule conflict'}
                         </p>
@@ -391,7 +391,7 @@ export function ManageAssignmentDrawer({
                   <select
                     value={destinationTripId ?? ''}
                     onChange={(e) => setDestinationTripId(e.target.value || null)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+                    className="w-full rounded-lg border border-border px-3 py-1.5 text-sm"
                   >
                     <option value="">Create rescue / new trip</option>
                     {otherTrips
@@ -414,7 +414,7 @@ export function ManageAssignmentDrawer({
 
           {step === 3 && (
             <SectionCard title="Pre-transfer validation">
-              <p className="mb-2 text-sm text-slate-600">
+              <p className="mb-2 text-sm text-ink-soft">
                 Workflow: <strong>{TRANSFER_WORKFLOW_LABELS[workflowType]}</strong>
               </p>
               <ul className="space-y-2 text-sm">
@@ -448,11 +448,11 @@ export function ManageAssignmentDrawer({
           {step === 4 && (
             <div className="space-y-3">
               <label className="block text-sm">
-                <span className="text-slate-600">Transfer reason</span>
+                <span className="text-ink-soft">Transfer reason</span>
                 <select
                   value={reasonCode}
                   onChange={(e) => setReasonCode(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 >
                   {TRANSFER_REASON_CODES.map((r) => (
                     <option key={r.code} value={r.code}>
@@ -462,41 +462,41 @@ export function ManageAssignmentDrawer({
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="text-slate-600">Admin notes (internal)</span>
+                <span className="text-ink-soft">Admin notes (internal)</span>
                 <textarea
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
                   rows={3}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
-              <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-soft">
                 Passenger message: {PASSENGER_FACING_TRANSFER_MESSAGE}
               </p>
 
               {(needsHandoverRecording || step >= 4) && jobsInScope.some((j) => j.status === 'onboard') && (
                 <SectionCard title="Record handover (required for onboard passengers)">
-                  <p className="mb-3 text-xs text-slate-500">
+                  <p className="mb-3 text-xs text-muted">
                     This creates an immutable transfer record with handover location, authorisation, driver
                     notifications, and change history on the trip.
                   </p>
                   <div className="space-y-3">
                     <label className="block text-sm">
-                      <span className="text-slate-600">Handover location</span>
+                      <span className="text-ink-soft">Handover location</span>
                       <input
                         value={handoverLocation}
                         onChange={(e) => setHandoverLocation(e.target.value)}
                         placeholder="e.g. A406 lay-by northbound"
-                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                        className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                       />
                     </label>
                     <label className="block text-sm">
-                      <span className="text-slate-600">Authorised by</span>
+                      <span className="text-ink-soft">Authorised by</span>
                       <input
                         value={handoverAuthorisedBy}
                         onChange={(e) => setHandoverAuthorisedBy(e.target.value)}
                         placeholder="Duty manager or dispatcher name"
-                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                        className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                       />
                     </label>
                   </div>
@@ -524,7 +524,7 @@ export function ManageAssignmentDrawer({
                 </ul>
               </SectionCard>
               {impact.jobsRemainingWithOriginal.length > 0 && (
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-ink-soft">
                   Remaining with original driver: {impact.jobsRemainingWithOriginal.join(', ')}
                 </p>
               )}
@@ -538,10 +538,10 @@ export function ManageAssignmentDrawer({
 
           {step === 6 && (
             <SectionCard title="Confirm transfer">
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-ink-soft">
                 Confirming will permanently record this move. Nothing is silently reassigned.
               </p>
-              <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              <ul className="mt-3 space-y-2 text-sm text-ink-soft">
                 <li>
                   <strong>Transfer record</strong> — reason, scope, before/after snapshot, transfer ID
                 </li>
@@ -561,7 +561,7 @@ export function ManageAssignmentDrawer({
                   <strong>Manifest</strong> — version bumped; ETAs recalculated
                 </li>
               </ul>
-              <ul className="mt-3 list-inside list-disc text-sm text-slate-600">
+              <ul className="mt-3 list-inside list-disc text-sm text-ink-soft">
                 <li>Scope: {scopeOptions.find((s) => s.id === scope)?.label ?? scope}</li>
                 <li>Reason: {TRANSFER_REASON_CODES.find((r) => r.code === reasonCode)?.label}</li>
                 <li>Moving: {jobsInScope.map((j) => j.passengerName).join(', ') || '—'}</li>
@@ -582,11 +582,11 @@ export function ManageAssignmentDrawer({
           {error && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
         </div>
 
-        <footer className="flex justify-between border-t border-slate-200 px-5 py-4">
+        <footer className="flex justify-between border-t border-border px-5 py-4">
           <button
             type="button"
             onClick={() => (step > 0 ? setStep((s) => s - 1) : onClose())}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
           >
             {step > 0 ? 'Back' : 'Cancel'}
           </button>
@@ -625,8 +625,8 @@ export function ManageAssignmentDrawer({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium capitalize text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium capitalize text-ink">{value}</dd>
     </div>
   )
 }
@@ -639,8 +639,8 @@ function ImpactCard({
   snapshot: import('@/lib/transfers/types').TransferImpactSnapshot
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-3 text-sm">
-      <p className="font-semibold text-slate-900">{title}</p>
+    <div className="rounded-lg border border-border p-3 text-sm">
+      <p className="font-semibold text-ink">{title}</p>
       <p className="mt-2">Driver: {snapshot.driverName ?? '—'}</p>
       <p>Vehicle: {snapshot.vehicleRegistration ?? '—'}</p>
       <p>Pickup ETA: {snapshot.pickupEta ?? '—'}</p>

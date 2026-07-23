@@ -44,11 +44,11 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
 
       <SectionCard title="Today's shifts" description="Shift assignments across depots">
         {hub.shiftsToday.length === 0 ? (
-          <p className="text-sm text-slate-500">No shifts scheduled today.</p>
+          <p className="text-sm text-muted">No shifts scheduled today.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3 font-medium">Staff</th>
                 <th className="pb-2 pr-3 font-medium">Depot</th>
                 <th className="pb-2 pr-3 font-medium">Time</th>
@@ -58,12 +58,12 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
             </thead>
             <tbody>
               {hub.shiftsToday.map((s) => (
-                <tr key={s.shiftId} className="border-b border-slate-50">
+                <tr key={s.shiftId} className="border-b border-border/60">
                   <td className="py-2 pr-3">
                     <Link to={`/staff/${s.staffId}?tab=Schedule`} className="font-medium text-command-600 hover:underline">
                       {s.staffName}
                     </Link>
-                    <p className="text-xs text-slate-500">{s.jobTitle}</p>
+                    <p className="text-xs text-muted">{s.jobTitle}</p>
                   </td>
                   <td className="py-2 pr-3">{s.depotName}</td>
                   <td className="py-2 pr-3">{s.startTime} – {s.endTime}</td>
@@ -80,11 +80,11 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
         <SectionCard title="Currently on duty">
           <ul className="space-y-2 text-sm">
             {onDuty.map((row) => (
-              <li key={row.staffId} className="flex justify-between rounded-lg border border-slate-200 px-3 py-2">
+              <li key={row.staffId} className="flex justify-between rounded-lg border border-border px-3 py-2">
                 <Link to={`/staff/${row.staffId}`} className="font-medium text-command-600 hover:underline">
                   {row.firstName} {row.lastName}
                 </Link>
-                <span className="text-slate-600">{row.primaryDepotName}</span>
+                <span className="text-ink-soft">{row.primaryDepotName}</span>
               </li>
             ))}
           </ul>
@@ -93,14 +93,14 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
         <SectionCard title="Scheduled (not yet on duty)">
           <ul className="space-y-2 text-sm">
             {scheduled.length === 0 ? (
-              <li className="text-slate-500">No scheduled staff awaiting start.</li>
+              <li className="text-muted">No scheduled staff awaiting start.</li>
             ) : (
               scheduled.map((row) => (
-                <li key={row.staffId} className="flex justify-between rounded-lg border border-slate-200 px-3 py-2">
+                <li key={row.staffId} className="flex justify-between rounded-lg border border-border px-3 py-2">
                   <Link to={`/staff/${row.staffId}?tab=Schedule`} className="font-medium text-command-600 hover:underline">
                     {row.firstName} {row.lastName}
                   </Link>
-                  <span className="text-xs text-slate-500">{DUTY_STATUS_LABELS[row.dutyStatus]}</span>
+                  <span className="text-xs text-muted">{DUTY_STATUS_LABELS[row.dutyStatus]}</span>
                 </li>
               ))
             )}
@@ -110,17 +110,17 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
 
       <SectionCard title="Pending shift handovers" description="Duty controllers ending shift must hand over unresolved exceptions">
         {hub.pendingHandovers.length === 0 ? (
-          <p className="text-sm text-slate-500">No pending handovers.</p>
+          <p className="text-sm text-muted">No pending handovers.</p>
         ) : (
           <ul className="space-y-3 text-sm">
             {hub.pendingHandovers.map((h) => (
               <li key={h.id} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
-                <p className="font-medium text-slate-900">{h.responsibility}</p>
-                <p className="text-slate-600">{h.fromStaffName} · {h.depotName} · {h.openExceptionCount} open exception(s)</p>
-                {h.notes && <p className="text-xs text-slate-500">{h.notes}</p>}
+                <p className="font-medium text-ink">{h.responsibility}</p>
+                <p className="text-ink-soft">{h.fromStaffName} · {h.depotName} · {h.openExceptionCount} open exception(s)</p>
+                {h.notes && <p className="text-xs text-muted">{h.notes}</p>}
                 {canManageStaffDuty(permissions) && (
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <select value={handoverTo} onChange={(e) => setHandoverTo(e.target.value)} className="rounded border border-slate-200 px-2 py-1 text-xs">
+                    <select value={handoverTo} onChange={(e) => setHandoverTo(e.target.value)} className="rounded border border-border px-2 py-1 text-xs">
                       <option value="">Accepting staff…</option>
                       {staffList
                         .filter((s) => s.id !== h.fromStaffId && s.employmentStatus === 'active')
@@ -146,11 +146,11 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
 
       <SectionCard title="Open tasks" description="Operational work assigned to staff">
         {hub.openTasks.length === 0 ? (
-          <p className="text-sm text-slate-500">No open tasks.</p>
+          <p className="text-sm text-muted">No open tasks.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3 font-medium">Task</th>
                 <th className="pb-2 pr-3 font-medium">Owner</th>
                 <th className="pb-2 pr-3 font-medium">Category</th>
@@ -159,7 +159,7 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
             </thead>
             <tbody>
               {hub.openTasks.map((t) => (
-                <tr key={t.taskId} className="border-b border-slate-50">
+                <tr key={t.taskId} className="border-b border-border/60">
                   <td className="py-2 pr-3">
                     {t.relatedHref ? (
                       <Link to={t.relatedHref} className="text-command-600 hover:underline">{t.title}</Link>
@@ -173,7 +173,7 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
                   <td className="py-2 pr-3 capitalize">{t.category}</td>
                   <td className="py-2">
                     <StatusPill status={t.status} />
-                    {t.dueDate && <span className="ml-2 text-xs text-slate-500">{t.dueDate}</span>}
+                    {t.dueDate && <span className="ml-2 text-xs text-muted">{t.dueDate}</span>}
                   </td>
                 </tr>
               ))}
@@ -187,9 +187,9 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-2xl font-bold tabular-nums text-slate-900">{value}</p>
-      <p className="text-xs text-slate-600">{label}</p>
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <p className="text-2xl font-bold tabular-nums text-ink">{value}</p>
+      <p className="text-xs text-ink-soft">{label}</p>
     </div>
   )
 }

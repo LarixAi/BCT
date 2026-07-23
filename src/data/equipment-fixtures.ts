@@ -82,7 +82,7 @@ function defaultOverrides(): EquipSeedOverrides {
   };
 }
 
-function buildEquipmentFor(vehicleId: string, type: VehicleType, o: EquipSeedOverrides = {}): VehicleEquipment {
+export function buildEquipmentForVehicle(vehicleId: string, type: VehicleType, o: EquipSeedOverrides = {}): VehicleEquipment {
   const s = { ...defaultOverrides(), ...o };
   const shortId = vehicleId.replace(/[^a-z0-9]/gi, "").toUpperCase();
 
@@ -118,20 +118,20 @@ function buildEquipmentFor(vehicleId: string, type: VehicleType, o: EquipSeedOve
   }
 
   const assigned: AssignedItem[] = [
-    { id: `HV-${shortId}`, defId: "hi-vis", label: "Hi-vis vest", status: "present", assignedAt: iso(-3), assignedBy: "J. Miller" },
-    { id: `WT-${shortId}`, defId: "warning-triangle", label: "Warning triangle", status: "present", assignedAt: iso(-5), assignedBy: "J. Miller" },
-    { id: `TR-${shortId}`, defId: "torch", label: "Driver torch", status: "present", assignedAt: iso(-10), assignedBy: "J. Miller" },
-    { id: `AP-${shortId}`, defId: "accident-pack", label: "Accident pack", status: "present", assignedAt: iso(-30), assignedBy: "J. Miller" },
+    { id: `HV-${shortId}`, defId: "hi-vis", label: "Hi-vis vest", qrCode: `EQ-HV-${shortId}`, status: "present", assignedAt: iso(-3), assignedBy: "J. Miller" },
+    { id: `WT-${shortId}`, defId: "warning-triangle", label: "Warning triangle", qrCode: `EQ-WT-${shortId}`, status: "present", assignedAt: iso(-5), assignedBy: "J. Miller" },
+    { id: `TR-${shortId}`, defId: "torch", label: "Driver torch", qrCode: `EQ-TR-${shortId}`, status: "present", assignedAt: iso(-10), assignedBy: "J. Miller" },
+    { id: `AP-${shortId}`, defId: "accident-pack", label: "Accident pack", qrCode: `EQ-AP-${shortId}`, status: "present", assignedAt: iso(-30), assignedBy: "J. Miller" },
   ];
 
   if (type === "Coach") {
-    assigned.push({ id: `BD-${shortId}`, defId: "breakdown-pack", label: "Breakdown pack", status: "present", assignedAt: iso(-20), assignedBy: "J. Miller" });
+    assigned.push({ id: `BD-${shortId}`, defId: "breakdown-pack", label: "Breakdown pack", qrCode: `EQ-BD-${shortId}`, status: "present", assignedAt: iso(-20), assignedBy: "J. Miller" });
   }
 
   if (type === "WAV") {
     const clampsPresent = s.wavIncomplete ? 3 : 4;
     assigned.push({
-      id: `WCS-${shortId}`, defId: "wheelchair-set", label: "Wheelchair Restraint Set",
+      id: `WCS-${shortId}`, defId: "wheelchair-set", label: "Wheelchair Restraint Set", qrCode: `EQ-WCS-${shortId}`,
       status: s.wavIncomplete ? "incomplete" : "complete",
       assignedAt: iso(-7),
       assignedBy: "J. Miller",
@@ -175,8 +175,31 @@ const OVERRIDES: Record<string, EquipSeedOverrides> = {
 };
 
 export const initialVehicleEquipment: Record<string, VehicleEquipment> = Object.fromEntries(
-  vehicles.map(v => [v.id, buildEquipmentFor(v.id, v.type, OVERRIDES[v.id])])
+  vehicles.map(v => [v.id, buildEquipmentForVehicle(v.id, v.type, OVERRIDES[v.id])])
 );
+
+export function isValidVehicleEquipment(eq: VehicleEquipment | undefined): eq is VehicleEquipment {
+  return (
+    !!eq &&
+    Array.isArray(eq.fixed) &&
+    Array.isArray(eq.assigned) &&
+    Array.isArray(eq.consumables) &&
+    Array.isArray(eq.documents)
+  );
+}
+
+export function mergeEquipmentForVehicles(
+  vehicleList: { id: string; type: VehicleType }[],
+  equipment: Record<string, VehicleEquipment>,
+): Record<string, VehicleEquipment> {
+  const next = { ...equipment };
+  for (const v of vehicleList) {
+    if (!isValidVehicleEquipment(next[v.id])) {
+      next[v.id] = buildEquipmentForVehicle(v.id, v.type);
+    }
+  }
+  return next;
+}
 
 // ---------- Depot stock (for restock sheet) ----------
 

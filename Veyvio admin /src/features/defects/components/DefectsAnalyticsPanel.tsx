@@ -13,12 +13,12 @@ export function DefectsAnalyticsPanel({ analytics }: { analytics: DefectAnalytic
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">By depot</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">By depot</h3>
           <ul className="mt-2 space-y-1 text-sm">
             {analytics.byDepot.slice(0, 5).map((d) => (
               <li key={d.depotName} className="flex justify-between gap-2">
-                <span className="text-slate-700">{d.depotName}</span>
-                <span className="tabular-nums text-slate-900">
+                <span className="text-ink-soft">{d.depotName}</span>
+                <span className="tabular-nums text-ink">
                   {d.openCount}
                   {d.criticalCount > 0 && <span className="ml-1 text-red-700">({d.criticalCount} critical)</span>}
                 </span>
@@ -27,23 +27,23 @@ export function DefectsAnalyticsPanel({ analytics }: { analytics: DefectAnalytic
           </ul>
         </div>
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">By category</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">By category</h3>
           <ul className="mt-2 space-y-1 text-sm">
             {analytics.byCategory.map((c) => (
               <li key={c.category} className="flex justify-between gap-2 capitalize">
-                <span className="text-slate-700">{c.category}</span>
-                <span className="tabular-nums text-slate-900">{c.count}</span>
+                <span className="text-ink-soft">{c.category}</span>
+                <span className="tabular-nums text-ink">{c.count}</span>
               </li>
             ))}
           </ul>
         </div>
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">By source</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">By source</h3>
           <ul className="mt-2 space-y-1 text-sm">
             {analytics.bySource.map((s) => (
               <li key={s.source} className="flex justify-between gap-2 capitalize">
-                <span className="text-slate-700">{s.source}</span>
-                <span className="tabular-nums text-slate-900">{s.count}</span>
+                <span className="text-ink-soft">{s.source}</span>
+                <span className="tabular-nums text-ink">{s.count}</span>
               </li>
             ))}
           </ul>
@@ -55,11 +55,11 @@ export function DefectsAnalyticsPanel({ analytics }: { analytics: DefectAnalytic
 
 function Stat({ label, value, tone = 'neutral' }: { label: string; value: string | number; tone?: 'neutral' | 'danger' | 'warning' }) {
   const toneClass =
-    tone === 'danger' ? 'text-red-800' : tone === 'warning' ? 'text-amber-800' : 'text-slate-900'
+    tone === 'danger' ? 'text-red-800' : tone === 'warning' ? 'text-amber-800' : 'text-ink'
   return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+    <div className="rounded-lg border border-border bg-surface-muted/50 p-3">
       <p className={`text-xl font-bold tabular-nums ${toneClass}`}>{value}</p>
-      <p className="text-xs text-slate-600">{label}</p>
+      <p className="text-xs text-ink-soft">{label}</p>
     </div>
   )
 }

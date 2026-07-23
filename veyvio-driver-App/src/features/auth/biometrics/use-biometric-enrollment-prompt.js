@@ -77,14 +77,26 @@ export function useBiometricEnrollmentPrompt({ driverId, ready, delayMs = 3500 }
     if (!driverId || busy) return;
     setBusy(true);
     setError("");
-    const result = await enableBiometricSignIn(driverId);
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.message);
-      return;
+    try {
+      const result = await enableBiometricSignIn(driverId);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setSuccessLabel(result.label);
+      setOpen(true);
+      // Keep the success state visible briefly so drivers know the next sign-in
+      // screen will show “Sign in with Fingerprint”.
+      window.setTimeout(() => {
+        setOpen(false);
+        setSuccessLabel("");
+      }, 1800);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not set up fingerprint. Try again.";
+      setError(message);
+    } finally {
+      setBusy(false);
     }
-    setSuccessLabel(result.label);
-    setOpen(false);
   }, [busy, driverId]);
 
   const onRemindNextWeek = useCallback(() => {

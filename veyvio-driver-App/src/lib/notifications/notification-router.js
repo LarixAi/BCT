@@ -28,7 +28,7 @@ export function routeFromNotificationData(data, navigate) {
     case "driver_message_received":
     case "admin_message_received":
       if (threadId) navigate(`/threads/${threadId}`);
-      else navigate("/threads");
+      else navigate("/messages");
       break;
     case "VehicleCheck":
     case "vehicle_check_missing":

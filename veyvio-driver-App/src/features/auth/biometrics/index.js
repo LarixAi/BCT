@@ -13,6 +13,7 @@ export {
 export {
   defaultBiometricPreference,
   getBiometricPreference,
+  findEnabledBiometricEnrollment,
   saveBiometricPreference,
   clearBiometricPreference,
   PROMPT_DONT_ASK,
@@ -35,6 +36,7 @@ export {
   declineBiometricEnrollmentPermanently,
   disableBiometricSignIn,
   invalidateBiometricAccess,
+  reconcileBiometricEnrollment,
   removeTrustedDeviceLocally,
   unlockStoredRefreshToken,
 } from "./biometric-enrollment.js";
@@ -42,9 +44,11 @@ export {
 export {
   rememberLastBiometricDriverId,
   getLastBiometricDriverId,
+  clearLastBiometricDriverId,
   shouldRequireBiometricLock,
   unlockBiometricAppLock,
   resetBiometricLockOnSignOut,
+  shouldRebindBiometricCredential,
 } from "./biometric-session.js";
 
 export {
@@ -54,6 +58,7 @@ export {
 } from "./biometric-lock-state.js";
 
 export { signInDriverWithBiometrics } from "./biometric-login.js";
+export { default as BiometricLoginButton, resolveBiometricLoginOffer } from "./BiometricLoginButton.jsx";
 
 export {
   getOrCreateDeviceKey,

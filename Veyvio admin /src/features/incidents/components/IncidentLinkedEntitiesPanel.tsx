@@ -58,12 +58,12 @@ export function IncidentLinkedEntitiesPanel({ incident }: { incident: IncidentDe
       </dl>
 
       {canEdit && (
-        <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-          <p className="text-sm font-medium text-slate-900">Update links</p>
+        <div className="mt-4 space-y-3 border-t border-border pt-4">
+          <p className="text-sm font-medium text-ink">Update links</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="text-slate-600">School</span>
-              <select value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+              <span className="text-ink-soft">School</span>
+              <select value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
                 <option value="">None</option>
                 {schools.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
@@ -71,8 +71,8 @@ export function IncidentLinkedEntitiesPanel({ incident }: { incident: IncidentDe
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Contract</span>
-              <select value={contractId} onChange={(e) => setContractId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+              <span className="text-ink-soft">Contract</span>
+              <select value={contractId} onChange={(e) => setContractId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
                 <option value="">None</option>
                 {contracts.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -80,12 +80,12 @@ export function IncidentLinkedEntitiesPanel({ incident }: { incident: IncidentDe
               </select>
             </label>
             <label className="block text-sm sm:col-span-2">
-              <span className="text-slate-600">Passengers</span>
+              <span className="text-ink-soft">Passengers</span>
               <select
                 multiple
                 value={passengerIds}
                 onChange={(e) => setPassengerIds(Array.from(e.target.selectedOptions, (o) => o.value))}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               >
                 {passengers.map((p) => (
                   <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
@@ -93,8 +93,8 @@ export function IncidentLinkedEntitiesPanel({ incident }: { incident: IncidentDe
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Manifest ID</span>
-              <input value={manifestId} onChange={(e) => setManifestId(e.target.value)} placeholder="e.g. mf-114" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+              <span className="text-ink-soft">Manifest ID</span>
+              <input value={manifestId} onChange={(e) => setManifestId(e.target.value)} placeholder="e.g. mf-114" className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
             </label>
             <label className="flex items-end gap-2 text-sm">
               <input type="checkbox" checked={freezeManifest} onChange={(e) => setFreezeManifest(e.target.checked)} />
@@ -119,8 +119,8 @@ export function IncidentLinkedEntitiesPanel({ incident }: { incident: IncidentDe
 function Row({ label, value, className = '' }: { label: string; value: string; className?: string }) {
   return (
     <div className={className}>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

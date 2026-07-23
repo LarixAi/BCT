@@ -257,7 +257,7 @@ export function ExceptionsPage() {
   }
 
   if (isLoading && withOverlays.length === 0) {
-    return <p className="text-sm text-slate-500">Loading exceptions…</p>
+    return <p className="text-sm text-muted">Loading exceptions…</p>
   }
 
   return (
@@ -286,7 +286,7 @@ export function ExceptionsPage() {
       />
 
       {toast && (
-        <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+        <p className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-soft">
           {toast}
           <button type="button" className="ml-3 text-xs font-medium text-command-700" onClick={() => setToast(null)}>
             Dismiss
@@ -355,18 +355,18 @@ export function ExceptionsPage() {
       </div>
 
       {createOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-900">Raise exception</h2>
-            <p className="mt-1 text-sm text-slate-600">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-midnight/40 p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-4 shadow-xl">
+            <h2 className="text-lg font-semibold text-ink">Raise exception</h2>
+            <p className="mt-1 text-sm text-ink-soft">
               Creates a local inbox item until the exceptions API accepts writes.
             </p>
-            <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted">
               Title
               <input
                 value={createTitle}
                 onChange={(e) => setCreateTitle(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal normal-case text-slate-900"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm font-normal normal-case text-ink"
                 placeholder="What needs intervention?"
               />
             </label>
@@ -374,7 +374,7 @@ export function ExceptionsPage() {
               <button
                 type="button"
                 onClick={() => setCreateOpen(false)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted"
               >
                 Cancel
               </button>

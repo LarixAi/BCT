@@ -55,8 +55,8 @@ export function DriversPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Drivers</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Drivers</h1>
+          <p className="text-sm text-ink-soft">
             Can this driver safely and compliantly complete their assigned work right now?
           </p>
         </div>
@@ -80,11 +80,11 @@ export function DriversPage() {
               className={`rounded-xl border p-4 text-left transition ${
                 filter === (card.filterKey ?? 'all')
                   ? 'border-command-500 bg-command-50 ring-1 ring-command-500'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
+                  : 'border-border bg-surface hover:border-border-strong'
               }`}
             >
-              <p className="text-2xl font-bold tabular-nums text-slate-900">{summary[card.id]}</p>
-              <p className="text-sm text-slate-600">{card.label}</p>
+              <p className="text-2xl font-bold tabular-nums text-ink">{summary[card.id]}</p>
+              <p className="text-sm text-ink-soft">{card.label}</p>
             </button>
           ))}
         </div>
@@ -96,13 +96,13 @@ export function DriversPage() {
           placeholder="Search name, reference, email, phone, depot…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="min-w-[240px] flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          className="min-w-[240px] flex-1 rounded-lg border border-border px-3 py-1.5 text-sm"
         />
         {filter !== 'all' && (
           <button
             type="button"
             onClick={() => setFilter('all')}
-            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
+            className="rounded-full bg-surface-muted px-3 py-1 text-xs font-medium text-ink-soft"
           >
             Clear filter
           </button>
@@ -111,12 +111,12 @@ export function DriversPage() {
 
       <SectionCard title="Driver directory" description={`${filtered.length} drivers`}>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                   <th className="pb-2 pr-4 font-medium">Driver</th>
                   <th className="pb-2 pr-4 font-medium">Depot</th>
                   <th className="pb-2 pr-4 font-medium">Employment</th>
@@ -148,21 +148,21 @@ function DriverRow({ driver }: { driver: DriverProfile }) {
   const expiry = expiryTone(driver.nearestExpiryDate)
 
   return (
-    <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+    <tr className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
       <td className="py-2.5 pr-4">
         <Link to={`/drivers/${driver.id}`} className="font-medium text-command-600 hover:underline">
           {driver.firstName} {driver.lastName}
         </Link>
-        <p className="text-xs text-slate-500">{driver.reference}</p>
+        <p className="text-xs text-muted">{driver.reference}</p>
       </td>
-      <td className="py-2.5 pr-4 text-slate-600">
+      <td className="py-2.5 pr-4 text-ink-soft">
         {driver.depotName ?? '—'}
         {driver.secondaryDepotNames.length > 0 && (
-          <p className="text-xs text-slate-400">+ {driver.secondaryDepotNames.join(', ')}</p>
+          <p className="text-xs text-muted">+ {driver.secondaryDepotNames.join(', ')}</p>
         )}
       </td>
-      <td className="py-2.5 pr-4 text-slate-600">{EMPLOYMENT_TYPE_LABELS[driver.employmentType]}</td>
-      <td className="py-2.5 pr-4 text-xs text-slate-600">
+      <td className="py-2.5 pr-4 text-ink-soft">{EMPLOYMENT_TYPE_LABELS[driver.employmentType]}</td>
+      <td className="py-2.5 pr-4 text-xs text-ink-soft">
         {workLabels.slice(0, 3).join(', ')}
         {workLabels.length > 3 ? ` +${workLabels.length - 3}` : ''}
       </td>
@@ -175,11 +175,11 @@ function DriverRow({ driver }: { driver: DriverProfile }) {
       <td className="py-2.5 pr-4">
         <StatusPill status={driver.dutyStatus} />
       </td>
-      <td className="py-2.5 pr-4 text-slate-600">
+      <td className="py-2.5 pr-4 text-ink-soft">
         {driver.nextDutyReference ? (
           <>
             {driver.nextDutyReference}
-            {driver.nextDutyTime && <span className="text-slate-400"> · {driver.nextDutyTime}</span>}
+            {driver.nextDutyTime && <span className="text-muted"> · {driver.nextDutyTime}</span>}
           </>
         ) : (
           '—'
@@ -188,7 +188,7 @@ function DriverRow({ driver }: { driver: DriverProfile }) {
       <td className="py-2.5 pr-4">
         <StatusPill status={driver.account.accountStatus} />
       </td>
-      <td className="py-2.5 pr-4 text-slate-600">
+      <td className="py-2.5 pr-4 text-ink-soft">
         {driver.account.lastAppSyncAt
           ? new Date(driver.account.lastAppSyncAt).toLocaleString('en-GB', {
               day: 'numeric',
@@ -206,7 +206,7 @@ function DriverRow({ driver }: { driver: DriverProfile }) {
                 ? 'text-red-700'
                 : expiry === 'warning'
                   ? 'text-amber-700'
-                  : 'text-slate-600'
+                  : 'text-ink-soft'
             }
           >
             {driver.nearestExpiryLabel}: {formatDate(driver.nearestExpiryDate)}

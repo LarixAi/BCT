@@ -174,7 +174,7 @@ export function CreateBookingPage() {
   }
 
   if (!draft || initializing) {
-    return <p className="p-6 text-sm text-slate-500">Preparing booking…</p>
+    return <p className="p-6 text-sm text-muted">Preparing booking…</p>
   }
 
   const step = draft.currentStep
@@ -187,8 +187,8 @@ export function CreateBookingPage() {
           <Link to="/bookings" className="text-sm font-medium text-command-600 hover:underline">
             ← Back to bookings
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">Create booking</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="mt-1 text-2xl font-semibold text-ink">Create booking</h1>
+          <p className="text-sm text-ink-soft">
             Booking → Trips → Stops — dispatch decides how to deliver it
           </p>
         </div>
@@ -196,7 +196,7 @@ export function CreateBookingPage() {
           type="button"
           onClick={() => saveDraft.mutate(draft)}
           disabled={saveDraft.isPending}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted"
         >
           Save draft
         </button>
@@ -221,7 +221,7 @@ export function CreateBookingPage() {
 
           <div className="mt-6 flex flex-wrap gap-2">
             {step > 1 && (
-              <button type="button" onClick={handleBack} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium">
+              <button type="button" onClick={handleBack} className="rounded-lg border border-border px-4 py-2 text-sm font-medium">
                 Back
               </button>
             )}
@@ -240,7 +240,7 @@ export function CreateBookingPage() {
                   type="button"
                   onClick={() => confirm.mutate({ asQuotation: true })}
                   disabled={confirm.isPending}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
                 >
                   Create quote
                 </button>
@@ -257,7 +257,7 @@ export function CreateBookingPage() {
                     type="button"
                     onClick={() => confirmWithReturn.mutate()}
                     disabled={confirmWithReturn.isPending || !canConfirm}
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium disabled:opacity-50"
+                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium disabled:opacity-50"
                   >
                     Confirm & create return
                   </button>
@@ -280,8 +280,8 @@ function BookingTypeSelect({ onSelect }: { onSelect: (type: BookingType) => void
         <Link to="/bookings" className="text-sm font-medium text-command-600 hover:underline">
           ← Back to bookings
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-900">Create booking</h1>
-        <p className="text-sm text-slate-600">What type of transport are you booking?</p>
+        <h1 className="mt-1 text-2xl font-semibold text-ink">Create booking</h1>
+        <p className="text-sm text-ink-soft">What type of transport are you booking?</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {BOOKING_TYPE_OPTIONS.map((opt) => (
@@ -289,10 +289,10 @@ function BookingTypeSelect({ onSelect }: { onSelect: (type: BookingType) => void
             key={opt.id}
             type="button"
             onClick={() => onSelect(opt.id)}
-            className="rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-command-400 hover:shadow-sm"
+            className="rounded-xl border border-border bg-surface p-4 text-left transition hover:border-command-400 hover:shadow-sm"
           >
-            <p className="font-semibold text-slate-900">{opt.label}</p>
-            <p className="mt-1 text-sm text-slate-600">{opt.description}</p>
+            <p className="font-semibold text-ink">{opt.label}</p>
+            <p className="mt-1 text-sm text-ink-soft">{opt.description}</p>
           </button>
         ))}
       </div>

@@ -70,8 +70,8 @@ export function ReviewStep({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-0.5 font-medium text-slate-900">{value}</dd>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</dt>
+      <dd className="mt-0.5 font-medium text-ink">{value}</dd>
     </div>
   )
 }

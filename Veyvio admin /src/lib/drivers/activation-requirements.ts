@@ -384,9 +384,11 @@ export function buildActivationResolution(driver: DriverProfile): ActivationReso
     if (catalog.category === 'role' && req.status === 'missing' && !catalog.permissions.length) {
       // skip unused
     }
-    // Only include mandatory catalogue items, or role items that apply (present in training list)
+    // Skip optional development; include vehicle/role only when permissions apply
+    if (catalog.category === 'development') continue
     if (
-      catalog.category === 'role' &&
+      (catalog.category === 'role' || catalog.category === 'vehicle') &&
+      catalog.permissions.length > 0 &&
       !driver.workPermissions.some((p) => p.enabled && catalog.permissions.includes(p.key))
     ) {
       continue
@@ -396,15 +398,19 @@ export function buildActivationResolution(driver: DriverProfile): ActivationReso
     const isQual = QUALIFICATION_KEYS.has(req.key) || Boolean(catalog.documentTypes?.length)
     const type: RequirementType = isQual ? 'qualification' : 'internal_training'
     let status = trainingStatus(req, meta)
+    const blocksAll =
+      catalog.category === 'mandatory' ||
+      isMandatoryTrainingKey(req.key) ||
+      catalog.eligibilityEffect === 'block_all_work'
     requirements.push({
       id: `${driver.id}:${req.key}`,
       driverId: driver.id,
       definitionKey: req.key,
       name: catalog.label,
       type,
-      mandatory: catalog.category === 'mandatory' || isMandatoryTrainingKey(req.key),
+      mandatory: blocksAll,
       blocksActivation:
-        (catalog.category === 'mandatory' || isMandatoryTrainingKey(req.key)) &&
+        blocksAll &&
         !['approved', 'completed', 'waived', 'not_applicable', 'expiring_soon'].includes(status),
       status,
       responsibleLabel: responsibleFor(type, status),

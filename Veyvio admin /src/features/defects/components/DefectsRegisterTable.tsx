@@ -33,7 +33,7 @@ export function DefectsRegisterTable({
   onToggleAll?: (ids: string[]) => void
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-slate-500">No defects match this view.</p>
+    return <p className="text-sm text-muted">No defects match this view.</p>
   }
 
   const allSelected = selectable && rows.length > 0 && rows.every((r) => selected.includes(r.id))
@@ -43,7 +43,7 @@ export function DefectsRegisterTable({
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[1200px] text-left text-sm" data-testid="defects-register-table">
           <thead>
-            <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+            <tr className="border-b border-border text-xs uppercase text-muted">
               {selectable && (
                 <th className="pb-2 pr-2 font-medium">
                   <input
@@ -72,7 +72,7 @@ export function DefectsRegisterTable({
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50">
+              <tr key={row.id} className="border-b border-border/60 hover:bg-surface-muted">
                 {selectable && (
                   <td className="py-2.5 pr-2">
                     <input
@@ -91,7 +91,7 @@ export function DefectsRegisterTable({
                   <Link to={`/defects/${row.id}`} className="font-medium text-command-600 hover:underline">
                     {row.registrationNumber}
                   </Link>
-                  {row.fleetNumber && <span className="block text-xs text-slate-500">{row.fleetNumber}</span>}
+                  {row.fleetNumber && <span className="block text-xs text-muted">{row.fleetNumber}</span>}
                 </td>
                 <td className="py-2.5 pr-3 max-w-[200px]">
                   <p className="truncate font-medium">{row.title}</p>
@@ -101,20 +101,20 @@ export function DefectsRegisterTable({
                 <td className="py-2.5 pr-3">
                   <AvailabilityBadge availability={row.vehicleAvailability} />
                 </td>
-                <td className="py-2.5 pr-3 capitalize text-slate-600">{row.source}</td>
-                <td className="py-2.5 pr-3 text-xs text-slate-600">{formatDateTime(row.reportedAt)}</td>
-                <td className="py-2.5 pr-3 text-slate-600">{row.location ?? row.depotName}</td>
-                <td className="py-2.5 pr-3 text-slate-600">{row.assignee ?? '—'}</td>
+                <td className="py-2.5 pr-3 capitalize text-ink-soft">{row.source}</td>
+                <td className="py-2.5 pr-3 text-xs text-ink-soft">{formatDateTime(row.reportedAt)}</td>
+                <td className="py-2.5 pr-3 text-ink-soft">{row.location ?? row.depotName}</td>
+                <td className="py-2.5 pr-3 text-ink-soft">{row.assignee ?? '—'}</td>
                 <td className="py-2.5 pr-3">
-                  <span className="text-xs text-slate-700">{WORKFLOW_STATUS_LABELS[row.workflowStatus] ?? row.workflowStatus}</span>
+                  <span className="text-xs text-ink-soft">{WORKFLOW_STATUS_LABELS[row.workflowStatus] ?? row.workflowStatus}</span>
                   {row.isOverdue && <span className="ml-1 text-xs text-red-700">Overdue</span>}
                 </td>
                 <td className="py-2.5 pr-3 text-xs">
-                  <span className={row.isSlaBreached ? 'font-medium text-red-700' : 'text-slate-600'}>
+                  <span className={row.isSlaBreached ? 'font-medium text-red-700' : 'text-ink-soft'}>
                     {formatSlaRemaining(row.slaMinutesRemaining)}
                   </span>
                 </td>
-                <td className="py-2.5 pr-3 text-xs text-slate-500">{formatAge(row.ageMinutes)}</td>
+                <td className="py-2.5 pr-3 text-xs text-muted">{formatAge(row.ageMinutes)}</td>
                 <td className="py-2.5">
                   <Link to={`/defects/${row.id}`} className="text-xs font-medium text-command-600 hover:underline">
                     Review
@@ -131,21 +131,21 @@ export function DefectsRegisterTable({
           <Link
             key={row.id}
             to={`/defects/${row.id}`}
-            className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300"
+            className="block rounded-xl border border-border bg-surface p-4 hover:border-border-strong"
           >
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-mono text-xs text-slate-500">{row.defectRef}</p>
-                <p className="font-semibold text-slate-900">{row.registrationNumber}</p>
+                <p className="font-mono text-xs text-muted">{row.defectRef}</p>
+                <p className="font-semibold text-ink">{row.registrationNumber}</p>
               </div>
               <SeverityBadge severity={row.severity} />
             </div>
-            <p className="mt-2 text-sm text-slate-800">{row.title}</p>
+            <p className="mt-2 text-sm text-ink">{row.title}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <AvailabilityBadge availability={row.vehicleAvailability} />
               <StatusPill status={row.workflowStatus} />
             </div>
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-muted">
               {row.location ?? row.depotName} · {formatAge(row.ageMinutes)} open
             </p>
           </Link>
@@ -161,10 +161,10 @@ function SeverityBadge({ severity }: { severity: string }) {
     dangerous: 'bg-red-100 text-red-800',
     major: 'bg-orange-100 text-orange-900',
     minor: 'bg-amber-100 text-amber-900',
-    advisory: 'bg-slate-100 text-slate-700',
+    advisory: 'bg-surface-muted text-ink-soft',
   }
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${styles[severity] ?? 'bg-slate-100 text-slate-700'}`}>
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${styles[severity] ?? 'bg-surface-muted text-ink-soft'}`}>
       {label}
     </span>
   )
@@ -179,7 +179,7 @@ function AvailabilityBadge({ availability }: { availability: string }) {
     available: 'bg-emerald-100 text-emerald-800',
   }
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${styles[availability] ?? 'bg-slate-100 text-slate-700'}`}>
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${styles[availability] ?? 'bg-surface-muted text-ink-soft'}`}>
       {label}
     </span>
   )

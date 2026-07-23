@@ -52,20 +52,20 @@ export function VehicleChecksTab({
 
       <SectionCard title="Check history" description={`${vehicle.checks.length} records`}>
         {vehicle.checks.length === 0 ? (
-          <p className="text-sm text-slate-500">No checks recorded yet.</p>
+          <p className="text-sm text-muted">No checks recorded yet.</p>
         ) : (
           <ul className="space-y-2">
             {vehicle.checks.map((c) => (
-              <li key={c.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <li key={c.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium">{CHECK_TYPE_LABELS[c.checkType] ?? c.checkType}</p>
                   <StatusPill status={c.result === 'pass' ? 'compliant' : c.result === 'fail' ? 'non_compliant' : 'warning'} />
                 </div>
-                <p className="text-slate-600">
+                <p className="text-ink-soft">
                   {new Date(c.checkDate).toLocaleString('en-GB')} · {c.performedBy} · {c.sourceApplication}
                 </p>
-                {c.mileage != null && <p className="text-xs text-slate-400">Mileage: {c.mileage.toLocaleString()} mi</p>}
-                {c.notes && <p className="text-xs text-slate-500">{c.notes}</p>}
+                {c.mileage != null && <p className="text-xs text-muted">Mileage: {c.mileage.toLocaleString()} mi</p>}
+                {c.notes && <p className="text-xs text-muted">{c.notes}</p>}
               </li>
             ))}
           </ul>
@@ -75,9 +75,9 @@ export function VehicleChecksTab({
       <SectionCard title="Check templates" description="Areas inspected by check type">
         <div className="grid gap-3 sm:grid-cols-2">
           {(Object.keys(CHECK_TEMPLATE_AREAS) as VehicleCheckType[]).map((type) => (
-            <div key={type} className="rounded-lg border border-slate-100 p-3 text-sm">
-              <p className="font-medium text-slate-900">{CHECK_TYPE_LABELS[type]}</p>
-              <p className="mt-1 text-xs text-slate-600">{CHECK_TEMPLATE_AREAS[type].join(' · ')}</p>
+            <div key={type} className="rounded-lg border border-border p-3 text-sm">
+              <p className="font-medium text-ink">{CHECK_TYPE_LABELS[type]}</p>
+              <p className="mt-1 text-xs text-ink-soft">{CHECK_TEMPLATE_AREAS[type].join(' · ')}</p>
             </div>
           ))}
         </div>

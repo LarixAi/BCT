@@ -87,7 +87,7 @@ export function AttendancePage() {
   const selected = rows.find((r) => r.id === selectedId) ?? data?.board.find((r) => r.id === selectedId) ?? null
 
   if (isLoading || !data) {
-    return <p className="text-sm text-slate-500">Loading attendance…</p>
+    return <p className="text-sm text-muted">Loading attendance…</p>
   }
 
   const s = data.summary
@@ -105,7 +105,7 @@ export function AttendancePage() {
         >
           ← Back to attendance board
         </button>
-        <h1 className="text-2xl font-semibold text-slate-900">{scorePerson.name}</h1>
+        <h1 className="text-2xl font-semibold text-ink">{scorePerson.name}</h1>
         <PersonAttendancePanel personId={scorePerson.id} personName={scorePerson.name} />
       </div>
     )
@@ -115,8 +115,8 @@ export function AttendancePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Attendance & availability</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Attendance & availability</h1>
+          <p className="text-sm text-ink-soft">
             Who is working, who is late, who has not arrived, and who is on approved leave — linked to
             Schedule, Trips and Time Off.
           </p>
@@ -124,7 +124,7 @@ export function AttendancePage() {
         <div className="flex flex-wrap gap-2">
           <Link
             to="/time-off"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
           >
             Time off requests
           </Link>
@@ -138,7 +138,7 @@ export function AttendancePage() {
       </div>
 
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
           Attendance —{' '}
           {new Date(s.operationalDate + 'T12:00:00').toLocaleDateString('en-GB', {
             weekday: 'long',
@@ -204,7 +204,7 @@ export function AttendancePage() {
                     'rounded-full px-2.5 py-1 text-xs font-medium',
                     filter === f.id
                       ? 'bg-command-600 text-white'
-                      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                      : 'border border-border bg-surface text-ink-soft hover:bg-surface-muted',
                   )}
                 >
                   {f.label}
@@ -215,7 +215,7 @@ export function AttendancePage() {
         >
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <thead className="border-b border-border text-xs uppercase text-muted">
                 <tr>
                   <th className="pb-2 pr-3 font-medium">Person</th>
                   <th className="pb-2 pr-3 font-medium">Role</th>
@@ -233,7 +233,7 @@ export function AttendancePage() {
                   <tr
                     key={r.id}
                     className={cn(
-                      'border-b border-slate-50 cursor-pointer hover:bg-slate-50/80',
+                      'border-b border-border/60 cursor-pointer hover:bg-surface-muted/80',
                       selectedId === r.id && 'bg-command-50/50',
                     )}
                     onClick={() => setSelectedId(r.id)}
@@ -247,8 +247,8 @@ export function AttendancePage() {
                         {r.personName}
                       </Link>
                     </td>
-                    <td className="py-2.5 pr-3 text-slate-600">{r.roleLabel}</td>
-                    <td className="py-2.5 pr-3 text-slate-600">{r.depotName}</td>
+                    <td className="py-2.5 pr-3 text-ink-soft">{r.roleLabel}</td>
+                    <td className="py-2.5 pr-3 text-ink-soft">{r.depotName}</td>
                     <td className="py-2.5 pr-3 tabular-nums">{r.scheduledStart ?? '—'}</td>
                     <td className="py-2.5 pr-3 tabular-nums">
                       {r.clockedInAt
@@ -261,11 +261,11 @@ export function AttendancePage() {
                     <td className="py-2.5 pr-3">
                       <StatusBadge status={r.status} />
                     </td>
-                    <td className="py-2.5 pr-3 text-slate-600">{r.differenceLabel ?? '—'}</td>
+                    <td className="py-2.5 pr-3 text-ink-soft">{r.differenceLabel ?? '—'}</td>
                     <td className="py-2.5 pr-3">
                       {r.currentDutyLabel ?? '—'}
                       {r.vehicleRegistration ? (
-                        <span className="block text-xs text-slate-400">{r.vehicleRegistration}</span>
+                        <span className="block text-xs text-muted">{r.vehicleRegistration}</span>
                       ) : null}
                     </td>
                     <td className="py-2.5 tabular-nums">
@@ -278,7 +278,7 @@ export function AttendancePage() {
                         }}
                       >
                         <span className="font-semibold">{r.attendanceScore}</span>
-                        <span className="block text-xs text-slate-500">
+                        <span className="block text-xs text-muted">
                           {SCORE_BAND_LABEL[r.scoreBand]}
                         </span>
                       </button>
@@ -295,7 +295,7 @@ export function AttendancePage() {
           description={selected ? 'Reason, classification and history' : 'Select a row'}
         >
           {!selected ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted">
               Select someone to classify lateness/absence, review evidence and open their attendance
               profile.
             </p>
@@ -306,7 +306,7 @@ export function AttendancePage() {
                 {selected.differenceLabel ?? ATTENDANCE_STATUS_LABEL[selected.status]}
                 {selected.currentDutyLabel ? ` · ${selected.currentDutyLabel}` : ''}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 Reported:{' '}
                 {selected.reportedReason
                   ? ABSENCE_REASON_LABEL[selected.reportedReason]
@@ -318,14 +318,14 @@ export function AttendancePage() {
                   : 'Not reviewed'}
               </p>
 
-              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Manager classification
                 </p>
                 <select
                   value={classifyAs}
                   onChange={(e) => setClassifyAs(e.target.value as ManagerClassification)}
-                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                  className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
                 >
                   {CLASSIFICATIONS.map((c) => (
                     <option key={c} value={c}>
@@ -337,7 +337,7 @@ export function AttendancePage() {
                   value={classifyNote}
                   onChange={(e) => setClassifyNote(e.target.value)}
                   placeholder="Note (optional) — e.g. wrong depot assigned"
-                  className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                  className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
                 />
                 <button
                   type="button"
@@ -354,7 +354,7 @@ export function AttendancePage() {
                 >
                   Save classification
                 </button>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-muted">
                   Operational issues and recording errors must not be treated like unauthorised
                   absence. No automatic disciplinary action.
                 </p>
@@ -365,13 +365,13 @@ export function AttendancePage() {
                 onClick={() =>
                   setScorePerson({ id: selected.personId, name: selected.personName })
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium hover:bg-slate-50"
+                className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-surface-muted"
               >
                 Open attendance history & score detail
               </button>
               <Link
                 to="/schedule"
-                className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-center text-xs font-medium hover:bg-slate-50"
+                className="block w-full rounded-lg border border-border px-3 py-2 text-center text-xs font-medium hover:bg-surface-muted"
               >
                 View on schedule
               </Link>
@@ -398,12 +398,12 @@ export function AttendancePage() {
           <TrendStat label="Score movements" value={t.scoreChangesNote} />
         </div>
         <div className="mt-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
             Punctuality by depot
           </p>
           <ul className="mt-2 space-y-1 text-sm">
             {t.punctualityByDepot.map((d) => (
-              <li key={d.depot} className="flex justify-between rounded-lg border border-slate-100 px-3 py-2">
+              <li key={d.depot} className="flex justify-between rounded-lg border border-border px-3 py-2">
                 <span>{d.depot}</span>
                 <span className="font-semibold tabular-nums">{d.percent}%</span>
               </li>
@@ -416,7 +416,7 @@ export function AttendancePage() {
       </SectionCard>
 
       <SectionCard title="How attendance is recorded" description="Multiple evidence sources — GPS never alone">
-        <ul className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-2 text-sm text-ink-soft sm:grid-cols-2 lg:grid-cols-3">
           {[
             'Driver App clock-in',
             'Yard arrival confirmation',
@@ -427,12 +427,12 @@ export function AttendancePage() {
             'Admin manual adjustment',
             'Depot geofence (supporting only)',
           ].map((item) => (
-            <li key={item} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+            <li key={item} className="rounded-lg border border-border bg-surface-muted px-3 py-2">
               {item}
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-xs text-slate-500">
+        <p className="mt-3 text-xs text-muted">
           Grace {data.graceMinutes} min · Late from {data.lateMarkMinutes} min · Driver reminder{' '}
           {data.driverReminderMinutes} min · Dispatcher {data.dispatcherWarningMinutes} min · Ops
           escalation {data.operationsEscalationMinutes} min (school routes may escalate sooner).
@@ -506,7 +506,7 @@ function SummaryCard({
       onClick={onClick}
       className={cn(
         'rounded-xl border px-3 py-2 text-left transition',
-        active ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200 bg-white hover:border-slate-300',
+        active ? 'border-command-500 ring-1 ring-command-500' : 'border-border bg-surface hover:border-border-strong',
         tone === 'attention' && 'bg-amber-50/50',
         tone === 'critical' && 'bg-red-50/50',
         tone === 'ready' && 'bg-emerald-50/40',
@@ -514,17 +514,17 @@ function SummaryCard({
         tone === 'sick' && 'bg-violet-50/40',
       )}
     >
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-0.5 text-xl font-semibold tabular-nums text-slate-900">{value}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-0.5 text-xl font-semibold tabular-nums text-ink">{value}</p>
     </button>
   )
 }
 
 function TrendStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 px-3 py-2">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-0.5 font-semibold text-slate-900">{value}</p>
+    <div className="rounded-xl border border-border px-3 py-2">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-0.5 font-semibold text-ink">{value}</p>
     </div>
   )
 }

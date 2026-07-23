@@ -145,31 +145,31 @@ export function DriverEligibilityTab({
             )}
             documentsPendingReview={docsPending}
           />
-          <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
+          <div className="rounded-xl border border-border bg-surface p-4 text-sm">
             <dl className="space-y-3">
               <div>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Driver app (go online)
                 </dt>
-                <dd className="mt-1 font-medium text-slate-900">
+                <dd className="mt-1 font-medium text-ink">
                   {appOnline
                     ? 'Unlocked — driver can use the live ops shell'
                     : 'Locked — still in onboarding / pending activation'}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Dispatch / take work
                 </dt>
-                <dd className="mt-1 font-medium text-slate-900">
+                <dd className="mt-1 font-medium text-ink">
                   {dispatchReady ? 'Ready for assignment' : 'Blocked until requirements clear'}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Operational status
                 </dt>
-                <dd className="mt-1 font-medium capitalize text-slate-900">
+                <dd className="mt-1 font-medium capitalize text-ink">
                   {driver.operationalStatus.replace(/_/g, ' ')}
                 </dd>
               </div>
@@ -177,7 +177,7 @@ export function DriverEligibilityTab({
 
             {blockingReasons.length > 0 ? (
               <div className="mt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Why it is blocked
                 </p>
                 <ul className="mt-2 space-y-1.5">
@@ -203,13 +203,13 @@ export function DriverEligibilityTab({
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
                 to={`/drivers/${driver.id}?tab=Compliance`}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted"
               >
                 Open Compliance
               </Link>
               <Link
                 to={`/drivers/${driver.id}?tab=Training`}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted"
               >
                 Open Training
               </Link>
@@ -255,8 +255,8 @@ export function DriverEligibilityTab({
               .map((o) => (
                 <li key={o.id} className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
                   <p className="font-medium">{o.label}</p>
-                  <p className="text-slate-700">{o.reason}</p>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="text-ink-soft">{o.reason}</p>
+                  <p className="mt-1 text-xs text-muted">
                     Expires {formatDate(o.expiresAt.slice(0, 10))} · Approved by {o.approvedBy}
                   </p>
                 </li>
@@ -280,13 +280,13 @@ export function DriverEligibilityTab({
         }
       >
         {showRestriction && (
-          <div className="mb-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="mb-4 space-y-3 rounded-lg border border-border bg-surface-muted p-3">
             <label className="block text-sm">
-              <span className="text-slate-600">Restriction type</span>
+              <span className="text-ink-soft">Restriction type</span>
               <select
                 value={restrictionType}
                 onChange={(e) => setRestrictionType(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               >
                 {RESTRICTION_TYPE_OPTIONS.map((o) => (
                   <option key={o.type} value={o.type}>
@@ -296,12 +296,12 @@ export function DriverEligibilityTab({
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Reason</span>
+              <span className="text-ink-soft">Reason</span>
               <textarea
                 value={restrictionReason}
                 onChange={(e) => setRestrictionReason(e.target.value)}
                 rows={2}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               />
             </label>
             <button
@@ -316,7 +316,7 @@ export function DriverEligibilityTab({
         )}
 
         {driver.restrictions.filter((r) => r.status === 'active').length === 0 ? (
-          <p className="text-sm text-slate-500">No active restrictions.</p>
+          <p className="text-sm text-muted">No active restrictions.</p>
         ) : (
           <ul className="space-y-3 text-sm">
             {driver.restrictions
@@ -326,8 +326,8 @@ export function DriverEligibilityTab({
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="font-medium">{r.label}</p>
-                      <p className="text-slate-700">{r.reason}</p>
-                      <p className="mt-1 text-xs text-slate-500">Since {formatDate(r.startDate)}</p>
+                      <p className="text-ink-soft">{r.reason}</p>
+                      <p className="mt-1 text-xs text-muted">Since {formatDate(r.startDate)}</p>
                     </div>
                     {canManage && (
                       <button
@@ -358,46 +358,46 @@ export function DriverEligibilityTab({
             </button>
           }
         >
-          <p className="mb-2 text-xs text-slate-500">
+          <p className="mb-2 text-xs text-muted">
             Rare, time-limited override for a specific check. Does not change the underlying compliance record.
           </p>
           {showOverride && (
             <div className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm">
-                  <span className="text-slate-600">Check code</span>
+                  <span className="text-ink-soft">Check code</span>
                   <input
                     value={overrideCode}
                     onChange={(e) => setOverrideCode(e.target.value)}
                     placeholder="e.g. licence_expired"
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="text-slate-600">Label</span>
+                  <span className="text-ink-soft">Label</span>
                   <input
                     value={overrideLabel}
                     onChange={(e) => setOverrideLabel(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                   />
                 </label>
               </div>
               <label className="block text-sm">
-                <span className="text-slate-600">Reason</span>
+                <span className="text-ink-soft">Reason</span>
                 <textarea
                   value={overrideReason}
                   onChange={(e) => setOverrideReason(e.target.value)}
                   rows={2}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
               <label className="block text-sm">
-                <span className="text-slate-600">Expires at</span>
+                <span className="text-ink-soft">Expires at</span>
                 <input
                   type="datetime-local"
                   value={overrideExpires}
                   onChange={(e) => setOverrideExpires(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
               <button

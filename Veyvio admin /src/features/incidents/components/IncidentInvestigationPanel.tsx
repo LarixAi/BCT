@@ -28,10 +28,10 @@ function CauseChecklist({
 
   return (
     <div>
-      <p className="text-sm font-medium text-slate-900">{label}</p>
+      <p className="text-sm font-medium text-ink">{label}</p>
       <div className="mt-2 grid gap-1 sm:grid-cols-2">
         {options.map((opt) => (
-          <label key={opt} className="flex items-center gap-2 text-sm text-slate-700">
+          <label key={opt} className="flex items-center gap-2 text-sm text-ink-soft">
             <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggle(opt)} />
             {opt}
           </label>
@@ -100,26 +100,26 @@ export function IncidentInvestigationPanel({ incident }: { incident: IncidentDet
     <SectionCard title="Investigation workspace" description="Structured cause analysis — allegations are not proven facts until confirmed">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm sm:col-span-2">
-          <span className="text-slate-600">Investigation scope</span>
-          <input value={scope} onChange={(e) => setScope(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+          <span className="text-ink-soft">Investigation scope</span>
+          <input value={scope} onChange={(e) => setScope(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Investigator</span>
-          <input value={investigatorName} onChange={(e) => setInvestigatorName(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+          <span className="text-ink-soft">Investigator</span>
+          <input value={investigatorName} onChange={(e) => setInvestigatorName(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Target completion</span>
-          <input type="date" value={targetCompletionDate} onChange={(e) => setTargetCompletionDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+          <span className="text-ink-soft">Target completion</span>
+          <input type="date" value={targetCompletionDate} onChange={(e) => setTargetCompletionDate(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
         </label>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <label className="block text-sm">
-          <span className="text-slate-600">Confirmed facts (one per line)</span>
-          <textarea value={confirmedFacts} onChange={(e) => setConfirmedFacts(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" data-testid="confirmed-facts" />
+          <span className="text-ink-soft">Confirmed facts (one per line)</span>
+          <textarea value={confirmedFacts} onChange={(e) => setConfirmedFacts(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" data-testid="confirmed-facts" />
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Disputed information (one per line)</span>
-          <textarea value={disputedInformation} onChange={(e) => setDisputedInformation(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+          <span className="text-ink-soft">Disputed information (one per line)</span>
+          <textarea value={disputedInformation} onChange={(e) => setDisputedInformation(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
         </label>
       </div>
       <div className="mt-4 space-y-4" data-testid="cause-analysis">
@@ -128,8 +128,8 @@ export function IncidentInvestigationPanel({ incident }: { incident: IncidentDet
         <CauseChecklist label="Underlying organisational causes" options={UNDERLYING_CAUSE_OPTIONS} selected={underlyingCauses} onChange={setUnderlyingCauses} />
       </div>
       <label className="mt-4 block text-sm">
-        <span className="text-slate-600">Findings summary</span>
-        <textarea value={findingsSummary} onChange={(e) => setFindingsSummary(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+        <span className="text-ink-soft">Findings summary</span>
+        <textarea value={findingsSummary} onChange={(e) => setFindingsSummary(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
       </label>
       <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()} className="mt-4 rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white" data-testid="save-investigation">
         Save investigation
@@ -141,8 +141,8 @@ export function IncidentInvestigationPanel({ incident }: { incident: IncidentDet
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2">
-      <dt className="w-36 shrink-0 text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="w-36 shrink-0 text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }
@@ -150,8 +150,8 @@ function Row({ label, value }: { label: string; value: string }) {
 function CauseList({ title, items }: { title: string; items: string[] }) {
   return (
     <div className="mt-4">
-      <p className="text-sm font-medium text-slate-900">{title}</p>
-      <ul className="mt-1 list-disc pl-5 text-sm text-slate-700">
+      <p className="text-sm font-medium text-ink">{title}</p>
+      <ul className="mt-1 list-disc pl-5 text-sm text-ink-soft">
         {items.map((item) => <li key={item}>{item}</li>)}
       </ul>
     </div>

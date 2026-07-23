@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import DriverMobileAuthLayout, {
   DriverAuthIdentifierField,
@@ -37,7 +37,12 @@ export default function DriverAuthEntry({ onLogin, onBiometricLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState(() => readRateLimitUntil());
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
   const submitLock = useRef(false);
+
+  const handleBiometricAvailability = useCallback((available) => {
+    setBiometricAvailable(Boolean(available));
+  }, []);
 
   useEffect(() => {
     if (cooldownUntil <= Date.now()) return;
@@ -101,6 +106,16 @@ export default function DriverAuthEntry({ onLogin, onBiometricLogin }) {
     // used to trap drivers on a loader or bounce them back to /auth.
   }
 
+  const biometricBlock =
+    onBiometricLogin ? (
+      <BiometricLoginButton
+        onLogin={onBiometricLogin}
+        disabled={loading}
+        primary
+        onAvailabilityChange={handleBiometricAvailability}
+      />
+    ) : null;
+
   if (step === "email-password") {
     return (
       <DriverMobileAuthLayout
@@ -115,6 +130,9 @@ export default function DriverAuthEntry({ onLogin, onBiometricLogin }) {
         }
       >
         <form onSubmit={(e) => void handleEmailSignIn(e)} className="driver-auth-form-stack">
+          {biometricBlock}
+          {biometricAvailable ? <DriverAuthOrDivider /> : null}
+
           <input
             type="email"
             value={trimmed}
@@ -190,12 +208,19 @@ export default function DriverAuthEntry({ onLogin, onBiometricLogin }) {
   return (
     <DriverMobileAuthLayout
       title="Sign in to Veyvio Driver"
-      subtitle="Use the email from your operator invitation."
+      subtitle={
+        biometricAvailable
+          ? "Welcome back — continue with fingerprint, or use the email from your invitation."
+          : "Use the email from your operator invitation."
+      }
       showPlatformHint
       animate
       footer={<>Trusted by licensed fleet drivers across the UK.</>}
     >
       <form onSubmit={(e) => void handleIdentifierContinue(e)} className="driver-auth-form-stack">
+        {biometricBlock}
+        {biometricAvailable ? <DriverAuthOrDivider /> : null}
+
         <DriverAuthIdentifierField
           id="identifier"
           value={identifier}
@@ -210,15 +235,8 @@ export default function DriverAuthEntry({ onLogin, onBiometricLogin }) {
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         <DriverAuthPrimaryButton type="submit" disabled={!isEmail} ready={isEmail}>
-          Continue
+          Continue with email
         </DriverAuthPrimaryButton>
-
-        {onBiometricLogin ? (
-          <>
-            <DriverAuthOrDivider />
-            <BiometricLoginButton onLogin={onBiometricLogin} disabled={loading} />
-          </>
-        ) : null}
 
         <DriverAuthTrustLine>Secure login for your fleet account.</DriverAuthTrustLine>
 

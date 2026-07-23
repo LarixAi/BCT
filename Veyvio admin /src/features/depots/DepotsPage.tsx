@@ -46,8 +46,8 @@ export function DepotsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Depots</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Depots</h1>
+          <p className="text-sm text-ink-soft">
             Operational headquarters for each location — resources, readiness and site settings. Vehicles, Drivers, Yard
             and Maintenance stay in their own modules; open a depot to see what belongs here.
           </p>
@@ -65,18 +65,18 @@ export function DepotsPage() {
         placeholder="Search depots…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full max-w-md rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+        className="w-full max-w-md rounded-lg border border-border px-3 py-1.5 text-sm"
       />
 
       {isLoading ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-sm text-muted">Loading…</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map(({ profile, snapshot }) => (
             <DepotCard key={profile.id} profile={profile} snapshot={snapshot} />
           ))}
           {filtered.length === 0 && (
-            <p className="text-sm text-slate-500 sm:col-span-2">No depots match this search.</p>
+            <p className="text-sm text-muted sm:col-span-2">No depots match this search.</p>
           )}
         </div>
       )}
@@ -94,15 +94,15 @@ function DepotCard({
   const readiness = profile.readiness
 
   return (
-    <div className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex flex-col rounded-xl border border-border bg-surface p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{profile.code}</p>
-          <h2 className="text-lg font-semibold text-slate-900">{profile.name}</h2>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">{profile.code}</p>
+          <h2 className="text-lg font-semibold text-ink">{profile.name}</h2>
         </div>
         <StatusPill status={profile.status} />
       </div>
-      <p className="mt-1 text-xs text-slate-500">{DEPOT_STATUS_LABELS[profile.status]}</p>
+      <p className="mt-1 text-xs text-muted">{DEPOT_STATUS_LABELS[profile.status]}</p>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <Stat label="Vehicles" value={snapshot?.vehiclesAssigned ?? '—'} />
@@ -135,8 +135,8 @@ function DepotCard({
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="text-lg font-semibold tabular-nums text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="text-lg font-semibold tabular-nums text-ink">{value}</dd>
     </div>
   )
 }

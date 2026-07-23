@@ -10,7 +10,7 @@ export function MaintenanceSuppliersTab({ suppliers, parts }: Pick<MaintenanceHu
       <SectionCard title="Approved suppliers" description="Internal workshops, franchise dealers and parts vendors">
         <table className="w-full min-w-[800px] text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+            <tr className="border-b border-border text-xs uppercase text-muted">
               <th className="pb-2 pr-3 font-medium">Supplier</th>
               <th className="pb-2 pr-3 font-medium">Type</th>
               <th className="pb-2 pr-3 font-medium">Services</th>
@@ -21,16 +21,16 @@ export function MaintenanceSuppliersTab({ suppliers, parts }: Pick<MaintenanceHu
           </thead>
           <tbody>
             {suppliers.map((s) => (
-              <tr key={s.id} className="border-b border-slate-50">
+              <tr key={s.id} className="border-b border-border/60">
                 <td className="py-2.5 pr-3">
                   <p className="font-medium">{s.name}</p>
-                  <p className="text-xs text-slate-500">{s.contactEmail}</p>
+                  <p className="text-xs text-muted">{s.contactEmail}</p>
                 </td>
-                <td className="py-2.5 pr-3 capitalize text-slate-600">{s.type}</td>
-                <td className="py-2.5 pr-3 text-slate-600">{s.services.join(', ')}</td>
-                <td className="py-2.5 pr-3 text-slate-600">{s.labourRate != null ? `£${s.labourRate}/hr` : '—'}</td>
-                <td className="py-2.5 pr-3 text-slate-600">{s.slaHours}</td>
-                <td className="py-2.5 font-medium text-slate-900">{s.performanceScore}%</td>
+                <td className="py-2.5 pr-3 capitalize text-ink-soft">{s.type}</td>
+                <td className="py-2.5 pr-3 text-ink-soft">{s.services.join(', ')}</td>
+                <td className="py-2.5 pr-3 text-ink-soft">{s.labourRate != null ? `£${s.labourRate}/hr` : '—'}</td>
+                <td className="py-2.5 pr-3 text-ink-soft">{s.slaHours}</td>
+                <td className="py-2.5 font-medium text-ink">{s.performanceScore}%</td>
               </tr>
             ))}
           </tbody>
@@ -48,7 +48,7 @@ export function MaintenanceSuppliersTab({ suppliers, parts }: Pick<MaintenanceHu
         )}
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+            <tr className="border-b border-border text-xs uppercase text-muted">
               <th className="pb-2 pr-3 font-medium">Part</th>
               <th className="pb-2 pr-3 font-medium">Number</th>
               <th className="pb-2 pr-3 font-medium">Supplier</th>
@@ -63,16 +63,16 @@ export function MaintenanceSuppliersTab({ suppliers, parts }: Pick<MaintenanceHu
               const supplier = suppliers.find((s) => s.id === p.supplierId)
               const low = isLowStock(p)
               return (
-                <tr key={p.id} className={`border-b border-slate-50 ${low ? 'bg-amber-50/60' : ''}`}>
+                <tr key={p.id} className={`border-b border-border/60 ${low ? 'bg-amber-50/60' : ''}`}>
                   <td className="py-2.5 pr-3 font-medium">{p.name}</td>
-                  <td className="py-2.5 pr-3 font-mono text-xs text-slate-500">{p.partNumber}</td>
-                  <td className="py-2.5 pr-3 text-slate-600">{supplier?.name ?? '—'}</td>
-                  <td className="py-2.5 pr-3 text-slate-600">£{p.unitCost.toFixed(2)}</td>
-                  <td className={`py-2.5 pr-3 tabular-nums font-medium ${low ? 'text-amber-900' : 'text-slate-900'}`}>
+                  <td className="py-2.5 pr-3 font-mono text-xs text-muted">{p.partNumber}</td>
+                  <td className="py-2.5 pr-3 text-ink-soft">{supplier?.name ?? '—'}</td>
+                  <td className="py-2.5 pr-3 text-ink-soft">£{p.unitCost.toFixed(2)}</td>
+                  <td className={`py-2.5 pr-3 tabular-nums font-medium ${low ? 'text-amber-900' : 'text-ink'}`}>
                     {p.stockOnHand}
                   </td>
-                  <td className="py-2.5 pr-3 text-slate-600">{p.reorderLevel}</td>
-                  <td className="py-2.5 text-xs text-slate-600">
+                  <td className="py-2.5 pr-3 text-ink-soft">{p.reorderLevel}</td>
+                  <td className="py-2.5 text-xs text-ink-soft">
                     {p.location ?? '—'}
                     {p.bin ? ` · ${p.bin}` : ''}
                   </td>
@@ -84,7 +84,7 @@ export function MaintenanceSuppliersTab({ suppliers, parts }: Pick<MaintenanceHu
       </SectionCard>
 
       <SectionCard title="Parts catalogue" description="Common parts linked to suppliers for work order costing">
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-ink-soft">
           Catalogue lines feed work-order estimates. Stock movements and purchase orders deepen in later Phase 2 passes.
         </p>
       </SectionCard>

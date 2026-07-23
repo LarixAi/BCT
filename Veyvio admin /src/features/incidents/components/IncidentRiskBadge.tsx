@@ -4,7 +4,7 @@ const BAND_STYLES: Record<IncidentRiskScore['band'], string> = {
   critical: 'bg-red-100 text-red-900',
   high: 'bg-orange-100 text-orange-900',
   medium: 'bg-amber-100 text-amber-900',
-  low: 'bg-slate-100 text-slate-700',
+  low: 'bg-surface-muted text-ink-soft',
 }
 
 export function IncidentRiskBadge({ risk, compact = false }: { risk: IncidentRiskScore; compact?: boolean }) {

@@ -35,15 +35,15 @@ export function EquipmentTab({ hub }: { hub: FleetResourcesHubData }) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Equipment assets</h2>
-        <p className="text-sm text-slate-600">
+        <h2 className="text-lg font-semibold text-ink">Equipment assets</h2>
+        <p className="text-sm text-ink-soft">
           QR-style IDs for safety and accessibility kit — assign to vehicles or return to depot stock.
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-3 py-2">QR / ID</th>
               <th className="px-3 py-2">Name</th>
@@ -57,14 +57,14 @@ export function EquipmentTab({ hub }: { hub: FleetResourcesHubData }) {
           <tbody>
             {hub.equipment.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500">
+                <td colSpan={7} className="px-3 py-8 text-center text-sm text-muted">
                   No equipment assets on the register yet. Kit recorded on each vehicle profile will
                   appear here once available.
                 </td>
               </tr>
             ) : (
               hub.equipment.map((e) => (
-                <tr key={e.id} className="border-t border-slate-100">
+                <tr key={e.id} className="border-t border-border">
                   <td className="px-3 py-2 font-mono text-xs">{e.qrCode}</td>
                   <td className="px-3 py-2 font-medium">{e.name}</td>
                   <td className="px-3 py-2">
@@ -112,16 +112,16 @@ export function EquipmentTab({ hub }: { hub: FleetResourcesHubData }) {
       </div>
 
       {assignId && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-900">Assign equipment</h3>
-            <p className="mt-1 text-sm text-slate-600">Leave vehicle empty to return to depot stock.</p>
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-midnight/30 p-4">
+          <div className="w-full max-w-md rounded-xl bg-surface p-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-ink">Assign equipment</h3>
+            <p className="mt-1 text-sm text-ink-soft">Leave vehicle empty to return to depot stock.</p>
             <label className="mt-4 block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Vehicle</span>
+              <span className="mb-1 block font-medium text-ink-soft">Vehicle</span>
               <select
                 value={vehicleId}
                 onChange={(ev) => setVehicleId(ev.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-lg border border-border px-3 py-2"
               >
                 <option value="">Depot stock</option>
                 {vehicles.map((v) => (
@@ -135,7 +135,7 @@ export function EquipmentTab({ hub }: { hub: FleetResourcesHubData }) {
               <button
                 type="button"
                 onClick={() => setAssignId(null)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="rounded-lg border border-border px-3 py-2 text-sm"
               >
                 Cancel
               </button>

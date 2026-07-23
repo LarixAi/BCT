@@ -50,12 +50,12 @@ export function CompanySettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Company Settings</h1>
-        <p className="text-sm text-slate-600">General company information and operator details</p>
+        <h1 className="text-2xl font-semibold text-ink">Company Settings</h1>
+        <p className="text-sm text-ink-soft">General company information and operator details</p>
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-sm text-muted">Loading…</p>
       ) : (
         <form
           onSubmit={(e) => {
@@ -109,12 +109,12 @@ function Field({
 }) {
   return (
     <label className="block text-sm">
-      <span className="text-slate-600">{label}</span>
+      <span className="text-ink-soft">{label}</span>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+        className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
       />
     </label>
   )

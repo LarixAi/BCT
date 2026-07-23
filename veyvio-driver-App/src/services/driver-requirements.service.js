@@ -10,10 +10,10 @@ const DBS_REQUIREMENT_KEYS = new Set(["dbs", "dbs_safeguarding", "safeguarding",
 export async function loadDriverRequirementKeys(driverId) {
   const supabase = getSupabaseClient();
 
-  const [{ data: driver }, { data: record }] = await Promise.all([
+  const [{ data: driverRow }, { data: record }] = await Promise.all([
     supabase
       .from("drivers")
-      .select("can_do_school_runs, employment_type, driver_role, organisation_id")
+      .select("employment_type, work_permission_keys")
       .eq("id", driverId)
       .maybeSingle(),
     supabase
@@ -35,6 +35,10 @@ export async function loadDriverRequirementKeys(driverId) {
       if (row.required !== false) keys.add(row.requirement_key);
     }
   }
+
+  const driver = driverRow
+    ? { ...driverRow, can_do_school_runs: (driverRow.work_permission_keys ?? []).includes("school") }
+    : driverRow;
 
   return {
     requirementKeys: [...keys],

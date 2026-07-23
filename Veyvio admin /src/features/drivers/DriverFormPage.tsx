@@ -109,14 +109,14 @@ export function DriverFormPage() {
     save.mutate()
   }
 
-  if (isEdit && isLoading) return <p className="text-sm text-slate-500">Loading…</p>
+  if (isEdit && isLoading) return <p className="text-sm text-muted">Loading…</p>
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <DriverBackLink />
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{isEdit ? 'Edit driver' : 'Add driver'}</h1>
-        <p className="text-sm text-slate-600">
+        <h1 className="text-2xl font-semibold text-ink">{isEdit ? 'Edit driver' : 'Add driver'}</h1>
+        <p className="text-sm text-ink-soft">
           {isEdit
             ? 'Update profile information and work permissions.'
             : 'Create a driver record and optionally send a secure app invitation.'}
@@ -137,11 +137,11 @@ export function DriverFormPage() {
         <SectionCard title="Employment">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="text-slate-600">Employment type</span>
+              <span className="text-ink-soft">Employment type</span>
               <select
                 value={employmentType}
                 onChange={(e) => setEmploymentType(e.target.value as EmploymentType)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               >
                 {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([k, label]) => (
                   <option key={k} value={k}>
@@ -151,11 +151,11 @@ export function DriverFormPage() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Primary depot</span>
+              <span className="text-ink-soft">Primary depot</span>
               <select
                 value={depotId}
                 onChange={(e) => setDepotId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               >
                 <option value="depot-wembley">Wembley Depot</option>
                 <option value="depot-croydon">Croydon Depot</option>
@@ -167,7 +167,7 @@ export function DriverFormPage() {
         </SectionCard>
 
         <SectionCard title="Work permissions">
-          <p className="mb-3 text-xs text-slate-500">Determines which job types this driver can be assigned to.</p>
+          <p className="mb-3 text-xs text-muted">Determines which job types this driver can be assigned to.</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {WORK_PERMISSION_OPTIONS.map((opt) => (
               <label key={opt.key} className="flex items-center gap-2 text-sm">
@@ -204,7 +204,7 @@ export function DriverFormPage() {
         <div className="flex justify-end gap-3">
           <Link
             to={isEdit && id ? `/drivers/${id}` : '/drivers'}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
           >
             Cancel
           </Link>
@@ -238,13 +238,13 @@ function Field({
 }) {
   return (
     <label className={`block text-sm ${className ?? ''}`}>
-      <span className="text-slate-600">{label}</span>
+      <span className="text-ink-soft">{label}</span>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+        className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
       />
     </label>
   )

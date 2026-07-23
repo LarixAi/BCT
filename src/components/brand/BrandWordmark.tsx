@@ -34,7 +34,7 @@ const sizeStyles: Record<
 export function BrandWordmark({ size = "splash", className, onDark = true }: BrandWordmarkProps) {
   const styles = sizeStyles[size];
   const veyvioColor = onDark ? "text-white" : "text-accent";
-  const yardColor = onDark ? "text-white/70" : "text-primary";
+  const yardColor = onDark ? "text-white/70" : "text-command-500";
 
   return (
     <div className={cn(styles.container, className)}>

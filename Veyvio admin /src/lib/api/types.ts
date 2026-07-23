@@ -7,10 +7,131 @@ export interface AuthUser {
   activeTenantId: string | null
   tenantName: string | null
   tenantStatus?: string | null
+  planCode?: string | null
+  subscriptionStatus?: string | null
+  enabledModules?: string[]
+  usageLimits?: Record<string, number | null>
   mfaEnabled?: boolean
   role: string | null
   permissions: string[]
   supportSessionId?: string | null
+}
+
+export type PlatformCompanyRow = {
+  id: string
+  legalName: string | null
+  tradingName: string | null
+  tenantStatus: string | null
+  subscriptionStatus: string | null
+  planCode: string | null
+  currentPeriodEnd: string | null
+  trialEndsAt: string | null
+  timezone: string | null
+  createdAt: string | null
+  activatedAt: string | null
+}
+
+export type PlatformModuleOverride = {
+  moduleKey: string
+  enabled: boolean
+  reason: string | null
+  createdAt: string | null
+}
+
+export type PlatformSupportGrant = {
+  id: string
+  companyId?: string
+  tradingName?: string | null
+  legalName?: string | null
+  granteeUserId: string
+  grantedBy: string | null
+  reason: string
+  ticketReference: string | null
+  accessLevel: string
+  startsAt: string | null
+  expiresAt: string | null
+  revokedAt: string | null
+}
+
+export type PlatformSubscriptionEvent = {
+  id: string
+  eventType: string
+  source: string
+  fromStatus: string | null
+  toStatus: string | null
+  fromPlanCode: string | null
+  toPlanCode: string | null
+  fromTenantStatus: string | null
+  toTenantStatus: string | null
+  actorUserId: string | null
+  createdAt: string | null
+}
+
+export type PlatformSubscriptionRow = {
+  companyId: string
+  tradingName: string | null
+  legalName: string | null
+  tenantStatus: string | null
+  subscriptionStatus: string
+  planCode: string
+  currentPeriodEnd: string | null
+  trialEndsAt: string | null
+  gracePeriodEndsAt: string | null
+  providerCustomerRef: string | null
+  updatedAt: string | null
+}
+
+export type PlatformFeatureFlag = {
+  key: string
+  description: string
+  enabled: boolean
+  updatedAt: string | null
+  updatedBy?: string | null
+}
+
+export type PlatformHealth = {
+  status: string
+  surface: string
+  checkedAt: string
+  billingMode: string
+  database: string
+  counts: {
+    companies: number
+    activeSubscriptions: number
+    featureFlags: number
+  }
+}
+
+export type PlatformCompanyDetail = PlatformCompanyRow & {
+  gracePeriodEndsAt?: string | null
+  providerCustomerRef?: string | null
+  stripeSubscriptionId?: string | null
+  entitlements?: {
+    planCode: string
+    subscriptionStatus: string
+    tenantStatus: string
+    enabledModules: string[]
+    usageLimits: Record<string, number | null>
+  }
+  subscriptionEvents?: PlatformSubscriptionEvent[]
+  moduleOverrides: PlatformModuleOverride[]
+  supportGrants: PlatformSupportGrant[]
+}
+
+export type PlatformPlanRow = {
+  code: string
+  name: string
+  description: string | null
+  modules: string[]
+}
+
+export type PlatformAuditRow = {
+  id: string
+  actor_user_id: string
+  action: string
+  target_company_id: string | null
+  detail: Record<string, unknown>
+  created_at: string
 }
 
 export interface TenantMembershipOption {

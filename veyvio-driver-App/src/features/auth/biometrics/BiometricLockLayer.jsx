@@ -15,7 +15,7 @@ import { shouldRequireBiometricLock, unlockBiometricAppLock } from "./biometric-
  * Covers the signed-in app with a biometric lock after cold start or long background.
  * Does not interrupt active external navigation.
  */
-export default function BiometricLockLayer({ driverId, active, onUsePassword }) {
+export default function BiometricLockLayer({ driverId, active, onUsePassword: onUsePasswordProp }) {
   const [locked, setLocked] = useState(false);
   const [label, setLabel] = useState("Face ID");
   const [busy, setBusy] = useState(false);
@@ -115,14 +115,26 @@ export default function BiometricLockLayer({ driverId, active, onUsePassword }) 
     if (!driverId || busy) return;
     setBusy(true);
     setError("");
-    const result = await unlockBiometricAppLock(driverId);
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.message);
-      return;
+    try {
+      const result = await unlockBiometricAppLock(driverId);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setLocked(false);
+    } catch {
+      setError("Fingerprint check did not finish. Use password instead, or try again.");
+    } finally {
+      setBusy(false);
     }
-    setLocked(false);
   }, [busy, driverId]);
+
+  const onUsePassword = useCallback(() => {
+    // Always allow escape — even if a biometric prompt is still busy.
+    setBusy(false);
+    setLocked(false);
+    onUsePasswordProp?.();
+  }, [onUsePasswordProp]);
 
   if (!locked) return null;
 
@@ -132,10 +144,7 @@ export default function BiometricLockLayer({ driverId, active, onUsePassword }) 
       busy={busy}
       error={error}
       onUnlock={() => void onUnlock()}
-      onUsePassword={() => {
-        setLocked(false);
-        onUsePassword?.();
-      }}
+      onUsePassword={onUsePassword}
     />
   );
 }

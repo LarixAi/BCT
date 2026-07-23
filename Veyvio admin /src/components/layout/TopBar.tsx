@@ -3,6 +3,7 @@ import { LogOut, Search, User } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { StatusBadge } from '@/components/ui'
 import { NotificationBellDropdown } from '@/components/layout/NotificationBellDropdown'
+import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { isMockApi } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
@@ -15,7 +16,7 @@ export function TopBar() {
     useOperationalContext()
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-white px-4">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-ink">{companyName}</p>
         <p className="truncate text-xs text-muted">
@@ -66,6 +67,8 @@ export function TopBar() {
 
       <StatusBadge kind="connection" value={connectionStatus} />
 
+      <ThemeToggle />
+
       <NotificationBellDropdown />
 
       <div className="flex items-center gap-1.5">
@@ -74,7 +77,7 @@ export function TopBar() {
           onClick={() => navigate('/profile')}
           className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-sm text-ink-soft hover:bg-page"
         >
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-command-500 text-[10px] font-bold text-white">
+          <span className="grid h-6 w-6 place-items-center rounded-full bg-midnight text-[10px] font-bold text-white">
             {(user?.firstName?.[0] ?? 'U').toUpperCase()}
             {(user?.lastName?.[0] ?? '').toUpperCase()}
           </span>

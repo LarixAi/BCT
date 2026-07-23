@@ -25,15 +25,15 @@ export function BookingStepper({
                   'flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition',
                   active && 'bg-command-600 text-white',
                   done && !active && 'bg-command-50 text-command-800',
-                  !active && !done && 'text-slate-500',
+                  !active && !done && 'text-muted',
                 )}
               >
                 <span
                   className={cn(
                     'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                    active && 'bg-white/20',
+                    active && 'bg-surface/20',
                     done && !active && 'bg-command-200 text-command-900',
-                    !active && !done && 'bg-slate-100',
+                    !active && !done && 'bg-surface-muted',
                   )}
                 >
                   {done ? '✓' : step.id}
@@ -59,8 +59,8 @@ export function BookingSummaryPanel({
   const errors = validation.filter((v) => v.level === 'error').length
 
   return (
-    <aside className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <h2 className="text-sm font-semibold text-slate-900">Booking summary</h2>
+    <aside className="rounded-xl border border-border bg-surface-muted p-4">
+      <h2 className="text-sm font-semibold text-ink">Booking summary</h2>
       <dl className="mt-3 space-y-2 text-sm">
         <SummaryRow label="Type" value={draft.bookingType.replace(/_/g, ' ')} />
         <SummaryRow label="Customer" value={draft.customerName ?? '—'} />
@@ -100,7 +100,7 @@ export function BookingSummaryPanel({
         )}
       </dl>
       {draft.reference && (
-        <p className="mt-3 text-xs text-slate-500">Ref: {draft.reference}</p>
+        <p className="mt-3 text-xs text-muted">Ref: {draft.reference}</p>
       )}
     </aside>
   )
@@ -117,8 +117,8 @@ function SummaryRow({
 }) {
   return (
     <div className="flex justify-between gap-3">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className={cn('font-medium capitalize text-slate-900', highlight && 'text-red-700')}>
+      <dt className="text-muted">{label}</dt>
+      <dd className={cn('font-medium capitalize text-ink', highlight && 'text-red-700')}>
         {value}
       </dd>
     </div>
@@ -141,7 +141,7 @@ export function ValidationList({ items }: { items: BookingValidationItem[] }) {
       {(['error', 'warning', 'info'] as const).map((level) =>
         groups[level].length > 0 ? (
           <div key={level}>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
               {level === 'error' ? 'Blocking errors' : level === 'warning' ? 'Warnings' : 'Information'}
             </p>
             <ul className="space-y-1">

@@ -9,7 +9,7 @@ function driverInitials(name: string | null) {
 
 export function LiveMapDriverCard({ vehicle }: { vehicle: LiveDispatchVehicle }) {
   return (
-    <div className="pointer-events-auto w-56 rounded-xl border border-[#e3e9f3] bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
+    <div className="pointer-events-auto w-56 rounded-xl border border-[#e3e9f3] bg-surface p-3 shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
       <div className="flex items-center gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--veyvio-brand-50)] text-xs font-semibold text-[var(--veyvio-brand-700)]">
           {driverInitials(vehicle.driverName)}
@@ -18,18 +18,18 @@ export function LiveMapDriverCard({ vehicle }: { vehicle: LiveDispatchVehicle })
           <p className="truncate text-sm font-semibold text-[var(--veyvio-brand-900)]">
             {vehicle.driverName ?? 'No driver'}
           </p>
-          <p className="truncate font-mono text-xs tabular-nums text-slate-500">
+          <p className="truncate font-mono text-xs tabular-nums text-muted">
             {vehicle.vehicleRegistration ?? vehicle.reference}
           </p>
         </div>
       </div>
 
-      <p className="mt-2 truncate text-xs text-slate-600">
+      <p className="mt-2 truncate text-xs text-ink-soft">
         {vehicle.routeName ?? vehicle.reference}
       </p>
 
       {vehicle.nextStop && (
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-muted">
           ~{vehicle.nextStop.etaMinutes}m to {vehicle.nextStop.name}
         </p>
       )}
@@ -44,14 +44,14 @@ export function LiveMapDriverCard({ vehicle }: { vehicle: LiveDispatchVehicle })
         {vehicle.driverId && (
           <Link
             to={`/drivers/${vehicle.driverId}`}
-            className="rounded-md bg-slate-100 px-2 py-1 text-slate-700 hover:bg-slate-200"
+            className="rounded-md bg-surface-muted px-2 py-1 text-ink-soft hover:bg-surface-muted"
           >
             Profile
           </Link>
         )}
         <Link
           to="/messages"
-          className="rounded-md bg-slate-100 px-2 py-1 text-slate-700 hover:bg-slate-200"
+          className="rounded-md bg-surface-muted px-2 py-1 text-ink-soft hover:bg-surface-muted"
         >
           Message
         </Link>

@@ -34,15 +34,15 @@ export function StaffTrainingCompliancePanel({ staff }: { staff: StaffProfile })
       ) : (
         <ul className="space-y-2 text-sm">
           {gaps.slice(0, 4).map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
               <div>
                 <p className="font-medium">{r.label}</p>
-                <p className="text-xs text-slate-500">{r.requiredFor}</p>
+                <p className="text-xs text-muted">{r.requiredFor}</p>
               </div>
               <StatusPill status={r.status} />
             </li>
           ))}
-          {gaps.length > 4 && <p className="text-xs text-slate-500">+{gaps.length - 4} more on Training tab</p>}
+          {gaps.length > 4 && <p className="text-xs text-muted">+{gaps.length - 4} more on Training tab</p>}
         </ul>
       )}
     </SectionCard>

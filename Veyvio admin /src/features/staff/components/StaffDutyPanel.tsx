@@ -45,12 +45,12 @@ export function StaffDutyPanel({ staff, actorName, permissions }: { staff: Staff
     <SectionCard title="Duty status" description="Operational duty controls — separate from employment and account status">
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <StatusPill status={staff.dutyStatus} />
-        <span className="text-slate-600">{DUTY_STATUS_LABELS[staff.dutyStatus]}</span>
+        <span className="text-ink-soft">{DUTY_STATUS_LABELS[staff.dutyStatus]}</span>
         {staff.onCall && <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">On-call</span>}
-        {staff.overtimeAvailable && <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">Overtime available</span>}
+        {staff.overtimeAvailable && <span className="rounded bg-surface-muted px-2 py-0.5 text-xs text-ink-soft">Overtime available</span>}
       </div>
       {activeSession && (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-muted">
           Active since {new Date(activeSession.startedAt).toLocaleString('en-GB')} · {activeSession.depotName}
         </p>
       )}
@@ -72,7 +72,7 @@ export function StaffDutyPanel({ staff, actorName, permissions }: { staff: Staff
               type="button"
               disabled={setDuty.isPending}
               onClick={() => setDuty.mutate(a.label === 'End break' ? 'on_duty' : a.status)}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
             >
               {a.label}
             </button>

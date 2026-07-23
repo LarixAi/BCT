@@ -85,18 +85,18 @@ export function VehicleCostsTab({ vehicle }: { vehicle: VehicleProfile }) {
 
       <SectionCard title="Cost breakdown" description="Running cost mix for this vehicle">
         {breakdown.length === 0 ? (
-          <p className="text-sm text-slate-500">No cost records yet.</p>
+          <p className="text-sm text-muted">No cost records yet.</p>
         ) : (
           <ul className="space-y-3">
             {breakdown.map((row) => (
               <li key={row.id}>
                 <div className="mb-1 flex justify-between text-sm">
-                  <span className="font-medium text-slate-800">{row.label}</span>
-                  <span className="tabular-nums text-slate-600">
+                  <span className="font-medium text-ink">{row.label}</span>
+                  <span className="tabular-nums text-ink-soft">
                     {money(row.amount)} · {row.pct}%
                   </span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
                   <div className="h-full rounded-full bg-command-500" style={{ width: `${row.pct}%` }} />
                 </div>
               </li>
@@ -107,12 +107,12 @@ export function VehicleCostsTab({ vehicle }: { vehicle: VehicleProfile }) {
 
       <SectionCard title="Recent transactions" description="Ledger lines from Fleet Resources">
         {transactions.length === 0 ? (
-          <p className="text-sm text-slate-500">No ledger transactions for this vehicle.</p>
+          <p className="text-sm text-muted">No ledger transactions for this vehicle.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+                <tr className="border-b border-border text-xs uppercase text-muted">
                   <th className="pb-2 pr-3 font-medium">Date</th>
                   <th className="pb-2 pr-3 font-medium">Type</th>
                   <th className="pb-2 pr-3 font-medium">Qty</th>
@@ -122,7 +122,7 @@ export function VehicleCostsTab({ vehicle }: { vehicle: VehicleProfile }) {
               </thead>
               <tbody>
                 {transactions.slice(0, 12).map((t) => (
-                  <tr key={t.id} className="border-b border-slate-50">
+                  <tr key={t.id} className="border-b border-border/60">
                     <td className="py-2 pr-3 whitespace-nowrap">
                       {new Date(t.createdAt).toLocaleString('en-GB')}
                     </td>
@@ -160,9 +160,9 @@ export function VehicleCostsTab({ vehicle }: { vehicle: VehicleProfile }) {
 
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-bold tabular-nums text-slate-900">{value}</p>
+    <div className="rounded-xl border border-border bg-surface p-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-1 text-xl font-bold tabular-nums text-ink">{value}</p>
     </div>
   )
 }

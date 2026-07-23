@@ -1,0 +1,386 @@
+/* Veyvio Yard — mobile auth (aligned with Driver auth shell) */
+
+.yard-auth-page {
+  background: #ffffff;
+}
+
+.yard-auth-shell {
+  display: flex;
+  box-sizing: border-box;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.yard-auth-inner {
+  margin-inline: auto;
+  display: flex;
+  width: 100%;
+  max-width: 28rem;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 1.25rem
+    calc(0.875rem + env(safe-area-inset-bottom, 0px));
+}
+
+.yard-auth-content {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+}
+
+.yard-auth-brand-hero {
+  margin-bottom: 1.25rem;
+}
+
+.yard-auth-brand {
+  margin: 0;
+}
+
+.yard-auth-slogan {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: #12a89d;
+}
+
+.yard-auth-platform-hint {
+  margin: 0.625rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.yard-auth-title {
+  margin: 0 0 0.375rem;
+  font-size: clamp(1.25rem, 5vw, 1.45rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: #0b0e14;
+}
+
+.yard-auth-subtitle {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.yard-auth-trust {
+  margin: 0.625rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #6b7280;
+  text-align: center;
+}
+
+.yard-auth-footer {
+  flex-shrink: 0;
+  margin-top: 1rem;
+  padding-top: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #6b7280;
+  text-align: center;
+}
+
+.yard-auth-card {
+  border-radius: 1rem;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.yard-auth-primary {
+  height: 3rem;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.875rem;
+  border: 1px solid transparent;
+  background: #e5e7eb;
+  color: #9ca3af;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+.yard-auth-primary--ready {
+  border-color: #0b0e14;
+  background: #0b0e14;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgb(11 14 20 / 0.16);
+}
+
+.yard-auth-primary--ready:hover:not(:disabled) {
+  background: #151a24;
+  box-shadow: 0 10px 22px rgb(11 14 20 / 0.2);
+}
+
+.yard-auth-primary--ready:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.yard-auth-primary:disabled {
+  cursor: not-allowed;
+}
+
+.yard-auth-outline,
+.yard-auth-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 1rem;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #0b0e14;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-align: left;
+  box-shadow: 0 1px 2px rgb(11 14 20 / 0.04);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.yard-auth-outline {
+  height: 3.5rem;
+  justify-content: center;
+}
+
+.yard-auth-option {
+  padding: 0.875rem 1rem;
+}
+
+.yard-auth-option:hover:not(:disabled),
+.yard-auth-outline:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  box-shadow: 0 4px 12px rgb(11 14 20 / 0.06);
+}
+
+.yard-auth-option:disabled,
+.yard-auth-outline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.yard-auth-option-meta {
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.yard-auth-field-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 3.375rem;
+  border-radius: 1rem;
+  border: 1px solid #e5e7eb;
+  background: #fafafa;
+  padding-inline: 0.875rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.yard-auth-field-wrap:focus-within {
+  border-color: #12a89d;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgb(18 168 157 / 0.15);
+}
+
+.yard-auth-field-wrap.is-invalid {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 3px rgb(217 45 32 / 0.12);
+}
+
+.yard-auth-field-icon {
+  flex-shrink: 0;
+  color: #9ca3af;
+  transition: color 0.15s ease;
+}
+
+.yard-auth-field-wrap:focus-within .yard-auth-field-icon {
+  color: #12a89d;
+}
+
+.yard-auth-field-inline {
+  height: 100%;
+  min-width: 0;
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 1rem;
+  color: #0b0e14;
+}
+
+.yard-auth-field-inline::placeholder {
+  color: #9ca3af;
+}
+
+.yard-auth-field-inline:focus {
+  outline: none;
+}
+
+.yard-auth-field {
+  height: 3.375rem;
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid #e5e7eb;
+  background: #fafafa;
+  padding-inline: 0.875rem;
+  font-size: 1rem;
+  color: #0b0e14;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.yard-auth-field::placeholder {
+  color: #9ca3af;
+}
+
+.yard-auth-field:focus {
+  outline: none;
+  border-color: #12a89d;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgb(18 168 157 / 0.15);
+}
+
+.yard-auth-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.yard-auth-list-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.yard-auth-link {
+  font-weight: 500;
+  color: #0f766e;
+  transition: color 0.15s ease;
+}
+
+.yard-auth-link:hover {
+  color: #0b0e14;
+}
+
+.yard-auth-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.yard-auth-checkbox input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #12a89d;
+}
+
+.yard-auth-error {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: #d92d20;
+}
+
+.yard-auth-progress {
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.yard-auth-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #12a89d;
+  transition: width 0.2s ease;
+}
+
+@keyframes yard-auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.yard-auth-anim-1 {
+  animation: yard-auth-rise 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.yard-auth-anim-2 {
+  animation: yard-auth-rise 0.48s cubic-bezier(0.22, 1, 0.36, 1) 0.07s both;
+}
+
+.yard-auth-anim-3 {
+  animation: yard-auth-rise 0.48s cubic-bezier(0.22, 1, 0.36, 1) 0.14s both;
+}
+
+.yard-auth-anim-4 {
+  animation: yard-auth-rise 0.48s cubic-bezier(0.22, 1, 0.36, 1) 0.21s both;
+}
+
+@media (max-height: 720px) {
+  .yard-auth-inner {
+    justify-content: flex-start;
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .yard-auth-brand-hero {
+    margin-bottom: 0.875rem;
+  }
+
+  .yard-auth-subtitle {
+    margin-bottom: 0.75rem;
+  }
+
+  .yard-auth-primary,
+  .yard-auth-outline {
+    height: 2.875rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yard-auth-anim-1,
+  .yard-auth-anim-2,
+  .yard-auth-anim-3,
+  .yard-auth-anim-4 {
+    animation: none;
+  }
+}

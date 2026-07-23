@@ -15,7 +15,7 @@ export function IncidentPeoplePanel({ incident }: { incident: IncidentDetailReco
   if (incident.people.length === 0) {
     return (
       <SectionCard title="People involved">
-        <p className="text-sm text-slate-500">No people recorded.</p>
+        <p className="text-sm text-muted">No people recorded.</p>
       </SectionCard>
     )
   }
@@ -120,14 +120,14 @@ function PersonCard({
             </button>
           )}
           {editing && (
-            <div className="mt-4 space-y-3 border-t border-slate-100 pt-4" data-testid="welfare-edit-form">
-              <select value={injuryStatus} onChange={(e) => setInjuryStatus(e.target.value as typeof injuryStatus)} className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+            <div className="mt-4 space-y-3 border-t border-border pt-4" data-testid="welfare-edit-form">
+              <select value={injuryStatus} onChange={(e) => setInjuryStatus(e.target.value as typeof injuryStatus)} className="w-full rounded-lg border border-border px-3 py-1.5 text-sm">
                 <option value="none">No injury</option>
                 <option value="minor">Minor injury</option>
                 <option value="serious">Serious injury</option>
                 <option value="unknown">Unknown</option>
               </select>
-              <input value={injuryDescription} onChange={(e) => setInjuryDescription(e.target.value)} placeholder="Injury description" className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
+              <input value={injuryDescription} onChange={(e) => setInjuryDescription(e.target.value)} placeholder="Injury description" className="w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
               <div className="grid gap-2 sm:grid-cols-2 text-sm">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={firstAidProvided} onChange={(e) => setFirstAidProvided(e.target.checked)} />First aid provided</label>
                 <label className="flex items-center gap-2"><input type="checkbox" checked={ambulanceAttended} onChange={(e) => setAmbulanceAttended(e.target.checked)} />Ambulance attended</label>
@@ -136,7 +136,7 @@ function PersonCard({
                 <label className="flex items-center gap-2"><input type="checkbox" checked={welfareFollowUpRequired} onChange={(e) => setWelfareFollowUpRequired(e.target.checked)} />Welfare follow-up required</label>
               </div>
               {canMedical && (
-                <textarea value={medicalNotes} onChange={(e) => setMedicalNotes(e.target.value)} placeholder="Medical notes (restricted)" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
+                <textarea value={medicalNotes} onChange={(e) => setMedicalNotes(e.target.value)} placeholder="Medical notes (restricted)" rows={2} className="w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
               )}
               <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()} className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white" data-testid="save-welfare-record">
                 Save welfare record
@@ -152,8 +152,8 @@ function PersonCard({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2">
-      <dt className="w-40 shrink-0 text-slate-500 capitalize">{label}</dt>
-      <dd className="font-medium capitalize text-slate-900">{value}</dd>
+      <dt className="w-40 shrink-0 text-muted capitalize">{label}</dt>
+      <dd className="font-medium capitalize text-ink">{value}</dd>
     </div>
   )
 }

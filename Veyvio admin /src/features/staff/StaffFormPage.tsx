@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
@@ -44,6 +44,16 @@ export function StaffFormPage() {
 
   const roleDef = STAFF_ROLES.find((r) => r.key === roleKey)
 
+  useEffect(() => {
+    const roleApps = roleDef?.applications ?? []
+    if (!roleApps.length) return
+    setApplications((prev) => {
+      const next = new Set(prev)
+      for (const app of roleApps) next.add(app)
+      return [...next]
+    })
+  }, [roleKey, roleDef?.applications])
+
   function toggleApp(app: StaffApplication) {
     setApplications((prev) => (prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]))
   }
@@ -75,11 +85,11 @@ export function StaffFormPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Link to="/staff" className="text-sm text-command-600 hover:underline">← Back to staff</Link>
-      <h1 className="text-2xl font-semibold text-slate-900">Add staff member</h1>
+      <h1 className="text-2xl font-semibold text-ink">Add staff member</h1>
 
       <div className="flex gap-2 text-xs">
         {STEPS.map((s, i) => (
-          <span key={s} className={`rounded-full px-2 py-1 ${i === step ? 'bg-command-100 text-command-800' : 'bg-slate-100 text-slate-600'}`}>
+          <span key={s} className={`rounded-full px-2 py-1 ${i === step ? 'bg-command-100 text-command-800' : 'bg-surface-muted text-ink-soft'}`}>
             {i + 1}. {s}
           </span>
         ))}
@@ -107,14 +117,14 @@ export function StaffFormPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Job title" value={jobTitle} onChange={setJobTitle} />
             <label className="block text-sm">
-              <span className="text-slate-600">Department</span>
-              <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+              <span className="text-ink-soft">Department</span>
+              <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
                 {DEPARTMENTS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Line manager</span>
-              <select value={lineManagerId} onChange={(e) => setLineManagerId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+              <span className="text-ink-soft">Line manager</span>
+              <select value={lineManagerId} onChange={(e) => setLineManagerId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
                 <option value="">—</option>
                 {managers.filter((m) => m.employmentStatus === 'active').map((m) => (
                   <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
@@ -123,8 +133,8 @@ export function StaffFormPage() {
             </label>
             <Field label="Start date" value={startDate} onChange={setStartDate} type="date" />
             <label className="block text-sm">
-              <span className="text-slate-600">Contract type</span>
-              <select value={contractType} onChange={(e) => setContractType(e.target.value as CreateStaffInput['contractType'])} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+              <span className="text-ink-soft">Contract type</span>
+              <select value={contractType} onChange={(e) => setContractType(e.target.value as CreateStaffInput['contractType'])} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
                 <option value="full_time">Full-time</option>
                 <option value="part_time">Part-time</option>
                 <option value="agency">Agency</option>
@@ -139,8 +149,8 @@ export function StaffFormPage() {
         <SectionCard title="Operational assignment">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="text-slate-600">Primary depot</span>
-              <select value={primaryDepotId} onChange={(e) => setPrimaryDepotId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+              <span className="text-ink-soft">Primary depot</span>
+              <select value={primaryDepotId} onChange={(e) => setPrimaryDepotId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
                 {depots.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </label>
@@ -153,21 +163,21 @@ export function StaffFormPage() {
         <SectionCard title="Role and application access">
           <div className="grid gap-3">
             <label className="block text-sm">
-              <span className="text-slate-600">Permission role</span>
-              <select value={roleKey} onChange={(e) => setRoleKey(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+              <span className="text-ink-soft">Permission role</span>
+              <select value={roleKey} onChange={(e) => setRoleKey(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
                 {STAFF_ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Scope</span>
-              <select value={scopeType} onChange={(e) => setScopeType(e.target.value as CreateStaffInput['scopeType'])} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+              <span className="text-ink-soft">Scope</span>
+              <select value={scopeType} onChange={(e) => setScopeType(e.target.value as CreateStaffInput['scopeType'])} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
                 <option value="company">Entire company</option>
                 <option value="depot">Specific depot</option>
                 <option value="department">Department</option>
               </select>
             </label>
             <div className="text-sm">
-              <p className="mb-2 text-slate-600">Applications</p>
+              <p className="mb-2 text-ink-soft">Applications</p>
               {(['command', 'yard', 'maintenance', 'driver', 'reports'] as StaffApplication[]).map((app) => (
                 <label key={app} className="mr-4 inline-flex items-center gap-2">
                   <input type="checkbox" checked={applications.includes(app)} onChange={() => toggleApp(app)} />
@@ -185,7 +195,7 @@ export function StaffFormPage() {
 
       {step === 4 && (
         <SectionCard title="Review">
-          <div className="space-y-2 text-sm text-slate-700">
+          <div className="space-y-2 text-sm text-ink-soft">
             <p><strong>{firstName} {lastName}</strong> will be added as <strong>{jobTitle}</strong>.</p>
             <p>Role: {roleDef?.label} · Scope: {scopeType === 'company' ? 'Entire company' : depots.find((d) => d.id === primaryDepotId)?.name}</p>
             <p>Applications: {applications.join(', ') || 'None'}</p>
@@ -197,7 +207,7 @@ export function StaffFormPage() {
 
       <div className="flex gap-2">
         {step > 0 && (
-          <button type="button" onClick={() => setStep((s) => s - 1)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm">
+          <button type="button" onClick={() => setStep((s) => s - 1)} className="rounded-lg border border-border px-4 py-2 text-sm">
             Back
           </button>
         )}
@@ -218,8 +228,8 @@ export function StaffFormPage() {
 function Field({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
   return (
     <label className="block text-sm">
-      <span className="text-slate-600">{label}</span>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+      <span className="text-ink-soft">{label}</span>
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
     </label>
   )
 }

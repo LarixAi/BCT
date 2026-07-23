@@ -7,7 +7,6 @@ import {
   LogOut,
   Settings,
   Shield,
-  ShieldCheck,
   UserRound,
 } from "lucide-react";
 import DriverCredentialTimeline from "@/components/driver/operational/DriverCredentialTimeline";
@@ -129,7 +128,6 @@ export default function DriverSupabaseProfile({ driver, onLogout }) {
         <div className={`mt-4 overflow-hidden ${op.listCard}`}>
           <MenuRow to="/profile/licence" icon={Shield} label="Licence & compliance" />
           <MenuRow to="/documents" icon={FileText} label="Documents" />
-          <MenuRow to="/profile/security" icon={ShieldCheck} label="Security" />
           <MenuRow to="/profile/settings" icon={Settings} label="Settings" />
           <MenuRow to="/help" icon={HelpCircle} label="Help & support" />
           <MenuRow icon={LogOut} label="Sign out" danger onClick={() => onLogout?.()} />

@@ -902,12 +902,13 @@ async function resolveDriverFromAuth(context: {
 }
 
 async function loadDriverPerson(companyId: string, driverId: string) {
-  const { data } = await admin
+  const { data, error } = await admin
     .from('drivers')
-    .select('id, employee_number, staff_members(first_name, last_name), primary_depot_id')
+    .select('id, driver_number, staff_members(first_name, last_name), primary_depot_id')
     .eq('company_id', companyId)
     .eq('id', driverId)
     .maybeSingle()
+  if (error) throw new Error(error.message)
   if (!data) return null
   const staff = (data.staff_members as Row | Row[] | null) ?? null
   const staffRow = Array.isArray(staff) ? staff[0] ?? null : staff
@@ -924,7 +925,7 @@ async function loadDriverPerson(companyId: string, driverId: string) {
   const last = String(staffRow?.last_name ?? '')
   return {
     personName: `${first} ${last}`.trim() || 'Driver',
-    personNumber: data.employee_number ? String(data.employee_number) : null,
+    personNumber: data.driver_number ? String(data.driver_number) : null,
     depotName,
   }
 }

@@ -9,7 +9,7 @@ export function TransfersReportSection({ from, to }: { from: string; to: string 
     queryFn: () => api.getTransferReport(from, to),
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading transfer report…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading transfer report…</p>
   if (!report) return null
 
   return (
@@ -26,11 +26,11 @@ export function TransfersReportSection({ from, to }: { from: string; to: string 
 
       {report.byReason.length > 0 && (
         <div className="mt-4">
-          <h3 className="text-xs font-semibold uppercase text-slate-500">By reason</h3>
+          <h3 className="text-xs font-semibold uppercase text-muted">By reason</h3>
           <ul className="mt-2 space-y-1 text-sm">
             {report.byReason.map((r) => (
               <li key={r.reason} className="flex justify-between">
-                <span className="capitalize text-slate-700">{r.reason}</span>
+                <span className="capitalize text-ink-soft">{r.reason}</span>
                 <span className="font-medium tabular-nums">{r.count}</span>
               </li>
             ))}
@@ -40,10 +40,10 @@ export function TransfersReportSection({ from, to }: { from: string; to: string 
 
       {report.recentTransfers.length > 0 && (
         <div className="mt-4 overflow-x-auto">
-          <h3 className="text-xs font-semibold uppercase text-slate-500">Recent transfers</h3>
+          <h3 className="text-xs font-semibold uppercase text-muted">Recent transfers</h3>
           <table className="mt-2 w-full min-w-[480px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3 font-medium">ID</th>
                 <th className="pb-2 pr-3 font-medium">Scope</th>
                 <th className="pb-2 pr-3 font-medium">Status</th>
@@ -52,7 +52,7 @@ export function TransfersReportSection({ from, to }: { from: string; to: string 
             </thead>
             <tbody>
               {report.recentTransfers.map((t) => (
-                <tr key={t.id} className="border-b border-slate-50 last:border-0">
+                <tr key={t.id} className="border-b border-border/60 last:border-0">
                   <td className="py-2 pr-3 font-mono text-xs">{t.id}</td>
                   <td className="py-2 pr-3 capitalize">{t.scope.replace(/_/g, ' ')}</td>
                   <td className="py-2 pr-3 capitalize">{t.status.replace(/_/g, ' ')}</td>
@@ -73,9 +73,9 @@ export function TransfersReportSection({ from, to }: { from: string; to: string 
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900">{value}</p>
+    <div className="rounded-lg border border-border bg-surface-muted p-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-ink">{value}</p>
     </div>
   )
 }

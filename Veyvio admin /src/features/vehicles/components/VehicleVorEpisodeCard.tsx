@@ -19,75 +19,75 @@ export function VehicleVorEpisodeCard({ record }: { record: VehicleVorRecord }) 
       <div className="space-y-3 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill status={open ? 'vor' : 'compliant'} />
-          <p className="font-medium text-slate-900">{vor.reason ?? 'VOR episode'}</p>
+          <p className="font-medium text-ink">{vor.reason ?? 'VOR episode'}</p>
         </div>
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <dt className="text-xs text-slate-500">Opened</dt>
+            <dt className="text-xs text-muted">Opened</dt>
             <dd>
               {new Date(vor.reportedAt).toLocaleString('en-GB')}
-              <span className="block text-xs text-slate-500">{vor.reportedBy}</span>
+              <span className="block text-xs text-muted">{vor.reportedBy}</span>
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Category</dt>
+            <dt className="text-xs text-muted">Category</dt>
             <dd>{(vor.category ?? '—').replace(/_/g, ' ')}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Location</dt>
+            <dt className="text-xs text-muted">Location</dt>
             <dd>{vor.location ?? '—'}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Diagnosis</dt>
+            <dt className="text-xs text-muted">Diagnosis</dt>
             <dd>{vor.diagnosis ?? '—'}</dd>
           </div>
           <div className="sm:col-span-2">
-            <dt className="text-xs text-slate-500">Work performed</dt>
+            <dt className="text-xs text-muted">Work performed</dt>
             <dd>{vor.workPerformed ?? (open ? 'Not recorded yet' : '—')}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Labour</dt>
+            <dt className="text-xs text-muted">Labour</dt>
             <dd className="tabular-nums">{money(vor.labourCost)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Parts</dt>
+            <dt className="text-xs text-muted">Parts</dt>
             <dd className="tabular-nums">{money(vor.partsCost)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">External</dt>
+            <dt className="text-xs text-muted">External</dt>
             <dd className="tabular-nums">{money(vor.externalCost)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Total cost</dt>
+            <dt className="text-xs text-muted">Total cost</dt>
             <dd className="font-semibold tabular-nums">{money(vor.totalCost)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Downtime</dt>
+            <dt className="text-xs text-muted">Downtime</dt>
             <dd className="tabular-nums">
               {vor.downtimeHours != null ? `${vor.downtimeHours} h` : open ? 'In progress' : '—'}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Returned to road</dt>
+            <dt className="text-xs text-muted">Returned to road</dt>
             <dd>
               {vor.returnedToRoadAt ? new Date(vor.returnedToRoadAt).toLocaleString('en-GB') : '—'}
               {vor.returnedToRoadBy ? (
-                <span className="block text-xs text-slate-500">{vor.returnedToRoadBy}</span>
+                <span className="block text-xs text-muted">{vor.returnedToRoadBy}</span>
               ) : null}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Return mileage</dt>
+            <dt className="text-xs text-muted">Return mileage</dt>
             <dd className="tabular-nums">
               {vor.returnMileage != null ? `${vor.returnMileage.toLocaleString('en-GB')} mi` : '—'}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Verification</dt>
+            <dt className="text-xs text-muted">Verification</dt>
             <dd>
               {vor.verificationResult ?? '—'}
               {vor.verifiedBy ? (
-                <span className="block text-xs text-slate-500">
+                <span className="block text-xs text-muted">
                   {vor.verifiedBy}
                   {vor.verificationMethod ? ` · ${vor.verificationMethod}` : ''}
                 </span>
@@ -96,10 +96,10 @@ export function VehicleVorEpisodeCard({ record }: { record: VehicleVorRecord }) 
           </div>
         </dl>
         {vor.workOrderIds && vor.workOrderIds.length > 0 && (
-          <p className="text-xs text-slate-500">Linked work orders: {vor.workOrderIds.join(', ')}</p>
+          <p className="text-xs text-muted">Linked work orders: {vor.workOrderIds.join(', ')}</p>
         )}
         {vor.preventiveAction && (
-          <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+          <p className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs">
             Preventive action: {vor.preventiveAction}
           </p>
         )}

@@ -79,7 +79,7 @@ export function InspectionsPage() {
     },
   })
 
-  if (isLoading || !hub) return <p className="text-sm text-slate-500">Loading inspections…</p>
+  if (isLoading || !hub) return <p className="text-sm text-muted">Loading inspections…</p>
 
   return (
     <div className="space-y-6">
@@ -93,8 +93,8 @@ export function InspectionsPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Inspections</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Inspections</h1>
+          <p className="text-sm text-ink-soft">
             Formal inspection schedule, checklist outcomes and sign-off — not daily vehicle checks.
           </p>
         </div>
@@ -108,27 +108,27 @@ export function InspectionsPage() {
           </button>
           <Link
             to="/inspections?tab=calendar"
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Calendar
           </Link>
           <button
             type="button"
             onClick={() => setShowImport(true)}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Import inspection
           </button>
           <Link
             to="/maintenance?tab=pmi"
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Manage schedules
           </Link>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200">
+      <div className="flex flex-wrap gap-1 border-b border-border">
         {INSPECTION_TABS.map((t) => (
           <button
             key={t.id}
@@ -137,7 +137,7 @@ export function InspectionsPage() {
             className={`border-b-2 px-3 py-2 text-sm font-medium ${
               tab === t.id
                 ? 'border-command-600 text-command-700'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                : 'border-transparent text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}
@@ -161,17 +161,17 @@ export function InspectionsPage() {
       {showSchedule && <ScheduleInspectionPanel onClose={() => setShowSchedule(false)} />}
 
       {showImport && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-4 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-900">Import inspection (PDF metadata)</h2>
-            <p className="mt-1 text-sm text-slate-600">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-midnight/30 p-4">
+          <div className="w-full max-w-md rounded-xl bg-surface p-4 shadow-xl">
+            <h2 className="text-lg font-semibold text-ink">Import inspection (PDF metadata)</h2>
+            <p className="mt-1 text-sm text-ink-soft">
               Phase 1 stub — records PDF file name and queues the inspection for sign-off review.
             </p>
             <label className="mt-4 block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Vehicle</span>
+              <span className="mb-1 block font-medium text-ink-soft">Vehicle</span>
               <select
                 id="import-vehicle"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                className="w-full rounded-lg border border-border px-3 py-2"
                 defaultValue=""
               >
                 <option value="">Select…</option>
@@ -186,7 +186,7 @@ export function InspectionsPage() {
               <button
                 type="button"
                 onClick={() => setShowImport(false)}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="rounded-lg border border-border px-3 py-2 text-sm"
               >
                 Cancel
               </button>

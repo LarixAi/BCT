@@ -19,12 +19,14 @@ export default function EnableBiometricsSheet({
   label = "Face ID",
   busy = false,
   error = "",
+  successLabel = "",
   onEnable,
   onRemindNextWeek,
   onDontAskAgain,
 }) {
   const isFace = /face/i.test(label);
   const Icon = isFace ? ScanFace : Fingerprint;
+  const done = Boolean(successLabel);
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} shouldScaleBackground={false}>
@@ -33,10 +35,13 @@ export default function EnableBiometricsSheet({
           <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-2xl ${op.iconWrap}`}>
             <Icon className={`h-6 w-6 ${op.iconTeal}`} aria-hidden />
           </div>
-          <DrawerTitle className="text-xl">You&apos;re ready to go</DrawerTitle>
+          <DrawerTitle className="text-xl">
+            {done ? `${successLabel} is on` : "You're ready to go"}
+          </DrawerTitle>
           <DrawerDescription className="text-[15px] leading-relaxed text-muted-foreground">
-            Use {label} so future sign-ins are faster. Your face or fingerprint stays on this device.
-            Veyvio never receives or stores your biometric information.
+            {done
+              ? `Next time you open the app after signing out, you can continue with ${successLabel} on the sign-in screen. Manage this any time under More → Security.`
+              : `Set up faster sign-in with ${label}, fingerprint or your device screen lock. Your biometric information stays on this device. Veyvio never receives or stores it.`}
           </DrawerDescription>
         </DrawerHeader>
 
@@ -46,32 +51,34 @@ export default function EnableBiometricsSheet({
           </p>
         ) : null}
 
-        <DrawerFooter className="gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void onEnable?.()}
-            className={`flex min-h-[48px] w-full items-center justify-center rounded-full font-semibold ${op.primaryBtn} disabled:opacity-60`}
-          >
-            {busy ? "Enabling…" : `Enable ${label}`}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onRemindNextWeek?.()}
-            className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card font-semibold text-foreground active:bg-muted/60 disabled:opacity-60"
-          >
-            Remind me next week
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onDontAskAgain?.()}
-            className="flex min-h-[44px] w-full items-center justify-center py-2 text-sm font-medium text-muted-foreground disabled:opacity-60"
-          >
-            Don&apos;t ask again
-          </button>
-        </DrawerFooter>
+        {done ? null : (
+          <DrawerFooter className="gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void onEnable?.()}
+              className={`flex min-h-[48px] w-full items-center justify-center rounded-full font-semibold ${op.primaryBtn} disabled:opacity-60`}
+            >
+              {busy ? "Setting up…" : "Set up biometric or device sign-in"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onRemindNextWeek?.()}
+              className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card font-semibold text-foreground active:bg-muted/60 disabled:opacity-60"
+            >
+              Remind me next week
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDontAskAgain?.()}
+              className="flex min-h-[44px] w-full items-center justify-center py-2 text-sm font-medium text-muted-foreground disabled:opacity-60"
+            >
+              Don&apos;t ask again
+            </button>
+          </DrawerFooter>
+        )}
       </DrawerContent>
     </Drawer>
   );

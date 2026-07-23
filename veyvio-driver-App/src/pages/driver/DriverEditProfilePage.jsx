@@ -96,10 +96,10 @@ export default function DriverEditProfilePage({ driver }) {
             Contact ops to update
           </Link>
           <Link
-            to="/profile/security"
+            to="/profile/settings"
             className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card text-[15px] font-semibold text-foreground active:bg-muted"
           >
-            Security & password
+            Security & sign-in
           </Link>
         </div>
       </div>

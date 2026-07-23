@@ -210,30 +210,55 @@ function workPermissionsFromKeys(keys: unknown): { key: string; label: string; e
 const DRIVER_TRAINING_CATALOG: Array<{
   key: string
   label: string
-  category: 'mandatory' | 'role'
+  category: 'mandatory' | 'vehicle' | 'role' | 'development'
   requiredFor: string
   permissions: string[]
   documentTypes?: string[]
 }> = [
-  { key: 'company_induction', label: 'Company induction', category: 'mandatory', requiredFor: 'All drivers', permissions: [] },
-  { key: 'driver_app', label: 'Using Veyvio Driver', category: 'mandatory', requiredFor: 'All drivers', permissions: [] },
-  { key: 'daily_vehicle_checks', label: 'Daily vehicle checks', category: 'mandatory', requiredFor: 'All drivers', permissions: [] },
-  { key: 'health_safety', label: 'Health and safety', category: 'mandatory', requiredFor: 'All drivers', permissions: [] },
-  { key: 'emergency_procedures', label: 'Emergency / accident procedures', category: 'mandatory', requiredFor: 'All drivers', permissions: [] },
-  { key: 'manual_handling', label: 'Manual handling', category: 'mandatory', requiredFor: 'All drivers', permissions: [], documentTypes: ['manual_handling'] },
-  { key: 'midas_standard', label: 'MiDAS Standard', category: 'mandatory', requiredFor: 'Minibus / community transport', permissions: [], documentTypes: ['midas', 'midas_standard'] },
-  { key: 'safeguarding_adults', label: 'Safeguarding adults', category: 'mandatory', requiredFor: 'All drivers', permissions: [], documentTypes: ['safeguarding_training', 'safeguarding_adults'] },
-  { key: 'first_aid_efaw', label: 'Emergency First Aid at Work', category: 'mandatory', requiredFor: 'All drivers', permissions: [], documentTypes: ['first_aid'] },
-  { key: 'midas_accessible', label: 'MiDAS Accessible module', category: 'role', requiredFor: 'Wheelchair / accessible transport', permissions: ['wheelchair', 'accessible', 'passenger_lift'], documentTypes: ['midas_accessible', 'wheelchair_training'] },
-  { key: 'wheelchair_restraint', label: 'Wheelchair restraint systems', category: 'role', requiredFor: 'Wheelchair passengers', permissions: ['wheelchair', 'accessible'], documentTypes: ['wheelchair_training'] },
-  { key: 'lift_ramp_operation', label: 'Lift and ramp operation', category: 'role', requiredFor: 'Accessible vehicles', permissions: ['wheelchair', 'accessible', 'passenger_lift'], documentTypes: ['wheelchair_training', 'passenger_lift'] },
+  // Level 1 — mandatory before first shift
+  { key: 'company_induction', label: 'Company induction', category: 'mandatory', requiredFor: 'All drivers — before first shift', permissions: [] },
+  { key: 'driver_app', label: 'Driver app training', category: 'mandatory', requiredFor: 'All drivers — before first shift', permissions: [] },
+  { key: 'daily_vehicle_checks', label: 'Daily vehicle check training', category: 'mandatory', requiredFor: 'All drivers — before first shift', permissions: [] },
+  { key: 'health_safety', label: 'Health and safety', category: 'mandatory', requiredFor: 'All drivers — before first shift', permissions: [], documentTypes: ['manual_handling'] },
+  { key: 'safeguarding', label: 'Safeguarding', category: 'mandatory', requiredFor: 'All drivers — Section 19/22 essential', permissions: [], documentTypes: ['safeguarding_training', 'safeguarding_adults'] },
+  { key: 'emergency_procedures', label: 'Emergency procedures', category: 'mandatory', requiredFor: 'All drivers — before first shift', permissions: [] },
+  { key: 'data_protection_gdpr', label: 'Data protection (GDPR)', category: 'mandatory', requiredFor: 'All drivers — before first shift', permissions: [] },
+  { key: 'driver_declaration', label: 'Driver declaration', category: 'mandatory', requiredFor: 'All drivers — before first shift', permissions: [] },
+  // Level 2 — vehicle-specific
+  { key: 'midas_standard', label: 'MiDAS Standard', category: 'vehicle', requiredFor: 'Minibus / community transport vehicles', permissions: ['community', 'minibus'], documentTypes: ['midas', 'midas_standard'] },
+  { key: 'midas_accessible', label: 'MiDAS Accessible', category: 'vehicle', requiredFor: 'Wheelchair / accessible vehicles', permissions: ['wheelchair', 'accessible', 'passenger_lift'], documentTypes: ['midas_accessible', 'wheelchair_training'] },
+  { key: 'wheelchair_restraint', label: 'Wheelchair restraint systems', category: 'vehicle', requiredFor: 'Wheelchair passengers', permissions: ['wheelchair', 'accessible'], documentTypes: ['wheelchair_training'] },
+  { key: 'lift_ramp_operation', label: 'Lift and ramp operation', category: 'vehicle', requiredFor: 'Accessible vehicles with lift or ramp', permissions: ['wheelchair', 'accessible', 'passenger_lift'], documentTypes: ['wheelchair_training', 'passenger_lift'] },
+  { key: 'driver_cpc', label: 'Driver CPC (periodic training)', category: 'vehicle', requiredFor: 'PSV / coach', permissions: ['psv', 'coach'], documentTypes: ['cpc', 'dqc'] },
+  // Level 4 — role-specific
+  { key: 'first_aid_efaw', label: 'Emergency First Aid at Work', category: 'role', requiredFor: 'First-aid designated duties', permissions: ['first_aid', 'hospital', 'school'], documentTypes: ['first_aid'] },
   { key: 'safeguarding_children', label: 'Safeguarding children', category: 'role', requiredFor: 'School / SEND transport', permissions: ['school', 'send', 'safeguarding'], documentTypes: ['safeguarding_training', 'safeguarding_children'] },
   { key: 'send_autism_awareness', label: 'SEND / autism awareness', category: 'role', requiredFor: 'SEND transport', permissions: ['send', 'school'] },
   { key: 'behaviour_management', label: 'Behaviour management', category: 'role', requiredFor: 'SEND / school transport', permissions: ['send', 'school'] },
   { key: 'infection_prevention', label: 'Infection prevention and control', category: 'role', requiredFor: 'Hospital transport', permissions: ['hospital'] },
   { key: 'dementia_awareness', label: 'Dementia awareness', category: 'role', requiredFor: 'Hospital / elderly transport', permissions: ['hospital', 'elderly'] },
-  { key: 'driver_cpc', label: 'Driver CPC (periodic training)', category: 'role', requiredFor: 'PSV / coach', permissions: ['psv', 'coach'], documentTypes: ['cpc', 'dqc'] },
+  { key: 'passenger_assistant', label: 'Passenger assistant', category: 'role', requiredFor: 'Escort / PA duties', permissions: ['escort', 'passenger_assistant'] },
+  { key: 'school_transport', label: 'School transport', category: 'role', requiredFor: 'School contracts', permissions: ['school'] },
+  { key: 'adult_social_care', label: 'Adult social care', category: 'role', requiredFor: 'Adult social care contracts', permissions: ['elderly', 'hospital', 'adult_care'] },
+  { key: 'mental_health_awareness', label: 'Mental health awareness', category: 'role', requiredFor: 'Hospital / vulnerable adult transport', permissions: ['hospital', 'adult_care'] },
+  { key: 'medication_awareness', label: 'Medication awareness', category: 'role', requiredFor: 'Roles handling medication handovers', permissions: ['hospital', 'adult_care'] },
+  { key: 'conflict_management', label: 'Conflict management', category: 'role', requiredFor: 'Front-line passenger duties', permissions: ['school', 'hospital', 'community'] },
+  // Level 5 — optional development (always offered)
+  { key: 'eco_driving', label: 'Eco driving', category: 'development', requiredFor: 'Optional development', permissions: [] },
+  { key: 'customer_excellence', label: 'Customer excellence', category: 'development', requiredFor: 'Optional development', permissions: [] },
+  { key: 'advanced_driving', label: 'Advanced driving', category: 'development', requiredFor: 'Optional development', permissions: [] },
+  { key: 'driver_mentor', label: 'Driver mentor', category: 'development', requiredFor: 'Optional development', permissions: [] },
+  { key: 'leadership', label: 'Leadership', category: 'development', requiredFor: 'Optional development', permissions: [] },
 ]
+
+function catalogApplies(
+  def: (typeof DRIVER_TRAINING_CATALOG)[number],
+  enabled: Set<string>,
+): boolean {
+  if (def.category === 'mandatory' || def.category === 'development') return true
+  if (!def.permissions.length) return true
+  return def.permissions.some((p) => enabled.has(p))
+}
 
 function buildProjectedTrainingRequirements(
   workPermissions: Array<{ key: string; enabled: boolean }>,
@@ -244,9 +269,15 @@ function buildProjectedTrainingRequirements(
   const byKey = new Map(trainingRows.map((r) => [String(r.training_key), r]))
   const EXPIRING_SOON_DAYS = 90
 
-  return DRIVER_TRAINING_CATALOG.filter(
-    (def) => !def.permissions.length || def.permissions.some((p) => enabled.has(p)),
-  ).map((def) => {
+  // Legacy course keys still count toward current Level 1 modules
+  if (!byKey.has('safeguarding') && byKey.has('safeguarding_adults')) {
+    byKey.set('safeguarding', byKey.get('safeguarding_adults')!)
+  }
+  if (!byKey.has('health_safety') && byKey.has('manual_handling')) {
+    byKey.set('health_safety', byKey.get('manual_handling')!)
+  }
+
+  return DRIVER_TRAINING_CATALOG.filter((def) => catalogApplies(def, enabled)).map((def) => {
     const record = byKey.get(def.key)
     const doc = (def.documentTypes ?? []).length
       ? documents.find((d) => def.documentTypes!.includes(String(d.requirementType ?? d.requirement_type ?? '')))
@@ -270,7 +301,14 @@ function buildProjectedTrainingRequirements(
 
     let status = 'missing'
     if (recordStatus === 'failed') status = 'failed'
-    else if (hasCompleteRecord || verifiedDoc) {
+    else if (recordStatus === 'assigned' || recordStatus === 'training_assigned') status = 'assigned'
+    else if (
+      recordStatus === 'in_progress' ||
+      recordStatus === 'assessment_required' ||
+      recordStatus === 'started'
+    ) {
+      status = 'in_progress'
+    } else if (hasCompleteRecord || verifiedDoc) {
       if (expiresAt) {
         const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
         if (days < 0) status = 'expired'
@@ -367,32 +405,41 @@ function buildDriverEligibility(profile: Row) {
     })
   }
 
-  // Mandatory training gaps (MiDAS etc.)
+  // Level 1 mandatory training — must be complete for RELEASE STATUS = Eligible
   const training = Array.isArray(profile.trainingRequirements) ? (profile.trainingRequirements as Row[]) : []
+  const outstanding = (status: string) =>
+    status === 'missing' ||
+    status === 'expired' ||
+    status === 'failed' ||
+    status === 'assigned' ||
+    status === 'in_progress'
+
   const mandatoryGaps = training.filter((req) => {
     if (String(req.category) !== 'mandatory') return false
-    const status = String(req.status ?? '')
-    return status === 'missing' || status === 'expired' || status === 'failed'
+    return outstanding(String(req.status ?? ''))
   })
-  const onboardingPhase = op === 'draft' || op === 'onboarding' || op === 'pending_compliance'
-  const dispatchActivated = op === 'eligible' || op === 'restricted'
-  if (mandatoryGaps.length && (onboardingPhase || dispatchActivated)) {
-    // Soft while onboarding, and after Activate for dispatch — admin already released the driver.
-    warnings.push({
+  const vehicleGaps = training.filter((req) => {
+    if (String(req.category) !== 'vehicle') return false
+    return outstanding(String(req.status ?? ''))
+  })
+
+  if (mandatoryGaps.length > 0) {
+    failures.push({
       code: 'training_not_started',
-      message: `${mandatoryGaps.length} mandatory training items not started — assign from Training`,
+      message:
+        mandatoryGaps.length === 1
+          ? `${String(mandatoryGaps[0]!.label)} is still outstanding — complete it under Training before release`
+          : `${mandatoryGaps.length} mandatory training courses still outstanding — complete them under Training before release`,
+      severity: 'block',
+      category: 'compliance',
+    })
+  } else if (vehicleGaps.length > 0) {
+    warnings.push({
+      code: 'vehicle_training_incomplete',
+      message: `${vehicleGaps.length} vehicle-specific course${vehicleGaps.length === 1 ? '' : 's'} still outstanding (e.g. MiDAS) — some vehicle types stay blocked`,
       severity: 'warning',
       category: 'compliance',
     })
-  } else {
-    for (const req of mandatoryGaps) {
-      failures.push({
-        code: `training_${req.key}`,
-        message: `${name}: ${req.label} — ${String(req.status ?? 'missing').replace(/_/g, ' ')}`,
-        severity: 'block',
-        category: 'compliance',
-      })
-    }
   }
 
   const canAssign = failures.length === 0

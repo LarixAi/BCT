@@ -48,23 +48,23 @@ export function DriverMessagesTab({ driver }: { driver: DriverProfile }) {
           </Link>
         }
       >
-        <p className="mb-3 text-sm text-slate-600">
+        <p className="mb-3 text-sm text-ink-soft">
           Messages sent here appear in the Driver app inbox for {displayName}. Replies come back to this shared Command
           thread.
         </p>
 
-        <div className="mb-4 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-4 space-y-2 rounded-lg border border-border bg-surface-muted p-3">
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
             placeholder="Subject"
           />
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={3}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
             placeholder={`Write a notice for ${displayName}…`}
           />
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -79,25 +79,25 @@ export function DriverMessagesTab({ driver }: { driver: DriverProfile }) {
         </div>
 
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading messages…</p>
+          <p className="text-sm text-muted">Loading messages…</p>
         ) : messages.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
-            <p className="text-sm text-slate-600">No Command messages for this driver yet.</p>
+          <div className="rounded-lg border border-dashed border-border bg-surface-muted px-4 py-6 text-center">
+            <p className="text-sm text-ink-soft">No Command messages for this driver yet.</p>
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-border">
             {messages.slice(0, 20).map((m) => (
               <li key={m.id} className="py-3 first:pt-0">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <p className="font-medium text-slate-900">{m.subject ?? 'No subject'}</p>
-                    <p className="mt-0.5 line-clamp-2 text-sm text-slate-600">{m.body}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="font-medium text-ink">{m.subject ?? 'No subject'}</p>
+                    <p className="mt-0.5 line-clamp-2 text-sm text-ink-soft">{m.body}</p>
+                    <p className="mt-1 text-xs text-muted">
                       {m.sender.firstName} {m.sender.lastName}
                       {m.sourceApp ? ` · ${m.sourceApp}` : ''}
                     </p>
                   </div>
-                  <p className="shrink-0 text-xs text-slate-500">
+                  <p className="shrink-0 text-xs text-muted">
                     {new Date(m.createdAt).toLocaleString('en-GB', {
                       day: 'numeric',
                       month: 'short',

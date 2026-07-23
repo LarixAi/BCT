@@ -43,7 +43,7 @@ export function IncidentsPage() {
     queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
   }
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading incidents…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading incidents…</p>
   if (isError || !hub) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load incidents'}</p>
   }
@@ -54,9 +54,9 @@ export function IncidentsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Incidents</h1>
-          <p className="text-sm text-slate-600">Record, respond to, investigate and resolve safety and operational incidents.</p>
-          <p className="text-xs text-slate-500">{safeHub.operationalDate}</p>
+          <h1 className="text-2xl font-semibold text-ink">Incidents</h1>
+          <p className="text-sm text-ink-soft">Record, respond to, investigate and resolve safety and operational incidents.</p>
+          <p className="text-xs text-muted">{safeHub.operationalDate}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canReport && (
@@ -66,11 +66,11 @@ export function IncidentsPage() {
           )}
           <IncidentsExportButton rows={safeHub.register} />
           {canSettings && (
-            <Link to="/incidents/settings" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50" data-testid="incident-settings-link">
+            <Link to="/incidents/settings" className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted" data-testid="incident-settings-link">
               Settings
             </Link>
           )}
-          <button type="button" onClick={refresh} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+          <button type="button" onClick={refresh} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
             Refresh
           </button>
         </div>
@@ -95,13 +95,13 @@ export function IncidentsPage() {
               className={`rounded-xl border p-3 text-left transition ${
                 filter === card.filterKey && tab === 'active'
                   ? 'border-command-500 bg-command-50 ring-1 ring-command-500'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
+                  : 'border-border bg-surface hover:border-border-strong'
               }`}
             >
-              <p className="text-xl font-bold tabular-nums text-slate-900">{value}</p>
-              <p className="text-xs text-slate-600">{card.label}</p>
+              <p className="text-xl font-bold tabular-nums text-ink">{value}</p>
+              <p className="text-xs text-ink-soft">{card.label}</p>
               {sub != null && typeof sub === 'number' && card.subKey === 'previousMonthCount' && (
-                <p className="mt-1 text-xs text-slate-500">Previous month: {sub}</p>
+                <p className="mt-1 text-xs text-muted">Previous month: {sub}</p>
               )}
             </button>
           )
@@ -109,8 +109,8 @@ export function IncidentsPage() {
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search incidents…" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:max-w-xs" />
-        <select value={depotId} onChange={(e) => setDepotId(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search incidents…" className="w-full rounded-lg border border-border px-3 py-2 text-sm sm:max-w-xs" />
+        <select value={depotId} onChange={(e) => setDepotId(e.target.value)} className="rounded-lg border border-border px-3 py-2 text-sm">
           <option value="all">All depots</option>
           {safeHub.depots.map((d) => (
             <option key={d.id} value={d.id}>{d.name}</option>
@@ -128,7 +128,7 @@ export function IncidentsPage() {
               setTab('active')
             }}
             className={`rounded-full px-3 py-1 text-xs font-medium ${
-              filter === view.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'
+              filter === view.id ? 'bg-command-600 text-white' : 'bg-surface text-ink-soft ring-1 ring-border'
             }`}
           >
             {view.label}
@@ -136,14 +136,14 @@ export function IncidentsPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {INCIDENTS_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === t.id ? 'border-b-2 border-command-600 text-command-700' : 'text-slate-600 hover:text-slate-900'
+              tab === t.id ? 'border-b-2 border-command-600 text-command-700' : 'text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}

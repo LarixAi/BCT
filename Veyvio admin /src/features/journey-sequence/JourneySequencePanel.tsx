@@ -210,7 +210,7 @@ export function JourneySequencePanel({
   }, [primarySelected, activeTripId, workspace])
 
   if (isLoading) {
-    return <p className="text-sm text-slate-500">Loading journey sequence…</p>
+    return <p className="text-sm text-muted">Loading journey sequence…</p>
   }
 
   if (isError || !workspace) {
@@ -225,7 +225,7 @@ export function JourneySequencePanel({
         <button
           type="button"
           onClick={() => refetch()}
-          className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium hover:bg-amber-100"
+          className="mt-2 rounded-lg border border-amber-300 bg-surface px-3 py-1.5 text-xs font-medium hover:bg-amber-100"
         >
           Try again
         </button>
@@ -304,7 +304,7 @@ export function JourneySequencePanel({
             workspace.capability === 'active_warning'
               ? 'border-amber-200 bg-amber-50 text-amber-950'
               : workspace.capability === 'correction_only' || workspace.capability === 'reinstate_only'
-                ? 'border-slate-200 bg-slate-50 text-slate-800'
+                ? 'border-border bg-surface-muted text-ink'
                 : 'border-sky-200 bg-sky-50 text-sky-950',
           )}
         >
@@ -317,8 +317,8 @@ export function JourneySequencePanel({
           title="Driver acknowledgement"
           description={`Status: ${ack.status.replace(/_/g, ' ')} · escalate after ${ack.escalateAfterMinutes} min`}
         >
-          <p className="text-sm text-slate-800">{ack.summary}</p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="text-sm text-ink">{ack.summary}</p>
+          <p className="mt-1 text-xs text-muted">
             Sent {ack.sentAt ? new Date(ack.sentAt).toLocaleTimeString('en-GB') : '—'}
             {ack.status === 'declined' && ack.declineReason
               ? ` · Declined: ${ack.declineReason.replace(/_/g, ' ')}`
@@ -329,7 +329,7 @@ export function JourneySequencePanel({
               <button
                 type="button"
                 onClick={() => ackMut.mutate('viewed')}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
               >
                 Mark viewed (demo)
               </button>
@@ -343,7 +343,7 @@ export function JourneySequencePanel({
               <select
                 value={declineReason}
                 onChange={(e) => setDeclineReason(e.target.value as DriverDeclineReason)}
-                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                className="rounded-lg border border-border px-2 py-1.5 text-xs"
               >
                 {DECLINE_REASONS.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -403,7 +403,7 @@ export function JourneySequencePanel({
                     setDraftOrder(null)
                     setShowLinkedPrompt(false)
                   }}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
                 >
                   Cancel
                 </button>
@@ -419,7 +419,7 @@ export function JourneySequencePanel({
               <button
                 type="button"
                 onClick={() => setMode('edit')}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
               >
                 Back to edit
               </button>
@@ -427,13 +427,13 @@ export function JourneySequencePanel({
           }
         >
           {mode === 'edit' && (
-            <p className="mb-3 text-xs text-slate-500">
+            <p className="mb-3 text-xs text-muted">
               Drag pickups (☰) or use Up/Down to change order. School drop-off stays fixed at the end.
               Select a pickup to move it to another run.
             </p>
           )}
           {mode === 'view' && editable && (
-            <p className="mb-3 text-xs text-slate-500">
+            <p className="mb-3 text-xs text-muted">
               Same stops as the Stops tab. Use Rearrange order to change pickup sequence.
             </p>
           )}
@@ -482,7 +482,7 @@ export function JourneySequencePanel({
                       'flex w-full items-start gap-3 rounded-lg border p-3 text-left text-sm transition',
                       isSelected && 'border-command-500 ring-1 ring-command-500 bg-command-50/40',
                       isLinked && 'border-sky-300 bg-sky-50/70',
-                      !isSelected && !isLinked && 'border-slate-200 bg-white',
+                      !isSelected && !isLinked && 'border-border bg-surface',
                       dragJobId === stop.jobId && 'opacity-50',
                       canDrag && 'cursor-grab active:cursor-grabbing',
                     )}
@@ -494,20 +494,20 @@ export function JourneySequencePanel({
                       disabled={!stop.jobId}
                     >
                       {canDrag ? (
-                        <span className="mt-0.5 text-slate-400" aria-hidden>
+                        <span className="mt-0.5 text-muted" aria-hidden>
                           ☰
                         </span>
                       ) : (
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-ink-soft">
                           {stop.position}
                         </span>
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-command-600">{stop.label}</p>
                         {stop.address && stop.address !== stop.label && (
-                          <p className="mt-0.5 text-xs text-slate-500">{stop.address}</p>
+                          <p className="mt-0.5 text-xs text-muted">{stop.address}</p>
                         )}
-                        <p className="mt-1 text-xs tabular-nums text-slate-500">
+                        <p className="mt-1 text-xs tabular-nums text-muted">
                           {timingLabel}
                           {isLinked ? ' · Linked journey' : ''}
                           {isSelected ? ' · Selected' : ''}
@@ -518,14 +518,14 @@ export function JourneySequencePanel({
                       <div className="flex shrink-0 flex-col gap-1">
                         <button
                           type="button"
-                          className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-50"
+                          className="rounded border border-border px-2 py-0.5 text-xs hover:bg-surface-muted"
                           onClick={() => movePickup(stop.jobId!, -1)}
                         >
                           Up
                         </button>
                         <button
                           type="button"
-                          className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-50"
+                          className="rounded border border-border px-2 py-0.5 text-xs hover:bg-surface-muted"
                           onClick={() => movePickup(stop.jobId!, 1)}
                         >
                           Down
@@ -539,7 +539,7 @@ export function JourneySequencePanel({
                             ? 'bg-emerald-100 text-emerald-800'
                             : statusLabel === 'Locked'
                               ? 'bg-amber-100 text-amber-900'
-                              : 'bg-slate-100 text-slate-600',
+                              : 'bg-surface-muted text-ink-soft',
                         )}
                       >
                         {statusLabel}
@@ -551,7 +551,7 @@ export function JourneySequencePanel({
             })}
           </ol>
 
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-muted">
             Reordering pickups updates the operating sequence. The school drop-off stays at the end
             unless you move a journey to another run.
           </p>
@@ -597,7 +597,7 @@ export function JourneySequencePanel({
 
       {showLinkedPrompt && linked && mode === 'edit' && (
         <SectionCard title="Linked return journey found" description="This return journey has not been changed">
-          <p className="text-sm text-slate-800">
+          <p className="text-sm text-ink">
             {linked.passengerName} also has a {linked.direction} journey today at{' '}
             <span className="font-semibold tabular-nums">{linked.plannedPickupTime}</span> on{' '}
             {linked.runReference ? `Run ${linked.runReference}` : linked.tripReference}.
@@ -621,7 +621,7 @@ export function JourneySequencePanel({
                   'rounded-lg px-3 py-1.5 text-sm font-medium',
                   linkedDecision === opt.id
                     ? 'bg-command-600 text-white'
-                    : 'border border-slate-200 hover:bg-slate-50',
+                    : 'border border-border hover:bg-surface-muted',
                 )}
               >
                 {opt.label}
@@ -641,8 +641,8 @@ export function JourneySequencePanel({
               </p>
             )}
 
-            <div className="rounded-lg border border-slate-200 px-3 py-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Changes</p>
+            <div className="rounded-lg border border-border px-3 py-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Changes</p>
               {previewQuery.data.movedPassengerName ? (
                 <ul className="mt-1 list-disc space-y-1 pl-5">
                   <li>
@@ -669,23 +669,23 @@ export function JourneySequencePanel({
                   </li>
                 </ul>
               ) : (
-                <p className="mt-1 text-slate-600">No pickup order change detected.</p>
+                <p className="mt-1 text-ink-soft">No pickup order change detected.</p>
               )}
             </div>
 
-            <div className="rounded-lg border border-slate-200 px-3 py-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div className="rounded-lg border border-border px-3 py-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Notifications
               </p>
               <ul className="mt-1 space-y-1">
                 {previewQuery.data.notifications.map((n) => (
                   <li key={n.audience} className="flex gap-2">
-                    <span className={n.notify ? 'text-emerald-700' : 'text-slate-400'}>
+                    <span className={n.notify ? 'text-emerald-700' : 'text-muted'}>
                       {n.notify ? '✓' : '–'}
                     </span>
                     <span>
                       <span className="font-medium">{AUDIENCE_LABEL[n.audience]}</span>
-                      <span className="text-slate-500"> — {n.reason}</span>
+                      <span className="text-muted"> — {n.reason}</span>
                     </span>
                   </li>
                 ))}
@@ -693,13 +693,13 @@ export function JourneySequencePanel({
             </div>
 
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Reason (required)
               </label>
               <select
                 value={reason}
                 onChange={(e) => setReason(e.target.value as ReorganiseReasonCode)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5 text-sm"
               >
                 {REORGANISE_REASONS.map((r) => (
                   <option key={r} value={r}>
@@ -712,7 +712,7 @@ export function JourneySequencePanel({
                   value={reasonNotes}
                   onChange={(e) => setReasonNotes(e.target.value)}
                   placeholder="Describe the reason"
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+                  className="mt-2 w-full rounded-lg border border-border px-3 py-1.5 text-sm"
                 />
               )}
             </div>
@@ -721,7 +721,7 @@ export function JourneySequencePanel({
               <button
                 type="button"
                 onClick={() => setMode('edit')}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
               >
                 Back
               </button>
@@ -733,7 +733,7 @@ export function JourneySequencePanel({
                   (reason === 'other' && !reasonNotes.trim())
                 }
                 onClick={() => commit.mutate(false)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
               >
                 Save without sending
               </button>
@@ -754,12 +754,12 @@ export function JourneySequencePanel({
         <SectionCard title="Change history" description="Permanent audit of sequence reorganisations">
           <ol className="space-y-2 text-sm">
             {audit.map((a) => (
-              <li key={a.id} className="rounded-lg border border-slate-100 px-3 py-2">
-                <p className="font-medium text-slate-900">
+              <li key={a.id} className="rounded-lg border border-border px-3 py-2">
+                <p className="font-medium text-ink">
                   {new Date(a.at).toLocaleString('en-GB')} · {a.actorName}
                 </p>
-                <p className="text-slate-700">{a.summary}</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="text-ink-soft">{a.summary}</p>
+                <p className="mt-1 text-xs text-muted">
                   Reason: {REORGANISE_REASON_LABEL[a.reason]} · Linked return:{' '}
                   {a.linkedReturnDecision.replace(/_/g, ' ')}
                   {a.notificationsSent.length

@@ -40,7 +40,7 @@ export function CheckDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['check-detail', checkId] }),
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading check…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading check…</p>
   if (isError || !check) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Check not found'}</p>
   }
@@ -55,8 +55,8 @@ export function CheckDetailPage() {
           <Link to="/vehicle-checks" className="text-sm text-command-600 hover:underline">
             ← Vehicle Checks
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">{check.registrationNumber}</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="mt-1 text-2xl font-semibold text-ink">{check.registrationNumber}</h1>
+          <p className="text-sm text-ink-soft">
             {check.makeModel} · {check.fleetNumber} · {check.checkTypeLabel}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -71,7 +71,7 @@ export function CheckDetailPage() {
               <button type="button" onClick={() => review.mutate('approve')} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white">
                 Approve
               </button>
-              <button type="button" onClick={() => review.mutate('request_redo')} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium">
+              <button type="button" onClick={() => review.mutate('request_redo')} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium">
                 Request redo
               </button>
               <button type="button" onClick={() => review.mutate('reject')} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-800">
@@ -84,7 +84,7 @@ export function CheckDetailPage() {
               Mark VOR
             </button>
           )}
-          <Link to={`/vehicles/${check.vehicleId}`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+          <Link to={`/vehicles/${check.vehicleId}`} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
             Open vehicle
           </Link>
         </div>
@@ -127,11 +127,11 @@ export function CheckDetailPage() {
           <SectionCard title="Check timeline">
           <ul className="space-y-2 text-sm">
             {check.timeline.map((e) => (
-              <li key={e.id} className="flex gap-3 border-b border-slate-50 pb-2">
-                <span className="shrink-0 text-xs text-slate-500">{new Date(e.occurredAt).toLocaleString('en-GB')}</span>
+              <li key={e.id} className="flex gap-3 border-b border-border/60 pb-2">
+                <span className="shrink-0 text-xs text-muted">{new Date(e.occurredAt).toLocaleString('en-GB')}</span>
                 <div>
                   <p className="font-medium">{e.action}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted">
                     {e.actorName} · {e.source}
                     {e.detail ? ` · ${e.detail}` : ''}
                   </p>
@@ -157,10 +157,10 @@ export function CheckDetailPage() {
                       ? 'border-red-200 bg-red-50/50'
                       : advisory
                         ? 'border-amber-200 bg-amber-50/50'
-                        : 'border-slate-200'
+                        : 'border-border'
                   }`}
                 >
-                  <p className="text-xs font-medium uppercase text-slate-500">{s.section.replace(/_/g, ' ')}</p>
+                  <p className="text-xs font-medium uppercase text-muted">{s.section.replace(/_/g, ' ')}</p>
                   <p className="text-sm font-medium">{s.question}</p>
                   <p
                     className={`mt-1 text-sm font-semibold ${
@@ -171,7 +171,7 @@ export function CheckDetailPage() {
                   </p>
                   {s.notes && <p className="mt-1 text-xs text-amber-800">{s.notes}</p>}
                   {s.zone || s.damageType ? (
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs text-ink-soft">
                       {[s.zone, s.damageType].filter(Boolean).join(' · ')}
                     </p>
                   ) : null}
@@ -192,14 +192,14 @@ export function CheckDetailPage() {
 
       <SectionCard title="Evidence" description={`${check.evidence.length} items captured — originals preserved`}>
         {check.evidence.length === 0 ? (
-          <p className="text-sm text-slate-500">No evidence uploaded with this check.</p>
+          <p className="text-sm text-muted">No evidence uploaded with this check.</p>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {check.evidence.map((e) => (
-              <li key={e.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+              <li key={e.id} className="rounded-lg border border-border p-3 text-sm">
                 <p className="font-medium capitalize">{e.kind.replace(/_/g, ' ')}</p>
-                <p className="text-slate-600">{e.label}</p>
-                <p className="text-xs text-slate-500">{new Date(e.capturedAt).toLocaleString('en-GB')}</p>
+                <p className="text-ink-soft">{e.label}</p>
+                <p className="text-xs text-muted">{new Date(e.capturedAt).toLocaleString('en-GB')}</p>
                 {e.url ? (
                   <img src={e.url} alt={e.label} className="mt-2 max-h-48 w-full rounded-md object-cover" />
                 ) : null}
@@ -214,7 +214,7 @@ export function CheckDetailPage() {
         <SectionCard title="Linked defects">
           <ul className="space-y-2 text-sm">
             {check.defectSummaries.map((d) => (
-              <li key={d.id} className="flex justify-between rounded-lg border border-slate-200 px-3 py-2">
+              <li key={d.id} className="flex justify-between rounded-lg border border-border px-3 py-2">
                 <span>{d.description}</span>
                 <StatusPill status={d.severity} />
               </li>
@@ -229,8 +229,8 @@ export function CheckDetailPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-2">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

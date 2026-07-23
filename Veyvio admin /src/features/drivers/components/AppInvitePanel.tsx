@@ -194,7 +194,7 @@ export function AppInvitePanel({
           type="button"
           disabled={!canManage || (!token && !account.inviteUrl)}
           onClick={() => void copyLink()}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
         >
           Copy invite link
         </button>
@@ -218,7 +218,7 @@ export function AppInvitePanel({
             setChannels({ email: Boolean(driver.email), sms: true })
             setResendOpen(true)
           }}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
         >
           Send by SMS
         </button>
@@ -235,25 +235,25 @@ export function AppInvitePanel({
       </div>
 
       {cooldownActive && (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-muted">
           Resend rate-limited — available again in about {Math.ceil(cooldownRemainingMs / 60000)} minute(s).
         </p>
       )}
 
       {resendOpen && (
-        <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/30 p-0 sm:p-4">
+        <div className="fixed inset-0 z-40 flex justify-end bg-midnight/30 p-0 sm:p-4">
           <button
             type="button"
             className="absolute inset-0 cursor-default"
             aria-label="Close"
             onClick={() => setResendOpen(false)}
           />
-          <div className="relative z-10 flex h-full w-full max-w-md flex-col overflow-y-auto rounded-none bg-white shadow-xl sm:rounded-2xl">
-            <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-900">
+          <div className="relative z-10 flex h-full w-full max-w-md flex-col overflow-y-auto rounded-none bg-surface shadow-xl sm:rounded-2xl">
+            <div className="border-b border-border px-5 py-4">
+              <h2 className="text-lg font-semibold text-ink">
                 {inviteActive ? 'Resend Driver app invitation' : 'Send Driver app invitation'}
               </h2>
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-ink-soft">
                 Send to {driver.email ?? 'no email on file'}
               </p>
             </div>
@@ -291,21 +291,21 @@ export function AppInvitePanel({
                   />
                   <span>
                     <span className="font-semibold">Invalidate previous invitation</span>
-                    <span className="block text-xs text-slate-500">
+                    <span className="block text-xs text-muted">
                       Recommended. The old link will stop working after a successful resend.
                     </span>
                   </span>
                 </label>
               )}
-              <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-soft">
                 Who resent: {actorName}. Temporary passwords are never created or shown.
               </p>
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+            <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
               <button
                 type="button"
                 onClick={() => setResendOpen(false)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm"
               >
                 Cancel
               </button>
@@ -331,9 +331,9 @@ export function AppInvitePanel({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-100 px-3 py-2">
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-0.5 font-medium capitalize text-slate-900">{value}</dd>
+    <div className="rounded-lg border border-border px-3 py-2">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</dt>
+      <dd className="mt-0.5 font-medium capitalize text-ink">{value}</dd>
     </div>
   )
 }

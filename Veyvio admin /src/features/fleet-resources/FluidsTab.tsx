@@ -12,8 +12,8 @@ export function FluidsTab({ hub }: { hub: FleetResourcesHubData }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Fluids & AdBlue</h2>
-          <p className="text-sm text-slate-600">
+          <h2 className="text-lg font-semibold text-ink">Fluids & AdBlue</h2>
+          <p className="text-sm text-ink-soft">
             AdBlue and other fluids — not diesel or petrol. Fuel purchases stay on the Fuel tab.
           </p>
         </div>
@@ -21,13 +21,13 @@ export function FluidsTab({ hub }: { hub: FleetResourcesHubData }) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search reg, fluid, depot…"
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm"
         />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-3 py-2">When</th>
               <th className="px-3 py-2">Resource</th>
@@ -40,8 +40,8 @@ export function FluidsTab({ hub }: { hub: FleetResourcesHubData }) {
           </thead>
           <tbody>
             {rows.map((t) => (
-              <tr key={t.id} className="border-t border-slate-100">
-                <td className="px-3 py-2 text-slate-600">{new Date(t.createdAt).toLocaleString()}</td>
+              <tr key={t.id} className="border-t border-border">
+                <td className="px-3 py-2 text-ink-soft">{new Date(t.createdAt).toLocaleString()}</td>
                 <td className="px-3 py-2 font-medium">{t.resourceName}</td>
                 <td className="px-3 py-2 font-semibold tabular-nums">
                   {t.vehicleId ? (

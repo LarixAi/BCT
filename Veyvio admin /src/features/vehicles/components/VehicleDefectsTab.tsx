@@ -57,22 +57,22 @@ export function VehicleDefectsTab({ vehicle, actorName }: { vehicle: VehicleProf
       }
     >
       {showForm && (
-        <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+        <div className="mb-4 grid gap-3 rounded-lg border border-border bg-surface-muted p-3 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
-            <span className="text-slate-600">Description</span>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" rows={2} />
+            <span className="text-ink-soft">Description</span>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" rows={2} />
           </label>
           <label className="text-sm">
-            <span className="text-slate-600">Category</span>
-            <input value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">Category</span>
+            <input value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <label className="text-sm">
-            <span className="text-slate-600">Component</span>
-            <input value={component} onChange={(e) => setComponent(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">Component</span>
+            <input value={component} onChange={(e) => setComponent(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <label className="text-sm sm:col-span-2">
-            <span className="text-slate-600">Severity</span>
-            <select value={severity} onChange={(e) => setSeverity(e.target.value as DefectSeverity)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+            <span className="text-ink-soft">Severity</span>
+            <select value={severity} onChange={(e) => setSeverity(e.target.value as DefectSeverity)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
               {Object.entries(DEFECT_SEVERITY_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
@@ -85,17 +85,17 @@ export function VehicleDefectsTab({ vehicle, actorName }: { vehicle: VehicleProf
       )}
 
       {openDefects.length === 0 ? (
-        <p className="text-sm text-slate-500">No open defects.</p>
+        <p className="text-sm text-muted">No open defects.</p>
       ) : (
         <ul className="space-y-2">
           {openDefects.map((d) => (
-            <li key={d.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <li key={d.id} className="rounded-lg border border-border px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-medium">{d.component} — {DEFECT_SEVERITY_LABELS[d.severity]}</p>
                 <StatusPill status={d.status} />
               </div>
-              <p className="text-slate-600">{d.description}</p>
-              <p className="text-xs text-slate-400">Reported by {d.reportedBy} · {d.source.replace(/_/g, ' ')}</p>
+              <p className="text-ink-soft">{d.description}</p>
+              <p className="text-xs text-muted">Reported by {d.reportedBy} · {d.source.replace(/_/g, ' ')}</p>
               {d.severity !== 'dangerous' && (
                 <button type="button" onClick={() => close.mutate({ defectId: d.id, reason: 'Rectified and verified' })} className="mt-2 text-xs font-medium text-command-600 hover:underline">
                   Close defect

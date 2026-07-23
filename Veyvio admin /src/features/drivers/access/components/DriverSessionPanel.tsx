@@ -48,13 +48,13 @@ export function DriverSessionPanel({
               value={unlockReason}
               onChange={(e) => setUnlockReason(e.target.value)}
               placeholder="Reason required to unlock"
-              className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+              className="min-w-0 flex-1 rounded-lg border border-border px-3 py-1.5 text-sm"
             />
             <button
               type="button"
               disabled={!unlockReason.trim() || unlockPending}
               onClick={onUnlock}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
             >
               Unlock account
             </button>
@@ -67,7 +67,7 @@ export function DriverSessionPanel({
               type="button"
               onClick={onPasswordReset}
               disabled={passwordResetPending}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Force password reset
             </button>
@@ -98,19 +98,19 @@ export function DriverSessionPanel({
         <p className="mt-3 text-sm text-red-800">{mutationErrorMessage(actionError)}</p>
       ) : null}
 
-      <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+      <p className="mt-4 rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-soft">
         Creating the driver record is separate from granting Driver app access. Administrators never set or see
         passwords — invite the driver to create their own credentials.
       </p>
 
       {(account.sessions ?? []).length === 0 ? (
-        <p className="mt-4 text-sm text-slate-500">No active sessions.</p>
+        <p className="mt-4 text-sm text-muted">No active sessions.</p>
       ) : (
         <ul className="mt-4 space-y-2 text-sm">
           {account.sessions.map((session) => (
-            <li key={session.id} className="rounded-lg border border-slate-200 px-3 py-2">
+            <li key={session.id} className="rounded-lg border border-border px-3 py-2">
               <p className="font-medium">{session.deviceLabel}</p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 Started {formatDateTime(session.startedAt)} · Last active {formatDateTime(session.lastActiveAt)}
                 {session.ipAddress ? ` · ${session.ipAddress}` : ''}
                 {session.current ? <span className="ml-2 text-emerald-700">Current</span> : null}

@@ -24,7 +24,7 @@ export function RunDetailDrawer({
   if (!run) {
     return (
       <SectionCard title="Run detail">
-        <p className="text-sm text-slate-500">Select a run to open the live workspace drawer.</p>
+        <p className="text-sm text-muted">Select a run to open the live workspace drawer.</p>
       </SectionCard>
     )
   }
@@ -41,7 +41,7 @@ export function RunDetailDrawer({
       className="min-h-0 overflow-hidden"
       flush
     >
-      <div className="flex gap-1 border-b border-slate-200 bg-slate-50 p-2">
+      <div className="flex gap-1 border-b border-border bg-surface-muted p-2">
         {(['overview', 'timeline', 'exceptions', 'actions'] as DrawerTab[]).map((t) => (
           <button
             key={t}
@@ -49,7 +49,7 @@ export function RunDetailDrawer({
             onClick={() => setTab(t)}
             className={cn(
               'rounded-md px-2.5 py-1 text-xs font-medium capitalize',
-              tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600',
+              tab === t ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft',
             )}
           >
             {t}
@@ -77,7 +77,7 @@ export function RunDetailDrawer({
               </p>
             )}
             {run.isMoving && (
-              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+              <p className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-ink-soft">
                 Driver appears to be in motion. Use urgent contact only when necessary.
               </p>
             )}
@@ -92,10 +92,10 @@ export function RunDetailDrawer({
         {tab === 'timeline' && (
           <ul className="space-y-2">
             {drawer.timeline.map((item) => (
-              <li key={item.id} className="border-b border-slate-100 pb-2">
-                <p className="text-[11px] text-slate-500">{item.timeLabel}</p>
-                <p className="font-medium text-slate-900">{item.description}</p>
-                <p className="text-xs text-slate-500">{item.actor}</p>
+              <li key={item.id} className="border-b border-border pb-2">
+                <p className="text-[11px] text-muted">{item.timeLabel}</p>
+                <p className="font-medium text-ink">{item.description}</p>
+                <p className="text-xs text-muted">{item.actor}</p>
               </li>
             ))}
           </ul>
@@ -104,13 +104,13 @@ export function RunDetailDrawer({
         {tab === 'exceptions' && (
           <ul className="space-y-2">
             {drawer.openExceptions.length === 0 && (
-              <li className="text-slate-500">No open exceptions for this run.</li>
+              <li className="text-muted">No open exceptions for this run.</li>
             )}
             {drawer.openExceptions.map((e) => (
-              <li key={e.id} className="rounded-lg border border-slate-200 p-2">
-                <p className="text-[10px] uppercase text-slate-500">{e.severity}</p>
+              <li key={e.id} className="rounded-lg border border-border p-2">
+                <p className="text-[10px] uppercase text-muted">{e.severity}</p>
                 <p className="font-medium">{e.title}</p>
-                <p className="text-xs text-slate-600">{e.recommendedAction}</p>
+                <p className="text-xs text-ink-soft">{e.recommendedAction}</p>
               </li>
             ))}
           </ul>
@@ -140,19 +140,19 @@ export function RunDetailDrawer({
               }}
               className="w-full rounded-lg bg-command-600 px-3 py-2 text-sm font-medium text-white hover:bg-command-700"
             />
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-muted">
               Manage assignment covers vehicle swap and trip transfer with the same eligibility checks as Dispatch.
             </p>
             <Link
               to={messageHref}
-              className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"
+              className="flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-surface-muted"
             >
               <MessageSquare className="h-4 w-4" />
               Message driver
             </Link>
             <Link
               to={yardHref}
-              className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"
+              className="flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-surface-muted"
             >
               <MessageSquare className="h-4 w-4" />
               Message Yard
@@ -162,7 +162,7 @@ export function RunDetailDrawer({
                 'flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium',
                 run.isMoving
                   ? 'border-amber-200 bg-amber-50 text-amber-900'
-                  : 'border-slate-200 text-slate-700',
+                  : 'border-border text-ink-soft',
               )}
             >
               <Phone className="h-4 w-4" />
@@ -188,8 +188,8 @@ export function RunDetailDrawer({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-medium text-slate-900">{value}</span>
+      <span className="text-muted">{label}</span>
+      <span className="text-right font-medium text-ink">{value}</span>
     </div>
   )
 }

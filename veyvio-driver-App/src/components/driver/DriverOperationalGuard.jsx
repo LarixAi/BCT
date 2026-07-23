@@ -1,26 +1,12 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { withTimeout } from "@/lib/withTimeout";
-import { loadDriverComplianceReadiness, canAccessDriverSection, getPrimaryComplianceFix } from "@/services/driver-compliance.service";
+import { canAccessDriverSection, getPrimaryComplianceFix } from "@/services/driver-compliance.service";
+import { useDriverComplianceReadiness } from "@/lib/driverComplianceReadinessContext";
 import { Button } from "@/components/ui/button";
 import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
 import { op } from "@/lib/driver-operational-theme";
 
-export default function DriverOperationalGuard({ driver, section, children }) {
-  const [readiness, setReadiness] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!driver?.id) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    void withTimeout(loadDriverComplianceReadiness(driver), 12_000, null)
-      .then(setReadiness)
-      .catch(() => setReadiness(null))
-      .finally(() => setLoading(false));
-  }, [driver?.id]);
+export default function DriverOperationalGuard({ section, children }) {
+  const { readiness, loading } = useDriverComplianceReadiness();
 
   if (loading) {
     return (

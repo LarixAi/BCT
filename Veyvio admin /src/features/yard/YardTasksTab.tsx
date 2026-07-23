@@ -34,11 +34,11 @@ export function YardTasksTab({ hub }: { hub: YardHubData }) {
         description={`${openTasks.length} open tasks at ${hub.depotName}. Completing refuel, fluids or equipment tasks writes to Fleet Resources.`}
       >
         {openTasks.length === 0 ? (
-          <p className="text-sm text-slate-500">No open yard tasks.</p>
+          <p className="text-sm text-muted">No open yard tasks.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3 font-medium">Task</th>
                 <th className="pb-2 pr-3 font-medium">Vehicle</th>
                 <th className="pb-2 pr-3 font-medium">Priority</th>
@@ -68,11 +68,11 @@ export function YardTasksTab({ hub }: { hub: YardHubData }) {
         <SectionCard title="Recently completed" description="Last completed yard tasks">
           <ul className="space-y-2 text-sm">
             {completedTasks.slice(0, 5).map((t) => (
-              <li key={t.id} className="flex justify-between gap-2 text-slate-600">
+              <li key={t.id} className="flex justify-between gap-2 text-ink-soft">
                 <span>
                   {t.registrationNumber} — {t.title}
                 </span>
-                <span className="text-xs text-slate-400">{t.completedAt ? new Date(t.completedAt).toLocaleString('en-GB') : ''}</span>
+                <span className="text-xs text-muted">{t.completedAt ? new Date(t.completedAt).toLocaleString('en-GB') : ''}</span>
               </li>
             ))}
           </ul>
@@ -100,13 +100,13 @@ function TaskRow({
       ? 'text-red-800 font-semibold'
       : task.priority === 'urgent'
         ? 'text-amber-800'
-        : 'text-slate-700'
+        : 'text-ink-soft'
 
   return (
-    <tr className={`border-b border-slate-50 ${task.priority === 'safety_critical' ? 'bg-red-50/50' : ''}`}>
+    <tr className={`border-b border-border/60 ${task.priority === 'safety_critical' ? 'bg-red-50/50' : ''}`}>
       <td className="py-2.5 pr-3">
-        <p className="font-medium text-slate-900">{task.title}</p>
-        <p className="text-xs text-slate-500">{YARD_TASK_TYPE_LABELS[task.taskType]}</p>
+        <p className="font-medium text-ink">{task.title}</p>
+        <p className="text-xs text-muted">{YARD_TASK_TYPE_LABELS[task.taskType]}</p>
         {task.blockingRelease && <p className="text-xs text-amber-700">Blocks release</p>}
       </td>
       <td className="py-2.5 pr-3">{task.registrationNumber}</td>
@@ -115,12 +115,12 @@ function TaskRow({
       <td className="py-2.5 pr-3">
         <StatusPill status={task.status} />
       </td>
-      <td className="py-2.5 pr-3 text-xs capitalize text-slate-500">{task.syncStatus.replace(/_/g, ' ')}</td>
+      <td className="py-2.5 pr-3 text-xs capitalize text-muted">{task.syncStatus.replace(/_/g, ' ')}</td>
       <td className="py-2.5">
         {canManage && (
           <div className="flex flex-wrap gap-1">
             {['open', 'assigned'].includes(task.status) && (
-              <button type="button" disabled={busy} onClick={onStart} className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-50 disabled:opacity-50">
+              <button type="button" disabled={busy} onClick={onStart} className="rounded border border-border px-2 py-0.5 text-xs hover:bg-surface-muted disabled:opacity-50">
                 Start
               </button>
             )}

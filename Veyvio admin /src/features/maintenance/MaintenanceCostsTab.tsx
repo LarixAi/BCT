@@ -35,7 +35,7 @@ export function MaintenanceCostsTab({ intelligence }: { intelligence: Maintenanc
         description="Vehicles and patterns needing cost attention — predictive shell, not a forecast model"
       >
         {intelligence.costAlerts.length === 0 ? (
-          <p className="text-sm text-slate-500">No cost alerts on the current fleet snapshot.</p>
+          <p className="text-sm text-muted">No cost alerts on the current fleet snapshot.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {intelligence.costAlerts.map((alert) => (
@@ -44,7 +44,7 @@ export function MaintenanceCostsTab({ intelligence }: { intelligence: Maintenanc
                 className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
               >
                 <div>
-                  <p className="font-medium text-slate-900">{alert.registration}</p>
+                  <p className="font-medium text-ink">{alert.registration}</p>
                   <p className="text-amber-950">{alert.message}</p>
                 </div>
                 <Link to={alert.href} className="text-xs font-medium text-command-600 hover:underline">
@@ -58,18 +58,18 @@ export function MaintenanceCostsTab({ intelligence }: { intelligence: Maintenanc
 
       <SectionCard title="Cost per mile" description="Maintenance spend relative to vehicle mileage">
         {intelligence.maintenanceCostPerMile.length === 0 ? (
-          <p className="text-sm text-slate-500">Insufficient mileage data.</p>
+          <p className="text-sm text-muted">Insufficient mileage data.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3 font-medium">Vehicle</th>
                 <th className="pb-2 font-medium">Cost / mile</th>
               </tr>
             </thead>
             <tbody>
               {intelligence.maintenanceCostPerMile.map((row) => (
-                <tr key={row.vehicleId} className="border-b border-slate-50">
+                <tr key={row.vehicleId} className="border-b border-border/60">
                   <td className="py-2 pr-3">
                     <Link to={`/vehicles/${row.vehicleId}?tab=Maintenance`} className="font-medium text-command-600 hover:underline">
                       {row.registration}
@@ -85,15 +85,15 @@ export function MaintenanceCostsTab({ intelligence }: { intelligence: Maintenanc
 
       <SectionCard title="High-cost vehicles" description="Vehicles approaching replacement threshold">
         {intelligence.highCostVehicles.length === 0 ? (
-          <p className="text-sm text-slate-500">No vehicles above 50% of replacement threshold.</p>
+          <p className="text-sm text-muted">No vehicles above 50% of replacement threshold.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {intelligence.highCostVehicles.map((v) => (
-              <li key={v.vehicleId} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+              <li key={v.vehicleId} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                 <Link to={`/vehicles/${v.vehicleId}?tab=Maintenance`} className="font-medium text-command-600 hover:underline">
                   {v.registration}
                 </Link>
-                <span className="text-slate-600">
+                <span className="text-ink-soft">
                   £{v.totalCost.toLocaleString()} / £{v.threshold.toLocaleString()}
                 </span>
               </li>
@@ -105,9 +105,9 @@ export function MaintenanceCostsTab({ intelligence }: { intelligence: Maintenanc
       <SectionCard title="Repeat defect categories" description="Open defects grouped by category">
         <ul className="space-y-2 text-sm">
           {intelligence.repeatDefectCategories.map((c) => (
-            <li key={c.category} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+            <li key={c.category} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
               <span className="font-medium capitalize">{c.category}</span>
-              <span className="text-slate-600">{c.vehicles.join(', ')}</span>
+              <span className="text-ink-soft">{c.vehicles.join(', ')}</span>
             </li>
           ))}
         </ul>
@@ -116,7 +116,7 @@ export function MaintenanceCostsTab({ intelligence }: { intelligence: Maintenanc
       <SectionCard title="Supplier performance">
         <ul className="space-y-2 text-sm">
           {intelligence.supplierScores.map((s) => (
-            <li key={s.supplierId} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+            <li key={s.supplierId} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
               <span>{s.name}</span>
               <span className="font-medium">{s.score}%</span>
             </li>
@@ -129,9 +129,9 @@ export function MaintenanceCostsTab({ intelligence }: { intelligence: Maintenanc
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-2xl font-bold text-slate-900">{value}</p>
-      <p className="text-xs text-slate-600">{label}</p>
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <p className="text-2xl font-bold text-ink">{value}</p>
+      <p className="text-xs text-ink-soft">{label}</p>
     </div>
   )
 }

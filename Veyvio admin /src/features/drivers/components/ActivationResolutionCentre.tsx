@@ -22,7 +22,7 @@ import { api } from '@/lib/api/client'
 import { cn } from '@/lib/cn'
 
 const STATUS_TONE: Partial<Record<RequirementStatus, string>> = {
-  missing: 'bg-slate-100 text-slate-700',
+  missing: 'bg-surface-muted text-ink-soft',
   request_sent: 'bg-sky-100 text-sky-950',
   opened: 'bg-indigo-100 text-indigo-950',
   submitted: 'bg-amber-100 text-amber-950',
@@ -34,8 +34,8 @@ const STATUS_TONE: Partial<Record<RequirementStatus, string>> = {
   expiring_soon: 'bg-amber-100 text-amber-950',
   training_assigned: 'bg-violet-100 text-violet-950',
   in_progress: 'bg-violet-100 text-violet-950',
-  waived: 'bg-slate-100 text-slate-600',
-  not_applicable: 'bg-slate-100 text-slate-600',
+  waived: 'bg-surface-muted text-ink-soft',
+  not_applicable: 'bg-surface-muted text-ink-soft',
 }
 
 function formatWhen(value: string | null): string {
@@ -261,8 +261,8 @@ export function ActivationResolutionCentre({
           title="Ready for activation"
           description="All mandatory account, document, qualification and training requirements have been approved."
         >
-          <p className="text-sm text-slate-700">Activation will:</p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+          <p className="text-sm text-ink-soft">Activation will:</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-soft">
             <li>Enable the Driver App account</li>
             <li>Allow the driver to be assigned to eligible work</li>
             <li>Add the driver to dispatch availability</li>
@@ -280,7 +280,7 @@ export function ActivationResolutionCentre({
             <button
               type="button"
               onClick={refresh}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-muted"
             >
               Refresh eligibility
             </button>
@@ -291,11 +291,11 @@ export function ActivationResolutionCentre({
           title="Activation blocked"
           description="The driver cannot be activated or assigned until critical requirements are approved."
         >
-          <p className="text-sm text-slate-800">
+          <p className="text-sm text-ink">
             <span className="font-semibold tabular-nums">{model.summary.incompleteRequirements}</span>{' '}
             requirements remain incomplete:
           </p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-soft">
             {model.summary.accountIncomplete && <li>1 account setup requirement</li>}
             {model.summary.trainingIncomplete > 0 && (
               <li>{model.summary.trainingIncomplete} mandatory training requirements</li>
@@ -330,14 +330,14 @@ export function ActivationResolutionCentre({
             </button>
             <Link
               to={`/drivers/${driver.id}?tab=Compliance`}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-muted"
             >
               Upload on behalf
             </Link>
             <button
               type="button"
               onClick={refresh}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-muted"
             >
               Refresh eligibility
             </button>
@@ -380,7 +380,7 @@ export function ActivationResolutionCentre({
                 setSelectedKeys(outstandingRequests.map((r) => r.definitionKey))
                 setResendOpen(true)
               }}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-800 disabled:opacity-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-50"
             >
               Resend incomplete
             </button>
@@ -407,7 +407,7 @@ export function ActivationResolutionCentre({
         </div>
 
         {hideDocumentRows ? (
-          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          <div className="mb-4 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-ink-soft">
             {documentAttention > 0 ? (
               <>
                 {documentAttention} document requirement
@@ -442,9 +442,9 @@ export function ActivationResolutionCentre({
           </div>
         ) : null}
 
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-3 py-2 font-semibold">Requirement</th>
                 <th className="px-3 py-2 font-semibold">Type</th>
@@ -526,14 +526,14 @@ export function ActivationResolutionCentre({
               type="button"
               disabled={!canManage || missing.length === 0}
               onClick={() => openRequestDrawer()}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
             >
               Request all missing items
             </button>
             {mode === 'onboarding' && (
               <Link
                 to={`/drivers/${driver.id}`}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
               >
                 Open driver profile
               </Link>
@@ -558,7 +558,7 @@ export function ActivationResolutionCentre({
           </button>
         </div>
         {!model.canActivate && (
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-muted">
             Unavailable because: {model.activateBlockedReasons.join(' · ')}
           </p>
         )}
@@ -646,38 +646,38 @@ function RequirementRow({
   canManage: boolean
 }) {
   return (
-    <tr className="border-t border-slate-100 align-top">
+    <tr className="border-t border-border align-top">
       <td className="px-3 py-2">
-        <p className="font-medium text-slate-900">{row.name}</p>
-        <p className="text-xs text-slate-500">{row.evidenceHint}</p>
+        <p className="font-medium text-ink">{row.name}</p>
+        <p className="text-xs text-muted">{row.evidenceHint}</p>
       </td>
-      <td className="px-3 py-2 capitalize text-slate-600">
+      <td className="px-3 py-2 capitalize text-ink-soft">
         {row.type.replace(/_/g, ' ')}
       </td>
       <td className="px-3 py-2">
         <span
           className={cn(
             'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
-            STATUS_TONE[row.status] ?? 'bg-slate-100 text-slate-700',
+            STATUS_TONE[row.status] ?? 'bg-surface-muted text-ink-soft',
           )}
         >
           {REQUIREMENT_STATUS_LABEL[row.status]}
         </span>
       </td>
-      <td className="px-3 py-2 text-xs text-slate-600">
+      <td className="px-3 py-2 text-xs text-ink-soft">
         <p>{formatWhen(row.lastRequestedAt)}</p>
         {row.lastRequestedChannels.length > 0 && (
-          <p className="text-slate-400">{row.lastRequestedChannels.join(', ')}</p>
+          <p className="text-muted">{row.lastRequestedChannels.join(', ')}</p>
         )}
       </td>
-      <td className="px-3 py-2 text-slate-600">{row.responsibleLabel}</td>
+      <td className="px-3 py-2 text-ink-soft">{row.responsibleLabel}</td>
       <td className="relative px-3 py-2">
         <div className="flex items-center gap-1">
           <button
             type="button"
             disabled={!canManage}
             onClick={onPrimary}
-            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium hover:bg-surface-muted disabled:opacity-50"
           >
             {row.primaryAction}
           </button>
@@ -685,14 +685,14 @@ function RequirementRow({
             type="button"
             disabled={!canManage}
             onClick={onToggleMenu}
-            className="rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-lg border border-border px-2 py-1 text-xs hover:bg-surface-muted disabled:opacity-50"
             aria-label="More actions"
           >
             ⋯
           </button>
         </div>
         {menuOpen && (
-          <div className="absolute right-3 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white py-1 text-xs shadow-lg">
+          <div className="absolute right-3 z-20 mt-1 w-52 rounded-xl border border-border bg-surface py-1 text-xs shadow-lg">
             {[
               ['request', 'Request from driver'],
               ['resend', 'Resend request'],
@@ -706,7 +706,7 @@ function RequirementRow({
               <button
                 key={id}
                 type="button"
-                className="block w-full px-3 py-1.5 text-left hover:bg-slate-50"
+                className="block w-full px-3 py-1.5 text-left hover:bg-surface-muted"
                 onClick={() => onMenuAction(id)}
               >
                 {label}
@@ -761,23 +761,23 @@ function RequestMissingDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/30 p-0 sm:p-4">
+    <div className="fixed inset-0 z-40 flex justify-end bg-midnight/30 p-0 sm:p-4">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-none bg-white shadow-xl sm:rounded-2xl">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">Request missing onboarding items</h2>
-          <p className="mt-1 text-sm text-slate-600">
+      <div className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-none bg-surface shadow-xl sm:rounded-2xl">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-lg font-semibold text-ink">Request missing onboarding items</h2>
+          <p className="mt-1 text-sm text-ink-soft">
             {driver.firstName} {driver.lastName}
             {driver.email ? ` · ${driver.email}` : ''}
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Driver app account: {driver.account.accountStatus.replace(/_/g, ' ')}
           </p>
         </div>
 
         <div className="flex-1 space-y-5 px-5 py-4">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Items to request</p>
+            <p className="text-sm font-semibold text-ink">Items to request</p>
             <ul className="mt-2 space-y-1.5">
               {options.map((item) => (
                 <label key={item.id} className="flex items-start gap-2 text-sm">
@@ -788,8 +788,8 @@ function RequestMissingDrawer({
                     className="mt-0.5"
                   />
                   <span>
-                    <span className="font-medium text-slate-900">{item.name}</span>
-                    <span className="block text-xs capitalize text-slate-500">
+                    <span className="font-medium text-ink">{item.name}</span>
+                    <span className="block text-xs capitalize text-muted">
                       {item.type.replace(/_/g, ' ')} · {REQUIREMENT_STATUS_LABEL[item.status]}
                     </span>
                   </span>
@@ -799,7 +799,7 @@ function RequestMissingDrawer({
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-slate-900">Delivery method</p>
+            <p className="text-sm font-semibold text-ink">Delivery method</p>
             <div className="mt-2 flex flex-wrap gap-3 text-sm">
               {(
                 [
@@ -821,17 +821,17 @@ function RequestMissingDrawer({
           </div>
 
           <label className="block text-sm">
-            <span className="font-semibold text-slate-900">Due date</span>
+            <span className="font-semibold text-ink">Due date</span>
             <input
               type="date"
               value={dueAt}
               onChange={(e) => setDueAt(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
 
           <div>
-            <p className="text-sm font-semibold text-slate-900">Reminder schedule</p>
+            <p className="text-sm font-semibold text-ink">Reminder schedule</p>
             <div className="mt-2 space-y-1.5 text-sm">
               <label className="flex items-center gap-2">
                 <input
@@ -861,21 +861,21 @@ function RequestMissingDrawer({
           </div>
 
           <label className="block text-sm">
-            <span className="font-semibold text-slate-900">Message</span>
+            <span className="font-semibold text-ink">Message</span>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={4}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
           >
             Cancel
           </button>
@@ -902,18 +902,18 @@ function RequestMissingDrawer({
 
 function SummaryChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-0.5 text-xs font-medium text-slate-800">{value}</p>
+    <div className="rounded-lg border border-border bg-surface-muted px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-0.5 text-xs font-medium text-ink">{value}</p>
     </div>
   )
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3 rounded-lg border border-slate-100 px-3 py-2">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+    <div className="flex justify-between gap-3 rounded-lg border border-border px-3 py-2">
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }
@@ -939,12 +939,12 @@ function BulkResendDrawer({
   const [minHours, setMinHours] = useState(24)
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/30 p-0 sm:p-4">
+    <div className="fixed inset-0 z-40 flex justify-end bg-midnight/30 p-0 sm:p-4">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-none bg-white shadow-xl sm:rounded-2xl">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">Resend incomplete requests</h2>
-          <p className="mt-1 text-sm text-slate-600">
+      <div className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-none bg-surface shadow-xl sm:rounded-2xl">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-lg font-semibold text-ink">Resend incomplete requests</h2>
+          <p className="mt-1 text-sm text-ink-soft">
             {options.length} of the incomplete requirements already have outstanding requests.
           </p>
         </div>
@@ -966,7 +966,7 @@ function BulkResendDrawer({
                 />
                 <span>
                   <span className="font-medium">{item.name}</span>
-                  <span className="block text-xs text-slate-500">
+                  <span className="block text-xs text-muted">
                     Last request {formatWhen(item.lastRequestedAt)}
                   </span>
                 </span>
@@ -978,7 +978,7 @@ function BulkResendDrawer({
             <select
               value={minHours}
               onChange={(e) => setMinHours(Number(e.target.value))}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             >
               <option value={0}>No cooldown</option>
               <option value={24}>24 hours</option>
@@ -992,12 +992,12 @@ function BulkResendDrawer({
               type="date"
               value={dueAt}
               onChange={(e) => setDueAt(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+          <button type="button" onClick={onClose} className="rounded-lg border border-border px-3 py-1.5 text-sm">
             Cancel
           </button>
           <button
@@ -1042,12 +1042,12 @@ function AssignTrainingDrawer({
   })
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/30 p-0 sm:p-4">
+    <div className="fixed inset-0 z-40 flex justify-end bg-midnight/30 p-0 sm:p-4">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-none bg-white shadow-xl sm:rounded-2xl">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">Assign training</h2>
-          <p className="mt-1 text-sm text-slate-600">{requirement.name}</p>
+      <div className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-none bg-surface shadow-xl sm:rounded-2xl">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-lg font-semibold text-ink">Assign training</h2>
+          <p className="mt-1 text-sm text-ink-soft">{requirement.name}</p>
         </div>
         <div className="flex-1 space-y-4 px-5 py-4 text-sm">
           <fieldset>
@@ -1078,7 +1078,7 @@ function AssignTrainingDrawer({
             <input
               value={trainer}
               onChange={(e) => setTrainer(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
           <label className="block">
@@ -1087,7 +1087,7 @@ function AssignTrainingDrawer({
               type="date"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
           <div>
@@ -1125,8 +1125,8 @@ function AssignTrainingDrawer({
             {error}
           </div>
         ) : null}
-        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+          <button type="button" onClick={onClose} className="rounded-lg border border-border px-3 py-1.5 text-sm">
             Cancel
           </button>
           <button
@@ -1183,12 +1183,12 @@ function RejectRequirementDrawer({
   const [deadline, setDeadline] = useState(defaultDue.toISOString().slice(0, 10))
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/30 p-0 sm:p-4">
+    <div className="fixed inset-0 z-40 flex justify-end bg-midnight/30 p-0 sm:p-4">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-none bg-white shadow-xl sm:rounded-2xl">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">Reject {requirement.name}</h2>
-          <p className="mt-1 text-sm text-slate-600">
+      <div className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-none bg-surface shadow-xl sm:rounded-2xl">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-lg font-semibold text-ink">Reject {requirement.name}</h2>
+          <p className="mt-1 text-sm text-ink-soft">
             This reopens the requirement and asks the driver for a replacement.
           </p>
         </div>
@@ -1215,7 +1215,7 @@ function RejectRequirementDrawer({
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               rows={4}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
           <label className="block">
@@ -1224,12 +1224,12 @@ function RejectRequirementDrawer({
               type="date"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+          <button type="button" onClick={onClose} className="rounded-lg border border-border px-3 py-1.5 text-sm">
             Cancel
           </button>
           <button

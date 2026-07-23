@@ -107,11 +107,14 @@ function minimalDriver(overrides: Partial<DriverProfile> = {}): DriverProfile {
 }
 
 describe('mandatory training eligibility', () => {
-  it('blocks assignment when MiDAS and other mandatory courses are missing', () => {
+  it('blocks assignment when Level 1 mandatory courses are missing', () => {
     const result = evaluateDriverEligibility(minimalDriver())
     expect(result.operationalEligibility).toBe('not_eligible')
-    expect(result.failures.some((f) => f.code === 'training_midas_standard')).toBe(true)
+    expect(result.failures.some((f) => f.code === 'training_company_induction')).toBe(true)
     expect(result.failures.some((f) => f.code.startsWith('training_'))).toBe(true)
+    // MiDAS is Level 2 (vehicle) — restriction warning, not a hard block without job context
+    expect(result.failures.some((f) => f.code === 'training_midas_standard')).toBe(false)
+    expect(result.warnings.some((f) => f.code === 'training_midas_standard')).toBe(true)
   })
 
   it('blocks wheelchair courses in wheelchair job context', () => {

@@ -17,7 +17,7 @@ export function DriverContactEditor({
       <button
         type="button"
         onClick={contact.startEditing}
-        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+        className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
       >
         Edit login email or mobile
       </button>
@@ -26,38 +26,38 @@ export function DriverContactEditor({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium text-slate-900">Edit login contact</p>
-      <p className="text-xs text-slate-600">
+      <p className="text-sm font-medium text-ink">Edit login contact</p>
+      <p className="text-xs text-ink-soft">
         This is the email/mobile used for invitations and account recovery. Changing it is audited. If an
         invitation is already pending, resend it after saving so the new address gets the link.
       </p>
       <label className="block text-sm">
-        <span className="font-medium text-slate-700">Email</span>
+        <span className="font-medium text-ink-soft">Email</span>
         <input
           type="email"
           value={contact.email}
           onChange={(e) => contact.setEmail(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
         />
       </label>
       <label className="block text-sm">
-        <span className="font-medium text-slate-700">Mobile</span>
+        <span className="font-medium text-ink-soft">Mobile</span>
         <input
           type="tel"
           value={contact.phone}
           onChange={(e) => contact.setPhone(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
         />
       </label>
       <label className="block text-sm">
-        <span className="font-medium text-slate-700">Reason</span>
+        <span className="font-medium text-ink-soft">Reason</span>
         <textarea
           value={contact.reason}
           onChange={(e) => contact.setReason(e.target.value)}
           rows={2}
           required
           placeholder="Required for the access audit trail"
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
         />
       </label>
       {contact.saveError ? (
@@ -79,7 +79,7 @@ export function DriverContactEditor({
         <button
           type="button"
           onClick={contact.cancelEditing}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
         >
           Cancel
         </button>

@@ -2,6 +2,7 @@
  * Core compliance document slots — aligned with Admin Driver Compliance tab.
  * Always show these six types even when nothing is uploaded yet.
  */
+import { effectiveDocumentVerificationStatus } from "@/lib/document-verification-status";
 
 export const CORE_COMPLIANCE_DOCUMENTS = [
   {
@@ -70,16 +71,17 @@ export function documentMatchesCoreKey(doc, definitionKey) {
 }
 
 function verificationOf(doc) {
-  if (doc?.verificationStatus) return String(doc.verificationStatus);
-  const status = String(doc?.status ?? "").toLowerCase();
-  if (status === "approved" || status === "valid" || status === "verified") return "verified";
-  if (status === "rejected") return "rejected";
-  if (status === "expired") return "expired";
-  if (status === "expiring_soon") return "expiring_soon";
-  if (status === "pending" || status === "uploaded" || status === "awaiting_review") {
+  const rawStatus = doc?.verificationStatus ?? doc?.status;
+  const expiry = doc?.expiryDate ?? doc?.expires_on ?? doc?.expiresOn ?? null;
+  const reconciled = effectiveDocumentVerificationStatus(rawStatus, expiry);
+  if (reconciled === "verified") return "verified";
+  if (reconciled === "rejected") return "rejected";
+  if (reconciled === "expired") return "expired";
+  if (reconciled === "expiring_soon") return "expiring_soon";
+  if (reconciled === "awaiting_review" || reconciled === "uploaded" || reconciled === "pending") {
     return "awaiting_review";
   }
-  return status || "missing";
+  return reconciled || "missing";
 }
 
 /**

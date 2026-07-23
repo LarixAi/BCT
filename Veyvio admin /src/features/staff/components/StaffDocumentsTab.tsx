@@ -74,13 +74,13 @@ export function StaffDocumentsTab({
         }
       >
         {showUpload && (
-          <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <div className="mb-4 grid gap-3 rounded-lg border border-border bg-surface-muted p-3 sm:grid-cols-2">
             <label className="block text-sm sm:col-span-2">
-              <span className="text-slate-600">Document type</span>
+              <span className="text-ink-soft">Document type</span>
               <select
                 value={requirementType}
                 onChange={(e) => setRequirementType(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               >
                 {STAFF_DOCUMENT_TYPES.map((o) => (
                   <option key={o.type} value={o.type}>
@@ -90,12 +90,12 @@ export function StaffDocumentsTab({
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Reference number</span>
-              <input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+              <span className="text-ink-soft">Reference number</span>
+              <input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Expiry date</span>
-              <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+              <span className="text-ink-soft">Expiry date</span>
+              <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
             </label>
             <button type="button" onClick={() => upload.mutate()} disabled={upload.isPending} className="rounded-lg bg-command-600 px-3 py-1.5 text-sm font-medium text-white sm:col-span-2">
               Submit upload
@@ -104,26 +104,26 @@ export function StaffDocumentsTab({
         )}
 
         {staff.documents.length === 0 ? (
-          <p className="text-sm text-slate-500">No documents recorded.</p>
+          <p className="text-sm text-muted">No documents recorded.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {staff.documents.map((doc) => (
-              <li key={doc.id} className="rounded-lg border border-slate-200 px-3 py-2">
+              <li key={doc.id} className="rounded-lg border border-border px-3 py-2">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-medium">
                       {doc.label}
                       {doc.sensitive && <span className="ml-2 text-xs text-amber-700">Restricted</span>}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-muted">
                       {doc.fileName ?? '—'}
                       {doc.referenceNumber ? ` · ${doc.referenceNumber}` : ''}
                     </p>
-                    {doc.verifiedBy && <p className="text-xs text-slate-500">Verified by {doc.verifiedBy}</p>}
+                    {doc.verifiedBy && <p className="text-xs text-muted">Verified by {doc.verifiedBy}</p>}
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <StatusPill status={doc.verificationStatus} />
-                    <p className="text-xs text-slate-500">Expires {formatDate(doc.expiryDate)}</p>
+                    <p className="text-xs text-muted">Expires {formatDate(doc.expiryDate)}</p>
                     {canVerify && doc.verificationStatus === 'awaiting_review' && (
                       <button type="button" onClick={() => verify.mutate(doc.id)} className="text-xs text-command-600 hover:underline">
                         Verify
@@ -141,8 +141,8 @@ export function StaffDocumentsTab({
         <SectionCard title="Document history" description="Superseded versions retained for audit">
           <ul className="space-y-2 text-sm">
             {staff.documentVersions.map((v) => (
-              <li key={v.id} className="rounded-lg border border-slate-100 px-3 py-2 text-slate-600">
-                <p className="font-medium text-slate-800">{v.label}</p>
+              <li key={v.id} className="rounded-lg border border-border px-3 py-2 text-ink-soft">
+                <p className="font-medium text-ink">{v.label}</p>
                 <p className="text-xs">Replaced {formatDate(v.replacedAt.slice(0, 10))} by {v.replacedBy}</p>
               </li>
             ))}

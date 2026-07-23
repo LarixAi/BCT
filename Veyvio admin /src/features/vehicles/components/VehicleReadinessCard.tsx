@@ -11,33 +11,33 @@ export function VehicleReadinessCard({ vehicle }: { vehicle: VehicleProfile }) {
 
   if (!readiness) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="vehicle-readiness-card">
-        <p className="text-sm text-slate-500">Readiness not available for this vehicle yet.</p>
+      <div className="rounded-xl border border-border bg-surface p-4" data-testid="vehicle-readiness-card">
+        <p className="text-sm text-muted">Readiness not available for this vehicle yet.</p>
       </div>
     )
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="vehicle-readiness-card">
+    <div className="rounded-xl border border-border bg-surface p-4" data-testid="vehicle-readiness-card">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Readiness</p>
-          <p className="mt-1 text-lg font-semibold text-slate-900">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Readiness</p>
+          <p className="mt-1 text-lg font-semibold text-ink">
             {readiness.assignmentEligible ? 'Eligible for assignment' : 'Not eligible for assignment'}
           </p>
-          <p className="text-sm text-slate-600">{RELEASE_DECISION_LABELS[readiness.releaseDecision]}</p>
+          <p className="text-sm text-ink-soft">{RELEASE_DECISION_LABELS[readiness.releaseDecision]}</p>
         </div>
         <StatusPill status={readiness.releaseDecision} />
       </div>
 
       <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-xs text-slate-500">Condition</dt>
-          <dd className="font-medium text-slate-900">{CONDITION_STATUS_LABELS[readiness.conditionStatus]}</dd>
+          <dt className="text-xs text-muted">Condition</dt>
+          <dd className="font-medium text-ink">{CONDITION_STATUS_LABELS[readiness.conditionStatus]}</dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Calculated</dt>
-          <dd className="font-medium text-slate-900">
+          <dt className="text-xs text-muted">Calculated</dt>
+          <dd className="font-medium text-ink">
             {new Date(readiness.calculatedAt).toLocaleString('en-GB', {
               day: 'numeric',
               month: 'short',

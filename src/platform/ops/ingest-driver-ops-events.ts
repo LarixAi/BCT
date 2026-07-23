@@ -1,4 +1,5 @@
 import { drainPlatformEventsForYard, type PlatformEvent } from "@veyvio/ops";
+import type { OperationalDayPlan } from "@/types/plan";
 
 const YARD_NOTICE_KEY = "veyvio.yard.driver.ops.notices.v1";
 
@@ -41,7 +42,8 @@ function noticeFromEvent(event: PlatformEvent): YardDriverOpsNotice | null {
     event.eventType !== "vehicle.returned" &&
     event.eventType !== "vehicle_check.submitted" &&
     event.eventType !== "vehicle_swap.requested" &&
-    event.eventType !== "vehicle.held"
+    event.eventType !== "vehicle.held" &&
+    event.eventType !== "plan.published"
   ) {
     return null;
   }
@@ -52,6 +54,7 @@ function noticeFromEvent(event: PlatformEvent): YardDriverOpsNotice | null {
     "vehicle_check.submitted": "Driver walkaround submitted",
     "vehicle_swap.requested": "Driver requested vehicle swap",
     "vehicle.held": "Vehicle held after driver defect",
+    "plan.published": "Next-day operational plan published — review staging order",
   };
   return {
     id: event.eventId,
@@ -63,7 +66,7 @@ function noticeFromEvent(event: PlatformEvent): YardDriverOpsNotice | null {
   };
 }
 
-/** Drain Driver platform events into Yard operational notices. */
+/** Drain Driver/Admin platform events into Yard operational notices. */
 export function ingestDriverOpsEventsForYard(): YardDriverOpsNotice[] {
   const events = drainPlatformEventsForYard();
   const existing = readNotices();
@@ -82,4 +85,11 @@ export function ingestDriverOpsEventsForYard(): YardDriverOpsNotice[] {
 
 export function listYardDriverOpsNotices(): YardDriverOpsNotice[] {
   return readNotices();
+}
+
+export function planFromNoticePayload(payload: unknown): OperationalDayPlan | null {
+  if (!payload || typeof payload !== "object") return null;
+  const plan = payload as Partial<OperationalDayPlan>;
+  if (!plan.id || !plan.operationalDate || !Array.isArray(plan.staging)) return null;
+  return plan as OperationalDayPlan;
 }

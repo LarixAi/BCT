@@ -31,7 +31,7 @@ export function OverviewPage() {
   }, [connectionStatus, setConnectionStatus])
 
   if (isLoading) {
-    return <p className="text-sm text-slate-500">Loading operational position…</p>
+    return <p className="text-sm text-muted">Loading operational position…</p>
   }
 
   if (isError || !model) {
@@ -55,9 +55,9 @@ export function OverviewPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Control centre</h1>
-          <p className="mt-1 text-sm font-medium text-slate-800">{headline}</p>
-          <p className="text-xs text-slate-500">
+          <h1 className="text-2xl font-semibold text-ink">Control centre</h1>
+          <p className="mt-1 text-sm font-medium text-ink">{headline}</p>
+          <p className="text-xs text-muted">
             {operationalDate} · Operational picture from Driver, Yard, Dispatch and compliance
           </p>
         </div>
@@ -100,7 +100,7 @@ export function OverviewPage() {
                   className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${
                     severityFilter === s
                       ? 'bg-command-600 text-white'
-                      : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                      : 'bg-surface text-ink-soft ring-1 ring-border'
                   }`}
                 >
                   {s}

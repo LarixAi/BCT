@@ -59,8 +59,8 @@ export function RunsPage() {
       <div className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Runs</h1>
-            <p className="mt-0.5 text-sm text-slate-700">
+            <h1 className="text-2xl font-semibold text-ink">Runs</h1>
+            <p className="mt-0.5 text-sm text-ink-soft">
               {operationalDate} · Who is driving what today?
             </p>
             <p className={cn('mt-1 text-xs', isFetching ? 'text-amber-800' : 'text-emerald-700')}>
@@ -72,12 +72,12 @@ export function RunsPage() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm"
             />
             <button
               type="button"
               onClick={() => refetch()}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Refresh
             </button>
@@ -89,13 +89,13 @@ export function RunsPage() {
             </Link>
             <Link
               to="/trips"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Trips
             </Link>
             <Link
               to="/schedule"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Schedule
             </Link>
@@ -108,7 +108,7 @@ export function RunsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search driver, vehicle, run…"
-            className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="w-full max-w-xs rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <div className="flex flex-wrap gap-1">
             {FILTERS.map((f) => (
@@ -118,7 +118,7 @@ export function RunsPage() {
                 onClick={() => setFilter(f.id)}
                 className={cn(
                   'rounded-full px-2.5 py-1 text-[11px] font-medium',
-                  filter === f.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200',
+                  filter === f.id ? 'bg-command-600 text-white' : 'bg-surface text-ink-soft ring-1 ring-border',
                 )}
               >
                 {f.label}
@@ -149,13 +149,13 @@ export function RunsPage() {
             type="button"
             onClick={() => setFilter(card.id)}
             className={cn(
-              'rounded-xl border bg-white p-3 text-left transition hover:border-command-400',
-              filter === card.id ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200',
+              'rounded-xl border bg-surface p-3 text-left transition hover:border-command-400',
+              filter === card.id ? 'border-command-500 ring-1 ring-command-500' : 'border-border',
               'tone' in card && card.tone === 'danger' && filter !== card.id && 'border-red-200',
               'tone' in card && card.tone === 'warning' && filter !== card.id && 'border-amber-200',
             )}
           >
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{card.title}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{card.title}</p>
             <p
               className={cn(
                 'mt-1 text-2xl font-bold tabular-nums',
@@ -163,7 +163,7 @@ export function RunsPage() {
                   ? 'text-red-800'
                   : 'tone' in card && card.tone === 'warning'
                     ? 'text-amber-800'
-                    : 'text-slate-900',
+                    : 'text-ink',
               )}
             >
               {card.value}
@@ -176,13 +176,13 @@ export function RunsPage() {
         <SectionCard title="Runs board" description={`${filtered.length} duties`} className="min-h-0 overflow-hidden" flush>
           <div className="min-h-0 flex-1 overflow-auto">
             {isLoading ? (
-              <p className="p-4 text-sm text-slate-500">Loading…</p>
+              <p className="p-4 text-sm text-muted">Loading…</p>
             ) : filtered.length === 0 ? (
-              <p className="p-8 text-center text-sm text-slate-500">No runs match this filter.</p>
+              <p className="p-8 text-center text-sm text-muted">No runs match this filter.</p>
             ) : (
               <table className="min-w-full text-left text-sm">
-                <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-wide text-slate-500">
-                  <tr className="border-b border-slate-200">
+                <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wide text-muted">
+                  <tr className="border-b border-border">
                     <th className="px-3 py-2 font-medium">Driver</th>
                     <th className="px-3 py-2 font-medium">Vehicle</th>
                     <th className="px-3 py-2 font-medium">Start</th>
@@ -200,25 +200,25 @@ export function RunsPage() {
                         key={duty.id}
                         onClick={() => selectRun(duty.id)}
                         className={cn(
-                          'cursor-pointer border-b border-slate-100 hover:bg-slate-50',
+                          'cursor-pointer border-b border-border hover:bg-surface-muted',
                           selectedId === duty.id && 'bg-command-50',
                         )}
                       >
-                        <td className="px-3 py-2.5 font-medium text-slate-900">
+                        <td className="px-3 py-2.5 font-medium text-ink">
                           {runDriverName(duty) ?? <span className="text-red-700">Unassigned</span>}
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-slate-700">
+                        <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-ink-soft">
                           {duty.vehicle?.registrationNumber ?? '—'}
                         </td>
-                        <td className="px-3 py-2.5 tabular-nums text-slate-700">
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">
                           {formatDutyClock(duty.startTime)}
                         </td>
-                        <td className="px-3 py-2.5 tabular-nums text-slate-700">
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">
                           {formatDutyClock(duty.endTime)}
                         </td>
                         <td className="px-3 py-2.5">
-                          <p className="font-semibold text-slate-900">{duty.reference}</p>
-                          <p className="text-xs text-slate-500">{duty.route?.name ?? '—'}</p>
+                          <p className="font-semibold text-ink">{duty.reference}</p>
+                          <p className="text-xs text-muted">{duty.route?.name ?? '—'}</p>
                         </td>
                         <td
                           className={cn(
@@ -227,13 +227,13 @@ export function RunsPage() {
                               ? 'font-semibold text-red-800'
                               : delayMinutes >= 8
                                 ? 'font-medium text-amber-800'
-                                : 'text-slate-600',
+                                : 'text-ink-soft',
                           )}
                         >
                           {formatDelayLabel(delayMinutes)}
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize text-slate-700">
+                          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium capitalize text-ink-soft">
                             {duty.status.replace(/_/g, ' ')}
                           </span>
                         </td>
@@ -256,7 +256,7 @@ function RunDetailPanel({ duty }: { duty: DutyRecord | null }) {
   if (!duty) {
     return (
       <SectionCard title="Selected run" description="Duty card">
-        <p className="text-sm text-slate-500">Select a run to open the duty card — driver, vehicle, trips and actions.</p>
+        <p className="text-sm text-muted">Select a run to open the duty card — driver, vehicle, trips and actions.</p>
       </SectionCard>
     )
   }
@@ -273,10 +273,10 @@ function RunDetailPanel({ duty }: { duty: DutyRecord | null }) {
       flush
     >
       <div className="max-h-[560px] space-y-3 overflow-y-auto p-4 text-sm">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Driver</p>
-          <p className="mt-1 text-lg font-semibold text-slate-900">{driver ?? 'Unassigned'}</p>
-          <p className="text-xs text-slate-500">
+        <div className="rounded-xl border border-border bg-surface-muted p-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted">Driver</p>
+          <p className="mt-1 text-lg font-semibold text-ink">{driver ?? 'Unassigned'}</p>
+          <p className="text-xs text-muted">
             Clock window {formatDutyClock(duty.startTime)} – {formatDutyClock(duty.endTime)}
           </p>
         </div>
@@ -330,9 +330,9 @@ function RunDetailPanel({ duty }: { duty: DutyRecord | null }) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3 border-b border-slate-100 pb-2">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-medium capitalize text-slate-900">{value}</span>
+    <div className="flex justify-between gap-3 border-b border-border pb-2">
+      <span className="text-muted">{label}</span>
+      <span className="text-right font-medium capitalize text-ink">{value}</span>
     </div>
   )
 }
@@ -345,7 +345,7 @@ function ActionLink({ label, href, primary }: { label: string; href: string; pri
         'rounded-lg border px-2 py-2 text-center text-xs font-medium',
         primary
           ? 'border-command-200 bg-command-50 text-command-800 hover:bg-command-100'
-          : 'border-slate-200 text-slate-700 hover:bg-slate-50',
+          : 'border-border text-ink-soft hover:bg-surface-muted',
       )}
     >
       {label}

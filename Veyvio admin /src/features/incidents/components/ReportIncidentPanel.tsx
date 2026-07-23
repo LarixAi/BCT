@@ -96,7 +96,7 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
     <SectionCard title="Report incident" description="Step-by-step safety reporting — emergency action always takes priority">
       {step === 1 && (
         <div className="space-y-4" data-testid="report-incident-step-1">
-          <p className="text-sm font-medium text-slate-900">Is anyone currently in immediate danger or need of emergency assistance?</p>
+          <p className="text-sm font-medium text-ink">Is anyone currently in immediate danger or need of emergency assistance?</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {([
               ['yes', 'Yes — emergency response required'],
@@ -104,7 +104,7 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
               ['no', 'No immediate danger'],
               ['unknown', 'Unknown'],
             ] as const).map(([value, label]) => (
-              <label key={value} className={`rounded-lg border p-3 text-sm cursor-pointer ${immediateDanger === value ? 'border-red-400 bg-red-50' : 'border-slate-200'}`}>
+              <label key={value} className={`rounded-lg border p-3 text-sm cursor-pointer ${immediateDanger === value ? 'border-red-400 bg-red-50' : 'border-border'}`}>
                 <input type="radio" name="danger" value={value} checked={immediateDanger === value} onChange={() => setImmediateDanger(value)} className="mr-2" />
                 {label}
               </label>
@@ -124,20 +124,20 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
       {step === 2 && (
         <div className="grid gap-3 sm:grid-cols-2" data-testid="report-incident-step-2">
           <label className="block text-sm sm:col-span-2">
-            <span className="text-slate-600">Short title</span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" placeholder="Brief description of what happened" />
+            <span className="text-ink-soft">Short title</span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" placeholder="Brief description of what happened" />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Category</span>
-            <select value={category} onChange={(e) => setCategory(e.target.value as IncidentCategory)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+            <span className="text-ink-soft">Category</span>
+            <select value={category} onChange={(e) => setCategory(e.target.value as IncidentCategory)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
               {INCIDENT_CATEGORIES.map((c) => (
                 <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
               ))}
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Severity</span>
-            <select value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+            <span className="text-ink-soft">Severity</span>
+            <select value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
               <option value="critical">Critical</option>
               <option value="high">High</option>
               <option value="medium">Medium</option>
@@ -146,16 +146,16 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">When it occurred</span>
-            <input type="datetime-local" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">When it occurred</span>
+            <input type="datetime-local" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Location</span>
-            <input value={location} onChange={(e) => setLocation(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">Location</span>
+            <input value={location} onChange={(e) => setLocation(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <label className="block text-sm sm:col-span-2">
-            <span className="text-slate-600">What happened?</span>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">What happened?</span>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input type="checkbox" checked={isSafeguarding} onChange={(e) => setIsSafeguarding(e.target.checked)} />
@@ -165,7 +165,7 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
             <button type="button" disabled={!title || !description || !location} onClick={() => setStep(3)} className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
               Continue
             </button>
-            <button type="button" onClick={() => setStep(1)} className="rounded-lg px-4 py-2 text-sm text-slate-600">Back</button>
+            <button type="button" onClick={() => setStep(1)} className="rounded-lg px-4 py-2 text-sm text-ink-soft">Back</button>
           </div>
         </div>
       )}
@@ -173,8 +173,8 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
       {step === 3 && (
         <div className="grid gap-3 sm:grid-cols-2" data-testid="report-incident-step-3">
           <label className="block text-sm">
-            <span className="text-slate-600">Vehicle (optional)</span>
-            <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+            <span className="text-ink-soft">Vehicle (optional)</span>
+            <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
               <option value="">No vehicle linked</option>
               {vehicles.map((v) => (
                 <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>
@@ -182,8 +182,8 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Driver (optional)</span>
-            <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+            <span className="text-ink-soft">Driver (optional)</span>
+            <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
               <option value="">No driver linked</option>
               {drivers.map((d) => (
                 <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>
@@ -191,12 +191,12 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <label className="block text-sm sm:col-span-2">
-            <span className="text-slate-600">Run / duty reference (optional)</span>
-            <input value={runReference} onChange={(e) => setRunReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" placeholder="e.g. RUN-2841" />
+            <span className="text-ink-soft">Run / duty reference (optional)</span>
+            <input value={runReference} onChange={(e) => setRunReference(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" placeholder="e.g. RUN-2841" />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">School (optional)</span>
-            <select value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" data-testid="report-school-select">
+            <span className="text-ink-soft">School (optional)</span>
+            <select value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" data-testid="report-school-select">
               <option value="">No school linked</option>
               {schools.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
@@ -204,8 +204,8 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Contract (optional)</span>
-            <select value={contractId} onChange={(e) => setContractId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" data-testid="report-contract-select">
+            <span className="text-ink-soft">Contract (optional)</span>
+            <select value={contractId} onChange={(e) => setContractId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" data-testid="report-contract-select">
               <option value="">No contract linked</option>
               {contracts.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -213,20 +213,20 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Booking reference (optional)</span>
-            <input value={bookingReference} onChange={(e) => setBookingReference(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" placeholder="e.g. BKG-4421" />
+            <span className="text-ink-soft">Booking reference (optional)</span>
+            <input value={bookingReference} onChange={(e) => setBookingReference(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" placeholder="e.g. BKG-4421" />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Manifest ID (optional)</span>
-            <input value={manifestId} onChange={(e) => setManifestId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" placeholder="e.g. mf-114" />
+            <span className="text-ink-soft">Manifest ID (optional)</span>
+            <input value={manifestId} onChange={(e) => setManifestId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" placeholder="e.g. mf-114" />
           </label>
           <label className="block text-sm sm:col-span-2">
-            <span className="text-slate-600">Passengers (optional)</span>
+            <span className="text-ink-soft">Passengers (optional)</span>
             <select
               multiple
               value={passengerIds}
               onChange={(e) => setPassengerIds(Array.from(e.target.selectedOptions, (o) => o.value))}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               data-testid="report-passenger-select"
             >
               {passengers.map((p) => (
@@ -248,7 +248,7 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
           )}
           <div className="flex gap-2 sm:col-span-2">
             <button type="button" onClick={() => setStep(4)} className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white">Continue</button>
-            <button type="button" onClick={() => setStep(2)} className="rounded-lg px-4 py-2 text-sm text-slate-600">Back</button>
+            <button type="button" onClick={() => setStep(2)} className="rounded-lg px-4 py-2 text-sm text-ink-soft">Back</button>
           </div>
         </div>
       )}
@@ -261,14 +261,14 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
           </label>
           <div className="flex gap-2">
             <button type="button" onClick={() => setStep(5)} className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white">Continue</button>
-            <button type="button" onClick={() => setStep(3)} className="rounded-lg px-4 py-2 text-sm text-slate-600">Back</button>
+            <button type="button" onClick={() => setStep(3)} className="rounded-lg px-4 py-2 text-sm text-ink-soft">Back</button>
           </div>
         </div>
       )}
 
       {step === 5 && (
         <div className="space-y-4" data-testid="report-incident-step-5">
-          <p className="text-sm font-medium text-slate-900">Immediate actions already taken</p>
+          <p className="text-sm font-medium text-ink">Immediate actions already taken</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {IMMEDIATE_ACTION_OPTIONS.map((action) => (
               <label key={action} className="flex items-center gap-2 text-sm">
@@ -281,8 +281,8 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
             <button type="button" disabled={report.isPending} onClick={() => report.mutate()} className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50" data-testid="submit-incident-report">
               Submit incident
             </button>
-            <button type="button" onClick={() => setStep(4)} className="rounded-lg px-4 py-2 text-sm text-slate-600">Back</button>
-            <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-600">Cancel</button>
+            <button type="button" onClick={() => setStep(4)} className="rounded-lg px-4 py-2 text-sm text-ink-soft">Back</button>
+            <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-ink-soft">Cancel</button>
           </div>
         </div>
       )}

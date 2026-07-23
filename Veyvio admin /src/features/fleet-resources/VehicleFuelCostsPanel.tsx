@@ -29,11 +29,11 @@ export function VehicleFuelCostsPanel({
   const recent = transactions.filter((t) => t.vehicleId === vehicleId).slice(0, 4)
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4">
+    <section className="rounded-xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">Fuel & costs</h2>
-          <p className="text-sm text-slate-600">
+          <h2 className="text-base font-semibold text-ink">Fuel & costs</h2>
+          <p className="text-sm text-ink-soft">
             Diesel/petrol spend for {registrationNumber}
             {fuelLevelPercent != null ? ` · fuel tank ${fuelLevelPercent}%` : ''}
             . AdBlue is tracked separately under fluids.
@@ -49,19 +49,19 @@ export function VehicleFuelCostsPanel({
 
       <dl className="mt-3 grid gap-3 sm:grid-cols-3 text-sm">
         <div>
-          <dt className="text-slate-500">Fuel (diesel / petrol)</dt>
+          <dt className="text-muted">Fuel (diesel / petrol)</dt>
           <dd className="font-semibold tabular-nums">
             {costs ? `£${costs.fuelSpend.toFixed(2)}` : '—'}
           </dd>
         </div>
         <div>
-          <dt className="text-slate-500">AdBlue & fluids</dt>
+          <dt className="text-muted">AdBlue & fluids</dt>
           <dd className="font-semibold tabular-nums">
             {costs ? `£${costs.fluidSpend.toFixed(2)}` : '—'}
           </dd>
         </div>
         <div>
-          <dt className="text-slate-500">£ / 1k mi</dt>
+          <dt className="text-muted">£ / 1k mi</dt>
           <dd className="font-semibold tabular-nums">
             {costs?.costPerMile != null ? `£${costs.costPerMile.toFixed(2)}` : '—'}
           </dd>
@@ -69,14 +69,14 @@ export function VehicleFuelCostsPanel({
       </dl>
 
       {recent.length > 0 && (
-        <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-sm">
+        <ul className="mt-3 space-y-1 border-t border-border pt-3 text-sm">
           {recent.map((t) => (
-            <li key={t.id} className="flex justify-between gap-2 text-slate-700">
+            <li key={t.id} className="flex justify-between gap-2 text-ink-soft">
               <span>
                 {t.resourceName} · {t.quantity}
                 {t.unit}
               </span>
-              <span className="tabular-nums text-slate-500">
+              <span className="tabular-nums text-muted">
                 {t.grossAmount != null ? `£${t.grossAmount.toFixed(2)}` : '—'}
               </span>
             </li>

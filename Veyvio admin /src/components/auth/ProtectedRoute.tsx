@@ -10,7 +10,7 @@ export function ProtectedRoute() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 text-sm text-slate-600">
+      <div className="flex h-screen items-center justify-center bg-page text-sm text-muted">
         Loading…
       </div>
     )
@@ -26,7 +26,7 @@ export function ProtectedRoute() {
 
   if (!user) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 text-sm text-slate-600">
+      <div className="flex h-screen items-center justify-center bg-page text-sm text-muted">
         Loading company context…
       </div>
     )

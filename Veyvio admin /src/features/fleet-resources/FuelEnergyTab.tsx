@@ -31,8 +31,8 @@ export function FuelEnergyTab({
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Fuel & energy register</h2>
-        <p className="text-sm text-slate-600">
+        <h2 className="text-lg font-semibold text-ink">Fuel & energy register</h2>
+        <p className="text-sm text-ink-soft">
           Top-ups linked to vehicle, driver, odometer and receipt evidence.
         </p>
       </div>
@@ -46,7 +46,7 @@ export function FuelEnergyTab({
             className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
               filter === f.id
                 ? 'bg-command-600 text-white'
-                : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
+                : 'border border-border text-ink-soft hover:bg-surface-muted'
             }`}
           >
             {f.label}
@@ -56,13 +56,13 @@ export function FuelEnergyTab({
           value={search}
           onChange={(e) => onSearch(e.target.value)}
           placeholder="Search reg, driver, site…"
-          className="ml-auto min-w-[200px] flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          className="ml-auto min-w-[200px] flex-1 rounded-lg border border-border px-3 py-1.5 text-sm"
         />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-3 py-2">When</th>
               <th className="px-3 py-2">Vehicle</th>
@@ -77,16 +77,16 @@ export function FuelEnergyTab({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-muted">
                   No fuel transactions match this view.
                 </td>
               </tr>
             ) : (
               rows.map((t) => (
-                <tr key={t.id} className="border-t border-slate-100">
-                  <td className="px-3 py-2 text-slate-600">
+                <tr key={t.id} className="border-t border-border">
+                  <td className="px-3 py-2 text-ink-soft">
                     {new Date(t.createdAt).toLocaleString()}
-                    <div className="text-xs text-slate-400">
+                    <div className="text-xs text-muted">
                       {TRANSACTION_TYPE_LABEL[t.transactionType]}
                     </div>
                   </td>

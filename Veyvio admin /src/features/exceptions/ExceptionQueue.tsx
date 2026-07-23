@@ -49,7 +49,7 @@ export function ExceptionQueue({
       className="flex min-h-0 flex-col overflow-hidden"
       flush
     >
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 bg-slate-50 p-2">
+      <div className="flex flex-wrap gap-1 border-b border-border bg-surface-muted p-2">
         {EXCEPTION_MODULE_FILTERS.map((t) => (
           <button
             key={t.id}
@@ -57,7 +57,7 @@ export function ExceptionQueue({
             onClick={() => onModule(t.id)}
             className={cn(
               'rounded-md px-2.5 py-1 text-xs font-medium',
-              module === t.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600',
+              module === t.id ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft',
             )}
           >
             {t.label}
@@ -67,13 +67,13 @@ export function ExceptionQueue({
 
       <div className="min-h-0 flex-1 overflow-auto">
         {rows.length === 0 ? (
-          <p className="px-3 py-8 text-center text-sm text-slate-500">
+          <p className="px-3 py-8 text-center text-sm text-muted">
             No exceptions match this filter.
           </p>
         ) : (
           <table className="min-w-full text-left text-sm">
-            <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-wide text-slate-500">
-              <tr className="border-b border-slate-200">
+            <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wide text-muted">
+              <tr className="border-b border-border">
                 <th className="px-3 py-2">
                   <input
                     type="checkbox"
@@ -99,7 +99,7 @@ export function ExceptionQueue({
                     key={ex.id}
                     onClick={() => onSelect(ex)}
                     className={cn(
-                      'cursor-pointer border-b border-slate-100 hover:bg-slate-50',
+                      'cursor-pointer border-b border-border hover:bg-surface-muted',
                       selectedId === ex.id && 'bg-command-50',
                       ex.status === 'resolved' && 'opacity-70',
                     )}
@@ -120,19 +120,19 @@ export function ExceptionQueue({
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 capitalize text-slate-600">{typeLabel(ex)}</td>
+                    <td className="px-3 py-2.5 capitalize text-ink-soft">{typeLabel(ex)}</td>
                     <td className="px-3 py-2.5">
-                      <p className="font-semibold text-slate-900">{ex.title}</p>
-                      <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+                      <p className="font-semibold text-ink">{ex.title}</p>
+                      <p className="mt-0.5 line-clamp-1 text-xs text-muted">
                         {ex.description ?? ex.relatedRecord}
                       </p>
                     </td>
-                    <td className="px-3 py-2.5 text-slate-700">{ex.owner ?? '—'}</td>
-                    <td className="px-3 py-2.5 tabular-nums text-slate-700">{ex.ageMinutes} min</td>
+                    <td className="px-3 py-2.5 text-ink-soft">{ex.owner ?? '—'}</td>
+                    <td className="px-3 py-2.5 tabular-nums text-ink-soft">{ex.ageMinutes} min</td>
                     <td
                       className={cn(
                         'px-3 py-2.5 tabular-nums font-medium',
-                        breached ? 'text-red-700' : 'text-slate-700',
+                        breached ? 'text-red-700' : 'text-ink-soft',
                       )}
                     >
                       {slaLabel(ex)}

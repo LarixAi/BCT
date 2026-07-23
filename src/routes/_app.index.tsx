@@ -6,12 +6,12 @@ import { useSessionStore } from "@/platform/auth/session-store";
 import { kpiCounts } from "@/domain/yard/kpi";
 import { pickBoardTasks } from "@/domain/tasks/task-automation";
 import { formatTaskDue } from "@/domain/tasks/task-stats";
-import { drivers } from "@/data/fixtures";
 import { KpiCard, SectionHeader, DepartureRow, VehicleCard, EmptyState } from "@/components/yard/primitives";
 import { getAttentionItems, zoneOccupancyStats } from "@/features/yard/yard-map";
 import { pendingDamageReviews } from "@/domain/condition/condition-helpers";
 import { ordersAwaitingVerification } from "@/domain/condition/repair-workflow";
-import { Map, LogIn, ScanLine, ListTodo, ChevronRight, AlertTriangle } from "lucide-react";
+import { planHeadline, stagingSorted } from "@/domain/yard/operational-plan";
+import { Map, LogIn, ScanLine, ListTodo, ChevronRight, AlertTriangle, CalendarDays } from "lucide-react";
 import {
   countVehiclesNeedingAttention,
   homeOperationalHeadline,
@@ -35,13 +35,14 @@ function Home() {
   const bays = useYard(s => s.bays);
   const trips = useYard(s => s.trips);
   const tasks = useYard(s => s.tasks) ?? [];
+  const operationalPlan = useYard(s => s.operationalPlan);
   const repairOrders = useYard(s => s.repairWorkOrders);
   const damageObservations = useYard(s => s.damageObservations);
   const damageReviews = useYard(s => s.damageReviews);
   const userId = useSessionStore(s => s.user?.id);
   const c = kpiCounts(vehicles);
   const preview = vehicles.slice(0, 4);
-  const driverName = (id?: string) => drivers.find(d => d.id === id)?.name;
+  const upcomingTrips = trips.slice(0, 6);
 
   const damageReviewCount = useMemo(
     () => pendingDamageReviews(damageObservations, damageReviews).length,
@@ -62,6 +63,7 @@ function Home() {
     [vehicles, trips],
   );
   const depotActionCount = attention.length;
+  const stagingPreview = useMemo(() => stagingSorted(operationalPlan).slice(0, 3), [operationalPlan]);
 
   return (
     <div className="space-y-4 lg:space-y-6">
@@ -115,6 +117,40 @@ function Home() {
         </div>
       )}
 
+      {operationalPlan && stagingPreview.length > 0 && (
+        <section className="space-y-2 animate-in-up">
+          <SectionHeader
+            title={yardCopy.home.dayPlan}
+            sub={planHeadline(operationalPlan)}
+            action={
+              <Link to="/plan" className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                Full plan →
+              </Link>
+            }
+          />
+          <Link
+            to="/plan"
+            className="flex items-start gap-3 rounded border border-primary/25 bg-primary/5 p-3 transition-colors hover:bg-primary/10"
+          >
+            <CalendarDays className="mt-0.5 size-5 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold">
+                {operationalPlan.operationalDate} · v{operationalPlan.version}
+              </div>
+              <ol className="mt-1 space-y-0.5">
+                {stagingPreview.map(item => (
+                  <li key={item.vehicleId} className="truncate text-[11px] text-muted">
+                    {item.sequence}. {item.vehicleReg} · {item.departAt}
+                    {item.targetBayId ? ` → ${item.targetBayId}` : ""}
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-muted" />
+          </Link>
+        </section>
+      )}
+
       <section className="hidden grid-cols-2 gap-2 animate-in-up sm:grid-cols-3 lg:grid lg:grid-cols-5">
         <KpiCard label="Available" value={c.available} to="/yard" />
         <KpiCard label="VOR" value={c.vor.toString().padStart(2, "0")} tone="vor" to="/vor" />
@@ -137,32 +173,52 @@ function Home() {
               sub="next 90 min"
               action={<Link to="/departure-line" className="text-[10px] font-bold uppercase tracking-widest text-primary">View all →</Link>}
             />
-            <div className="overflow-hidden rounded border border-border bg-white">
-              <div className="lg:hidden">
-                {trips.slice(0, 1).map(t => (
-                  <DepartureRow key={t.id} trip={t} vehicle={vehicles.find(v => v.id === t.vehicleId)} driverName={driverName(t.driverId)} />
-                ))}
+            {upcomingTrips.length === 0 ? (
+              <EmptyState
+                title="No departures in the next 90 minutes"
+                hint="Published duties from Dispatch will appear here."
+              />
+            ) : (
+              <div className="overflow-hidden rounded border border-border bg-white">
+                <div className="lg:hidden">
+                  {upcomingTrips.slice(0, 1).map(t => (
+                    <DepartureRow key={t.id} trip={t} vehicle={vehicles.find(v => v.id === t.vehicleId)} />
+                  ))}
+                </div>
+                <div className="hidden lg:block">
+                  {upcomingTrips.map(t => (
+                    <DepartureRow key={t.id} trip={t} vehicle={vehicles.find(v => v.id === t.vehicleId)} />
+                  ))}
+                </div>
               </div>
-              <div className="hidden lg:block">
-                {trips.slice(0, 6).map(t => (
-                  <DepartureRow key={t.id} trip={t} vehicle={vehicles.find(v => v.id === t.vehicleId)} driverName={driverName(t.driverId)} />
-                ))}
-              </div>
-            </div>
+            )}
           </section>
 
           <section className="hidden space-y-3 animate-in-up lg:block" style={{ animationDelay: "160ms" }}>
             <SectionHeader
               title="Yard Inventory"
-              action={<Link to="/yard" className="text-[10px] font-bold uppercase tracking-widest text-primary">View all {vehicles.length} →</Link>}
+              action={
+                vehicles.length > 0 ? (
+                  <Link to="/yard" className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                    View all {vehicles.length} →
+                  </Link>
+                ) : undefined
+              }
             />
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-              {preview.map(v => <VehicleCard key={v.id} v={v} nextAction={nextActionFor(v.status)} />)}
-            </div>
+            {preview.length === 0 ? (
+              <EmptyState
+                title="No vehicles on the depot board"
+                hint="Fleet records from Command will appear after the yard hub syncs."
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                {preview.map(v => <VehicleCard key={v.id} v={v} nextAction={nextActionFor(v.status)} />)}
+              </div>
+            )}
           </section>
         </div>
 
-        <div className="hidden space-y-6 lg:block">
+        <div className="space-y-6 lg:block">
           {boardTasks.length > 0 && (
             <section className="space-y-2 animate-in-up" style={{ animationDelay: "50ms" }}>
               <SectionHeader

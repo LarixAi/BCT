@@ -54,11 +54,18 @@ export default function BiometricLockScreen({
 
         <button
           type="button"
-          disabled={busy}
           onClick={onUsePassword}
-          className="mt-4 min-h-[44px] text-sm font-medium text-white/75 underline-offset-4 hover:underline disabled:opacity-60"
+          className="mt-4 min-h-[44px] text-sm font-medium text-white/75 underline-offset-4 hover:underline"
         >
           Use password instead
+        </button>
+
+        <button
+          type="button"
+          onClick={onUsePassword}
+          className="mt-6 min-h-[44px] text-xs font-medium text-white/50 underline-offset-4 hover:underline"
+        >
+          Sign out
         </button>
       </div>
     </div>

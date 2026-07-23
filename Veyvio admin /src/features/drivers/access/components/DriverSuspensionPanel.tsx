@@ -53,7 +53,7 @@ export function DriverSuspensionPanel({
               value={reinstateReason}
               onChange={(e) => setReinstateReason(e.target.value)}
               placeholder="Reason required to reinstate"
-              className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+              className="min-w-0 flex-1 rounded-lg border border-border px-3 py-1.5 text-sm"
             />
             <button
               type="button"

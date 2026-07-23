@@ -31,8 +31,8 @@ function normalizeRow(row) {
     notificationType: String(row.notificationType ?? row.notification_type ?? "system"),
     action_url: row.action_url ?? row.actionUrl ?? null,
     actionUrl: row.actionUrl ?? row.action_url ?? null,
-    entity_type: row.entity_type ?? row.entityType ?? null,
-    entity_id: row.entity_id ?? row.entityId ?? null,
+    entity_type: row.source_entity_type ?? row.entity_type ?? row.entityType ?? null,
+    entity_id: row.source_entity_id ?? row.entity_id ?? row.entityId ?? null,
   };
 }
 
@@ -125,7 +125,7 @@ export async function getDriverNotifications(userId) {
     // Older Ridova schema used `message` only — retry minimal columns.
     const retry = await supabase
       .from("notifications")
-      .select("id, title, message, severity, status, created_at, read_at, notification_type, action_url, entity_type, entity_id")
+      .select("id, title, message, severity, status, created_at, read_at, notification_type, action_url, source_entity_type, source_entity_id")
       .eq("recipient_user_id", userId)
       .order("created_at", { ascending: false })
       .limit(50);

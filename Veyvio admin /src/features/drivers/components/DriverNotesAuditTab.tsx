@@ -45,7 +45,7 @@ export function DriverNotesAuditTab({
       <SectionCard title="Internal notes">
         {canEdit ? (
           <form
-            className="mb-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3"
+            className="mb-4 space-y-3 rounded-lg border border-border bg-surface-muted/60 p-3"
             onSubmit={(e) => {
               e.preventDefault()
               if (!body.trim()) return
@@ -53,11 +53,11 @@ export function DriverNotesAuditTab({
             }}
           >
             <label className="block text-sm">
-              <span className="text-slate-600">Category</span>
+              <span className="text-ink-soft">Category</span>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as DriverNoteCategory)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
               >
                 {NOTE_CATEGORIES.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -67,16 +67,16 @@ export function DriverNotesAuditTab({
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Note</span>
+              <span className="text-ink-soft">Note</span>
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 rows={3}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
                 placeholder="Operational note for the driver record…"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
+            <label className="flex items-center gap-2 text-sm text-ink-soft">
               <input
                 type="checkbox"
                 checked={visibleToDriver}
@@ -100,12 +100,12 @@ export function DriverNotesAuditTab({
         ) : null}
 
         {driver.notes.length === 0 ? (
-          <p className="text-sm text-slate-500">No notes.</p>
+          <p className="text-sm text-muted">No notes.</p>
         ) : (
           <ul className="space-y-3 text-sm">
             {driver.notes.map((n) => (
-              <li key={n.id} className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-500">
+              <li key={n.id} className="rounded-lg border border-border px-3 py-2">
+                <p className="text-xs text-muted">
                   {n.category.replace(/_/g, ' ')} · {n.author} ·{' '}
                   {new Date(n.createdAt).toLocaleString('en-GB')}
                   {n.visibleToDriver ? ' · Visible to driver' : ''}
@@ -119,11 +119,11 @@ export function DriverNotesAuditTab({
 
       <SectionCard title="Audit history">
         {driver.auditEvents.length === 0 ? (
-          <p className="text-sm text-slate-500">No audit events for this driver yet.</p>
+          <p className="text-sm text-muted">No audit events for this driver yet.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-2">Time</th>
                 <th className="pb-2 pr-2">Action</th>
                 <th className="pb-2">Actor</th>
@@ -131,8 +131,8 @@ export function DriverNotesAuditTab({
             </thead>
             <tbody>
               {driver.auditEvents.map((e) => (
-                <tr key={e.id} className="border-b border-slate-50 align-top">
-                  <td className="py-2 pr-2 text-slate-600 whitespace-nowrap">
+                <tr key={e.id} className="border-b border-border/60 align-top">
+                  <td className="py-2 pr-2 text-ink-soft whitespace-nowrap">
                     {new Date(e.createdAt).toLocaleString('en-GB', {
                       day: 'numeric',
                       month: 'short',
@@ -142,9 +142,9 @@ export function DriverNotesAuditTab({
                   </td>
                   <td className="py-2 pr-2">
                     <p>{e.action}</p>
-                    {e.reason ? <p className="text-xs text-slate-500">{e.reason}</p> : null}
+                    {e.reason ? <p className="text-xs text-muted">{e.reason}</p> : null}
                   </td>
-                  <td className="py-2 text-slate-600">{e.actor}</td>
+                  <td className="py-2 text-ink-soft">{e.actor}</td>
                 </tr>
               ))}
             </tbody>

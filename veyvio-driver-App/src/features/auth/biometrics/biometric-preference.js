@@ -69,6 +69,26 @@ export function getBiometricPreference(driverId) {
 }
 
 /**
+ * Find any driver on this phone with biometric sign-in enabled.
+ * Prefers the last-used driver id when that enrolment is still active.
+ * @param {string | null | undefined} preferredDriverId
+ * @returns {{ driverId: string, prefs: BiometricPreference } | null}
+ */
+export function findEnabledBiometricEnrollment(preferredDriverId = null) {
+  const all = readAll();
+  const preferred = preferredDriverId ? String(preferredDriverId) : null;
+  if (preferred) {
+    const prefs = { ...defaultBiometricPreference(), ...(all[preferred] || {}) };
+    if (prefs.enabled) return { driverId: preferred, prefs };
+  }
+  for (const [driverId, stored] of Object.entries(all)) {
+    const prefs = { ...defaultBiometricPreference(), ...stored };
+    if (prefs.enabled) return { driverId, prefs };
+  }
+  return null;
+}
+
+/**
  * @param {string} driverId
  * @param {Partial<BiometricPreference>} patch
  * @returns {BiometricPreference}

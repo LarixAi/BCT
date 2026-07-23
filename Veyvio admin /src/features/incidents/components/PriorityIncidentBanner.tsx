@@ -14,11 +14,11 @@ export function PriorityIncidentBanner({ alerts }: { alerts: IncidentPriorityAle
         <div key={alert.id} className="rounded-xl border border-red-200 bg-red-50/60 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-base font-semibold text-slate-900">
+              <p className="text-base font-semibold text-ink">
                 {alert.incidentRef} — {alert.title}
               </p>
-              <p className="mt-1 text-sm text-slate-700">{alert.summary}</p>
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-ink-soft">{alert.summary}</p>
+              <p className="mt-2 text-sm text-ink-soft">
                 {SEVERITY_DISPLAY[alert.severity]} · {alert.location}
                 {alert.isSafeguarding && ' · Safeguarding'}
                 {alert.requiresAcknowledgement && ' · Awaiting acknowledgement'}
@@ -29,11 +29,11 @@ export function PriorityIncidentBanner({ alerts }: { alerts: IncidentPriorityAle
                 Review incident
               </Link>
               {alert.requiresAcknowledgement && (
-                <Link to={`/incidents/${alert.incidentId}?action=acknowledge`} className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-50">
+                <Link to={`/incidents/${alert.incidentId}?action=acknowledge`} className="rounded-lg border border-red-300 bg-surface px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-50">
                   Acknowledge
                 </Link>
               )}
-              <Link to="/exceptions" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+              <Link to="/exceptions" className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
                 Open command response
               </Link>
             </div>

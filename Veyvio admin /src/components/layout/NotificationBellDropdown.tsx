@@ -84,7 +84,7 @@ export function NotificationBellDropdown() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="relative rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+        className="relative rounded-lg p-2 text-ink-soft hover:bg-surface-muted"
         aria-label="Notifications"
         aria-expanded={open}
         aria-haspopup="true"
@@ -99,11 +99,11 @@ export function NotificationBellDropdown() {
 
       {open && (
         <div
-          className="absolute right-0 top-full z-50 mt-2 w-[min(100vw-2rem,22rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+          className="absolute right-0 top-full z-50 mt-2 w-[min(100vw-2rem,22rem)] overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
           role="menu"
         >
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <p className="text-sm font-semibold text-slate-900">Notifications</p>
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <p className="text-sm font-semibold text-ink">Notifications</p>
             {unreadCount > 0 && (
               <button
                 type="button"
@@ -118,36 +118,36 @@ export function NotificationBellDropdown() {
 
           <div className="max-h-80 overflow-y-auto">
             {isLoading ? (
-              <p className="px-4 py-6 text-center text-sm text-slate-500">Loading…</p>
+              <p className="px-4 py-6 text-center text-sm text-muted">Loading…</p>
             ) : preview.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-slate-500">No notifications</p>
+              <p className="px-4 py-6 text-center text-sm text-muted">No notifications</p>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-border">
                 {preview.map((notification) => (
                   <li key={notification.id}>
                     <button
                       type="button"
                       onClick={() => handleNotificationClick(notification)}
                       className={cn(
-                        'w-full px-4 py-3 text-left transition hover:bg-slate-50',
+                        'w-full px-4 py-3 text-left transition hover:bg-surface-muted',
                         !notification.read && 'bg-command-50/40',
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p
                           className={cn(
-                            'text-sm text-slate-900',
+                            'text-sm text-ink',
                             !notification.read && 'font-semibold',
                           )}
                         >
                           {notification.title}
                         </p>
-                        <time className="shrink-0 text-[10px] text-slate-400">
+                        <time className="shrink-0 text-[10px] text-muted">
                           {notification.receivedAt}
                         </time>
                       </div>
                       {notification.body && (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-slate-600">
+                        <p className="mt-0.5 line-clamp-2 text-xs text-ink-soft">
                           {notification.body}
                         </p>
                       )}
@@ -158,7 +158,7 @@ export function NotificationBellDropdown() {
             )}
           </div>
 
-          <div className="border-t border-slate-100 px-4 py-2.5">
+          <div className="border-t border-border px-4 py-2.5">
             <Link
               to="/notifications"
               onClick={() => setOpen(false)}

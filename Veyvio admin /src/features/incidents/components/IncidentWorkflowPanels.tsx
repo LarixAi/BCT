@@ -36,7 +36,7 @@ export function IncidentSafetyControlsPanel({ incident }: { incident: IncidentDe
       <dl className="grid gap-2 sm:grid-cols-2" data-testid="safety-controls">
         {items.map((item) => (
           <div key={item.label} className="flex justify-between gap-2 text-sm">
-            <dt className="text-slate-600">{item.label}</dt>
+            <dt className="text-ink-soft">{item.label}</dt>
             <dd className="font-medium">{item.value == null ? '—' : item.value ? 'Yes' : 'No'}</dd>
           </div>
         ))}
@@ -65,7 +65,7 @@ export function AcknowledgeIncidentPanel({ incident }: { incident: IncidentDetai
 
   return (
     <SectionCard title="Acknowledge incident">
-      <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Acknowledgement notes" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" rows={2} />
+      <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Acknowledgement notes" className="w-full rounded-lg border border-border px-3 py-2 text-sm" rows={2} />
       <button type="button" disabled={ack.isPending} onClick={() => ack.mutate()} className="mt-2 rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white" data-testid="acknowledge-incident">
         Acknowledge
       </button>
@@ -93,7 +93,7 @@ export function AssignIncidentPanel({ incident }: { incident: IncidentDetailReco
   return (
     <SectionCard title="Assign incident lead">
       <div className="flex flex-wrap gap-2">
-        <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
+        <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} className="rounded-lg border border-border px-3 py-1.5 text-sm" />
         <button type="button" disabled={assign.isPending} onClick={() => assign.mutate()} className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white">
           Assign
         </button>
@@ -121,25 +121,25 @@ export function IncidentEvidencePanel({ incident }: { incident: IncidentDetailRe
   return (
     <SectionCard title="Evidence" description="Original evidence is retained — never overwritten">
       {incident.evidence.length === 0 ? (
-        <p className="text-sm text-slate-500">No evidence uploaded yet.</p>
+        <p className="text-sm text-muted">No evidence uploaded yet.</p>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-border">
           {incident.evidence.map((ev) => (
             <li key={ev.id} className="py-3 first:pt-0">
               <p className="text-sm font-medium">{ev.label}</p>
-              <p className="text-xs text-slate-500">{ev.kind} · {ev.uploadedBy} · {new Date(ev.uploadedAt).toLocaleString('en-GB')}</p>
+              <p className="text-xs text-muted">{ev.kind} · {ev.uploadedBy} · {new Date(ev.uploadedAt).toLocaleString('en-GB')}</p>
             </li>
           ))}
         </ul>
       )}
       {canUpload && (
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4" data-testid="evidence-upload">
-          <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4" data-testid="evidence-upload">
+          <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="rounded-lg border border-border px-2 py-1.5 text-sm">
             <option value="photo">Photo</option>
             <option value="document">Document</option>
             <option value="statement">Statement</option>
           </select>
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Description" className="min-w-[160px] flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Description" className="min-w-[160px] flex-1 rounded-lg border border-border px-2 py-1.5 text-sm" />
           <button type="button" disabled={upload.isPending} onClick={() => upload.mutate()} className="rounded-lg bg-command-600 px-3 py-1.5 text-sm font-medium text-white">Upload</button>
         </div>
       )}
@@ -166,8 +166,8 @@ export function CloseIncidentPanel({ incident }: { incident: IncidentDetailRecor
 
   return (
     <SectionCard title="Close incident">
-      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Closure reason" className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
-      <button type="button" disabled={!reason || close.isPending} onClick={() => close.mutate()} className="mt-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium">
+      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Closure reason" className="w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
+      <button type="button" disabled={!reason || close.isPending} onClick={() => close.mutate()} className="mt-2 rounded-lg border border-border px-4 py-2 text-sm font-medium">
         Close incident
       </button>
     </SectionCard>
@@ -193,7 +193,7 @@ export function AddIncidentUpdatePanel({ incident }: { incident: IncidentDetailR
 
   return (
     <SectionCard title="Add timeline update">
-      <textarea value={update} onChange={(e) => setUpdate(e.target.value)} placeholder="Operational update or correction" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" rows={2} />
+      <textarea value={update} onChange={(e) => setUpdate(e.target.value)} placeholder="Operational update or correction" className="w-full rounded-lg border border-border px-3 py-2 text-sm" rows={2} />
       <button type="button" disabled={!update || mutation.isPending} onClick={() => mutation.mutate()} className="mt-2 rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white" data-testid="add-incident-update">
         Add update
       </button>
@@ -232,7 +232,7 @@ export function ContainIncidentPanel({ incident }: { incident: IncidentDetailRec
         <label className="flex items-center gap-2"><input type="checkbox" checked={vehicleSafe} onChange={(e) => setVehicleSafe(e.target.checked)} />Vehicle / location safe</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={evidencePreserved} onChange={(e) => setEvidencePreserved(e.target.checked)} />Evidence preserved</label>
       </div>
-      <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Containment notes" className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" rows={2} />
+      <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Containment notes" className="mt-3 w-full rounded-lg border border-border px-3 py-2 text-sm" rows={2} />
       <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate()} className="mt-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white" data-testid="contain-incident">
         Mark contained
       </button>
@@ -260,12 +260,12 @@ export function EscalateIncidentPanel({ incident }: { incident: IncidentDetailRe
 
   return (
     <SectionCard title="Escalate severity">
-      <select value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)} className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+      <select value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)} className="w-full rounded-lg border border-border px-3 py-1.5 text-sm">
         <option value="critical">Critical</option>
         <option value="high">High</option>
         <option value="medium">Medium</option>
       </select>
-      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for escalation" className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
+      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for escalation" className="mt-2 w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
       <button type="button" disabled={!reason || mutation.isPending} onClick={() => mutation.mutate()} className="mt-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-800" data-testid="escalate-incident">
         Escalate
       </button>
@@ -292,8 +292,8 @@ export function ReopenIncidentPanel({ incident }: { incident: IncidentDetailReco
 
   return (
     <SectionCard title="Reopen incident">
-      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for reopening" className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
-      <button type="button" disabled={!reason || mutation.isPending} onClick={() => mutation.mutate()} className="mt-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium" data-testid="reopen-incident">
+      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for reopening" className="w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
+      <button type="button" disabled={!reason || mutation.isPending} onClick={() => mutation.mutate()} className="mt-2 rounded-lg border border-border px-4 py-2 text-sm font-medium" data-testid="reopen-incident">
         Reopen
       </button>
     </SectionCard>
@@ -319,8 +319,8 @@ export function CreateDefectFromIncidentPanel({ incident }: { incident: Incident
 
   return (
     <SectionCard title="Create defect from incident">
-      <input value={component} onChange={(e) => setComponent(e.target.value)} placeholder="Component / area" className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
-      <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" rows={2} />
+      <input value={component} onChange={(e) => setComponent(e.target.value)} placeholder="Component / area" className="w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
+      <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="mt-2 w-full rounded-lg border border-border px-3 py-1.5 text-sm" rows={2} />
       <button type="button" disabled={!component || !description || mutation.isPending} onClick={() => mutation.mutate()} className="mt-2 rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white" data-testid="create-defect-from-incident">
         Create defect
       </button>
@@ -346,7 +346,7 @@ export function MarkIncidentVorPanel({ incident }: { incident: IncidentDetailRec
 
   return (
     <SectionCard title="Mark vehicle VOR">
-      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for off-road" className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
+      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for off-road" className="w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
       <button type="button" disabled={!reason || mutation.isPending} onClick={() => mutation.mutate()} className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900" data-testid="mark-incident-vor">
         Mark VOR
       </button>
@@ -381,7 +381,7 @@ export function RegulatoryDecisionPanel({ incident }: { incident: IncidentDetail
 
   return (
     <SectionCard title="Record regulatory decision">
-      <select value={assessmentId} onChange={(e) => setAssessmentId(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+      <select value={assessmentId} onChange={(e) => setAssessmentId(e.target.value)} className="w-full rounded-lg border border-border px-3 py-1.5 text-sm">
         {pending.map((r) => (
           <option key={r.id} value={r.id}>{r.label}</option>
         ))}
@@ -390,8 +390,8 @@ export function RegulatoryDecisionPanel({ incident }: { incident: IncidentDetail
         <input type="checkbox" checked={potentiallyRequired} onChange={(e) => setPotentiallyRequired(e.target.checked)} />
         External report potentially required
       </label>
-      <input value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="Decision / rationale" className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
-      <input value={externalReference} onChange={(e) => setExternalReference(e.target.value)} placeholder="External reference (optional)" className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
+      <input value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="Decision / rationale" className="mt-2 w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
+      <input value={externalReference} onChange={(e) => setExternalReference(e.target.value)} placeholder="External reference (optional)" className="mt-2 w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
       <button type="button" disabled={!decision || !assessmentId || mutation.isPending} onClick={() => mutation.mutate()} className="mt-2 rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white" data-testid="record-regulatory-decision">
         Record decision
       </button>
@@ -422,11 +422,11 @@ export function AddCorrectiveActionPanel({ incident }: { incident: IncidentDetai
 
   return (
     <SectionCard title="Add corrective action">
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Action title" className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
-      <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm" rows={2} />
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Action title" className="w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
+      <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" className="mt-2 w-full rounded-lg border border-border px-3 py-1.5 text-sm" rows={2} />
       <div className="mt-2 flex flex-wrap gap-2">
-        <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
-        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm" />
+        <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} className="rounded-lg border border-border px-3 py-1.5 text-sm" />
+        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="rounded-lg border border-border px-3 py-1.5 text-sm" />
       </div>
       <button type="button" disabled={!title || !description || mutation.isPending} onClick={() => mutation.mutate()} className="mt-2 rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white" data-testid="add-corrective-action">
         Add action

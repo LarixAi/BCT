@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@veyvio/ops": path.resolve(__dirname, "./shared/veyvio-ops"),
     },
   },
 });

@@ -177,7 +177,7 @@ export function scheduleServiceColour(routeName: string | null | undefined): str
   if (n.includes('hospital') || n.includes('hosp')) return 'bg-emerald-100 text-emerald-900 ring-emerald-200'
   if (n.includes('send')) return 'bg-amber-100 text-amber-900 ring-amber-200'
   if (n.includes('private') || n.includes('priv')) return 'bg-violet-100 text-violet-900 ring-violet-200'
-  if (n.includes('cancel')) return 'bg-slate-200 text-slate-700 ring-slate-300'
+  if (n.includes('cancel')) return 'bg-surface-muted text-ink-soft ring-border'
   return 'bg-sky-100 text-sky-900 ring-sky-200'
 }
 

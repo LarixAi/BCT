@@ -51,7 +51,7 @@ export function DefectsPage() {
     queryClient.invalidateQueries({ queryKey: ['defects-hub'] })
   }
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading defects…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading defects…</p>
   if (isError || !hub) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load defects'}</p>
   }
@@ -62,11 +62,11 @@ export function DefectsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Defects</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Defects</h1>
+          <p className="text-sm text-ink-soft">
             Review, prioritise and resolve vehicle faults across the operation.
           </p>
-          <p className="text-xs text-slate-500">{safeHub.operationalDate}</p>
+          <p className="text-xs text-muted">{safeHub.operationalDate}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canReport && (
@@ -78,11 +78,11 @@ export function DefectsPage() {
               Report defect
             </button>
           )}
-          <Link to="/maintenance?tab=work-orders" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+          <Link to="/maintenance?tab=work-orders" className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
             Create workshop job
           </Link>
           <DefectsExportButton rows={safeHub.register} />
-          <button type="button" onClick={refresh} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+          <button type="button" onClick={refresh} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
             Refresh
           </button>
         </div>
@@ -105,11 +105,11 @@ export function DefectsPage() {
               className={`rounded-xl border p-3 text-left transition ${
                 filter === card.filterKey && tab === 'overview'
                   ? 'border-command-500 bg-command-50 ring-1 ring-command-500'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
+                  : 'border-border bg-surface hover:border-border-strong'
               }`}
             >
-              <p className="text-xl font-bold tabular-nums text-slate-900">{value}</p>
-              <p className="text-xs text-slate-600">{card.label}</p>
+              <p className="text-xl font-bold tabular-nums text-ink">{value}</p>
+              <p className="text-xs text-ink-soft">{card.label}</p>
               {sub != null && typeof sub === 'number' && sub > 0 && (
                 <p className="mt-1 text-xs text-amber-700">
                   {card.subKey === 'addedToday' && `${sub} added today`}
@@ -131,12 +131,12 @@ export function DefectsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search defects…"
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:max-w-xs"
+          className="w-full rounded-lg border border-border px-3 py-2 text-sm sm:max-w-xs"
         />
         <select
           value={depotId}
           onChange={(e) => setDepotId(e.target.value)}
-          className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="rounded-lg border border-border px-3 py-2 text-sm"
         >
           <option value="all">All depots</option>
           {safeHub.depots.map((d) => (
@@ -155,7 +155,7 @@ export function DefectsPage() {
               setTab('overview')
             }}
             className={`rounded-full px-3 py-1 text-xs font-medium ${
-              filter === view.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'
+              filter === view.id ? 'bg-command-600 text-white' : 'bg-surface text-ink-soft ring-1 ring-border'
             }`}
           >
             {view.label}
@@ -163,14 +163,14 @@ export function DefectsPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {DEFECTS_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === t.id ? 'border-b-2 border-command-600 text-command-700' : 'text-slate-600 hover:text-slate-900'
+              tab === t.id ? 'border-b-2 border-command-600 text-command-700' : 'text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}

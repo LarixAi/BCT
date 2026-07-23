@@ -54,12 +54,25 @@ export const yardCopy = {
     zoneOccupancy: "Zone occupancy",
     departureLine: "Departure line",
     departureSub: "next 90 min",
+    dayPlan: "Tomorrow's staging",
     yardInventory: "Yard inventory",
     quickLinks: {
       yardMap: "Yard map",
       arrivals: "Arrivals",
       scan: "Scan",
     },
+  },
+
+  plan: {
+    title: "Day plan",
+    boardLabel: "Operational day plan",
+    stagingTitle: "Staging order",
+    dutiesTitle: "Published duties",
+    acknowledgeAction: "Acknowledge plan",
+    emptyTitle: "No day plan yet",
+    emptySub: "Waiting for Admin to publish",
+    emptyHint: "When Dispatch publishes tomorrow's duties, staging order and prep tasks appear here.",
+    noStaging: "This plan has no staging sequence.",
   },
 
   welcome: {
@@ -99,6 +112,14 @@ export const yardCopy = {
     offlineAuth: "Offline — sign in when connection returns",
     weakConnection: "Weak connection",
     online: "Online",
+    liveBackend: "Connected to Command",
+    mockBackend: "Demo mode — mock sign-in",
+    mfaFailed: "That code was not accepted. Try again.",
+    verifying: "Verifying…",
+    loadingCompanies: "Loading companies…",
+    loadingDepots: "Loading depots…",
+    noCompanies: "No companies are linked to this account.",
+    noDepots: "No depots found for this company.",
   },
 
   empty: {
@@ -205,6 +226,7 @@ export const yardCopy = {
     equipment: {
       assigned: (label: string, reg: string) => `${label} assigned to ${reg}`,
       unassigned: (label: string, dest: string) => `${label} unassigned → ${dest}`,
+      transferred: (label: string, reg: string) => `${label} transferred to ${reg}`,
       restocked: (count: number, reg: string) =>
         `Restocked ${n(count, "item", "items")} on ${reg}`,
       issue: (label: string, issue: string) => `${label} — ${issue}`,
@@ -212,6 +234,9 @@ export const yardCopy = {
     departure: {
       released: (tripCode: string) => `${tripCode} released for departure`,
       leftDepot: (tripCode: string) => `${tripCode} left the depot — bay is now empty`,
+    },
+    plan: {
+      acknowledged: "Day plan acknowledged — prep tasks are on the board",
     },
     task: {
       completed: "Task completed",
@@ -236,7 +261,7 @@ export const yardCopy = {
       filed: "Damage report filed — awaiting Yard review",
     },
     scan: {
-      noMatch: (value: string) => `No vehicle or item found for “${value}”`,
+      noMatch: (value: string) => `No vehicle or equipment found for “${value}”`,
     },
   },
 } as const;

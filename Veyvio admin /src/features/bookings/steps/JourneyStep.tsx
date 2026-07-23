@@ -35,16 +35,16 @@ export function JourneyStep({
         <SectionCard key={trip.id} title={trip.label} description="Booking → Trip → Stops">
           <div className="mb-4 grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              <span className="text-slate-600">Pickup date</span>
+              <span className="text-ink-soft">Pickup date</span>
               <input
                 type="date"
                 value={trip.pickupDate}
                 onChange={(e) => updateTrip(tripIndex, { pickupDate: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               />
             </label>
             <label className="text-sm">
-              <span className="text-slate-600">Scheduling</span>
+              <span className="text-ink-soft">Scheduling</span>
               <select
                 value={trip.schedulingMode}
                 onChange={(e) =>
@@ -52,7 +52,7 @@ export function JourneyStep({
                     schedulingMode: e.target.value as 'pickup_led' | 'arrival_led',
                   })
                 }
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               >
                 <option value="pickup_led">Pickup-led — customer specifies departure</option>
                 <option value="arrival_led">Arrival-led — must arrive by time (schools, healthcare)</option>
@@ -60,29 +60,29 @@ export function JourneyStep({
             </label>
             {trip.schedulingMode === 'pickup_led' ? (
               <label className="text-sm">
-                <span className="text-slate-600">Requested pickup time</span>
+                <span className="text-ink-soft">Requested pickup time</span>
                 <input
                   type="time"
                   value={trip.requestedPickupTime ?? ''}
                   onChange={(e) => updateTrip(tripIndex, { requestedPickupTime: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
             ) : (
               <label className="text-sm">
-                <span className="text-slate-600">Required arrival time</span>
+                <span className="text-ink-soft">Required arrival time</span>
                 <input
                   type="time"
                   value={trip.requiredArrivalTime ?? ''}
                   onChange={(e) => updateTrip(tripIndex, { requiredArrivalTime: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
             )}
             {trip.calculatedArrivalTime && (
-              <p className="text-sm text-slate-600 sm:col-span-2">
+              <p className="text-sm text-ink-soft sm:col-span-2">
                 Calculated: pickup {trip.calculatedPickupTime} → arrive {trip.calculatedArrivalTime}
-                <span className="text-slate-400"> (includes journey, boarding & traffic allowance)</span>
+                <span className="text-muted"> (includes journey, boarding & traffic allowance)</span>
               </p>
             )}
           </div>
@@ -90,13 +90,13 @@ export function JourneyStep({
           <div className="space-y-3">
             {trip.stops.map((stop, stopIndex) => (
               <label key={stop.id} className="block text-sm">
-                <span className="capitalize text-slate-600">{stop.type} — {stop.name}</span>
+                <span className="capitalize text-ink-soft">{stop.type} — {stop.name}</span>
                 <input
                   type="text"
                   value={stop.address}
                   onChange={(e) => updateStop(tripIndex, stopIndex, e.target.value)}
                   placeholder="Full address"
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
             ))}
@@ -129,19 +129,19 @@ function Field({
 }) {
   return (
     <label className="text-sm">
-      <span className="text-slate-600">{label}</span>
+      <span className="text-ink-soft">{label}</span>
       {multiline ? (
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={2}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+          className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
         />
       ) : (
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+          className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
         />
       )}
     </label>

@@ -20,23 +20,23 @@ export function StaffProfileHeader({ staff, actions }: { staff: StaffProfile; ac
           {staff.firstName[0]}{staff.lastName[0]}
         </div>
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
+          <h1 className="text-2xl font-semibold text-ink">
             {staff.firstName} {staff.lastName}
-            {staff.preferredName && <span className="text-lg font-normal text-slate-500"> ({staff.preferredName})</span>}
+            {staff.preferredName && <span className="text-lg font-normal text-muted"> ({staff.preferredName})</span>}
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-soft">
             {staff.jobTitle} · {staff.department} · {staff.primaryDepotName}
           </p>
-          <p className="text-xs text-slate-500">{staff.reference}{staff.employeeNumber ? ` · ${staff.employeeNumber}` : ''}</p>
+          <p className="text-xs text-muted">{staff.reference}{staff.employeeNumber ? ` · ${staff.employeeNumber}` : ''}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <StatusPill status={staff.employmentStatus} />
-            <span className="text-xs text-slate-500">{EMPLOYMENT_STATUS_LABELS[staff.employmentStatus]}</span>
+            <span className="text-xs text-muted">{EMPLOYMENT_STATUS_LABELS[staff.employmentStatus]}</span>
             <StatusPill status={staff.account.accountStatus} />
-            <span className="text-xs text-slate-500">{ACCOUNT_STATUS_LABELS[staff.account.accountStatus]}</span>
+            <span className="text-xs text-muted">{ACCOUNT_STATUS_LABELS[staff.account.accountStatus]}</span>
             <StatusPill status={staff.dutyStatus} />
-            <span className="text-xs text-slate-500">{DUTY_STATUS_LABELS[staff.dutyStatus]}</span>
+            <span className="text-xs text-muted">{DUTY_STATUS_LABELS[staff.dutyStatus]}</span>
           </div>
-          <p className="mt-1 text-xs text-slate-500">Role: {primaryRole}</p>
+          <p className="mt-1 text-xs text-muted">Role: {primaryRole}</p>
         </div>
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}

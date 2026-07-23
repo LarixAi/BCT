@@ -51,7 +51,7 @@ export function RepairWorkflowPanel({ defect }: { defect: DefectDetailRecord }) 
   if (defect.defectStatus === 'closed') {
     return (
       <SectionCard title="Repair information">
-        <p className="text-sm text-slate-600">Defect closed — repair record retained in vehicle history.</p>
+        <p className="text-sm text-ink-soft">Defect closed — repair record retained in vehicle history.</p>
         {defect.repair && (
           <dl className="mt-3 space-y-2 text-sm">
             <Row label="Diagnosis" value={defect.repair.diagnosis ?? '—'} />
@@ -80,21 +80,21 @@ export function RepairWorkflowPanel({ defect }: { defect: DefectDetailRecord }) 
   return (
     <SectionCard title="Record repair" description="Technician diagnosis and work performed — moves defect to verification">
       {defect.repair?.linkedWorkOrderId && (
-        <p className="mb-3 text-sm text-slate-600">Linked job: {defect.repair.linkedWorkOrderId} ({defect.repair.workOrderStatus})</p>
+        <p className="mb-3 text-sm text-ink-soft">Linked job: {defect.repair.linkedWorkOrderId} ({defect.repair.workOrderStatus})</p>
       )}
       {canRepair ? (
         <div className="space-y-3 text-sm">
           <label className="block">
-            <span className="text-slate-600">Diagnosis</span>
-            <textarea value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">Diagnosis</span>
+            <textarea value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <label className="block">
-            <span className="text-slate-600">Work performed</span>
-            <textarea value={workPerformed} onChange={(e) => setWorkPerformed(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">Work performed</span>
+            <textarea value={workPerformed} onChange={(e) => setWorkPerformed(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <label className="block">
-            <span className="text-slate-600">Notes</span>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">Notes</span>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <button
             type="button"
@@ -106,7 +106,7 @@ export function RepairWorkflowPanel({ defect }: { defect: DefectDetailRecord }) 
           </button>
         </div>
       ) : (
-        <p className="text-sm text-slate-500">Awaiting maintenance team to record repair.</p>
+        <p className="text-sm text-muted">Awaiting maintenance team to record repair.</p>
       )}
     </SectionCard>
   )
@@ -149,7 +149,7 @@ export function VerificationWorkflowPanel({ defect }: { defect: DefectDetailReco
   if (defect.workflowStatus !== 'awaiting_verification') {
     return (
       <SectionCard title="Verification" description={`Required: ${VERIFICATION_LEVEL_LABELS[required]}`}>
-        <p className="text-sm text-slate-500">Verification is required after repair is completed.</p>
+        <p className="text-sm text-muted">Verification is required after repair is completed.</p>
       </SectionCard>
     )
   }
@@ -159,20 +159,20 @@ export function VerificationWorkflowPanel({ defect }: { defect: DefectDetailReco
       {canVerify ? (
         <div className="space-y-3 text-sm">
           <label className="block">
-            <span className="text-slate-600">Verification level</span>
-            <select value={level} onChange={(e) => setLevel(Number(e.target.value) as 1 | 2 | 3 | 4)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+            <span className="text-ink-soft">Verification level</span>
+            <select value={level} onChange={(e) => setLevel(Number(e.target.value) as 1 | 2 | 3 | 4)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
               {([1, 2, 3, 4] as const).map((l) => (
                 <option key={l} value={l}>{VERIFICATION_LEVEL_LABELS[l]}</option>
               ))}
             </select>
           </label>
           <label className="block">
-            <span className="text-slate-600">Method</span>
-            <input value={method} onChange={(e) => setMethod(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">Method</span>
+            <input value={method} onChange={(e) => setMethod(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <label className="block">
-            <span className="text-slate-600">Notes</span>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">Notes</span>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <div className="flex gap-2">
             <button type="button" disabled={verify.isPending} onClick={() => verify.mutate('pass')} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white">
@@ -184,7 +184,7 @@ export function VerificationWorkflowPanel({ defect }: { defect: DefectDetailReco
           </div>
         </div>
       ) : (
-        <p className="text-sm text-slate-500">Awaiting authorised verifier sign-off.</p>
+        <p className="text-sm text-muted">Awaiting authorised verifier sign-off.</p>
       )}
     </SectionCard>
   )
@@ -226,12 +226,12 @@ export function RestrictionWorkflowPanel({ defect }: { defect: DefectDetailRecor
   return (
     <SectionCard title="Operational restrictions" description="Controlled limits on vehicle use — expired restrictions must not continue silently">
       {defect.restrictions.length > 0 ? (
-        <ul className="mb-4 divide-y divide-slate-100 text-sm">
+        <ul className="mb-4 divide-y divide-border text-sm">
           {defect.restrictions.map((r) => (
             <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
               <div>
                 <p className="font-medium">{r.label}</p>
-                <p className="text-xs text-slate-500">{r.reason}</p>
+                <p className="text-xs text-muted">{r.reason}</p>
               </div>
               {canRestrict && (
                 <button type="button" onClick={() => lift.mutate(r.id)} className="text-xs font-medium text-command-600 hover:underline">
@@ -242,21 +242,21 @@ export function RestrictionWorkflowPanel({ defect }: { defect: DefectDetailRecor
           ))}
         </ul>
       ) : (
-        <p className="mb-3 text-sm text-slate-500">No active restrictions linked to this defect.</p>
+        <p className="mb-3 text-sm text-muted">No active restrictions linked to this defect.</p>
       )}
       {canRestrict && defect.defectStatus !== 'closed' && (
-        <div className="space-y-3 border-t border-slate-100 pt-3 text-sm">
+        <div className="space-y-3 border-t border-border pt-3 text-sm">
           <label className="block">
-            <span className="text-slate-600">Restriction type</span>
-            <select value={restrictionType} onChange={(e) => setRestrictionType(e.target.value as typeof restrictionType)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+            <span className="text-ink-soft">Restriction type</span>
+            <select value={restrictionType} onChange={(e) => setRestrictionType(e.target.value as typeof restrictionType)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
               {DEFECT_RESTRICTION_OPTIONS.map((o) => (
                 <option key={o.type} value={o.type}>{o.label}</option>
               ))}
             </select>
           </label>
           <label className="block">
-            <span className="text-slate-600">Reason</span>
-            <input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" placeholder="Authorised operational limit" />
+            <span className="text-ink-soft">Reason</span>
+            <input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" placeholder="Authorised operational limit" />
           </label>
           <button type="button" disabled={apply.isPending} onClick={() => apply.mutate()} className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white">
             Apply restriction
@@ -296,10 +296,10 @@ export function CloseDefectPanel({ defect }: { defect: DefectDetailRecord }) {
           <Row label="Closed by" value={defect.closedBy ?? '—'} />
         </dl>
         {canReopen && (
-          <div className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm">
+          <div className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
             <label className="block">
-              <span className="text-slate-600">Reopen reason</span>
-              <input value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+              <span className="text-ink-soft">Reopen reason</span>
+              <input value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
             </label>
             <button type="button" disabled={!reopenReason || reopen.isPending} onClick={() => reopen.mutate()} className="rounded-lg border border-amber-200 px-4 py-2 text-sm font-medium text-amber-900">
               Reopen defect
@@ -316,17 +316,17 @@ export function CloseDefectPanel({ defect }: { defect: DefectDetailRecord }) {
     <SectionCard title="Close defect" description="Only close when repair, evidence and verification requirements are met">
       <div className="space-y-3 text-sm">
         <label className="block">
-          <span className="text-slate-600">Close-out reason</span>
-          <select value={reason} onChange={(e) => setReason(e.target.value as DefectClosureReason)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+          <span className="text-ink-soft">Close-out reason</span>
+          <select value={reason} onChange={(e) => setReason(e.target.value as DefectClosureReason)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
             {Object.entries(CLOSURE_REASON_LABELS).map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
         </label>
-        <button type="button" disabled={close.isPending} onClick={() => close.mutate()} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium hover:bg-slate-50">
+        <button type="button" disabled={close.isPending} onClick={() => close.mutate()} className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-surface-muted">
           Close without verification
         </button>
-        <p className="text-xs text-slate-500">Safety-critical defects should be closed via verification pass.</p>
+        <p className="text-xs text-muted">Safety-critical defects should be closed via verification pass.</p>
       </div>
     </SectionCard>
   )
@@ -335,8 +335,8 @@ export function CloseDefectPanel({ defect }: { defect: DefectDetailRecord }) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2">
-      <dt className="w-36 shrink-0 text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="w-36 shrink-0 text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

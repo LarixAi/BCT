@@ -93,9 +93,9 @@ export function HandoverWorkflowDialog({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">Recovery & handover</h2>
-        <p className="mt-1 text-sm text-slate-600">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-ink">Recovery & handover</h2>
+        <p className="mt-1 text-sm text-ink-soft">
           Passengers onboard — controlled handover required. This is not a simple reassignment.
         </p>
 
@@ -106,7 +106,7 @@ export function HandoverWorkflowDialog({
                 <label
                   key={w.id}
                   className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm ${
-                    workflow === w.id ? 'border-command-500 bg-command-50' : 'border-slate-200'
+                    workflow === w.id ? 'border-command-500 bg-command-50' : 'border-border'
                   }`}
                 >
                   <input
@@ -118,7 +118,7 @@ export function HandoverWorkflowDialog({
                   />
                   <div>
                     <p className="font-medium">{w.label}</p>
-                    <p className="text-slate-600">{w.description}</p>
+                    <p className="text-ink-soft">{w.description}</p>
                   </div>
                 </label>
               ))}
@@ -126,7 +126,7 @@ export function HandoverWorkflowDialog({
           </SectionCard>
 
           <SectionCard title="Passengers onboard">
-            <ul className="list-inside list-disc text-sm text-slate-700">
+            <ul className="list-inside list-disc text-sm text-ink-soft">
               {onboardJobs.map((j) => (
                 <li key={j.id}>
                   {j.passengerName}
@@ -139,21 +139,21 @@ export function HandoverWorkflowDialog({
           </SectionCard>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Handover location</span>
+            <span className="text-ink-soft">Handover location</span>
             <input
               value={handoverLocation}
               onChange={(e) => setHandoverLocation(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               placeholder="e.g. A406 lay-by northbound"
             />
           </label>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Receiving driver</span>
+            <span className="text-ink-soft">Receiving driver</span>
             <select
               value={receivingDriverId}
               onChange={(e) => setReceivingDriverId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             >
               <option value="">Select driver…</option>
               {candidates.map((c) => (
@@ -165,11 +165,11 @@ export function HandoverWorkflowDialog({
           </label>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Authorised by</span>
+            <span className="text-ink-soft">Authorised by</span>
             <input
               value={authorisedBy}
               onChange={(e) => setAuthorisedBy(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
 
@@ -195,12 +195,12 @@ export function HandoverWorkflowDialog({
           </div>
 
           <label className="block text-sm">
-            <span className="text-slate-600">Notes</span>
+            <span className="text-ink-soft">Notes</span>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
         </div>
@@ -208,7 +208,7 @@ export function HandoverWorkflowDialog({
         {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
 
         <div className="mt-6 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm">
+          <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm">
             Cancel
           </button>
           <button

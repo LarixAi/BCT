@@ -71,18 +71,18 @@ export function VehicleComplianceTab({
         )
       }
     >
-      <p className="mb-3 text-xs text-slate-500">
+      <p className="mb-3 text-xs text-muted">
         Certificates must be verified before they affect vehicle release. MOT, insurance, tax and tachograph dates sync from verified documents.
       </p>
 
       {showUpload && (
-        <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+        <div className="mb-4 grid gap-3 rounded-lg border border-border bg-surface-muted p-3 sm:grid-cols-2">
           <label className="block text-sm sm:col-span-2">
-            <span className="text-slate-600">Requirement type</span>
+            <span className="text-ink-soft">Requirement type</span>
             <select
               value={requirementType}
               onChange={(e) => setRequirementType(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             >
               {REQUIREMENT_TYPE_OPTIONS.map((o) => (
                 <option key={o.type} value={o.type}>
@@ -92,20 +92,20 @@ export function VehicleComplianceTab({
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Expiry date</span>
+            <span className="text-ink-soft">Expiry date</span>
             <input
               type="date"
               value={expiryDate}
               onChange={(e) => setExpiryDate(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Reference number</span>
+            <span className="text-ink-soft">Reference number</span>
             <input
               value={referenceNumber}
               onChange={(e) => setReferenceNumber(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
           <button
@@ -121,7 +121,7 @@ export function VehicleComplianceTab({
 
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+          <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
             <th className="pb-2 pr-4 font-medium">Document</th>
             <th className="pb-2 pr-4 font-medium">Expiry</th>
             <th className="pb-2 pr-4 font-medium">Status</th>
@@ -130,10 +130,10 @@ export function VehicleComplianceTab({
         </thead>
         <tbody>
           {vehicle.documents.map((doc) => (
-            <tr key={doc.id} className="border-b border-slate-50 last:border-0">
+            <tr key={doc.id} className="border-b border-border/60 last:border-0">
               <td className="py-2.5 pr-4 font-medium">{doc.label}</td>
               <td
-                className={`py-2.5 pr-4 ${expiryTone(doc.expiryDate) === 'expired' ? 'text-red-700' : expiryTone(doc.expiryDate) === 'warning' ? 'text-amber-700' : 'text-slate-600'}`}
+                className={`py-2.5 pr-4 ${expiryTone(doc.expiryDate) === 'expired' ? 'text-red-700' : expiryTone(doc.expiryDate) === 'warning' ? 'text-amber-700' : 'text-ink-soft'}`}
               >
                 {formatDate(doc.expiryDate)}
               </td>

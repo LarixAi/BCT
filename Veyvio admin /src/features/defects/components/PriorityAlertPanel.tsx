@@ -12,28 +12,28 @@ export function PriorityAlertPanel({ alerts }: { alerts: DefectPriorityAlert[] }
         <div key={alert.id} className="rounded-xl border border-red-200 bg-red-50/60 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-base font-semibold text-slate-900">
+              <p className="text-base font-semibold text-ink">
                 {alert.registrationNumber} — {alert.title}
               </p>
-              <p className="mt-1 text-sm text-slate-700">{alert.summary}</p>
+              <p className="mt-1 text-sm text-ink-soft">{alert.summary}</p>
               <dl className="mt-3 grid gap-1 text-sm sm:grid-cols-2">
                 <div>
-                  <dt className="text-slate-500">Reported by</dt>
+                  <dt className="text-muted">Reported by</dt>
                   <dd className="font-medium">{alert.reportedBy}</dd>
                 </div>
                 <div>
-                  <dt className="text-slate-500">Reported at</dt>
+                  <dt className="text-muted">Reported at</dt>
                   <dd className="font-medium">
                     {new Date(alert.reportedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-500">Current location</dt>
+                  <dt className="text-muted">Current location</dt>
                   <dd className="font-medium">{alert.location}</dd>
                 </div>
                 {alert.assignedRunReference && (
                   <div>
-                    <dt className="text-slate-500">Assigned work</dt>
+                    <dt className="text-muted">Assigned work</dt>
                     <dd className="font-medium">
                       {alert.assignedRunReference}
                       {alert.nextDepartureTime ? ` at ${alert.nextDepartureTime}` : ''}
@@ -41,11 +41,11 @@ export function PriorityAlertPanel({ alerts }: { alerts: DefectPriorityAlert[] }
                   </div>
                 )}
                 <div>
-                  <dt className="text-slate-500">Vehicle status</dt>
+                  <dt className="text-muted">Vehicle status</dt>
                   <dd className="font-medium">{AVAILABILITY_LABELS[alert.vehicleAvailability] ?? alert.vehicleAvailability}</dd>
                 </div>
                 <div>
-                  <dt className="text-slate-500">Replacement vehicle</dt>
+                  <dt className="text-muted">Replacement vehicle</dt>
                   <dd className="font-medium">
                     {alert.replacementAssigned
                       ? 'Assigned'
@@ -56,7 +56,7 @@ export function PriorityAlertPanel({ alerts }: { alerts: DefectPriorityAlert[] }
                 </div>
                 {alert.dispatchBlocked && (
                   <div className="sm:col-span-2">
-                    <dt className="text-slate-500">Dispatch</dt>
+                    <dt className="text-muted">Dispatch</dt>
                     <dd className="font-medium text-red-800">Blocked — safety rules prevent assignment</dd>
                   </div>
                 )}
@@ -70,14 +70,14 @@ export function PriorityAlertPanel({ alerts }: { alerts: DefectPriorityAlert[] }
                 Review defect
               </Link>
               {alert.assignedRunReference && (
-                <Link to="/dispatch" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+                <Link to="/dispatch" className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
                   Reassign work
                 </Link>
               )}
-              <Link to="/maintenance" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+              <Link to="/maintenance" className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
                 Assign maintenance
               </Link>
-              <Link to="/exceptions" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+              <Link to="/exceptions" className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
                 View exception
               </Link>
             </div>

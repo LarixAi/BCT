@@ -15,6 +15,7 @@ import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as PublicUpdateRequiredRouteImport } from './routes/_public.update-required'
 import { Route as PublicSplashRouteImport } from './routes/_public.splash'
 import { Route as PublicSignInRouteImport } from './routes/_public.sign-in'
+import { Route as PublicModuleUnavailableRouteImport } from './routes/_public.module-unavailable'
 import { Route as PublicMfaRouteImport } from './routes/_public.mfa'
 import { Route as PublicInitialSyncRouteImport } from './routes/_public.initial-sync'
 import { Route as PublicDepotSelectRouteImport } from './routes/_public.depot-select'
@@ -26,6 +27,7 @@ import { Route as AppVorRouteImport } from './routes/_app.vor'
 import { Route as AppTasksRouteImport } from './routes/_app.tasks'
 import { Route as AppShiftRouteImport } from './routes/_app.shift'
 import { Route as AppScanRouteImport } from './routes/_app.scan'
+import { Route as AppPlanRouteImport } from './routes/_app.plan'
 import { Route as AppMovementsRouteImport } from './routes/_app.movements'
 import { Route as AppMoreRouteImport } from './routes/_app.more'
 import { Route as AppInspectionsRouteImport } from './routes/_app.inspections'
@@ -98,6 +100,11 @@ const PublicSignInRoute = PublicSignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => PublicRoute,
 } as any)
+const PublicModuleUnavailableRoute = PublicModuleUnavailableRouteImport.update({
+  id: '/module-unavailable',
+  path: '/module-unavailable',
+  getParentRoute: () => PublicRoute,
+} as any)
 const PublicMfaRoute = PublicMfaRouteImport.update({
   id: '/mfa',
   path: '/mfa',
@@ -151,6 +158,11 @@ const AppShiftRoute = AppShiftRouteImport.update({
 const AppScanRoute = AppScanRouteImport.update({
   id: '/scan',
   path: '/scan',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPlanRoute = AppPlanRouteImport.update({
+  id: '/plan',
+  path: '/plan',
   getParentRoute: () => AppRoute,
 } as any)
 const AppMovementsRoute = AppMovementsRouteImport.update({
@@ -386,6 +398,7 @@ export interface FileRoutesByFullPath {
   '/inspections': typeof AppInspectionsRouteWithChildren
   '/more': typeof AppMoreRouteWithChildren
   '/movements': typeof AppMovementsRoute
+  '/plan': typeof AppPlanRoute
   '/scan': typeof AppScanRoute
   '/shift': typeof AppShiftRoute
   '/tasks': typeof AppTasksRouteWithChildren
@@ -397,6 +410,7 @@ export interface FileRoutesByFullPath {
   '/depot-select': typeof PublicDepotSelectRoute
   '/initial-sync': typeof PublicInitialSyncRoute
   '/mfa': typeof PublicMfaRoute
+  '/module-unavailable': typeof PublicModuleUnavailableRoute
   '/sign-in': typeof PublicSignInRoute
   '/splash': typeof PublicSplashRoute
   '/update-required': typeof PublicUpdateRequiredRoute
@@ -442,6 +456,7 @@ export interface FileRoutesByTo {
   '/arrivals': typeof AppArrivalsRoute
   '/departure-line': typeof AppDepartureLineRoute
   '/movements': typeof AppMovementsRoute
+  '/plan': typeof AppPlanRoute
   '/scan': typeof AppScanRoute
   '/shift': typeof AppShiftRoute
   '/account-restricted': typeof PublicAccountRestrictedRoute
@@ -450,6 +465,7 @@ export interface FileRoutesByTo {
   '/depot-select': typeof PublicDepotSelectRoute
   '/initial-sync': typeof PublicInitialSyncRoute
   '/mfa': typeof PublicMfaRoute
+  '/module-unavailable': typeof PublicModuleUnavailableRoute
   '/sign-in': typeof PublicSignInRoute
   '/splash': typeof PublicSplashRoute
   '/update-required': typeof PublicUpdateRequiredRoute
@@ -500,6 +516,7 @@ export interface FileRoutesById {
   '/_app/inspections': typeof AppInspectionsRouteWithChildren
   '/_app/more': typeof AppMoreRouteWithChildren
   '/_app/movements': typeof AppMovementsRoute
+  '/_app/plan': typeof AppPlanRoute
   '/_app/scan': typeof AppScanRoute
   '/_app/shift': typeof AppShiftRoute
   '/_app/tasks': typeof AppTasksRouteWithChildren
@@ -511,6 +528,7 @@ export interface FileRoutesById {
   '/_public/depot-select': typeof PublicDepotSelectRoute
   '/_public/initial-sync': typeof PublicInitialSyncRoute
   '/_public/mfa': typeof PublicMfaRoute
+  '/_public/module-unavailable': typeof PublicModuleUnavailableRoute
   '/_public/sign-in': typeof PublicSignInRoute
   '/_public/splash': typeof PublicSplashRoute
   '/_public/update-required': typeof PublicUpdateRequiredRoute
@@ -563,6 +581,7 @@ export interface FileRouteTypes {
     | '/inspections'
     | '/more'
     | '/movements'
+    | '/plan'
     | '/scan'
     | '/shift'
     | '/tasks'
@@ -574,6 +593,7 @@ export interface FileRouteTypes {
     | '/depot-select'
     | '/initial-sync'
     | '/mfa'
+    | '/module-unavailable'
     | '/sign-in'
     | '/splash'
     | '/update-required'
@@ -619,6 +639,7 @@ export interface FileRouteTypes {
     | '/arrivals'
     | '/departure-line'
     | '/movements'
+    | '/plan'
     | '/scan'
     | '/shift'
     | '/account-restricted'
@@ -627,6 +648,7 @@ export interface FileRouteTypes {
     | '/depot-select'
     | '/initial-sync'
     | '/mfa'
+    | '/module-unavailable'
     | '/sign-in'
     | '/splash'
     | '/update-required'
@@ -676,6 +698,7 @@ export interface FileRouteTypes {
     | '/_app/inspections'
     | '/_app/more'
     | '/_app/movements'
+    | '/_app/plan'
     | '/_app/scan'
     | '/_app/shift'
     | '/_app/tasks'
@@ -687,6 +710,7 @@ export interface FileRouteTypes {
     | '/_public/depot-select'
     | '/_public/initial-sync'
     | '/_public/mfa'
+    | '/_public/module-unavailable'
     | '/_public/sign-in'
     | '/_public/splash'
     | '/_public/update-required'
@@ -781,6 +805,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicSignInRouteImport
       parentRoute: typeof PublicRoute
     }
+    '/_public/module-unavailable': {
+      id: '/_public/module-unavailable'
+      path: '/module-unavailable'
+      fullPath: '/module-unavailable'
+      preLoaderRoute: typeof PublicModuleUnavailableRouteImport
+      parentRoute: typeof PublicRoute
+    }
     '/_public/mfa': {
       id: '/_public/mfa'
       path: '/mfa'
@@ -856,6 +887,13 @@ declare module '@tanstack/react-router' {
       path: '/scan'
       fullPath: '/scan'
       preLoaderRoute: typeof AppScanRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/plan': {
+      id: '/_app/plan'
+      path: '/plan'
+      fullPath: '/plan'
+      preLoaderRoute: typeof AppPlanRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/movements': {
@@ -1323,6 +1361,7 @@ interface AppRouteChildren {
   AppInspectionsRoute: typeof AppInspectionsRouteWithChildren
   AppMoreRoute: typeof AppMoreRouteWithChildren
   AppMovementsRoute: typeof AppMovementsRoute
+  AppPlanRoute: typeof AppPlanRoute
   AppScanRoute: typeof AppScanRoute
   AppShiftRoute: typeof AppShiftRoute
   AppTasksRoute: typeof AppTasksRouteWithChildren
@@ -1340,6 +1379,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppInspectionsRoute: AppInspectionsRouteWithChildren,
   AppMoreRoute: AppMoreRouteWithChildren,
   AppMovementsRoute: AppMovementsRoute,
+  AppPlanRoute: AppPlanRoute,
   AppScanRoute: AppScanRoute,
   AppShiftRoute: AppShiftRoute,
   AppTasksRoute: AppTasksRouteWithChildren,
@@ -1358,6 +1398,7 @@ interface PublicRouteChildren {
   PublicDepotSelectRoute: typeof PublicDepotSelectRoute
   PublicInitialSyncRoute: typeof PublicInitialSyncRoute
   PublicMfaRoute: typeof PublicMfaRoute
+  PublicModuleUnavailableRoute: typeof PublicModuleUnavailableRoute
   PublicSignInRoute: typeof PublicSignInRoute
   PublicSplashRoute: typeof PublicSplashRoute
   PublicUpdateRequiredRoute: typeof PublicUpdateRequiredRoute
@@ -1371,6 +1412,7 @@ const PublicRouteChildren: PublicRouteChildren = {
   PublicDepotSelectRoute: PublicDepotSelectRoute,
   PublicInitialSyncRoute: PublicInitialSyncRoute,
   PublicMfaRoute: PublicMfaRoute,
+  PublicModuleUnavailableRoute: PublicModuleUnavailableRoute,
   PublicSignInRoute: PublicSignInRoute,
   PublicSplashRoute: PublicSplashRoute,
   PublicUpdateRequiredRoute: PublicUpdateRequiredRoute,

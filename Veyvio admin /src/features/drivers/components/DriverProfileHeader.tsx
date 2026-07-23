@@ -33,8 +33,8 @@ export function DriverProfileHeader({
           </div>
           <div>
             <p className="text-sm font-medium text-command-600">{driver.reference}</p>
-            <h1 className="text-2xl font-semibold text-slate-900">{displayName}</h1>
-            <p className="text-sm text-slate-600">
+            <h1 className="text-2xl font-semibold text-ink">{displayName}</h1>
+            <p className="text-sm text-ink-soft">
               {EMPLOYMENT_TYPE_LABELS[driver.employmentType]} · {driver.depotName ?? 'No depot'}
               {driver.employeeNumber ? ` · ${driver.employeeNumber}` : ''}
             </p>
@@ -55,7 +55,7 @@ export function DriverProfileHeader({
           onboardingPhase={['draft', 'onboarding', 'pending_compliance'].includes(driver.operationalStatus)}
           documentsPendingReview={countDocumentsPendingAdminReview(driver.documents)}
         />
-        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm lg:col-span-2">
+        <div className="rounded-xl border border-border bg-surface p-4 text-sm lg:col-span-2">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Meta label="Operational" value={OPERATIONAL_STATUS_LABELS[driver.operationalStatus]} />
             <Meta
@@ -108,8 +108,8 @@ export function DriverProfileHeader({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

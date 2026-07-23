@@ -49,7 +49,7 @@ export function PricingStep({
             <PriceRow label="Estimated operating cost" value={p.estimatedCost} />
             <PriceRow label="Estimated margin" value={p.margin} />
             <div className="flex justify-between font-medium">
-              <dt className="text-slate-500">Margin %</dt>
+              <dt className="text-muted">Margin %</dt>
               <dd className={p.marginPct < 10 ? 'text-amber-700' : 'text-emerald-700'}>{p.marginPct.toFixed(1)}%</dd>
             </div>
           </dl>
@@ -57,21 +57,21 @@ export function PricingStep({
 
         {context?.poRequired && (
           <label className="mt-4 block text-sm">
-            <span className="text-slate-600">Purchase order number</span>
+            <span className="text-ink-soft">Purchase order number</span>
             <input
               value={p.poNumber ?? ''}
               onChange={(e) => onChange({ pricing: { ...p, poNumber: e.target.value } })}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
         )}
 
         {!contractRef && (
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <p className="text-xs font-semibold uppercase text-slate-500">Price override (authorised users)</p>
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="text-xs font-semibold uppercase text-muted">Price override (authorised users)</p>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <label className="text-sm">
-                <span className="text-slate-600">Override price (£)</span>
+                <span className="text-ink-soft">Override price (£)</span>
                 <input
                   type="number"
                   step="0.01"
@@ -84,15 +84,15 @@ export function PricingStep({
                       },
                     })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
               <label className="text-sm">
-                <span className="text-slate-600">Reason (audit log)</span>
+                <span className="text-ink-soft">Reason (audit log)</span>
                 <input
                   value={p.overrideReason ?? ''}
                   onChange={(e) => onChange({ pricing: { ...p, overrideReason: e.target.value } })}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
             </div>
@@ -106,8 +106,8 @@ export function PricingStep({
 function PriceRow({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
   return (
     <div className="flex justify-between">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className={bold ? 'font-bold text-slate-900' : 'text-slate-900'}>£{value.toFixed(2)}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className={bold ? 'font-bold text-ink' : 'text-ink'}>£{value.toFixed(2)}</dd>
     </div>
   )
 }

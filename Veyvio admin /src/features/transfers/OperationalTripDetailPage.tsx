@@ -63,7 +63,7 @@ export function OperationalTripDetailPage() {
     else setSearchParams({}, { replace: true })
   }
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading trip…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading trip…</p>
   if (isError || !trip) {
     return (
       <p className="text-sm text-red-800">
@@ -82,10 +82,10 @@ export function OperationalTripDetailPage() {
           ← Back to {trip.runReference ? `run ${trip.runReference}` : 'dispatch'}
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold text-slate-900">{trip.reference}</h1>
+          <h1 className="text-2xl font-semibold text-ink">{trip.reference}</h1>
           <StatusPill status={trip.status} />
         </div>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-ink-soft">
           {trip.routeName ?? VEYVIO_TERMS.trip.term}
           {trip.runReference ? ` · Run ${trip.runReference}` : ''}
         </p>
@@ -98,7 +98,7 @@ export function OperationalTripDetailPage() {
         <Info label="Delay" value={`${trip.delayMinutes} min`} />
       </div>
 
-      <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 pb-px">
+      <nav className="flex gap-1 overflow-x-auto border-b border-border pb-px">
         {TABS.map((label) => (
           <button
             key={label}
@@ -107,8 +107,8 @@ export function OperationalTripDetailPage() {
             className={cn(
               'shrink-0 rounded-t-lg px-3 py-2 text-sm font-medium',
               tab === label
-                ? 'border border-b-0 border-slate-200 bg-white text-command-700'
-                : 'text-slate-600 hover:text-slate-900',
+                ? 'border border-b-0 border-border bg-surface text-command-700'
+                : 'text-ink-soft hover:text-ink',
             )}
           >
             {label}
@@ -169,7 +169,7 @@ export function OperationalTripDetailPage() {
         <SectionCard title="Passengers / jobs" description="Each job is one passenger journey leg">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3 font-medium">#</th>
                 <th className="pb-2 pr-3 font-medium">Passenger</th>
                 <th className="pb-2 pr-3 font-medium">Pickup</th>
@@ -183,18 +183,18 @@ export function OperationalTripDetailPage() {
               {[...trip.jobs]
                 .sort((a, b) => a.sequence - b.sequence)
                 .map((job) => (
-                  <tr key={job.id} className="border-b border-slate-50 last:border-0">
-                    <td className="py-2.5 pr-3 tabular-nums text-slate-500">{job.sequence}</td>
+                  <tr key={job.id} className="border-b border-border/60 last:border-0">
+                    <td className="py-2.5 pr-3 tabular-nums text-muted">{job.sequence}</td>
                     <td className="py-2.5 pr-3 font-medium">{job.passengerName}</td>
-                    <td className="py-2.5 pr-3 text-slate-600">{job.pickupAddress}</td>
-                    <td className="py-2.5 pr-3 text-slate-600">{job.dropoffAddress}</td>
-                    <td className="py-2.5 pr-3 tabular-nums text-slate-600">
+                    <td className="py-2.5 pr-3 text-ink-soft">{job.pickupAddress}</td>
+                    <td className="py-2.5 pr-3 text-ink-soft">{job.dropoffAddress}</td>
+                    <td className="py-2.5 pr-3 tabular-nums text-ink-soft">
                       {job.plannedPickupTime}
                     </td>
                     <td className="py-2.5 pr-3">
                       <StatusPill status={job.status} />
                     </td>
-                    <td className="py-2.5 text-xs text-slate-500">
+                    <td className="py-2.5 text-xs text-muted">
                       {job.wheelchairRequired && 'WC '}
                       {job.escortRequired && 'Escort '}
                       {job.safeguardingFlag && 'Safeguarding'}
@@ -241,9 +241,9 @@ export function OperationalTripDetailPage() {
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-semibold capitalize text-slate-900">{value}</p>
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-1 font-semibold capitalize text-ink">{value}</p>
     </div>
   )
 }
@@ -251,8 +251,8 @@ function Info({ label, value }: { label: string; value: string }) {
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium capitalize text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium capitalize text-ink">{value}</dd>
     </div>
   )
 }

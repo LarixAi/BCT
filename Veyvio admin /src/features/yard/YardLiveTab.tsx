@@ -26,11 +26,11 @@ export function YardLiveTab({
       <div className="space-y-4">
         <SectionCard title="Live yard" description={`${rows.length} vehicles at ${hub.depotName}`}>
           {rows.length === 0 ? (
-            <p className="text-sm text-slate-500">No vehicles match these filters.</p>
+            <p className="text-sm text-muted">No vehicles match these filters.</p>
           ) : (
             <table className="w-full min-w-[960px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+                <tr className="border-b border-border text-xs uppercase text-muted">
                   <th className="pb-2 pr-3 font-medium">Vehicle</th>
                   <th className="pb-2 pr-3 font-medium">Location</th>
                   <th className="pb-2 pr-3 font-medium">Presence</th>
@@ -45,18 +45,18 @@ export function YardLiveTab({
                 {rows.map((row) => (
                   <tr
                     key={row.vehicleId}
-                    className={`cursor-pointer border-b border-slate-50 hover:bg-slate-50 ${selectedId === row.vehicleId ? 'bg-command-50' : ''}`}
+                    className={`cursor-pointer border-b border-border/60 hover:bg-surface-muted ${selectedId === row.vehicleId ? 'bg-command-50' : ''}`}
                     onClick={() => onSelect(row)}
                   >
                     <td className="py-2.5 pr-3">
-                      <p className="font-medium text-slate-900">{row.registrationNumber}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="font-medium text-ink">{row.registrationNumber}</p>
+                      <p className="text-xs text-muted">
                         {row.fleetNumber ?? '—'} · {row.vehicleCategory}
                       </p>
                     </td>
                     <td className="py-2.5 pr-3">
                       <p>{row.bay ?? row.zone}</p>
-                      <p className="text-xs capitalize text-slate-500">{row.locationConfidence}</p>
+                      <p className="text-xs capitalize text-muted">{row.locationConfidence}</p>
                     </td>
                     <td className="py-2.5 pr-3">
                       <StatusPill status={row.presenceState} />
@@ -64,7 +64,7 @@ export function YardLiveTab({
                     <td className="py-2.5 pr-3">
                       <StatusPill status={row.readinessState} />
                     </td>
-                    <td className="py-2.5 pr-3 text-slate-600">{ACTIVITY_LABELS[row.activityState] ?? row.activityState}</td>
+                    <td className="py-2.5 pr-3 text-ink-soft">{ACTIVITY_LABELS[row.activityState] ?? row.activityState}</td>
                     <td className="py-2.5 pr-3 tabular-nums">{row.openTaskCount}</td>
                     <td className="py-2.5 pr-3">{row.nextDeparture ?? '—'}</td>
                     <td className="py-2.5 text-xs text-amber-800">

@@ -33,20 +33,20 @@ export function SuspendDriverAccessDialog({
     !pending
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-lg">
-        <h2 className="text-lg font-semibold text-slate-900">Suspend driver access</h2>
-        <p className="mt-1 text-sm text-slate-600">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-midnight/40 p-4" role="dialog" aria-modal="true">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-lg">
+        <h2 className="text-lg font-semibold text-ink">Suspend driver access</h2>
+        <p className="mt-1 text-sm text-ink-soft">
           {driverName} will be signed out and blocked from signing in until access is restored.
         </p>
 
         <div className="mt-4 space-y-4">
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Reason category</span>
+            <span className="font-medium text-ink-soft">Reason category</span>
             <select
               value={reasonCategory}
               onChange={(e) => setReasonCategory(e.target.value as SuspendReasonCategory)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
             >
               {SUSPEND_REASON_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -57,19 +57,19 @@ export function SuspendDriverAccessDialog({
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Detailed reason</span>
+            <span className="font-medium text-ink-soft">Detailed reason</span>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               required
               placeholder="Required for the access audit trail"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
             />
           </label>
 
           <fieldset className="space-y-2 text-sm">
-            <legend className="font-medium text-slate-700">Duration</legend>
+            <legend className="font-medium text-ink-soft">Duration</legend>
             <label className="flex items-center gap-2">
               <input
                 type="radio"
@@ -93,20 +93,20 @@ export function SuspendDriverAccessDialog({
                 type="datetime-local"
                 value={restoreAt}
                 onChange={(e) => setRestoreAt(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
               />
             )}
           </fieldset>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Driver message</span>
-            <span className="ml-1 text-slate-500">(optional)</span>
+            <span className="font-medium text-ink-soft">Driver message</span>
+            <span className="ml-1 text-muted">(optional)</span>
             <textarea
               value={driverMessage}
               onChange={(e) => setDriverMessage(e.target.value)}
               rows={2}
               placeholder="Shown to the driver if they try to sign in"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
             />
           </label>
 
@@ -131,7 +131,7 @@ export function SuspendDriverAccessDialog({
             type="button"
             onClick={onClose}
             disabled={pending}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
           >
             Cancel
           </button>

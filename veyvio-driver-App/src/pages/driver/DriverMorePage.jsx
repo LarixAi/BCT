@@ -12,7 +12,6 @@ import {
   GraduationCap,
   MessageSquare,
   Settings,
-  Shield,
   ShieldCheck,
   User,
   Wifi,
@@ -115,13 +114,7 @@ export default function DriverMorePage({ driver, onLogout }) {
           to="/profile/settings"
           icon={Settings}
           label="Settings"
-          description="Notifications, navigation and contact"
-        />
-        <Row
-          to="/profile/security"
-          icon={Shield}
-          label="Security"
-          description="Biometric unlock and trusted device"
+          description="Notifications, navigation, security and sign-in"
         />
         <Row to="/help" icon={CircleHelp} label="Help & support" />
       </div>

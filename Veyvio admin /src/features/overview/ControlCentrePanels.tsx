@@ -53,7 +53,7 @@ export function SavedViewChips({
           type="button"
           onClick={() => onChange(v.id)}
           className={`rounded-full px-3 py-1 text-xs font-medium ${
-            view === v.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'
+            view === v.id ? 'bg-command-600 text-white' : 'bg-surface text-ink-soft ring-1 ring-border'
           }`}
         >
           {v.label}
@@ -65,10 +65,10 @@ export function SavedViewChips({
 
 function StatLine({ label, value, tone }: { label: string; value: number | string; tone?: 'danger' | 'warning' | 'ok' }) {
   const toneClass =
-    tone === 'danger' ? 'text-red-700' : tone === 'warning' ? 'text-amber-700' : tone === 'ok' ? 'text-emerald-700' : 'text-slate-900'
+    tone === 'danger' ? 'text-red-700' : tone === 'warning' ? 'text-amber-700' : tone === 'ok' ? 'text-emerald-700' : 'text-ink'
   return (
     <div className="flex items-baseline justify-between gap-3 text-sm">
-      <span className="text-slate-600">{label}</span>
+      <span className="text-ink-soft">{label}</span>
       <span className={`font-semibold tabular-nums ${toneClass}`}>{value}</span>
     </div>
   )
@@ -119,23 +119,23 @@ export function TopLineCards({ model }: { model: OpsDashboardModel }) {
         <Link
           key={c.title}
           to={c.href}
-          className={`rounded-xl border bg-white p-4 transition hover:border-command-400 ${
+          className={`rounded-xl border bg-surface p-4 transition hover:border-command-400 ${
             c.tone === 'danger'
               ? 'border-red-200'
               : c.tone === 'warning'
                 ? 'border-amber-200'
-                : 'border-slate-200'
+                : 'border-border'
           }`}
         >
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{c.title}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">{c.title}</p>
           <p
             className={`mt-1 text-3xl font-bold tabular-nums ${
-              c.tone === 'danger' ? 'text-red-800' : c.tone === 'warning' ? 'text-amber-800' : 'text-slate-900'
+              c.tone === 'danger' ? 'text-red-800' : c.tone === 'warning' ? 'text-amber-800' : 'text-ink'
             }`}
           >
             {c.value}
           </p>
-          <p className="mt-1 text-xs text-slate-600">{c.sub}</p>
+          <p className="mt-1 text-xs text-ink-soft">{c.sub}</p>
         </Link>
       ))}
     </div>
@@ -166,8 +166,8 @@ export function DriverReadinessPanel({ model }: { model: OpsDashboardModel }) {
         )}
       </div>
       {d.blockedReasons.length > 0 && (
-        <div className="mt-4 border-t border-slate-100 pt-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Blocked reasons</p>
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Blocked reasons</p>
           <ul className="space-y-1.5">
             {d.blockedReasons.map((r) => (
               <li key={r.reason}>
@@ -204,18 +204,18 @@ export function VehicleReadinessPanel({ model }: { model: OpsDashboardModel }) {
         <StatLine label="In service" value={v.inService} />
         <StatLine label="Unavailable / VOR" value={v.unavailable} tone={v.vor > 0 ? 'danger' : undefined} />
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
+      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center">
         <div>
-          <p className="text-lg font-bold tabular-nums text-slate-900">{v.stages.yardReady}</p>
-          <p className="text-[11px] text-slate-500">Yard ready</p>
+          <p className="text-lg font-bold tabular-nums text-ink">{v.stages.yardReady}</p>
+          <p className="text-[11px] text-muted">Yard ready</p>
         </div>
         <div>
-          <p className="text-lg font-bold tabular-nums text-slate-900">{v.stages.driverChecked}</p>
-          <p className="text-[11px] text-slate-500">Driver checked</p>
+          <p className="text-lg font-bold tabular-nums text-ink">{v.stages.driverChecked}</p>
+          <p className="text-[11px] text-muted">Driver checked</p>
         </div>
         <div>
-          <p className="text-lg font-bold tabular-nums text-slate-900">{v.stages.operationallyReleased}</p>
-          <p className="text-[11px] text-slate-500">Released</p>
+          <p className="text-lg font-bold tabular-nums text-ink">{v.stages.operationallyReleased}</p>
+          <p className="text-[11px] text-muted">Released</p>
         </div>
       </div>
     </SectionCard>
@@ -235,11 +235,11 @@ export function ReadinessPipelinePanel({ model }: { model: OpsDashboardModel }) 
       flush
     >
       {model.pipeline.length === 0 ? (
-        <p className="p-4 text-sm text-slate-500">No runs scheduled for today.</p>
+        <p className="p-4 text-sm text-muted">No runs scheduled for today.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="border-b border-border bg-surface-muted text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-4 py-2 font-medium">Run</th>
                 <th className="px-4 py-2 font-medium">Driver</th>
@@ -251,7 +251,7 @@ export function ReadinessPipelinePanel({ model }: { model: OpsDashboardModel }) 
             </thead>
             <tbody>
               {model.pipeline.map((row) => (
-                <tr key={row.id} className="border-b border-slate-100 align-top">
+                <tr key={row.id} className="border-b border-border align-top">
                   <td className="px-4 py-2.5">
                     <Link to={row.href} className="font-medium text-command-700 hover:underline">
                       {row.runReference}
@@ -260,10 +260,10 @@ export function ReadinessPipelinePanel({ model }: { model: OpsDashboardModel }) 
                       <p className="mt-1 max-w-xs text-xs text-red-700">{row.blocker}</p>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-slate-700">{row.driverName}</td>
-                  <td className="px-4 py-2.5 font-medium tabular-nums text-slate-900">{row.vehicleRegistration}</td>
-                  <td className="px-4 py-2.5 text-slate-700">{row.yardLabel}</td>
-                  <td className="px-4 py-2.5 text-slate-700">{row.driverCheckLabel}</td>
+                  <td className="px-4 py-2.5 text-ink-soft">{row.driverName}</td>
+                  <td className="px-4 py-2.5 font-medium tabular-nums text-ink">{row.vehicleRegistration}</td>
+                  <td className="px-4 py-2.5 text-ink-soft">{row.yardLabel}</td>
+                  <td className="px-4 py-2.5 text-ink-soft">{row.driverCheckLabel}</td>
                   <td className="px-4 py-2.5">
                     <span
                       className={
@@ -271,7 +271,7 @@ export function ReadinessPipelinePanel({ model }: { model: OpsDashboardModel }) 
                           ? 'font-medium text-red-700'
                           : row.releaseLabel === 'Released'
                             ? 'font-medium text-emerald-700'
-                            : 'text-slate-700'
+                            : 'text-ink-soft'
                       }
                     >
                       {row.releaseLabel}
@@ -299,27 +299,27 @@ export function LiveTripsPanel({ model }: { model: OpsDashboardModel }) {
       }
     >
       {model.liveTrips.length === 0 ? (
-        <p className="text-sm text-slate-500">No active live trips right now.</p>
+        <p className="text-sm text-muted">No active live trips right now.</p>
       ) : (
         <ul className="space-y-3">
           {model.liveTrips.map((t) => (
-            <li key={t.id} className="rounded-lg border border-slate-100 p-3">
+            <li key={t.id} className="rounded-lg border border-border p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <Link to={t.href} className="font-semibold text-slate-900 hover:text-command-700">
+                  <Link to={t.href} className="font-semibold text-ink hover:text-command-700">
                     {t.tripReference}
                   </Link>
-                  <p className="text-xs text-slate-500">{t.runReference}</p>
+                  <p className="text-xs text-muted">{t.runReference}</p>
                 </div>
-                <span className={`text-xs font-medium ${t.hasException ? 'text-amber-700' : 'text-slate-500'}`}>
+                <span className={`text-xs font-medium ${t.hasException ? 'text-amber-700' : 'text-muted'}`}>
                   {t.lastUpdateLabel}
                   {t.isStale ? ' · stale' : ''}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-slate-700">
+              <p className="mt-1 text-sm text-ink-soft">
                 Driver: {t.driverName} · Vehicle: <span className="font-medium tabular-nums">{t.vehicleRegistration}</span>
               </p>
-              <p className="text-sm text-slate-600">Status: {t.stage}</p>
+              <p className="text-sm text-ink-soft">Status: {t.stage}</p>
               {t.delayMinutes > 0 && (
                 <p className="text-sm text-amber-800">Delay signal: {t.delayMinutes} min (stale tracking)</p>
               )}
@@ -359,9 +359,9 @@ export function YardSnapshotPanel({ model }: { model: OpsDashboardModel }) {
           <StatLine label="In maintenance" value={y.inMaintenance} />
         </div>
       </div>
-      <div className="mt-4 rounded-lg bg-slate-50 p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Yard tasks</p>
-        <p className="mt-1 text-sm text-slate-800">
+      <div className="mt-4 rounded-lg bg-surface-muted p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Yard tasks</p>
+        <p className="mt-1 text-sm text-ink">
           <span className="font-bold tabular-nums">{y.openTasks}</span> open ·{' '}
           <span className={`font-bold tabular-nums ${y.overdueTasks > 0 ? 'text-amber-800' : ''}`}>{y.overdueTasks}</span> overdue ·{' '}
           <span className={`font-bold tabular-nums ${y.safetyCriticalTasks > 0 ? 'text-red-800' : ''}`}>
@@ -394,13 +394,13 @@ export function ChecksSnapshotPanel({ model }: { model: OpsDashboardModel }) {
         <StatLine label="Not synced" value={c.notSynced} tone={c.notSynced > 0 ? 'warning' : undefined} />
       </div>
       {c.failedRows.length > 0 && (
-        <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+        <ul className="mt-4 space-y-2 border-t border-border pt-3">
           {c.failedRows.map((r) => (
             <li key={r.id}>
               <Link to={r.href} className="block rounded-lg border border-red-100 bg-red-50/50 p-2 text-sm hover:border-red-300">
-                <span className="font-medium tabular-nums text-slate-900">{r.registration}</span>
-                <span className="text-slate-600"> · {r.failure}</span>
-                {r.runReference && <span className="block text-xs text-slate-500">Run {r.runReference}</span>}
+                <span className="font-medium tabular-nums text-ink">{r.registration}</span>
+                <span className="text-ink-soft"> · {r.failure}</span>
+                {r.runReference && <span className="block text-xs text-muted">Run {r.runReference}</span>}
               </Link>
             </li>
           ))}
@@ -452,18 +452,18 @@ export function HandoverExceptionsPanel({ model }: { model: OpsDashboardModel })
       }
     >
       {model.handoverExceptions.length === 0 ? (
-        <p className="text-sm text-slate-500">No open handover discrepancies.</p>
+        <p className="text-sm text-muted">No open handover discrepancies.</p>
       ) : (
         <ul className="space-y-3">
           {model.handoverExceptions.map((h) => (
             <li key={h.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
-              <Link to={h.href} className="font-medium text-slate-900 hover:text-command-700">
+              <Link to={h.href} className="font-medium text-ink hover:text-command-700">
                 {h.title}
               </Link>
               {h.registration && (
-                <p className="text-xs font-medium tabular-nums text-slate-600">{h.registration}</p>
+                <p className="text-xs font-medium tabular-nums text-ink-soft">{h.registration}</p>
               )}
-              <p className="mt-1 text-sm text-slate-700">{h.detail}</p>
+              <p className="mt-1 text-sm text-ink-soft">{h.detail}</p>
               <p className="mt-1 text-xs text-amber-900">Next: {h.recommendedAction}</p>
             </li>
           ))}
@@ -485,14 +485,14 @@ export function SyncHealthPanel({ model }: { model: OpsDashboardModel }) {
         <StatLine label="Live vehicles stale" value={s.liveVehiclesStale} tone={s.liveVehiclesStale > 0 ? 'danger' : undefined} />
       </div>
       {s.notes.length > 0 && (
-        <ul className="mt-3 list-disc space-y-1 pl-4 text-xs text-slate-600">
+        <ul className="mt-3 list-disc space-y-1 pl-4 text-xs text-ink-soft">
           {s.notes.map((n) => (
             <li key={n}>{n}</li>
           ))}
         </ul>
       )}
-      <p className="mt-3 text-xs text-slate-500">
-        Connection: <span className="font-medium capitalize text-slate-800">{s.connectionStatus}</span>
+      <p className="mt-3 text-xs text-muted">
+        Connection: <span className="font-medium capitalize text-ink">{s.connectionStatus}</span>
       </p>
     </SectionCard>
   )
@@ -501,7 +501,7 @@ export function SyncHealthPanel({ model }: { model: OpsDashboardModel }) {
 const SEVERITY_STYLES: Record<OpsActionSeverity, string> = {
   critical: 'border-red-300 bg-red-50',
   urgent: 'border-amber-300 bg-amber-50',
-  warning: 'border-slate-200 bg-white',
+  warning: 'border-border bg-surface',
 }
 
 export function ActionQueuePanel({
@@ -527,23 +527,23 @@ export function ActionQueuePanel({
       }
     >
       {items.length === 0 ? (
-        <p className="text-sm text-slate-500">No open exceptions for this filter.</p>
+        <p className="text-sm text-muted">No open exceptions for this filter.</p>
       ) : (
         <ul className="space-y-2">
           {items.map((a) => (
             <li key={a.id} className={`rounded-lg border p-3 ${SEVERITY_STYLES[a.severity]}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{a.severity}</p>
-                  <Link to={a.href} className="font-medium text-slate-900 hover:text-command-700">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{a.severity}</p>
+                  <Link to={a.href} className="font-medium text-ink hover:text-command-700">
                     {a.title}
                   </Link>
                 </div>
-                <span className="text-[10px] uppercase text-slate-500">{a.source}</span>
+                <span className="text-[10px] uppercase text-muted">{a.source}</span>
               </div>
-              <p className="mt-1 text-sm text-slate-700">{a.detail}</p>
-              <p className="mt-1 text-xs text-slate-600">Next: {a.recommendedAction}</p>
-              {a.owner && <p className="text-xs text-slate-500">Owner: {a.owner}</p>}
+              <p className="mt-1 text-sm text-ink-soft">{a.detail}</p>
+              <p className="mt-1 text-xs text-ink-soft">Next: {a.recommendedAction}</p>
+              {a.owner && <p className="text-xs text-muted">Owner: {a.owner}</p>}
             </li>
           ))}
         </ul>
@@ -571,7 +571,7 @@ export function QuickActionsPanel() {
           <Link
             key={a.label}
             to={a.href}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:border-command-400 hover:text-command-800"
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:border-command-400 hover:text-command-800"
           >
             {a.label}
           </Link>

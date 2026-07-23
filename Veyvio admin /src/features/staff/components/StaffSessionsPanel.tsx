@@ -7,15 +7,15 @@ export function StaffSessionsPanel({ staff }: { staff: StaffProfile }) {
     <SectionCard title="Devices and sessions" description="Registered devices and active sign-in sessions">
       {staff.devices.length > 0 && (
         <div className="mb-4">
-          <h3 className="mb-2 text-sm font-medium text-slate-700">Registered devices</h3>
+          <h3 className="mb-2 text-sm font-medium text-ink-soft">Registered devices</h3>
           <ul className="space-y-2 text-sm">
             {staff.devices.map((d) => (
-              <li key={d.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+              <li key={d.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-border px-3 py-2">
                 <div>
                   <p className="font-medium">{d.label}</p>
-                  <p className="text-xs text-slate-500">{d.platform} · Last seen {formatDate(d.lastSeenAt.slice(0, 10))}</p>
+                  <p className="text-xs text-muted">{d.platform} · Last seen {formatDate(d.lastSeenAt.slice(0, 10))}</p>
                 </div>
-                <div className="text-xs text-slate-600">
+                <div className="text-xs text-ink-soft">
                   {d.trusted ? 'Trusted' : 'Untrusted'}
                   {d.mfaRegistered ? ' · MFA registered' : ' · No MFA on device'}
                 </div>
@@ -25,16 +25,16 @@ export function StaffSessionsPanel({ staff }: { staff: StaffProfile }) {
         </div>
       )}
       {staff.sessions.length === 0 ? (
-        <p className="text-sm text-slate-500">No active sessions.</p>
+        <p className="text-sm text-muted">No active sessions.</p>
       ) : (
         <ul className="space-y-2 text-sm">
           {staff.sessions.map((s) => (
-            <li key={s.id} className="rounded-lg border border-slate-200 px-3 py-2">
+            <li key={s.id} className="rounded-lg border border-border px-3 py-2">
               <p className="font-medium">{s.deviceLabel}</p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 {s.application} · {s.ipAddress}{s.location ? ` · ${s.location}` : ''}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 Started {formatDate(s.startedAt.slice(0, 10))} · Last active {formatDate(s.lastActiveAt.slice(0, 10))}
                 {s.current && <span className="ml-2 text-emerald-700">Current session</span>}
               </p>
@@ -42,7 +42,7 @@ export function StaffSessionsPanel({ staff }: { staff: StaffProfile }) {
           ))}
         </ul>
       )}
-      <p className="mt-3 text-xs text-slate-500">
+      <p className="mt-3 text-xs text-muted">
         SSO: {staff.account.ssoEnabled ? `Enabled (${staff.account.authProvider})` : 'Not enabled'} · MFA policy: {staff.account.mfaPolicy.replace(/_/g, ' ')}
       </p>
     </SectionCard>

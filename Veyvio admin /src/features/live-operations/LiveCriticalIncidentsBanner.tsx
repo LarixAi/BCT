@@ -20,11 +20,11 @@ export function LiveCriticalIncidentsBanner() {
           <p className="text-sm font-semibold text-red-900">
             {alerts.length} critical incident{alerts.length > 1 ? 's' : ''} — live operations awareness
           </p>
-          <ul className="mt-2 space-y-1 text-sm text-slate-800">
+          <ul className="mt-2 space-y-1 text-sm text-ink">
             {alerts.map((alert) => (
               <li key={alert.id}>
                 <span className="font-medium">{alert.incidentRef}</span> — {alert.title}
-                <span className="text-slate-600"> · {SEVERITY_DISPLAY[alert.severity]}</span>
+                <span className="text-ink-soft"> · {SEVERITY_DISPLAY[alert.severity]}</span>
                 {alert.isSafeguarding && <span className="text-red-700"> · Safeguarding</span>}
               </li>
             ))}

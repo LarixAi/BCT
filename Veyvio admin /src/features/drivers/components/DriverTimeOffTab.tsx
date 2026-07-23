@@ -203,7 +203,7 @@ export function DriverTimeOffTab({
         }
       >
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading holiday balance…</p>
+          <p className="text-sm text-muted">Loading holiday balance…</p>
         ) : error ? (
           <p className="text-sm text-red-800">
             {error instanceof Error ? error.message : 'Could not load holiday balance'}
@@ -247,24 +247,24 @@ export function DriverTimeOffTab({
               />
             </div>
             {showHours && approx ? (
-              <p className="mt-3 text-xs text-slate-500">{approx}</p>
+              <p className="mt-3 text-xs text-muted">{approx}</p>
             ) : null}
           </>
         ) : null}
       </SectionCard>
 
       <SectionCard title="Employment & holiday settings">
-        <p className="mb-3 text-xs text-slate-500">
+        <p className="mb-3 text-xs text-muted">
           Choose the calculation method for this contract. Working weekdays drive how many days a
           leave request deducts. Pending leave does not reduce the official remaining balance.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm sm:col-span-2">
-            <span className="text-slate-600">Calculation method</span>
+            <span className="text-ink-soft">Calculation method</span>
             <select
               value={method}
               onChange={(e) => setMethod(e.target.value as HolidayCalculationMethod)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               disabled={!canManage}
             >
               <option value="fixed_days">Fixed days (working days × weeks)</option>
@@ -274,7 +274,7 @@ export function DriverTimeOffTab({
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Contracted days per week</span>
+            <span className="text-ink-soft">Contracted days per week</span>
             <input
               type="number"
               step="0.5"
@@ -282,48 +282,48 @@ export function DriverTimeOffTab({
               max="7"
               value={daysPerWeek}
               onChange={(e) => setDaysPerWeek(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               disabled={!canManage}
             />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Contracted hours per week</span>
+            <span className="text-ink-soft">Contracted hours per week</span>
             <input
               type="number"
               step="0.5"
               min="1"
               value={hoursPerWeek}
               onChange={(e) => setHoursPerWeek(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               disabled={!canManage}
             />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Entitlement weeks</span>
+            <span className="text-ink-soft">Entitlement weeks</span>
             <input
               type="number"
               step="0.1"
               min="0"
               value={entitlementWeeks}
               onChange={(e) => setEntitlementWeeks(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               disabled={!canManage}
             />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Carry-forward (days)</span>
+            <span className="text-ink-soft">Carry-forward (days)</span>
             <input
               type="number"
               step="0.5"
               min="0"
               value={carryForwardDays}
               onChange={(e) => setCarryForwardDays(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               disabled={!canManage}
             />
           </label>
           <div className="sm:col-span-2">
-            <p className="text-sm text-slate-600">Working weekdays</p>
+            <p className="text-sm text-ink-soft">Working weekdays</p>
             <div className="mt-1 flex flex-wrap gap-2">
               {WEEKDAY_OPTIONS.map((d) => {
                 const active = workingWeekdays.includes(d.id)
@@ -336,7 +336,7 @@ export function DriverTimeOffTab({
                     className={`rounded-lg border px-2.5 py-1 text-xs font-medium ${
                       active
                         ? 'border-command-500 bg-command-50 text-command-900'
-                        : 'border-slate-200 text-slate-600'
+                        : 'border-border text-ink-soft'
                     }`}
                   >
                     {d.label}
@@ -345,7 +345,7 @@ export function DriverTimeOffTab({
               })}
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700 sm:mt-2">
+          <label className="flex items-center gap-2 text-sm text-ink-soft sm:mt-2">
             <input
               type="checkbox"
               checked={bankHolidays}
@@ -372,27 +372,27 @@ export function DriverTimeOffTab({
 
       {canManage ? (
         <SectionCard title="Add adjustment">
-          <p className="mb-3 text-xs text-slate-500">
+          <p className="mb-3 text-xs text-muted">
             Manual ledger adjustment (requires reason). Positive days increase the balance; negative
             days reduce it.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="text-slate-600">Days (+/−)</span>
+              <span className="text-ink-soft">Days (+/−)</span>
               <input
                 type="number"
                 step="0.5"
                 value={adjustDays}
                 onChange={(e) => setAdjustDays(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               />
             </label>
             <label className="block text-sm sm:col-span-2">
-              <span className="text-slate-600">Reason</span>
+              <span className="text-ink-soft">Reason</span>
               <input
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 placeholder="e.g. Historic leave correction"
               />
             </label>
@@ -406,7 +406,7 @@ export function DriverTimeOffTab({
               setMessage(null)
               adjust.mutate()
             }}
-            className="mt-3 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+            className="mt-3 rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
           >
             {adjust.isPending ? 'Posting…' : 'Post adjustment'}
           </button>
@@ -415,18 +415,18 @@ export function DriverTimeOffTab({
 
       {canManage && method === 'irregular_hours' ? (
         <SectionCard title="Post irregular-hours accrual">
-          <p className="mb-3 text-xs text-slate-500">
+          <p className="mb-3 text-xs text-muted">
             Accrues holiday at 12.07% of hours worked in the period.
           </p>
           <label className="block text-sm">
-            <span className="text-slate-600">Hours worked</span>
+            <span className="text-ink-soft">Hours worked</span>
             <input
               type="number"
               step="0.25"
               min="0.25"
               value={accrualHours}
               onChange={(e) => setAccrualHours(e.target.value)}
-              className="mt-1 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full max-w-xs rounded-lg border border-border px-3 py-1.5"
             />
           </label>
           <button
@@ -436,7 +436,7 @@ export function DriverTimeOffTab({
               setMessage(null)
               accrue.mutate()
             }}
-            className="mt-3 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+            className="mt-3 rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
           >
             {accrue.isPending ? 'Posting…' : 'Post accrual'}
           </button>
@@ -445,7 +445,7 @@ export function DriverTimeOffTab({
 
       <SectionCard title="Leave requests" description="Approve or decline — annual leave updates the balance">
         {driverLeave.length === 0 ? (
-          <p className="text-sm text-slate-500">No leave requests for this driver yet.</p>
+          <p className="text-sm text-muted">No leave requests for this driver yet.</p>
         ) : (
           <ul className="space-y-3">
             {driverLeave.map((row) => {
@@ -455,18 +455,18 @@ export function DriverTimeOffTab({
                 workingWeekdays,
               })
               return (
-                <li key={row.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <li key={row.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-medium">
                         {formatDate(row.startDate)} – {formatDate(row.endDate)}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted">
                         {LEAVE_TYPE_LABEL[row.leaveType] ?? row.leaveType} ·{' '}
                         {LEAVE_STATUS_LABEL[row.status] ?? row.status}
                         {row.reference ? ` · ${row.reference}` : ''}
                       </p>
-                      {row.reason ? <p className="mt-1 text-slate-700">{row.reason}</p> : null}
+                      {row.reason ? <p className="mt-1 text-ink-soft">{row.reason}</p> : null}
                     </div>
                     {canManage && row.status === 'pending' ? (
                       <div className="flex flex-wrap gap-2">
@@ -524,7 +524,7 @@ export function DriverTimeOffTab({
                         </button>
                         <button
                           type="button"
-                          className="text-xs text-slate-600"
+                          className="text-xs text-ink-soft"
                           onClick={() => setRejectId(null)}
                         >
                           Cancel
@@ -554,11 +554,11 @@ function BalanceStat({
   return (
     <div
       className={`rounded-xl border p-3 ${
-        tone === 'ready' ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'
+        tone === 'ready' ? 'border-emerald-200 bg-emerald-50' : 'border-border bg-surface'
       }`}
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{value}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-1 text-xl font-semibold tabular-nums text-ink">{value}</p>
     </div>
   )
 }

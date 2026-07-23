@@ -3,12 +3,18 @@ import { useEffect, useState } from "react";
 import { useSessionStore } from "@/platform/auth/session-store";
 import { useTenancyStore } from "@/platform/tenancy/context-store";
 import { runBootstrapSync } from "@/platform/sync/sync-engine";
-import { Button } from "@/components/ui/button";
+import { YardAuthPrimaryButton, YardMobileAuthLayout } from "@/components/auth/YardMobileAuthLayout";
 import type { YardRole } from "@/types/permissions";
 
 const SYNC_ITEMS = [
-  "Vehicles", "Yard bays and zones", "Vehicle statuses", "Movements",
-  "Equipment records", "Open checks", "Defects and VOR cases", "Permissions",
+  "Vehicles",
+  "Yard bays and zones",
+  "Vehicle statuses",
+  "Movements",
+  "Equipment records",
+  "Open checks",
+  "Defects and VOR cases",
+  "Permissions",
 ];
 
 export const Route = createFileRoute("/_public/initial-sync")({
@@ -58,27 +64,39 @@ function InitialSyncPage() {
   }, [failed, companyId, depotId, role, completeBootstrap, navigate]);
 
   return (
-    <div className="space-y-6 animate-in-up max-w-md mx-auto text-center">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight">Synchronising yard data</h1>
-        <p className="mt-1 text-sm text-muted">Loading depot records into local storage for offline operation.</p>
+    <YardMobileAuthLayout
+      title="Synchronising yard data"
+      subtitle="Loading depot records into local storage for offline operation."
+      showBrand={false}
+      animate
+    >
+      <div className="yard-auth-progress" aria-hidden>
+        <span style={{ width: `${progress}%` }} />
       </div>
-      <div className="h-2 bg-secondary rounded-xs overflow-hidden">
-        <div className="h-full bg-primary transition-all duration-200" style={{ width: `${progress}%` }} />
-      </div>
-      <ul className="text-left text-xs text-muted space-y-1">
+
+      <ul className="mt-4 space-y-1 text-left text-xs text-[#9ca3af]">
         {SYNC_ITEMS.map((item, i) => (
-          <li key={item} className={progress > i * 11 ? "text-foreground" : ""}>✓ {item}</li>
+          <li key={item} className={progress > i * 11 ? "text-[#0b0e14]" : undefined}>
+            ✓ {item}
+          </li>
         ))}
       </ul>
-      {failed && (
-        <div className="space-y-2">
-          <p className="text-sm text-vor">{error}</p>
-          <Button onClick={() => { setFailed(false); setError(null); setProgress(0); }} className="w-full">
+
+      {failed ? (
+        <div className="yard-auth-form-stack mt-4">
+          <p className="yard-auth-error">{error}</p>
+          <YardAuthPrimaryButton
+            ready
+            onClick={() => {
+              setFailed(false);
+              setError(null);
+              setProgress(0);
+            }}
+          >
             Retry synchronisation
-          </Button>
+          </YardAuthPrimaryButton>
         </div>
-      )}
-    </div>
+      ) : null}
+    </YardMobileAuthLayout>
   );
 }

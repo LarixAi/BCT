@@ -14,6 +14,9 @@ import {
   seedDriverBootstrapCache,
 } from "@/services/driver-bootstrap.service";
 import { withTimeout } from "@/lib/withTimeout";
+import { findEnabledBiometricEnrollment } from "@/features/auth/biometrics/biometric-preference";
+import { rebindBiometricCredentialIfEnabled } from "@/features/auth/biometrics/biometric-enrollment";
+
 /** Map Command `driver_app_accounts.account_status` → fields the Ridova-shaped UI expects. */
 export function mapAccountStatusToDriverFields(accountStatus) {
   const status = String(accountStatus ?? "active");
@@ -168,6 +171,10 @@ async function ensureCompanyOnSession(supabase, accessToken, refreshToken) {
       );
       if (!selected.ok || !selected.accessToken) continue;
 
+      console.log(
+        "[BIOMETRIC_DEBUG] ensureCompanyOnSession rotated refresh via select-tenant " +
+          tokenTag(selected.refreshToken ?? refreshToken),
+      );
       await supabase.auth.setSession({
         access_token: selected.accessToken,
         refresh_token: selected.refreshToken ?? refreshToken,
@@ -245,12 +252,14 @@ export async function getDriverSessionContext() {
   // Prefer Command session fields; fall back to shared tables when API is behind.
   let operationalStatus = String(sessionResult.session?.operationalStatus ?? "");
   let accountStatus = String(mapped.accountStatus ?? sessionResult.session?.accountStatus ?? "");
-  // Always read operational status from shared table — Command session may lag behind deploys.
+  // Always read operational status + credential dates from shared table — Command session may lag.
   {
     const { data: driverOps } = await withTimeout(
       supabase
         .from("drivers")
-        .select("operational_status")
+        .select(
+          "operational_status, licence_expiry_date, cpc_expiry_date, dbs_expiry_date, medical_expiry_date, work_permission_keys",
+        )
         .eq("id", driverRow.id)
         .maybeSingle()
         .then((result) => result),
@@ -258,6 +267,28 @@ export async function getDriverSessionContext() {
       { data: null },
     );
     if (driverOps?.operational_status) operationalStatus = String(driverOps.operational_status);
+    if (driverOps) {
+      if (driverOps.dbs_expiry_date) {
+        driverRow.dbs_expiry_date = driverOps.dbs_expiry_date;
+        driverRow.dbs_expiry = driverOps.dbs_expiry_date;
+      }
+      if (driverOps.licence_expiry_date) {
+        driverRow.licence_expiry_date = driverOps.licence_expiry_date;
+        driverRow.license_expiry = driverOps.licence_expiry_date;
+      }
+      if (driverOps.cpc_expiry_date) {
+        driverRow.cpc_expiry_date = driverOps.cpc_expiry_date;
+        driverRow.cpc_expiry = driverOps.cpc_expiry_date;
+      }
+      if (driverOps.medical_expiry_date) {
+        driverRow.medical_expiry_date = driverOps.medical_expiry_date;
+        driverRow.medical_expiry = driverOps.medical_expiry_date;
+      }
+      if (Array.isArray(driverOps.work_permission_keys)) {
+        driverRow.work_permission_keys = driverOps.work_permission_keys;
+        driverRow.can_do_school_runs = driverOps.work_permission_keys.includes("school");
+      }
+    }
   }
   if (!accountStatus || accountStatus === "setup_incomplete") {
     const { data: appRow } = await withTimeout(
@@ -314,11 +345,20 @@ export async function getDriverSessionContext() {
   const activeDepotId = bootstrap?.identity?.activeDepotId ?? depotId;
   if (bootstrap) seedDriverBootstrapCache(bootstrap, activeDepotId);
 
+  const enabledModules = Array.isArray(bootstrap?.entitlements?.enabledModules)
+    ? bootstrap.entitlements.enabledModules
+    : null;
+  // Soft-open until entitlements are present; then require workforce for Driver surface.
+  const { canUse } = await import("@veyvio/entitlements");
+  const moduleBlocked = !canUse(enabledModules, "workforce");
+
   let routeTarget = "home";
   const activationPhase = sessionResult.session?.activationPhase;
   const dispatchActivated = ["eligible", "restricted"].includes(operationalStatus);
 
-  if (dispatchActivated) {
+  if (moduleBlocked) {
+    routeTarget = "module_unavailable";
+  } else if (dispatchActivated) {
     routeTarget = restrictedMode || canonical === "rejected" ? "restricted" : "home";
     try {
       sessionStorage.removeItem("veyvio.driver.forceAppShell");
@@ -382,7 +422,13 @@ export async function getDriverSessionContext() {
   };
 }
 
+function tokenTag(token) {
+  if (typeof token !== "string" || !token) return "null";
+  return "len=" + token.length + " prefix=" + token.slice(0, 6);
+}
+
 async function applyCommandTokens(supabase, accessToken, refreshToken) {
+  console.log("[BIOMETRIC_DEBUG] applyCommandTokens setSession refresh " + tokenTag(refreshToken));
   const { error } = await supabase.auth.setSession({
     access_token: accessToken,
     refresh_token: refreshToken,
@@ -480,8 +526,45 @@ export async function signInDriver(email, password) {
   return { ok: true, context };
 }
 
+/**
+ * Clear the persisted Supabase session from local storage WITHOUT calling the
+ * server `/logout` endpoint. `supabase.auth.signOut()` — even with scope:'local' —
+ * POSTs `/logout` and revokes the current session's refresh token on the server,
+ * which is the exact token fingerprint unlock later replays (causing
+ * `refresh_token_not_found`). The client re-reads the session from storage on every
+ * call, so removing the stored entry logs the user out locally while the refresh
+ * token stays valid server-side for biometric sign-in.
+ */
+function clearLocalSupabaseSession(supabase) {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return;
+    const keys = new Set();
+    const explicitKey = supabase?.auth?.storageKey;
+    if (typeof explicitKey === "string" && explicitKey) keys.add(explicitKey);
+    for (let i = storage.length - 1; i >= 0; i -= 1) {
+      const key = storage.key(i);
+      if (key && /^sb-.*-auth-token$/.test(key)) keys.add(key);
+    }
+    for (const key of keys) storage.removeItem(key);
+  } catch {
+    // Best-effort — the auth context has already dropped the in-memory session.
+  }
+}
+
 export async function signOutDriver() {
   invalidateDriverBootstrapCache();
   const supabase = getSupabaseClient();
+
+  const enrollment = await findEnabledBiometricEnrollment();
+  if (enrollment?.driverId) {
+    // Keep the current, server-valid refresh token stored for the next unlock, then
+    // clear the session locally only — never hit the server logout, which would
+    // revoke that token and force "set up fingerprint again".
+    await rebindBiometricCredentialIfEnabled(enrollment.driverId).catch(() => undefined);
+    clearLocalSupabaseSession(supabase);
+    return;
+  }
+
   await supabase.auth.signOut();
 }

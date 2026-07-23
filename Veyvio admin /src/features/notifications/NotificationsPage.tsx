@@ -76,8 +76,8 @@ export function NotificationsPage() {
       <div className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Notifications</h1>
-            <p className="mt-0.5 text-sm text-slate-700">
+            <h1 className="text-2xl font-semibold text-ink">Notifications</h1>
+            <p className="mt-0.5 text-sm text-ink-soft">
               Operational updates, alerts and items requiring your attention.
             </p>
             <p className={cn('mt-1 text-xs', isFetching ? 'text-amber-800' : 'text-emerald-700')}>
@@ -89,26 +89,26 @@ export function NotificationsPage() {
               type="button"
               onClick={() => markAllRead.mutate()}
               disabled={markAllRead.isPending || kpis.unread === 0}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
             >
               Mark all as read
             </button>
             <Link
               to="/settings/notifications"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Preferences
             </Link>
             <button
               type="button"
               onClick={() => refetch()}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Refresh
             </button>
             <Link
               to="/messages"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Messages
             </Link>
@@ -121,7 +121,7 @@ export function NotificationsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search alerts, drivers, vehicles…"
-            className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="w-full max-w-xs rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <div className="flex flex-wrap gap-1">
             {NOTIFICATION_TABS.map((t) => (
@@ -134,7 +134,7 @@ export function NotificationsPage() {
                 }}
                 className={cn(
                   'rounded-full px-2.5 py-1 text-[11px] font-medium',
-                  tab === t.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200',
+                  tab === t.id ? 'bg-command-600 text-white' : 'bg-surface text-ink-soft ring-1 ring-border',
                 )}
               >
                 {t.label}
@@ -165,13 +165,13 @@ export function NotificationsPage() {
             type="button"
             onClick={() => setSummaryFocus((prev) => (prev === card.id ? null : card.id))}
             className={cn(
-              'rounded-xl border bg-white p-3 text-left transition hover:border-command-400',
-              summaryFocus === card.id ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200',
+              'rounded-xl border bg-surface p-3 text-left transition hover:border-command-400',
+              summaryFocus === card.id ? 'border-command-500 ring-1 ring-command-500' : 'border-border',
               'tone' in card && card.tone === 'danger' && summaryFocus !== card.id && 'border-red-200',
               'tone' in card && card.tone === 'warning' && summaryFocus !== card.id && 'border-amber-200',
             )}
           >
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{card.title}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{card.title}</p>
             <p
               className={cn(
                 'mt-1 text-2xl font-bold tabular-nums',
@@ -179,7 +179,7 @@ export function NotificationsPage() {
                   ? 'text-red-800'
                   : 'tone' in card && card.tone === 'warning'
                     ? 'text-amber-800'
-                    : 'text-slate-900',
+                    : 'text-ink',
               )}
             >
               {card.value}
@@ -196,9 +196,9 @@ export function NotificationsPage() {
           flush
         >
           <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
-            {isLoading && <p className="text-sm text-slate-500">Loading notifications…</p>}
+            {isLoading && <p className="text-sm text-muted">Loading notifications…</p>}
             {!isLoading && filtered.length === 0 && (
-              <p className="py-8 text-center text-sm text-slate-500">
+              <p className="py-8 text-center text-sm text-muted">
                 {tab === 'unread'
                   ? 'You have read all current notifications.'
                   : search
@@ -208,7 +208,7 @@ export function NotificationsPage() {
             )}
             {groups.map((group) => (
               <div key={group.label}>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
                   {group.label}
                 </p>
                 <ul className="space-y-2">
@@ -218,20 +218,20 @@ export function NotificationsPage() {
                         type="button"
                         onClick={() => openNotification(n)}
                         className={cn(
-                          'w-full rounded-xl border bg-white p-3 text-left transition hover:border-command-400',
-                          selectedId === n.id ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200',
+                          'w-full rounded-xl border bg-surface p-3 text-left transition hover:border-command-400',
+                          selectedId === n.id ? 'border-command-500 ring-1 ring-command-500' : 'border-border',
                           !n.read && 'border-l-4 border-l-command-500',
                         )}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <PriorityChip priority={n.priority} />
-                          <span className="text-xs text-slate-500">{n.receivedAt}</span>
+                          <span className="text-xs text-muted">{n.receivedAt}</span>
                         </div>
-                        <p className={cn('mt-1.5 text-sm', !n.read ? 'font-semibold text-slate-900' : 'font-medium text-slate-800')}>
+                        <p className={cn('mt-1.5 text-sm', !n.read ? 'font-semibold text-ink' : 'font-medium text-ink')}>
                           {n.title}
                         </p>
-                        <p className="mt-1 line-clamp-2 text-xs text-slate-600">{n.body}</p>
-                        <p className="mt-2 text-[11px] text-slate-500">
+                        <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{n.body}</p>
+                        <p className="mt-2 text-[11px] text-muted">
                           {[n.relatedRecord, n.depot, n.driverName && `Driver ${n.driverName}`, n.vehicleRegistration]
                             .filter(Boolean)
                             .join(' · ')}
@@ -285,7 +285,7 @@ function NotificationDetailDrawer({
   if (!notification) {
     return (
       <SectionCard title="Notification detail" description="Select an alert to review">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted">
           Clicking a notification opens the linked record. Reading it is not the same as resolving the underlying issue.
         </p>
       </SectionCard>
@@ -300,7 +300,7 @@ function NotificationDetailDrawer({
       flush
     >
       <div className="max-h-[560px] space-y-3 overflow-y-auto p-4 text-sm">
-        <p className="text-slate-700">{notification.body}</p>
+        <p className="text-ink-soft">{notification.body}</p>
         <DetailRow label="Priority" value={priorityLabel(notification.priority)} />
         <DetailRow label="Status" value={notification.read ? 'Read' : 'Unread'} />
         <DetailRow label="Received" value={notification.receivedAt} />
@@ -326,7 +326,7 @@ function NotificationDetailDrawer({
                   'rounded-lg px-3 py-1.5 text-xs font-medium',
                   action.variant === 'primary'
                     ? 'border border-command-200 bg-command-50 text-command-800 hover:bg-command-100'
-                    : 'border border-slate-200 hover:bg-slate-50',
+                    : 'border border-border hover:bg-surface-muted',
                 )}
               >
                 {action.label}
@@ -336,7 +336,7 @@ function NotificationDetailDrawer({
                 key={action.label}
                 type="button"
                 onClick={onAcknowledge}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
               >
                 {action.label}
               </button>
@@ -345,13 +345,13 @@ function NotificationDetailDrawer({
           <button
             type="button"
             onClick={onMarkUnread}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
           >
             Mark unread
           </button>
           <Link
             to="/exceptions"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
           >
             Escalate to exception
           </Link>
@@ -363,9 +363,9 @@ function NotificationDetailDrawer({
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3 border-b border-slate-100 pb-2">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-medium text-slate-900">{value}</span>
+    <div className="flex justify-between gap-3 border-b border-border pb-2">
+      <span className="text-muted">{label}</span>
+      <span className="text-right font-medium text-ink">{value}</span>
     </div>
   )
 }

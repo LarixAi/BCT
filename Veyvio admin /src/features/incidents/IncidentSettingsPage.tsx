@@ -30,15 +30,15 @@ export function IncidentSettingsPage() {
   })
 
   if (isLoading || !settings) {
-    return <p className="text-sm text-slate-500">Loading incident settings…</p>
+    return <p className="text-sm text-muted">Loading incident settings…</p>
   }
 
   return (
     <div className="space-y-6">
       <div>
         <Link to="/incidents" className="text-sm text-command-600 hover:underline">← Incidents</Link>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-900">Incident settings</h1>
-        <p className="text-sm text-slate-600">Company safety response rules, assessment clocks, and automation</p>
+        <h1 className="mt-1 text-2xl font-semibold text-ink">Incident settings</h1>
+        <p className="text-sm text-ink-soft">Company safety response rules, assessment clocks, and automation</p>
       </div>
 
       <SectionCard title="Response rules" description="Configurable safety controls for critical incidents">
@@ -68,19 +68,19 @@ export function IncidentSettingsPage() {
             onChange={(v) => save.mutate({ nearMissTrackingEnabled: v })}
           />
           <div>
-            <dt className="text-slate-500">ICO assessment window</dt>
+            <dt className="text-muted">ICO assessment window</dt>
             <dd className="font-medium">{settings.icoAssessmentHours} hours</dd>
           </div>
           <div>
-            <dt className="text-slate-500">RIDDOR assessment window</dt>
+            <dt className="text-muted">RIDDOR assessment window</dt>
             <dd className="font-medium">{settings.riddorAssessmentDays} days</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Welfare follow-up default</dt>
+            <dt className="text-muted">Welfare follow-up default</dt>
             <dd className="font-medium">{settings.welfareFollowUpDays} days</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Notify roles</dt>
+            <dt className="text-muted">Notify roles</dt>
             <dd className="font-medium">{formatRoleList(settings.notifyRoles)}</dd>
           </div>
         </dl>
@@ -89,16 +89,16 @@ export function IncidentSettingsPage() {
       <IncidentIntegrationsPanel />
 
       <SectionCard title="Automation rules" description="Automated responses when incidents are reported">
-        <ul className="divide-y divide-slate-100" data-testid="incident-automation-rules">
+        <ul className="divide-y divide-border" data-testid="incident-automation-rules">
           {(hub?.automationRules ?? []).map((rule) => (
             <li key={rule.id} className="py-3 first:pt-0">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="font-medium text-slate-900">{rule.name}</p>
-                  <p className="mt-1 text-sm text-slate-600">{rule.description}</p>
-                  <p className="mt-1 text-xs text-slate-500">{formatIncidentAutomationActions(rule.actions)}</p>
+                  <p className="font-medium text-ink">{rule.name}</p>
+                  <p className="mt-1 text-sm text-ink-soft">{rule.description}</p>
+                  <p className="mt-1 text-xs text-muted">{formatIncidentAutomationActions(rule.actions)}</p>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${rule.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${rule.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-muted text-ink-soft'}`}>
                   {rule.enabled ? 'Active' : 'Disabled'}
                 </span>
               </div>
@@ -135,13 +135,13 @@ function ToggleRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <dt className="text-slate-600">{label}</dt>
+      <dt className="text-ink-soft">{label}</dt>
       <dd>
         <button
           type="button"
           disabled={disabled}
           onClick={() => onChange(!value)}
-          className={`rounded-full px-3 py-1 text-xs font-medium ${value ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'} disabled:opacity-50`}
+          className={`rounded-full px-3 py-1 text-xs font-medium ${value ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-muted text-ink-soft'} disabled:opacity-50`}
         >
           {value ? 'Yes' : 'No'}
         </button>

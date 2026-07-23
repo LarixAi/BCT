@@ -7,7 +7,7 @@ export function RecurringDefectsPanel({ insights }: { insights: DefectRecurringI
   if (insights.length === 0) {
     return (
       <SectionCard title="Recurring defect intelligence">
-        <p className="text-sm text-slate-500">No recurring component patterns detected in the current window.</p>
+        <p className="text-sm text-muted">No recurring component patterns detected in the current window.</p>
       </SectionCard>
     )
   }
@@ -19,16 +19,16 @@ export function RecurringDefectsPanel({ insights }: { insights: DefectRecurringI
           <li key={insight.id} className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="font-semibold text-slate-900">
+                <p className="font-semibold text-ink">
                   {insight.registrationNumber} — {insight.component}
                 </p>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-ink-soft">
                   {insight.occurrenceCount} occurrences in {insight.windowDays} days · {insight.depotName}
                 </p>
                 <p className="mt-2 text-sm text-amber-900">{insight.recommendation}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-amber-900">
+                <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-amber-900">
                   {SEVERITY_DISPLAY[insight.severity] ?? insight.severity}
                 </span>
                 {insight.openDefectIds[0] && (

@@ -1,5 +1,4 @@
 import {
-  listDriverMessagesViaCommand,
   markDriverMessageReadViaCommand,
   replyDriverMessageViaCommand,
 } from "@/services/command-driver-ops.service";
@@ -12,25 +11,6 @@ async function accessToken() {
     data: { session },
   } = await supabase.auth.getSession();
   return session?.access_token ?? null;
-}
-
-export async function listDriverMessageThreads(_driverId, _organisationId) {
-  const result = await listDriverMessagesViaCommand();
-  if (!result.ok) {
-    throw new Error(result.message ?? "Messages could not be loaded.");
-  }
-
-  return (result.inbox?.conversations ?? []).map((t) => ({
-    id: t.id,
-    subject: t.subject || t.title,
-    status: "open",
-    thread_type: t.audience === "yard" ? "yard" : t.audience === "both" ? "ops_and_yard" : "driver_support",
-    audience: t.audience ?? "dispatch",
-    updated_at: t.updatedAt,
-    created_at: t.updatedAt,
-    lastMessage: t.preview ?? t.body ?? null,
-    lastMessageAt: t.updatedAt,
-  }));
 }
 
 export async function getDriverMessageThread(threadId) {

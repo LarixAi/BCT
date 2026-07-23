@@ -51,7 +51,7 @@ export function MaintenancePmiTab({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+      <div className="rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-ink-soft">
         Formal Safety Inspection (PMI) records live in the{' '}
         <Link to="/inspections" className="font-medium text-command-600 hover:underline">
           Inspections centre
@@ -63,14 +63,14 @@ export function MaintenancePmiTab({
         title="PMI / safety inspection intervals"
         description="Preventive Maintenance Inspection is not a daily walkaround, MOT, or manufacturer service. Interval = earlier of calendar and mileage limits."
       >
-        <p className="mb-3 text-sm text-slate-600">
+        <p className="mb-3 text-sm text-ink-soft">
           Company default: 8 weeks. Vehicles 12+ years: guidance maximum 6 weeks (DVSA). Open a PMI work order to complete
           the digital checklist with evidence — or open the linked Inspection record for sign-off.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3">Vehicle</th>
                 <th className="pb-2 pr-3">Interval</th>
                 <th className="pb-2 pr-3">Reason / approver</th>
@@ -82,35 +82,35 @@ export function MaintenancePmiTab({
             </thead>
             <tbody>
               {rows.map(({ v, interval, due, stored }) => (
-                <tr key={v.id} className="border-b border-slate-50">
+                <tr key={v.id} className="border-b border-border/60">
                   <td className="py-2 pr-3">
                     <Link to={`/vehicles/${v.id}?tab=Maintenance`} className="font-medium text-command-600 hover:underline">
                       {v.registrationNumber}
                     </Link>
-                    <p className="text-xs text-slate-500">{v.modelYear ?? '—'} · {v.homeDepotName}</p>
+                    <p className="text-xs text-muted">{v.modelYear ?? '—'} · {v.homeDepotName}</p>
                   </td>
                   <td className="py-2 pr-3 tabular-nums">
                     {interval.intervalWeeks} weeks
-                    <p className="text-[11px] text-slate-500">{stored ? 'Vehicle policy' : 'Default'}</p>
+                    <p className="text-[11px] text-muted">{stored ? 'Vehicle policy' : 'Default'}</p>
                   </td>
-                  <td className="py-2 pr-3 text-xs text-slate-600 max-w-[220px]">
+                  <td className="py-2 pr-3 text-xs text-ink-soft max-w-[220px]">
                     {interval.reason}
                     {interval.approvedBy && (
-                      <p className="mt-0.5 text-slate-500">Approved by {interval.approvedBy}</p>
+                      <p className="mt-0.5 text-muted">Approved by {interval.approvedBy}</p>
                     )}
                   </td>
                   <td className="py-2 pr-3 text-xs">
                     {due.dueDate?.slice(0, 10) ?? '—'}
                     {due.dueMileage != null && (
-                      <p className="text-slate-500">{due.dueMileage.toLocaleString()} mi</p>
+                      <p className="text-muted">{due.dueMileage.toLocaleString()} mi</p>
                     )}
                   </td>
-                  <td className="py-2 pr-3 text-xs text-slate-600">{due.trigger}</td>
+                  <td className="py-2 pr-3 text-xs text-ink-soft">{due.trigger}</td>
                   <td className="py-2 pr-3">
                     <StatusPill status={due.status} />
                     <span className="sr-only">{pmiStatusLabel(due.status)}</span>
                   </td>
-                  <td className="py-2 text-xs text-slate-600">{interval.reviewDueAt ?? '—'}</td>
+                  <td className="py-2 text-xs text-ink-soft">{interval.reviewDueAt ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -120,20 +120,20 @@ export function MaintenancePmiTab({
 
       <SectionCard title="Open PMI work orders" description={`${pmiOrders.length} PMI jobs — open digital checklist to record items and evidence`}>
         {pmiOrders.length === 0 ? (
-          <p className="text-sm text-slate-500">No open PMI work orders. Schedule from Planner or Create work order.</p>
+          <p className="text-sm text-muted">No open PMI work orders. Schedule from Planner or Create work order.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {pmiOrders.map((w) => {
               const progress = w.pmiChecklistProgress
               return (
-                <li key={w.workOrderId} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-50 py-2">
+                <li key={w.workOrderId} className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2">
                   <div>
                     <Link to={`/vehicles/${w.vehicleId}?tab=Maintenance`} className="font-medium text-command-600 hover:underline">
                       {w.registrationNumber}
                     </Link>
-                    <p className="text-slate-600">{w.title}</p>
+                    <p className="text-ink-soft">{w.title}</p>
                     {progress && (
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted">
                         Checklist {progress.answered}/{progress.total}
                         {progress.complete ? ' · Complete' : ' · Incomplete'}
                       </p>
@@ -170,7 +170,7 @@ export function MaintenancePmiTab({
             .filter((s) => s.serviceType.toLowerCase().includes('pmi') || s.serviceType === 'Scheduled service')
             .slice(0, 20)
             .map((s) => (
-              <li key={s.id} className="flex justify-between gap-2 border-b border-slate-50 py-1.5">
+              <li key={s.id} className="flex justify-between gap-2 border-b border-border/60 py-1.5">
                 <Link to={`/vehicles/${s.vehicleId}?tab=Maintenance`} className="text-command-600 hover:underline">
                   {s.registrationNumber}
                 </Link>

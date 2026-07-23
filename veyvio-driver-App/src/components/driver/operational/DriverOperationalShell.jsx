@@ -23,7 +23,6 @@ function showBottomNav(pathname) {
     pathname === "/messages" ||
     pathname === "/notifications" ||
     pathname === "/contact" ||
-    pathname === "/threads" ||
     pathname.startsWith("/threads/")
   ) {
     return true;

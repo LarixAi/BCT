@@ -89,7 +89,7 @@ export function KpiCardView({
     <Link
       to={href}
       className={cn(
-        'group block rounded-lg border bg-white p-4 transition',
+        'group block rounded-lg border bg-surface p-4 transition',
         toneClasses[tone],
       )}
     >
@@ -119,7 +119,7 @@ export function SectionCard({
   flush?: boolean
 }) {
   return (
-    <section className={cn('rounded-lg border border-border bg-white', className)}>
+    <section className={cn('rounded-lg border border-border bg-surface', className)}>
       <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-ink">{title}</h2>
@@ -146,7 +146,7 @@ export function PlaceholderPage({ title, description }: { title: string; descrip
     <div className="mx-auto max-w-2xl py-16 text-center">
       <h1 className="text-2xl font-semibold text-ink">{title}</h1>
       <p className="mt-2 text-muted">{description}</p>
-      <p className="mt-6 rounded-lg border border-dashed border-border-strong bg-white px-4 py-8 text-sm text-muted">
+      <p className="mt-6 rounded-lg border border-dashed border-border-strong bg-surface px-4 py-8 text-sm text-muted">
         This module will be built in a later phase.
       </p>
     </div>

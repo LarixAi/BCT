@@ -160,11 +160,11 @@ export function DriverDetailPage() {
     [driver?.auditEvents],
   )
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading driver…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading driver…</p>
   if (isError || !driver) {
     return (
-      <div className="space-y-3 rounded-xl border border-critical/30 bg-white p-5">
-        <p className="text-sm font-medium text-slate-900">Driver profile could not be loaded</p>
+      <div className="space-y-3 rounded-xl border border-critical/30 bg-surface p-5">
+        <p className="text-sm font-medium text-ink">Driver profile could not be loaded</p>
         <p className="text-sm text-red-800">
           {error instanceof Error ? error.message : 'Driver not found'}
         </p>
@@ -177,7 +177,7 @@ export function DriverDetailPage() {
           >
             {isFetching ? 'Retrying…' : 'Try again'}
           </button>
-          <Link to="/drivers" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <Link to="/drivers" className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted">
             Back to drivers
           </Link>
         </div>
@@ -200,7 +200,7 @@ export function DriverDetailPage() {
             {needsOnboarding && canEditDriver(permissions) && (
               <Link
                 to={`/drivers/${driver.id}/onboarding`}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
               >
                 Continue onboarding
               </Link>
@@ -219,7 +219,7 @@ export function DriverDetailPage() {
             {canEditDriver(permissions) && (
               <Link
                 to={`/drivers/${driver.id}/edit`}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
               >
                 Edit driver
               </Link>
@@ -239,7 +239,7 @@ export function DriverDetailPage() {
                 type="button"
                 onClick={() => cancelInvite.mutate()}
                 disabled={cancelInvite.isPending}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
               >
                 Cancel invitation
               </button>
@@ -273,7 +273,7 @@ export function DriverDetailPage() {
                   type="button"
                   onClick={() => passwordReset.mutate()}
                   disabled={passwordReset.isPending}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
                 >
                   Force password reset
                 </button>
@@ -290,7 +290,7 @@ export function DriverDetailPage() {
             <button
               type="button"
               onClick={() => setTab('Access & Security')}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Access & Security
             </button>
@@ -318,7 +318,7 @@ export function DriverDetailPage() {
         />
       )}
 
-      <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 pb-px">
+      <nav className="flex gap-1 overflow-x-auto border-b border-border pb-px">
         {TABS.map((label) => (
           <button
             key={label}
@@ -326,8 +326,8 @@ export function DriverDetailPage() {
             onClick={() => setTab(label)}
             className={`shrink-0 rounded-t-lg px-3 py-2 text-sm font-medium ${
               tab === label
-                ? 'border border-b-0 border-slate-200 bg-white text-command-700'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'border border-b-0 border-border bg-surface text-command-700'
+                : 'text-ink-soft hover:text-ink'
             }`}
           >
             {label}
@@ -368,14 +368,14 @@ export function DriverDetailPage() {
           </SectionCard>
           {driverAppEvents.length > 0 ? (
             <SectionCard title="Driver app activity" className="lg:col-span-2">
-              <p className="mb-3 text-xs text-slate-500">
+              <p className="mb-3 text-xs text-muted">
                 Recent updates from the Driver mobile app (onboarding and evidence).
               </p>
               <ul className="space-y-2 text-sm">
                 {driverAppEvents.map((event) => (
-                  <li key={event.id} className="flex flex-col gap-0.5 border-b border-slate-50 pb-2 last:border-0">
-                    <span className="font-medium text-slate-900">{event.action}</span>
-                    <span className="text-xs text-slate-500">{formatDate(event.createdAt)}</span>
+                  <li key={event.id} className="flex flex-col gap-0.5 border-b border-border/60 pb-2 last:border-0">
+                    <span className="font-medium text-ink">{event.action}</span>
+                    <span className="text-xs text-muted">{formatDate(event.createdAt)}</span>
                   </li>
                 ))}
               </ul>
@@ -401,7 +401,7 @@ export function DriverDetailPage() {
                   {p.label}
                 </span>
               ))}
-              {enabledPerms.length === 0 && <p className="text-sm text-slate-500">No work permissions configured.</p>}
+              {enabledPerms.length === 0 && <p className="text-sm text-muted">No work permissions configured.</p>}
             </div>
           </SectionCard>
           <SectionCard title="Current operational information" className="lg:col-span-2">
@@ -467,6 +467,7 @@ export function DriverDetailPage() {
           driver={driver}
           actorName={actorName}
           canEdit={canEditDriver(permissions) || canVerifyDriverDocuments(permissions)}
+          onViewCompliance={() => setTab('Compliance')}
         />
       )}
 
@@ -497,8 +498,8 @@ export function DriverDetailPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="text-right font-medium text-ink">{value}</dd>
     </div>
   )
 }

@@ -38,7 +38,7 @@ export function VehicleReportDetailPage() {
     },
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading report…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading report…</p>
   if (error || !report) {
     return (
       <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Report not found'}</p>
@@ -53,9 +53,9 @@ export function VehicleReportDetailPage() {
         </Link>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">{report.reference}</p>
-            <h1 className="text-2xl font-semibold text-slate-900">{report.title}</h1>
-            <p className="text-sm text-slate-600">
+            <p className="text-xs uppercase tracking-wide text-muted">{report.reference}</p>
+            <h1 className="text-2xl font-semibold text-ink">{report.title}</h1>
+            <p className="text-sm text-ink-soft">
               <Link to={`/vehicles/${report.vehicleId}`} className="font-medium text-command-700 hover:underline">
                 {report.registrationNumber}
               </Link>
@@ -74,55 +74,55 @@ export function VehicleReportDetailPage() {
           <SectionCard title="Report information">
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-xs text-slate-500">Type</dt>
+                <dt className="text-xs text-muted">Type</dt>
                 <dd className="capitalize">{report.reportType.replace(/_/g, ' ')}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Stage</dt>
+                <dt className="text-xs text-muted">Stage</dt>
                 <dd className="capitalize">{report.stage.replace(/_/g, ' ')}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Reported by</dt>
+                <dt className="text-xs text-muted">Reported by</dt>
                 <dd>
                   {report.reportedBy}
-                  <span className="block text-xs text-slate-500">{report.reportedByRole}</span>
+                  <span className="block text-xs text-muted">{report.reportedByRole}</span>
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Reported at</dt>
+                <dt className="text-xs text-muted">Reported at</dt>
                 <dd>{new Date(report.reportedAt).toLocaleString('en-GB')}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Vehicle area</dt>
+                <dt className="text-xs text-muted">Vehicle area</dt>
                 <dd>{report.vehicleArea ?? '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Mileage</dt>
+                <dt className="text-xs text-muted">Mileage</dt>
                 <dd className="tabular-nums">
                   {report.mileage != null ? `${report.mileage.toLocaleString('en-GB')} mi` : '—'}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Safe to move</dt>
+                <dt className="text-xs text-muted">Safe to move</dt>
                 <dd>{report.safeToMove == null ? '—' : report.safeToMove ? 'Yes' : 'No'}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Passengers onboard</dt>
+                <dt className="text-xs text-muted">Passengers onboard</dt>
                 <dd>{report.passengersOnboard ? 'Yes' : 'No'}</dd>
               </div>
             </dl>
-            <p className="mt-4 text-sm text-slate-700">{report.description}</p>
+            <p className="mt-4 text-sm text-ink-soft">{report.description}</p>
           </SectionCard>
 
           <SectionCard title="Evidence" description={`${report.evidence.length} items`}>
             {report.evidence.length === 0 ? (
-              <p className="text-sm text-slate-500">No evidence attached.</p>
+              <p className="text-sm text-muted">No evidence attached.</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {report.evidence.map((item) => (
-                  <li key={item.id} className="rounded-lg border border-slate-200 px-3 py-2">
+                  <li key={item.id} className="rounded-lg border border-border px-3 py-2">
                     {item.label}
-                    <span className="block text-xs text-slate-500">
+                    <span className="block text-xs text-muted">
                       {item.kind} · {new Date(item.capturedAt).toLocaleString('en-GB')}
                     </span>
                   </li>
@@ -134,10 +134,10 @@ export function VehicleReportDetailPage() {
           <SectionCard title="Timeline">
             <ul className="space-y-3 text-sm">
               {report.timeline.map((event) => (
-                <li key={event.id} className="border-b border-slate-100 pb-3 last:border-0">
+                <li key={event.id} className="border-b border-border pb-3 last:border-0">
                   <p className="font-medium capitalize">{event.action}</p>
-                  <p className="text-slate-600">{event.detail ?? '—'}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-ink-soft">{event.detail ?? '—'}</p>
+                  <p className="text-xs text-muted">
                     {event.actorName} · {new Date(event.occurredAt).toLocaleString('en-GB')}
                   </p>
                 </li>
@@ -162,7 +162,7 @@ export function VehicleReportDetailPage() {
                       restrictionType: 'restricted_use',
                     })
                   }
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+                  className="rounded-lg border border-border px-3 py-2 text-left text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
                 >
                   {item.label}
                 </button>
@@ -194,21 +194,21 @@ export function VehicleReportDetailPage() {
           <SectionCard title="Resolution">
             <dl className="space-y-2 text-sm">
               <div>
-                <dt className="text-xs text-slate-500">Root cause</dt>
+                <dt className="text-xs text-muted">Root cause</dt>
                 <dd>{report.rootCause ?? '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Resolution</dt>
+                <dt className="text-xs text-muted">Resolution</dt>
                 <dd>{report.resolution ?? '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Cost</dt>
+                <dt className="text-xs text-muted">Cost</dt>
                 <dd className="tabular-nums">
                   {report.totalCost != null ? `£${report.totalCost.toLocaleString('en-GB')}` : '—'}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">Downtime</dt>
+                <dt className="text-xs text-muted">Downtime</dt>
                 <dd className="tabular-nums">
                   {report.downtimeHours != null ? `${report.downtimeHours} h` : '—'}
                 </dd>

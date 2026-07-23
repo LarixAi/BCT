@@ -116,3 +116,38 @@ jobs:
           VITE_DRIVER_APP_URL: https://localhost
           VITE_DRIVER_NAV_TEST_MODE: "true"
         run: npm run build
+
+  tenant-isolation:
+    name: Tenant isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Requires repo secrets against hosted Command API (see docs/plan/veyvio-multi-tenant-saas-roadmap.md).
+    # Fork PRs without secrets fail closed when CI=true and VEYVIO_ANON_KEY is unset.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ format('{0} /package-lock.json', 'Veyvio admin') }}
+
+      - name: Install Admin deps
+        run: |
+          cd "Veyvio admin "
+          npm ci
+
+      - name: Cross-tenant isolation smoke
+        env:
+          CI: "true"
+          VEYVIO_ANON_KEY: ${{ secrets.VEYVIO_ANON_KEY }}
+          VEYVIO_API_URL: ${{ secrets.VEYVIO_API_URL }}
+          VEYVIO_SUPABASE_URL: ${{ secrets.VEYVIO_SUPABASE_URL }}
+          VEYVIO_PLATFORM_EMAIL: ${{ secrets.VEYVIO_PLATFORM_EMAIL }}
+          VEYVIO_PLATFORM_PASSWORD: ${{ secrets.VEYVIO_PLATFORM_PASSWORD }}
+          VEYVIO_ISOLATION_PASSWORD: ${{ secrets.VEYVIO_ISOLATION_PASSWORD }}
+        run: |
+          cd "Veyvio admin "
+          npm run test:tenant-isolation

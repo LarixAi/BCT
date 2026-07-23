@@ -37,8 +37,8 @@ export function CustomersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Customers</h1>
-        <p className="text-sm text-slate-600">Schools, councils and commercial accounts linked to routes and contracts</p>
+        <h1 className="text-2xl font-semibold text-ink">Customers</h1>
+        <p className="text-sm text-ink-soft">Schools, councils and commercial accounts linked to routes and contracts</p>
       </div>
 
       <input
@@ -46,16 +46,16 @@ export function CustomersPage() {
         placeholder="Search customers…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full max-w-md rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+        className="w-full max-w-md rounded-lg border border-border px-3 py-1.5 text-sm"
       />
 
       <SectionCard title="Customer register" description={`${filtered.length} customers`}>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : (
           <table className="w-full min-w-[480px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                 <th className="pb-2 pr-4 font-medium">Name</th>
                 <th className="pb-2 pr-4 font-medium">Routes</th>
                 <th className="pb-2 pr-4 font-medium">Status</th>
@@ -64,9 +64,9 @@ export function CustomersPage() {
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                  <td className="py-2.5 pr-4 font-medium text-slate-900">{c.name}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{routeCountByCustomer.get(c.id) ?? 0}</td>
+                <tr key={c.id} className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
+                  <td className="py-2.5 pr-4 font-medium text-ink">{c.name}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{routeCountByCustomer.get(c.id) ?? 0}</td>
                   <td className="py-2.5">
                     <StatusPill status={c.status ?? 'active'} />
                   </td>

@@ -25,9 +25,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   useSyncLifecycle();
 
   return (
-    <div className="min-h-screen bg-background pb-28 text-foreground lg:pb-0">
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-accent pt-safe text-white lg:hidden">
-        <div className="h-[3px] w-full bg-primary" aria-hidden />
+    <div className="min-h-screen bg-page pb-28 text-ink lg:pb-0">
+      {/* Mobile header — Midnight chrome + Command Blue rail (Admin accent) */}
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-midnight pt-safe text-white lg:hidden">
+        <div className="h-[3px] w-full bg-command-500" aria-hidden />
         <div className="mx-auto flex max-w-5xl items-center justify-between px-3 py-2">
           <div className="flex min-w-0 items-center gap-3">
             <Link to="/" className="shrink-0" aria-label="Veyvio Yard home">
@@ -44,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex shrink-0 items-center gap-2">
             <Link
               to="/scan"
-              className="grid size-9 place-items-center rounded-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+              className="grid size-9 place-items-center rounded-xl bg-command-500 text-white transition-colors hover:bg-command-700"
               aria-label="Scan vehicle or item"
             >
               <ScanLine className="size-5" />
@@ -54,14 +55,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[184px] flex-col bg-accent px-3 py-5 text-white lg:flex">
-        <Link to="/" className="border-b border-white/10 px-2 pb-5" aria-label="Veyvio Yard home">
-          <BrandWordmark size="header" />
+      {/* Desktop sidebar — light Command style (matches Admin) */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[220px] flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-fg lg:flex">
+        <Link
+          to="/"
+          className="flex items-center gap-3 border-b border-sidebar-border px-2 pb-5"
+          aria-label="Veyvio Yard home"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-command-500 text-sm font-black text-white">
+            VY
+          </span>
+          <BrandWordmark size="header" onDark={false} />
         </Link>
 
         <div className="px-2 py-4">
-          <div className="text-[9px] font-bold uppercase tracking-widest text-white/40">Depot</div>
-          <div className="mt-1 truncate text-xs font-bold">
+          <div className="text-[9px] font-bold uppercase tracking-widest text-sidebar-muted">Depot</div>
+          <div className="mt-1 truncate text-xs font-bold text-ink">
             {depotName ? `${depotName} (${depotCode})` : "No depot selected"}
           </div>
         </div>
@@ -94,23 +103,23 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
         </nav>
 
-        <div className="mt-auto border-t border-white/10 px-2 pt-4">
-          {user && <div className="truncate text-xs font-bold">{user.firstName} {user.lastName}</div>}
-          <div className="mt-1 truncate text-[10px] capitalize text-white/45">
+        <div className="mt-auto border-t border-sidebar-border px-2 pt-4">
+          {user && <div className="truncate text-xs font-bold text-ink">{user.firstName} {user.lastName}</div>}
+          <div className="mt-1 truncate text-[10px] capitalize text-sidebar-muted">
             {role?.replaceAll("-", " ") ?? "Yard user"}
           </div>
         </div>
       </aside>
 
-      <div className="min-h-screen lg:pl-[184px]">
-        <header className="sticky top-0 z-30 hidden h-[58px] items-center justify-between border-b border-border border-t-[3px] border-t-primary bg-card px-6 lg:flex">
-          <div className="min-w-0 truncate text-xs text-muted-foreground">
+      <div className="min-h-screen lg:pl-[220px]">
+        <header className="sticky top-0 z-30 hidden h-[58px] items-center justify-between border-b border-border border-t-[3px] border-t-command-500 bg-surface px-6 lg:flex">
+          <div className="min-w-0 truncate text-xs text-muted">
             {companyName ?? "Veyvio Transport"} · {depotName ?? "No depot selected"} operations
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Link
               to="/scan"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-bold transition-colors hover:bg-muted"
+              className="inline-flex h-9 items-center gap-2 rounded-xl bg-command-500 px-3 text-xs font-bold text-white shadow-[0_8px_18px_rgb(47_107_255/0.22)] transition-colors hover:bg-command-700"
             >
               <ScanLine className="size-4" aria-hidden />
               Scan record
@@ -147,13 +156,18 @@ function DesktopNavItem({
   return (
     <Link
       to={to}
-      className={`flex min-h-10 items-center gap-3 rounded-lg border-l-[3px] px-3 text-xs font-bold transition-colors ${
+      className={`group flex min-h-10 w-full items-center gap-3 rounded-xl text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-command-500 ${
         active
-          ? "border-primary bg-primary/15 text-white"
-          : "border-transparent text-white/55 hover:bg-white/5 hover:text-white"
+          ? "border-l-[3px] border-l-command-500 bg-sidebar-active pl-[9px] font-semibold text-sidebar-active-fg"
+          : "border-l-[3px] border-l-transparent px-3 text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg"
       }`}
     >
-      <span className="[&>svg]:size-4" aria-hidden>{icon}</span>
+      <span
+        className={`[&>svg]:size-4 ${active ? "text-command-500" : "text-sidebar-muted group-hover:text-sidebar-fg"}`}
+        aria-hidden
+      >
+        {icon}
+      </span>
       {label}
     </Link>
   );

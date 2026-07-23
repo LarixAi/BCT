@@ -17,8 +17,11 @@ describe("applyBootstrapToYard", () => {
     expect(yard.bays).toEqual(payload.bays);
     expect(yard.vehicles).toEqual(payload.vehicles);
     expect(yard.equipment).toEqual(payload.equipment);
+    expect(yard.operationalPlan?.id).toBe(payload.operationalPlan?.id);
+    expect(yard.tasks.some(t => t.title.includes("Stage for"))).toBe(true);
 
     expect(usePermissionStore.getState().can("vehicle.mark_vor")).toBe(true);
+    expect(usePermissionStore.getState().can("plan.acknowledge")).toBe(true);
     expect(usePermissionStore.getState().can("equipment.write_off")).toBe(false);
   });
 });

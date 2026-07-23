@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import * as fx from "@/data/fixtures";
 import type { BootstrapPayload } from "@/data/mocks/bootstrap";
-import { initialVehicleEquipment, initialDepotStock, type StockLine } from "@/data/equipment-fixtures";
+import { initialVehicleEquipment, initialDepotStock, buildEquipmentForVehicle, mergeEquipmentForVehicles, isValidVehicleEquipment, type StockLine } from "@/data/equipment-fixtures";
 import { initialAdBlueRefills } from "@/data/adblue-fixtures";
 import { initialTasks } from "@/data/tasks-fixtures";
 import type { CompleteYardCheckInput, YardCheckResult } from "@/types/yard-check";
@@ -12,6 +12,11 @@ import { shouldAutoVorFromSection } from "@/domain/yard/check-vor";
 import { buildVorCaseFromDefect } from "@/domain/yard/vor-from-defect";
 import { applyVehicleMove } from "@/domain/yard/bay-zones";
 import { applyVehicleDeparture } from "@/domain/yard/departure-exit";
+import {
+  acknowledgePlan,
+  buildPrepTasksFromPlan,
+  canAcknowledgePlan,
+} from "@/domain/yard/operational-plan";
 import { applyResolveDefect, canResolveDefect } from "@/domain/yard/defect-workflow";
 import { buildHandoverSummary } from "@/domain/yard/handover-summary";
 import { recomputeAllTrips } from "@/domain/yard/trip-readiness";
@@ -24,10 +29,13 @@ import {
 import {
   applyAssignEquipment,
   applyClearEquipmentIssue,
+  applyRecordEquipmentPresence,
   applyReportEquipmentIssue,
   applyRestockConsumable,
+  applyTransferEquipment,
   applyUnassignEquipment,
   patchVehicleEquipment,
+  type EquipmentCheckKind,
   type EquipmentIssue,
 } from "@/domain/equipment/equipment-mutations";
 import {
@@ -37,10 +45,14 @@ import {
 import { canAcceptTask, canAssignTask, canCompleteTask } from "@/domain/tasks/task-workflow";
 import { computeReadiness } from "@/lib/readiness";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
+import { getTenancySnapshot } from "@/platform/tenancy/context-store";
 import { getActorName } from "@/platform/yard/get-actor-name";
 import { enqueueYardMutation } from "@/platform/yard/enqueue-yard-mutation";
+import { publishVehicleVorMarked } from "@/platform/ops/publish-vor-marked";
 import { createAdBlueRefillRecord } from "@/domain/fluids/adblue-refill";
 import type { AdBlueRefillInput, AdBlueRefillRecord } from "@/types/fluids";
+import type { OperationalDayPlan } from "@/types/plan";
+import type { YardTask } from "@/types/tasks";
 import type {
   Bay,
   Defect,
@@ -73,6 +85,10 @@ import {
 } from "@/domain/condition/inspection-mutations";
 import { openDamageForVehicle, formatDamageRef } from "@/domain/condition/condition-helpers";
 import {
+  defectCategoryForDamageType,
+  operationalDecisionForDamage,
+} from "@/domain/condition/damage-operational";
+import {
   damageStatusAfterRepairComplete,
   damageStatusAfterRepairStart,
   damageStatusAfterVerification,
@@ -99,6 +115,8 @@ export type SheetKind =
   | { kind: "vor"; caseId: string }
   | { kind: "quick" }
   | { kind: "assign-equipment"; vehicleId: string }
+  | { kind: "equipment-label"; vehicleId: string; itemId: string }
+  | { kind: "transfer-equipment"; vehicleId: string; itemId: string }
   | { kind: "restock-consumable"; vehicleId: string; defId?: string }
   | { kind: "report-equipment-issue"; vehicleId: string; itemId?: string; itemKind?: "fixed" | "assigned" }
   | { kind: "unassign-equipment"; vehicleId: string; itemId: string }
@@ -135,8 +153,13 @@ interface State {
   conditionSnapshots: VehicleConditionSnapshot[];
   custodyTimeline: CustodyEvent[];
   repairWorkOrders: RepairWorkOrder[];
+  operationalPlan: OperationalDayPlan | null;
 
   hydrateFromBootstrap: (payload: BootstrapPayload) => void;
+  /** Drain driver/admin platform events (journey start, plan publish) while the app is open. */
+  processIncomingOpsNotices: () => number;
+  applyPublishedPlan: (plan: OperationalDayPlan) => void;
+  acknowledgeOperationalPlan: () => boolean;
 
   // actions
   openSheet: (s: SheetKind) => void;
@@ -151,7 +174,10 @@ interface State {
 
   // equipment actions
   readiness: (vehicleId: string) => ReadinessResult;
-  assignEquipment: (vehicleId: string, item: Omit<AssignedItem, "assignedAt" | "assignedBy">) => void;
+  ensureVehicleEquipment: (vehicleId: string) => void;
+  recordEquipmentPresence: (vehicleId: string, kind: EquipmentCheckKind, itemId: string, present: boolean) => void;
+  assignEquipment: (vehicleId: string, item: Omit<AssignedItem, "assignedAt" | "assignedBy">) => string | null;
+  transferEquipment: (fromVehicleId: string, itemId: string, toVehicleId: string) => void;
   unassignEquipment: (vehicleId: string, itemId: string, reason: string, destination: string) => void;
   restockConsumable: (vehicleId: string, defId: string, addQty: number) => void;
   reportEquipmentIssue: (vehicleId: string, kind: "fixed" | "assigned", itemId: string, issue: EquipmentIssue, note?: string) => void;
@@ -235,6 +261,21 @@ function equipmentMeta(vehicleId: string, actor: string) {
   };
 }
 
+function emitVorMarked(vc: VorCase, vehicleReg?: string) {
+  const tenancy = getTenancySnapshot();
+  const session = getSessionSnapshot();
+  publishVehicleVorMarked({
+    companyId: tenancy.companyId ?? "unknown",
+    depotId: tenancy.depotId ?? "unknown",
+    actorId: session.user?.id ?? getActorName(),
+    vehicleId: vc.vehicleId,
+    vorCaseId: vc.id,
+    defectId: vc.defectId,
+    reason: vc.reason,
+    vehicleReg,
+  });
+}
+
 function commitTripState(
   st: { trips: Trip[]; tasks: YardTask[] },
   vehicles: Vehicle[],
@@ -281,23 +322,37 @@ export const useYard = create<State>((set, get) => ({
   conditionSnapshots: cfx.conditionSnapshots,
   custodyTimeline: cfx.custodyTimeline,
   repairWorkOrders: cfx.repairWorkOrders,
+  operationalPlan: null,
 
   hydrateFromBootstrap: (payload) => {
+    const plan = payload.operationalPlan ?? null;
+    const actor = "Yard automation";
+    const prepTasks = plan
+      ? buildPrepTasksFromPlan(plan, payload.tasks ?? [], actor, uid)
+      : [];
+    const { tasks: withPrep, added: prepAdded } = mergeAutomatedTasks(payload.tasks ?? [], prepTasks);
+    enqueueCreatedTasks(prepAdded);
+
+    const equipment = mergeEquipmentForVehicles(payload.vehicles, {
+      ...get().equipment,
+      ...payload.equipment,
+    });
+
     set({
       bays: payload.bays,
       vehicles: payload.vehicles,
-      trips: recomputeAllTrips(payload.trips, payload.vehicles, payload.equipment),
+      trips: recomputeAllTrips(payload.trips, payload.vehicles, equipment),
       defects: payload.defects,
       vorCases: payload.vorCases,
       movements: payload.movements,
       adblueRefills: payload.adblueRefills ?? get().adblueRefills,
       yardChecks: payload.yardChecks,
-      equipment: payload.equipment,
+      equipment,
       depotStock: payload.depotStock,
       equipmentAudit: get().equipmentAudit,
       departureReleases: get().departureReleases,
       handovers: get().handovers,
-      tasks: payload.tasks ?? get().tasks ?? initialTasks,
+      tasks: withPrep,
       conditionProfiles: payload.conditionProfiles ?? get().conditionProfiles,
       inspections: payload.inspections ?? get().inspections,
       inspectionMedia: payload.inspectionMedia ?? get().inspectionMedia,
@@ -307,15 +362,57 @@ export const useYard = create<State>((set, get) => ({
       conditionSnapshots: payload.conditionSnapshots ?? get().conditionSnapshots,
       custodyTimeline: payload.custodyTimeline ?? get().custodyTimeline,
       repairWorkOrders: payload.repairWorkOrders ?? get().repairWorkOrders ?? cfx.repairWorkOrders,
+      operationalPlan: plan,
     });
+    get().processIncomingOpsNotices();
+  },
+
+  processIncomingOpsNotices: () => {
+    let applied = 0;
     void import("@/platform/ops/ingest-driver-ops-events").then((m) => {
       const notices = m.ingestDriverOpsEventsForYard();
       for (const notice of notices) {
-        if (notice.eventType !== "journey.started") continue;
-        const trip = get().trips.find(candidate => candidate.vehicleId === notice.vehicleId && !candidate.departedAt);
-        if (trip) get().departVehicleForService(trip.id, "driver_journey_start", notice.id);
+        if (notice.eventType === "journey.started") {
+          const trip = get().trips.find(
+            candidate => candidate.vehicleId === notice.vehicleId && !candidate.departedAt,
+          );
+          if (trip && get().departVehicleForService(trip.id, "driver_journey_start", notice.id)) {
+            applied += 1;
+          }
+          continue;
+        }
+        if (notice.eventType === "plan.published") {
+          const plan = m.planFromNoticePayload(notice.payload);
+          if (plan) {
+            get().applyPublishedPlan(plan);
+            applied += 1;
+          }
+        }
       }
     });
+    return applied;
+  },
+
+  applyPublishedPlan: (plan) => {
+    const st = get();
+    const actor = "Yard automation";
+    const prepTasks = buildPrepTasksFromPlan(plan, st.tasks, actor, uid);
+    const { tasks, added } = mergeAutomatedTasks(st.tasks, prepTasks);
+    enqueueCreatedTasks(added);
+    set({ operationalPlan: plan, tasks });
+  },
+
+  acknowledgeOperationalPlan: () => {
+    const st = get();
+    if (!canAcknowledgePlan(st.operationalPlan)) return false;
+    const plan = acknowledgePlan(st.operationalPlan!, nowIso());
+    set({ operationalPlan: plan });
+    void enqueueYardMutation("plan.acknowledge", {
+      planId: plan.id,
+      operationalDate: plan.operationalDate,
+      version: plan.version,
+    });
+    return true;
   },
 
   openSheet: (s) => set({ sheet: s }),
@@ -511,6 +608,8 @@ export const useYard = create<State>((set, get) => ({
         defectId: vc.defectId,
         reason: vc.reason,
       });
+      const markedVehicle = vehicles.find(v => v.id === vc.vehicleId);
+      emitVorMarked(vc, markedVehicle?.reg);
     }
     return defectsWithVor;
   },
@@ -590,6 +689,7 @@ export const useYard = create<State>((set, get) => ({
       tasks,
     });
     void enqueueYardMutation("vehicle.mark_vor", { vorCaseId: vc.id, vehicleId: df.vehicleId, defectId, reason: vc.reason });
+    emitVorMarked(vc, vehicle?.reg);
     return vc;
   },
 
@@ -639,10 +739,29 @@ export const useYard = create<State>((set, get) => ({
     return computeReadiness(v, st.equipment[vehicleId]);
   },
 
-  assignEquipment: (vehicleId, item) => {
+  ensureVehicleEquipment: (vehicleId) => {
+    const st = get();
+    if (isValidVehicleEquipment(st.equipment[vehicleId])) return;
+    const v = st.vehicles.find(x => x.id === vehicleId);
+    if (!v) return;
+    const equipment = {
+      ...st.equipment,
+      [vehicleId]: buildEquipmentForVehicle(v.id, v.type),
+    };
+    const { trips, tasks } = commitTripState(st, st.vehicles, equipment);
+    set({ equipment, trips, tasks });
+  },
+
+  recordEquipmentPresence: (vehicleId, kind, itemId, present) => {
     const st = get();
     const actor = getActorName();
-    const result = applyAssignEquipment(st.equipment[vehicleId], item, equipmentMeta(vehicleId, actor));
+    const result = applyRecordEquipmentPresence(
+      st.equipment[vehicleId],
+      kind,
+      itemId,
+      present,
+      equipmentMeta(vehicleId, actor),
+    );
     if (!result) return;
     const equipment = patchVehicleEquipment(st.equipment, vehicleId, result.equipment);
     const { trips, tasks } = commitTripState(st, st.vehicles, equipment);
@@ -652,7 +771,54 @@ export const useYard = create<State>((set, get) => ({
       trips,
       tasks,
     });
+  },
+
+  assignEquipment: (vehicleId, item) => {
+    const st = get();
+    const actor = getActorName();
+    const result = applyAssignEquipment(st.equipment[vehicleId], item, equipmentMeta(vehicleId, actor));
+    if (!result) return null;
+    const equipment = patchVehicleEquipment(st.equipment, vehicleId, result.equipment);
+    const { trips, tasks } = commitTripState(st, st.vehicles, equipment);
+    set({
+      equipment,
+      equipmentAudit: [result.audit, ...st.equipmentAudit],
+      trips,
+      tasks,
+    });
     void enqueueYardMutation("equipment.assign", { vehicleId, itemId: result.itemId, label: result.label });
+    return result.itemId;
+  },
+
+  transferEquipment: (fromVehicleId, itemId, toVehicleId) => {
+    if (fromVehicleId === toVehicleId) return;
+    const st = get();
+    const actor = getActorName();
+    const toVehicle = st.vehicles.find(v => v.id === toVehicleId);
+    if (!toVehicle) return;
+    const result = applyTransferEquipment(
+      st.equipment[fromVehicleId],
+      st.equipment[toVehicleId],
+      itemId,
+      toVehicle.reg,
+      equipmentMeta(fromVehicleId, actor),
+    );
+    if (!result) return;
+    let equipment = patchVehicleEquipment(st.equipment, fromVehicleId, result.sourceEquipment);
+    equipment = patchVehicleEquipment(equipment, toVehicleId, result.targetEquipment);
+    const { trips, tasks } = commitTripState(st, st.vehicles, equipment);
+    set({
+      equipment,
+      equipmentAudit: [result.audit, ...st.equipmentAudit],
+      trips,
+      tasks,
+    });
+    void enqueueYardMutation("equipment.transfer", {
+      fromVehicleId,
+      toVehicleId,
+      itemId,
+      label: result.label,
+    });
   },
 
   unassignEquipment: (vehicleId, itemId, reason, destination) => {

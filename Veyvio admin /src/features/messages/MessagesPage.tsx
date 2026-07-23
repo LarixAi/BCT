@@ -212,8 +212,8 @@ export function MessagesPage() {
       <div className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Messages</h1>
-            <p className="mt-0.5 text-sm text-slate-700">
+            <h1 className="text-2xl font-semibold text-ink">Messages</h1>
+            <p className="mt-0.5 text-sm text-ink-soft">
               Communicate with drivers, staff, customers and operational teams.
             </p>
             <p className="mt-1 text-xs text-emerald-700">
@@ -231,13 +231,13 @@ export function MessagesPage() {
             </button>
             <Link
               to="/templates"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Templates
             </Link>
             <Link
               to="/notifications"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Notifications
             </Link>
@@ -250,7 +250,7 @@ export function MessagesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search conversations…"
-            className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="w-full max-w-xs rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <div className="flex flex-wrap gap-1">
             {TABS.map((t) => (
@@ -260,7 +260,7 @@ export function MessagesPage() {
                 onClick={() => setTab(t.id)}
                 className={cn(
                   'rounded-full px-2.5 py-1 text-[11px] font-medium',
-                  tab === t.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200',
+                  tab === t.id ? 'bg-command-600 text-white' : 'bg-surface text-ink-soft ring-1 ring-border',
                 )}
               >
                 {t.label}
@@ -280,15 +280,15 @@ export function MessagesPage() {
           <div
             key={card.title}
             className={cn(
-              'rounded-xl border bg-white p-3',
-              card.tone === 'danger' ? 'border-red-200' : card.tone === 'warning' ? 'border-amber-200' : 'border-slate-200',
+              'rounded-xl border bg-surface p-3',
+              card.tone === 'danger' ? 'border-red-200' : card.tone === 'warning' ? 'border-amber-200' : 'border-border',
             )}
           >
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{card.title}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{card.title}</p>
             <p
               className={cn(
                 'mt-1 text-2xl font-bold tabular-nums',
-                card.tone === 'danger' ? 'text-red-800' : card.tone === 'warning' ? 'text-amber-800' : 'text-slate-900',
+                card.tone === 'danger' ? 'text-red-800' : card.tone === 'warning' ? 'text-amber-800' : 'text-ink',
               )}
             >
               {card.value}
@@ -301,31 +301,31 @@ export function MessagesPage() {
         <SectionCard title="Inbox" description={`${filtered.length} conversations`} className="min-h-0 overflow-hidden" flush>
           <div className="max-h-[640px] overflow-auto">
             {filtered.length === 0 ? (
-              <p className="p-4 text-sm text-slate-500">No conversations match this view.</p>
+              <p className="p-4 text-sm text-muted">No conversations match this view.</p>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-border">
                 {filtered.map((c) => (
                   <li key={c.id}>
                     <button
                       type="button"
                       onClick={() => selectConversation(c.id)}
                       className={cn(
-                        'w-full px-3 py-3 text-left hover:bg-slate-50',
+                        'w-full px-3 py-3 text-left hover:bg-surface-muted',
                         selected?.id === c.id && 'bg-command-50',
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className={cn('text-sm', c.unreadCount > 0 ? 'font-semibold text-slate-900' : 'font-medium text-slate-800')}>
+                        <p className={cn('text-sm', c.unreadCount > 0 ? 'font-semibold text-ink' : 'font-medium text-ink')}>
                           {c.title}
                         </p>
-                        <time className="shrink-0 text-[11px] text-slate-400">
+                        <time className="shrink-0 text-[11px] text-muted">
                           {new Date(c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </time>
                       </div>
-                      <p className="mt-0.5 text-[11px] capitalize text-slate-500">
+                      <p className="mt-0.5 text-[11px] capitalize text-muted">
                         {c.participantRole} · {c.runRef ?? c.bookingRef ?? c.depot ?? 'General'}
                       </p>
-                      <p className="mt-1 line-clamp-2 text-xs text-slate-600">{c.preview}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{c.preview}</p>
                       {c.unreadCount > 0 && (
                         <span className="mt-1 inline-flex rounded-full bg-command-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                           {c.unreadCount} unread
@@ -350,12 +350,12 @@ export function MessagesPage() {
           flush
         >
           {!selected ? (
-            <p className="p-4 text-sm text-slate-500">
+            <p className="p-4 text-sm text-muted">
               No conversations yet. Start a message with a driver, customer or team.
             </p>
           ) : (
             <div className="flex h-full min-h-[520px] flex-col">
-              <div className="border-b border-slate-100 px-4 py-2 text-xs text-slate-600">
+              <div className="border-b border-border px-4 py-2 text-xs text-ink-soft">
                 {[selected.runRef && `Trip ${selected.runRef}`, selected.vehicleRegistration, selected.assignedTo && `Assigned to ${selected.assignedTo}`]
                   .filter(Boolean)
                   .join(' · ')}
@@ -367,42 +367,42 @@ export function MessagesPage() {
                     className={cn(
                       'max-w-[85%] rounded-xl px-3 py-2 text-sm',
                       m.kind === 'system'
-                        ? 'mx-auto max-w-full border border-dashed border-slate-200 bg-slate-50 text-center text-xs text-slate-600'
+                        ? 'mx-auto max-w-full border border-dashed border-border bg-surface-muted text-center text-xs text-ink-soft'
                         : m.kind === 'internal_note'
                           ? 'border border-amber-200 bg-amber-50 text-amber-950'
                           : m.mine
                             ? 'ml-auto bg-command-600 text-white'
-                            : 'bg-slate-100 text-slate-900',
+                            : 'bg-surface-muted text-ink',
                     )}
                   >
                     {m.kind !== 'system' && (
-                      <p className={cn('text-[11px] font-medium', m.mine ? 'text-command-100' : 'text-slate-500')}>
+                      <p className={cn('text-[11px] font-medium', m.mine ? 'text-command-100' : 'text-muted')}>
                         {m.senderName} · {m.senderRole}
                       </p>
                     )}
                     <p className="mt-0.5 whitespace-pre-wrap">{m.body}</p>
-                    <p className={cn('mt-1 text-[10px]', m.mine && m.kind === 'user' ? 'text-command-100' : 'text-slate-400')}>
+                    <p className={cn('mt-1 text-[10px]', m.mine && m.kind === 'user' ? 'text-command-100' : 'text-muted')}>
                       {new Date(m.createdAt).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                     </p>
                   </div>
                 ))}
               </div>
-              <div className="border-t border-slate-200 p-3">
+              <div className="border-t border-border p-3">
                 <div className="mb-2 flex flex-wrap gap-2 text-xs">
                   <button
                     type="button"
                     onClick={() => setInternalNote((v) => !v)}
                     className={cn(
                       'rounded-md border px-2 py-1 font-medium',
-                      internalNote ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-200 text-slate-600',
+                      internalNote ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-border text-ink-soft',
                     )}
                   >
                     Internal note
                   </button>
-                  <Link to="/templates" className="rounded-md border border-slate-200 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50">
+                  <Link to="/templates" className="rounded-md border border-border px-2 py-1 font-medium text-ink-soft hover:bg-surface-muted">
                     Template
                   </Link>
-                  <Link to="/exceptions" className="rounded-md border border-slate-200 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50">
+                  <Link to="/exceptions" className="rounded-md border border-border px-2 py-1 font-medium text-ink-soft hover:bg-surface-muted">
                     Create exception
                   </Link>
                 </div>
@@ -411,7 +411,7 @@ export function MessagesPage() {
                   onChange={(e) => setDraft(e.target.value)}
                   rows={3}
                   placeholder={internalNote ? 'Add an internal note (not visible to the driver)…' : 'Type a message…'}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm"
                 />
                 <div className="mt-2 flex justify-end">
                   <button
@@ -430,13 +430,13 @@ export function MessagesPage() {
 
         <SectionCard title="Context" description="Related operational record">
           {!selected ? (
-            <p className="text-sm text-slate-500">Context appears when a conversation is selected.</p>
+            <p className="text-sm text-muted">Context appears when a conversation is selected.</p>
           ) : (
             <div className="space-y-3 text-sm">
               {selected.context.lines.map((line) => (
-                <div key={line.label} className="flex justify-between gap-3 border-b border-slate-100 pb-2">
-                  <span className="text-slate-500">{line.label}</span>
-                  <span className="text-right font-medium text-slate-900">{line.value}</span>
+                <div key={line.label} className="flex justify-between gap-3 border-b border-border pb-2">
+                  <span className="text-muted">{line.label}</span>
+                  <span className="text-right font-medium text-ink">{line.value}</span>
                 </div>
               ))}
               <div className="space-y-2 pt-1">
@@ -444,7 +444,7 @@ export function MessagesPage() {
                   <Link
                     key={link.href + link.label}
                     to={link.href}
-                    className="block rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-command-700 hover:bg-command-50"
+                    className="block rounded-lg border border-border px-3 py-2 text-xs font-medium text-command-700 hover:bg-command-50"
                   >
                     {link.label} →
                   </Link>
@@ -456,38 +456,38 @@ export function MessagesPage() {
       </div>
 
       {composeOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-900">New message</h2>
-            <p className="mt-1 text-sm text-slate-600">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-midnight/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-4 shadow-xl">
+            <h2 className="text-lg font-semibold text-ink">New message</h2>
+            <p className="mt-1 text-sm text-ink-soft">
               Send an ops notice to a Driver app account. Prefer opening this from the driver profile so the driver ID is
               filled in.
             </p>
-            <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted">
               Driver name / subject
               <input
                 value={composeTo}
                 onChange={(e) => setComposeTo(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal normal-case text-slate-900"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm font-normal normal-case text-ink"
                 placeholder="Driver name"
               />
             </label>
-            <label className="mt-3 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="mt-3 block text-xs font-medium uppercase tracking-wide text-muted">
               Driver ID
               <input
                 value={composeDriverId}
                 onChange={(e) => setComposeDriverId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal normal-case text-slate-900"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm font-normal normal-case text-ink"
                 placeholder="UUID from driver profile"
               />
             </label>
-            <label className="mt-3 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="mt-3 block text-xs font-medium uppercase tracking-wide text-muted">
               Message
               <textarea
                 value={composeBody}
                 onChange={(e) => setComposeBody(e.target.value)}
                 rows={4}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal normal-case text-slate-900"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm font-normal normal-case text-ink"
                 placeholder="Write the first message…"
               />
             </label>
@@ -495,7 +495,7 @@ export function MessagesPage() {
               <button
                 type="button"
                 onClick={() => setComposeOpen(false)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
               >
                 Cancel
               </button>

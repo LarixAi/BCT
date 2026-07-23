@@ -43,59 +43,59 @@ export function IncidentDriverIntakePanel({ incident }: { incident: IncidentDeta
       <p className="text-xs font-semibold uppercase tracking-wide text-command-700">New driver incident report</p>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div>
-          <p className="text-xs text-slate-500">Reference</p>
-          <p className="font-semibold text-slate-900">{incident.incidentRef}</p>
+          <p className="text-xs text-muted">Reference</p>
+          <p className="font-semibold text-ink">{incident.incidentRef}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Incident</p>
-          <p className="font-semibold text-slate-900">{CATEGORY_LABELS[incident.category] ?? incident.category}</p>
+          <p className="text-xs text-muted">Incident</p>
+          <p className="font-semibold text-ink">{CATEGORY_LABELS[incident.category] ?? incident.category}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Reported by</p>
-          <p className="font-semibold text-slate-900">{incident.driverName ?? incident.reportedBy} — Driver</p>
+          <p className="text-xs text-muted">Reported by</p>
+          <p className="font-semibold text-ink">{incident.driverName ?? incident.reportedBy} — Driver</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Vehicle</p>
-          <p className="font-semibold text-slate-900">{incident.vehicleRegistration ?? '—'}</p>
+          <p className="text-xs text-muted">Vehicle</p>
+          <p className="font-semibold text-ink">{incident.vehicleRegistration ?? '—'}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Journey</p>
-          <p className="font-semibold text-slate-900">{incident.journeyReference ?? '—'}</p>
+          <p className="text-xs text-muted">Journey</p>
+          <p className="font-semibold text-ink">{incident.journeyReference ?? '—'}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Location</p>
-          <p className="font-semibold text-slate-900">{incident.location ?? '—'}</p>
+          <p className="text-xs text-muted">Location</p>
+          <p className="font-semibold text-ink">{incident.location ?? '—'}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Immediate danger</p>
-          <p className="font-semibold text-slate-900">{formatAnswerValue(danger)}</p>
+          <p className="text-xs text-muted">Immediate danger</p>
+          <p className="font-semibold text-ink">{formatAnswerValue(danger)}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Injuries</p>
-          <p className="font-semibold text-slate-900">
+          <p className="text-xs text-muted">Injuries</p>
+          <p className="font-semibold text-ink">
             {injury === 'not_yet_confirmed' || injury == null ? 'Not yet confirmed' : formatAnswerValue(injury)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Passengers onboard</p>
-          <p className="font-semibold text-slate-900">{formatAnswerValue(passengersOnboard)}</p>
+          <p className="text-xs text-muted">Passengers onboard</p>
+          <p className="font-semibold text-ink">{formatAnswerValue(passengersOnboard)}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Journey status</p>
-          <p className="font-semibold text-slate-900">
+          <p className="text-xs text-muted">Journey status</p>
+          <p className="font-semibold text-ink">
             {journeyContinue === 'no' ? 'Cannot continue' : formatAnswerValue(journeyContinue)}
           </p>
         </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 text-sm">
-        <span className="rounded-full bg-white px-3 py-1 font-medium text-slate-700">
+        <span className="rounded-full bg-surface px-3 py-1 font-medium text-ink-soft">
           Driver report: {driverReportStageLabel(report.stage)}
         </span>
-        <span className="rounded-full bg-white px-3 py-1 font-medium text-slate-700">
+        <span className="rounded-full bg-surface px-3 py-1 font-medium text-ink-soft">
           Completeness: {report.completenessScore}%
         </span>
-        <span className="rounded-full bg-white px-3 py-1 font-medium text-slate-700">
+        <span className="rounded-full bg-surface px-3 py-1 font-medium text-ink-soft">
           App v{report.driverAppVersion}
         </span>
       </div>
@@ -109,8 +109,8 @@ export function IncidentDriverIntakePanel({ incident }: { incident: IncidentDeta
 
       {missing.length > 0 && (
         <div className="mt-4">
-          <p className="text-sm font-semibold text-slate-800">Missing information</p>
-          <ul className="mt-2 list-inside list-disc text-sm text-slate-600">
+          <p className="text-sm font-semibold text-ink">Missing information</p>
+          <ul className="mt-2 list-inside list-disc text-sm text-ink-soft">
             {missing.map((item) => (
               <li key={item}>{item}</li>
             ))}
@@ -124,14 +124,14 @@ export function IncidentDriverIntakePanel({ incident }: { incident: IncidentDeta
 export function IncidentDriverReportPanel({ incident }: { incident: IncidentDetailRecord }) {
   const report = incident.driverReport
   if (!report) {
-    return <p className="text-sm text-slate-500">No structured driver submission is linked to this incident.</p>
+    return <p className="text-sm text-muted">No structured driver submission is linked to this incident.</p>
   }
 
   const entries = Object.entries(report.originalAnswers)
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+      <div className="rounded-lg border border-border bg-surface-muted p-4 text-sm text-ink-soft">
         <p>
           <span className="font-medium">Submission stage:</span> {driverReportStageLabel(report.stage)}
         </p>
@@ -143,12 +143,12 @@ export function IncidentDriverReportPanel({ incident }: { incident: IncidentDeta
         </p>
       </div>
 
-      <div className="divide-y divide-slate-200 rounded-lg border border-slate-200">
+      <div className="divide-y divide-border rounded-lg border border-border">
         {entries.map(([key, field]) => (
           <div key={key} className="px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{formatFieldLabel(key)}</p>
-            <p className="mt-1 text-sm text-slate-900">{formatAnswerValue(field.value)}</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">{formatFieldLabel(key)}</p>
+            <p className="mt-1 text-sm text-ink">{formatAnswerValue(field.value)}</p>
+            <p className="mt-1 text-xs text-muted">
               Source: {field.source} · {new Date(field.enteredAt).toLocaleString('en-GB')}
               {field.confidence === 'UNCONFIRMED' || field.value === 'not_yet_confirmed'
                 ? ' · Status: Unconfirmed'
@@ -158,7 +158,7 @@ export function IncidentDriverReportPanel({ incident }: { incident: IncidentDeta
         ))}
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted">
         Investigation findings are recorded separately and must not overwrite these original driver answers.
       </p>
     </div>

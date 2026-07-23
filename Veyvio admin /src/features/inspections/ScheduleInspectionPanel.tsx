@@ -36,21 +36,21 @@ export function ScheduleInspectionPanel({ onClose }: { onClose: () => void }) {
   })
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/30" role="dialog" aria-modal="true">
-      <div className="flex h-full w-full max-w-md flex-col bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <h2 className="text-lg font-semibold text-slate-900">Schedule inspection</h2>
-          <button type="button" onClick={onClose} className="text-sm text-slate-600 hover:text-slate-900">
+    <div className="fixed inset-0 z-40 flex justify-end bg-midnight/30" role="dialog" aria-modal="true">
+      <div className="flex h-full w-full max-w-md flex-col bg-surface shadow-xl">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <h2 className="text-lg font-semibold text-ink">Schedule inspection</h2>
+          <button type="button" onClick={onClose} className="text-sm text-ink-soft hover:text-ink">
             Close
           </button>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Vehicle</span>
+            <span className="mb-1 block font-medium text-ink-soft">Vehicle</span>
             <select
               value={vehicleId}
               onChange={(e) => setVehicleId(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="w-full rounded-lg border border-border px-3 py-2"
             >
               <option value="">Select vehicle…</option>
               {vehicles.map((v) => (
@@ -62,11 +62,11 @@ export function ScheduleInspectionPanel({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Inspection type</span>
+            <span className="mb-1 block font-medium text-ink-soft">Inspection type</span>
             <select
               value={inspectionType}
               onChange={(e) => setInspectionType(e.target.value as InspectionType)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="w-full rounded-lg border border-border px-3 py-2"
             >
               {TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -76,30 +76,30 @@ export function ScheduleInspectionPanel({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Due / booked date</span>
+            <span className="mb-1 block font-medium text-ink-soft">Due / booked date</span>
             <input
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Provider</span>
+            <span className="mb-1 block font-medium text-ink-soft">Provider</span>
             <input
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Driver instruction</span>
+            <span className="mb-1 block font-medium text-ink-soft">Driver instruction</span>
             <textarea
               value={driverInstruction}
               onChange={(e) => setDriverInstruction(e.target.value)}
               rows={3}
               placeholder="Return to depot by…"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
           {schedule.isError && (
@@ -108,7 +108,7 @@ export function ScheduleInspectionPanel({ onClose }: { onClose: () => void }) {
             </p>
           )}
         </div>
-        <div className="border-t border-slate-200 p-4">
+        <div className="border-t border-border p-4">
           <button
             type="button"
             disabled={!vehicleId || schedule.isPending}

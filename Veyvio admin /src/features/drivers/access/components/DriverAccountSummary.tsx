@@ -9,8 +9,8 @@ import { DriverContactEditor } from './DriverContactEditor'
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="text-right font-medium text-ink">{value}</dd>
     </div>
   )
 }
@@ -66,7 +66,7 @@ export function DriverAccountSummary({
       </dl>
 
       {canManage ? (
-        <div className="mt-4 border-t border-slate-100 pt-4">
+        <div className="mt-4 border-t border-border pt-4">
           <DriverContactEditor
             contact={contact}
             canResendInvite={canResendInvite}

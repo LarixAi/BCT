@@ -2,6 +2,9 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import { friendlyOnboardingError } from "@/lib/onboarding-errors";
 import { OnboardingUploadError } from "@/lib/onboarding-upload-error";
 import { normalizeDocumentStatus } from "@/lib/onboarding-status";
+import {
+  enrichDocumentWithDriverProfile,
+} from "@/lib/document-verification-status";
 import { getCommandApiBaseUrl } from "@/lib/command-api";
 import { hasAllRequiredDocuments, STEP_DOCUMENT_TYPES } from "@/lib/onboarding-document-requirements";
 import {
@@ -134,8 +137,18 @@ export function mapDocumentRow(doc) {
   };
 }
 
-function mapCommandDocumentRow(doc) {
-  const status = String(doc.verificationStatus ?? "uploaded");
+function mapCommandDocumentRow(doc, driver) {
+  const enriched = enrichDocumentWithDriverProfile(
+    {
+      ...doc,
+      requirementType: doc.requirementType,
+      expiryDate: doc.expiryDate ? String(doc.expiryDate).slice(0, 10) : null,
+      verificationStatus: doc.verificationStatus,
+    },
+    driver,
+  );
+  const expiryDate = enriched.expiryDate ? String(enriched.expiryDate).slice(0, 10) : null;
+  const status = enriched.verificationStatus;
   const mappedStatus =
     status === "verified"
       ? "approved"
@@ -156,7 +169,7 @@ function mapCommandDocumentRow(doc) {
     file_name: doc.fileName ?? null,
     status: mappedStatus,
     created_at: doc.createdAt,
-    expires_on: doc.expiryDate,
+    expires_on: expiryDate,
     rejection_reason: doc.rejectionReason,
     displayName: doc.fileName || doc.label,
     sourceApp: doc.sourceApp ?? "DRIVER",
@@ -190,15 +203,16 @@ export function buildDriverDocumentMaps(documents) {
   return { documentsByType, documentsByStep };
 }
 
-export async function loadDriverDocumentMaps(driverId) {
-  const documents = await loadDriverDocuments(driverId);
+export async function loadDriverDocumentMaps(driverId, options = {}) {
+  const documents = await loadDriverDocuments(driverId, options);
   return { documents, ...buildDriverDocumentMaps(documents) };
 }
 
-export async function loadDriverDocuments(driverId) {
+export async function loadDriverDocuments(driverId, options = {}) {
+  const { driver } = options;
   const command = await listDocumentsViaCommand();
   if (command.ok) {
-    return (command.documents ?? []).map(mapCommandDocumentRow);
+    return (command.documents ?? []).map((doc) => mapCommandDocumentRow(doc, driver));
   }
 
   const supabase = getSupabaseClient();

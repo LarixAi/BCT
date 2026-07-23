@@ -32,8 +32,8 @@ export function RecordMovementPanel({
     <SectionCard title="Record vehicle movement" description="Manual movement — updates yard location and audit trail">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm sm:col-span-2">
-          <span className="text-slate-600">Vehicle</span>
-          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+          <span className="text-ink-soft">Vehicle</span>
+          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
             {hub.vehicles.map((v) => (
               <option key={v.vehicleId} value={v.vehicleId}>
                 {v.registrationNumber} — {v.bay ?? v.zone}
@@ -42,12 +42,12 @@ export function RecordMovementPanel({
           </select>
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Destination</span>
-          <input value={destinationBay} onChange={(e) => setDestinationBay(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+          <span className="text-ink-soft">Destination</span>
+          <input value={destinationBay} onChange={(e) => setDestinationBay(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Reason</span>
-          <select value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+          <span className="text-ink-soft">Reason</span>
+          <select value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
             {MOVEMENT_REASONS.map((r) => (
               <option key={r} value={r}>
                 {r}
@@ -65,7 +65,7 @@ export function RecordMovementPanel({
         >
           Record movement
         </button>
-        <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium">
+        <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm font-medium">
           Cancel
         </button>
       </div>

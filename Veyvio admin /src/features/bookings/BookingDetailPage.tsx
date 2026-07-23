@@ -43,7 +43,7 @@ export function BookingDetailPage() {
     onSuccess: (draft) => navigate(`/bookings/new?draft=${draft.id}`),
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading…</p>
   if (isError || !booking) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Booking not found'}</p>
   }
@@ -59,13 +59,13 @@ export function BookingDetailPage() {
           ← Back to bookings
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold text-slate-900">{booking.reference}</h1>
+          <h1 className="text-2xl font-semibold text-ink">{booking.reference}</h1>
           <StatusPill status={booking.status} />
           {booking.priority === 'urgent' && (
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">URGENT</span>
           )}
         </div>
-        <p className="text-sm text-slate-600">{booking.customerName}</p>
+        <p className="text-sm text-ink-soft">{booking.customerName}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
@@ -80,16 +80,16 @@ export function BookingDetailPage() {
           {booking.trips.map((trip) => (
             <div key={trip.id} className="mb-4 last:mb-0">
               <div className="flex items-center gap-2">
-                <p className="font-medium text-slate-900">{trip.label}</p>
+                <p className="font-medium text-ink">{trip.label}</p>
                 <StatusPill status={trip.status} />
               </div>
-              <p className="text-xs text-slate-500">{trip.pickupDate}</p>
-              <ol className="mt-2 space-y-1 border-l-2 border-slate-200 pl-4">
+              <p className="text-xs text-muted">{trip.pickupDate}</p>
+              <ol className="mt-2 space-y-1 border-l-2 border-border pl-4">
                 {trip.stops.map((stop) => (
                   <li key={stop.id} className="text-sm">
-                    <span className="capitalize text-slate-500">{stop.type}</span>
-                    <span className="mx-1 text-slate-300">·</span>
-                    <span className="text-slate-800">{stop.address || stop.name}</span>
+                    <span className="capitalize text-muted">{stop.type}</span>
+                    <span className="mx-1 text-muted">·</span>
+                    <span className="text-ink">{stop.address || stop.name}</span>
                   </li>
                 ))}
               </ol>
@@ -102,7 +102,7 @@ export function BookingDetailPage() {
             {booking.passengers.map((p) => (
               <li key={p.passengerId} className="text-sm">
                 <p className="font-medium">{p.firstName} {p.lastName}</p>
-                <ul className="mt-1 list-inside list-disc text-slate-600">
+                <ul className="mt-1 list-inside list-disc text-ink-soft">
                   {p.requirements.map((r) => (
                     <li key={r}>{r}</li>
                   ))}
@@ -126,10 +126,10 @@ export function BookingDetailPage() {
         >
           <ul className="space-y-2 text-sm">
             {opsTrips.map((t) => (
-              <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+              <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
                 <div>
-                  <p className="font-medium text-slate-900">{t.reference}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="font-medium text-ink">{t.reference}</p>
+                  <p className="text-xs text-muted">
                     {t.totalJobCount} jobs · Run {t.runReference ?? '—'}
                   </p>
                 </div>
@@ -153,7 +153,7 @@ export function BookingDetailPage() {
           Open dispatch
         </Link>
         {canEdit && (
-          <Link to={`/bookings/${booking.id}/edit`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+          <Link to={`/bookings/${booking.id}/edit`} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
             Edit booking
           </Link>
         )}
@@ -161,7 +161,7 @@ export function BookingDetailPage() {
           type="button"
           onClick={() => duplicate.mutate()}
           disabled={duplicate.isPending}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
         >
           Duplicate
         </button>
@@ -170,7 +170,7 @@ export function BookingDetailPage() {
             type="button"
             onClick={() => createReturn.mutate()}
             disabled={createReturn.isPending}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
           >
             Create return
           </button>
@@ -178,7 +178,7 @@ export function BookingDetailPage() {
         <button
           type="button"
           onClick={() => setConfirmationSent(true)}
-          className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
         >
           Send confirmation
         </button>
@@ -208,9 +208,9 @@ export function BookingDetailPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-semibold capitalize text-slate-900">{value}</p>
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-1 font-semibold capitalize text-ink">{value}</p>
     </div>
   )
 }

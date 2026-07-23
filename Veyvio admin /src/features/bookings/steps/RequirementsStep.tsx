@@ -19,11 +19,11 @@ export function RequirementsStep({
       <SectionCard title="Vehicle requirements" description="Compared against actual fleet records at validation">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">
-            <span className="text-slate-600">Vehicle type</span>
+            <span className="text-ink-soft">Vehicle type</span>
             <select
               value={req.vehicleType}
               onChange={(e) => setReq({ vehicleType: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             >
               <option value="car">Standard car</option>
               <option value="mpv">MPV</option>
@@ -42,14 +42,14 @@ export function RequirementsStep({
           </label>
           {req.wheelchairAccessible && (
             <label className="text-sm">
-              <span className="text-slate-600">Wheelchair positions</span>
+              <span className="text-ink-soft">Wheelchair positions</span>
               <input
                 type="number"
                 min={1}
                 max={4}
                 value={req.wheelchairPositions}
                 onChange={(e) => setReq({ wheelchairPositions: Number(e.target.value) })}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               />
             </label>
           )}
@@ -63,12 +63,12 @@ export function RequirementsStep({
         <div className="space-y-3">
           <Toggle label="Passenger assistant required" checked={req.passengerAssistant} onChange={(v) => setReq({ passengerAssistant: v })} />
           <label className="block text-sm">
-            <span className="text-slate-600">Additional staffing notes</span>
+            <span className="text-ink-soft">Additional staffing notes</span>
             <textarea
               value={req.staffingNotes}
               onChange={(e) => setReq({ staffingNotes: e.target.value })}
               rows={2}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
             />
           </label>
         </div>

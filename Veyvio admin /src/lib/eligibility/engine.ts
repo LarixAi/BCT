@@ -9,7 +9,7 @@ import type {
   TrainingRequirement,
 } from '@/lib/drivers/types'
 import { deriveComplianceStatus } from '@/lib/drivers/compliance'
-import { buildTrainingRequirements, isMandatoryTrainingKey } from '@/lib/drivers/training'
+import { buildTrainingRequirements, getTrainingEligibilityEffect, isMandatoryTrainingKey } from '@/lib/drivers/training'
 
 export interface JobEligibilityContext {
   wheelchairRequired?: boolean
@@ -259,9 +259,21 @@ function checkTrainingRequirements(
 ): EligibilityFailure[] {
   const items: EligibilityFailure[] = []
   for (const req of requirements) {
-    if (req.status !== 'missing' && req.status !== 'expired' && req.status !== 'failed') continue
+    const outstanding =
+      req.status === 'missing' ||
+      req.status === 'expired' ||
+      req.status === 'failed' ||
+      req.status === 'assigned' ||
+      req.status === 'in_progress'
+    if (!outstanding) continue
 
-    const mandatory = req.category === 'mandatory' || isMandatoryTrainingKey(req.key)
+    const effect = getTrainingEligibilityEffect(req.key)
+    const mandatory =
+      req.category === 'mandatory' ||
+      isMandatoryTrainingKey(req.key) ||
+      effect === 'block_all_work'
+    const vehicleModule =
+      req.category === 'vehicle' || effect === 'block_vehicle_type'
     const schoolBlock =
       (req.key === 'safeguarding_children' || req.key === 'safeguarding_training' || req.key === 'send_autism_awareness') &&
       ctx?.schoolContract
@@ -281,6 +293,7 @@ function checkTrainingRequirements(
       continue
     }
 
+    // Level 1 — blocks all duty assignment
     if (!ctx && mandatory) {
       items.push(
         failure(`training_${req.key}`, `${req.label} — ${req.status.replace(/_/g, ' ')}`, 'block', 'compliance'),
@@ -288,6 +301,20 @@ function checkTrainingRequirements(
       continue
     }
 
+    // Level 2 — without a job context, surface as restriction warnings so dispatch sees gaps
+    if (!ctx && vehicleModule) {
+      items.push(
+        failure(
+          `training_${req.key}`,
+          `${req.label} incomplete — cannot assign to matching vehicles`,
+          'warning',
+          'compliance',
+        ),
+      )
+      continue
+    }
+
+    // Level 4 / other — warnings unless job context already handled above
     if (!ctx) {
       items.push(
         failure(`training_${req.key}`, `${req.label} — ${req.status.replace(/_/g, ' ')}`, 'warning', 'compliance'),

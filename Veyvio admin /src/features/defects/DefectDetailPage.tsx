@@ -76,7 +76,7 @@ export function DefectDetailPage() {
     },
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading defect…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading defect…</p>
   if (isError || !defect) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Defect not found'}</p>
   }
@@ -100,8 +100,8 @@ export function DefectDetailPage() {
           <Link to="/defects" className="text-sm text-command-600 hover:underline">
             ← Defects
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">{defect.defectRef}</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="mt-1 text-2xl font-semibold text-ink">{defect.defectRef}</h1>
+          <p className="text-sm text-ink-soft">
             {defect.registrationNumber}
             {defect.fleetNumber ? ` · ${defect.fleetNumber}` : ''} · {defect.makeModel}
           </p>
@@ -110,7 +110,7 @@ export function DefectDetailPage() {
               {SEVERITY_DISPLAY[defect.severity] ?? defect.severity}
             </span>
             <StatusPill status={defect.workflowStatus} />
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+            <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-ink-soft">
               {AVAILABILITY_LABELS[defect.vehicleAvailability] ?? defect.vehicleAvailability}
             </span>
           </div>
@@ -143,11 +143,11 @@ export function DefectDetailPage() {
               Mark VOR
             </button>
           )}
-          <Link to={`/vehicles/${defect.vehicleId}?tab=Defects`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+          <Link to={`/vehicles/${defect.vehicleId}?tab=Defects`} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
             Open vehicle
           </Link>
           {defect.linkedWorkOrderId && (
-            <Link to="/maintenance?tab=work-orders" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+            <Link to="/maintenance?tab=work-orders" className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
               Maintenance job
             </Link>
           )}
@@ -173,7 +173,7 @@ export function DefectDetailPage() {
             >
               Confirm VOR
             </button>
-            <button type="button" onClick={() => setShowVorConfirm(false)} className="rounded-lg px-3 py-1.5 text-sm text-slate-600">
+            <button type="button" onClick={() => setShowVorConfirm(false)} className="rounded-lg px-3 py-1.5 text-sm text-ink-soft">
               Cancel
             </button>
           </div>
@@ -193,14 +193,14 @@ export function DefectDetailPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setActiveTab(t.id)}
             className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
-              activeTab === t.id ? 'border-b-2 border-command-600 text-command-700' : 'text-slate-600 hover:text-slate-900'
+              activeTab === t.id ? 'border-b-2 border-command-600 text-command-700' : 'text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}
@@ -266,17 +266,17 @@ export function DefectDetailPage() {
       {activeTab === 'evidence' && (
         <SectionCard title="Evidence" description="Original evidence is retained and never overwritten">
           {defect.evidence.length === 0 ? (
-            <p className="text-sm text-slate-500">No evidence uploaded.</p>
+            <p className="text-sm text-muted">No evidence uploaded.</p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-border">
               {defect.evidence.map((ev) => (
                 <li key={ev.id} className="flex flex-wrap items-start justify-between gap-2 py-3 first:pt-0">
                   <div>
                     <p className="text-sm font-medium">{ev.label}</p>
-                    <p className="text-xs text-slate-500 capitalize">{ev.kind.replace(/_/g, ' ')} · {ev.source}</p>
-                    <p className="text-xs text-slate-500">Uploaded by {ev.uploadedBy}</p>
+                    <p className="text-xs text-muted capitalize">{ev.kind.replace(/_/g, ' ')} · {ev.source}</p>
+                    <p className="text-xs text-muted">Uploaded by {ev.uploadedBy}</p>
                   </div>
-                  <time className="text-xs text-slate-500">
+                  <time className="text-xs text-muted">
                     {new Date(ev.capturedAt).toLocaleString('en-GB')}
                   </time>
                 </li>
@@ -298,11 +298,11 @@ export function DefectDetailPage() {
           ) : canTriage ? (
             <div className="space-y-3 text-sm">
               <label className="block">
-                <span className="text-slate-600">Triage decision</span>
+                <span className="text-ink-soft">Triage decision</span>
                 <select
                   value={triageStatus}
                   onChange={(e) => setTriageStatus(e.target.value as DefectTriageStatus)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 >
                   <option value="validated">Confirm defect — schedule repair</option>
                   <option value="deferred">Monitor until inspection</option>
@@ -311,8 +311,8 @@ export function DefectDetailPage() {
                 </select>
               </label>
               <label className="block">
-                <span className="text-slate-600">Reviewer comments</span>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+                <span className="text-ink-soft">Reviewer comments</span>
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
               </label>
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={createWorkOrder} onChange={(e) => setCreateWorkOrder(e.target.checked)} />
@@ -332,7 +332,7 @@ export function DefectDetailPage() {
               </button>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">Awaiting triage by an authorised reviewer.</p>
+            <p className="text-sm text-muted">Awaiting triage by an authorised reviewer.</p>
           )}
         </SectionCard>
       )}
@@ -368,11 +368,11 @@ export function DefectDetailPage() {
         <SectionCard title="Audit trail">
           <ul className="space-y-2 text-sm">
             {defect.timeline.map((e) => (
-              <li key={e.id} className="flex gap-3 border-b border-slate-50 pb-2">
-                <span className="shrink-0 text-xs text-slate-500">{new Date(e.occurredAt).toLocaleString('en-GB')}</span>
+              <li key={e.id} className="flex gap-3 border-b border-border/60 pb-2">
+                <span className="shrink-0 text-xs text-muted">{new Date(e.occurredAt).toLocaleString('en-GB')}</span>
                 <div>
                   <p className="font-medium">{e.action}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted">
                     {e.actorName}
                     {e.detail ? ` · ${e.detail}` : ''}
                   </p>
@@ -391,8 +391,8 @@ export function DefectDetailPage() {
 function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex gap-2">
-      <dt className="w-36 shrink-0 text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="w-36 shrink-0 text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

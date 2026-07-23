@@ -320,7 +320,7 @@ export interface TrainingRequirement {
   /** Assessment / quiz score when recorded */
   assessmentScore?: number | null
   /** Present when built from the Section 19/22 catalogue */
-  category?: 'mandatory' | 'role'
+  category?: 'mandatory' | 'vehicle' | 'role' | 'development'
 }
 
 export interface EligibilityOverride {

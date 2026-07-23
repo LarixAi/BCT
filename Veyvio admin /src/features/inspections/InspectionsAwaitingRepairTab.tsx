@@ -13,19 +13,19 @@ export function InspectionsAwaitingRepairTab({ register }: { register: Inspectio
       description="Inspections blocked until Maintenance work orders and defects are closed"
     >
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-500">No inspections awaiting repair.</p>
+        <p className="text-sm text-muted">No inspections awaiting repair.</p>
       ) : (
-        <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+        <ul className="divide-y divide-border rounded-lg border border-border">
           {rows.map((r) => (
             <li key={r.id} className="flex flex-wrap items-start justify-between gap-3 px-3 py-3 text-sm">
               <div>
                 <Link to={`/inspections/${r.id}`} className="font-medium tabular-nums text-command-600 hover:underline">
                   {r.registrationNumber}
                 </Link>
-                <span className="text-slate-500"> · {INSPECTION_TYPE_LABELS[r.inspectionType]}</span>
-                <p className="mt-1 text-slate-700">{r.depot}</p>
+                <span className="text-muted"> · {INSPECTION_TYPE_LABELS[r.inspectionType]}</span>
+                <p className="mt-1 text-ink-soft">{r.depot}</p>
                 {r.linkedWorkOrders.map((w) => (
-                  <p key={w.workOrderId} className="mt-1 text-xs text-slate-600">
+                  <p key={w.workOrderId} className="mt-1 text-xs text-ink-soft">
                     WO:{' '}
                     <Link
                       to={`/maintenance?tab=work-orders&wo=${w.workOrderId}&vehicle=${encodeURIComponent(r.registrationNumber)}`}
@@ -37,7 +37,7 @@ export function InspectionsAwaitingRepairTab({ register }: { register: Inspectio
                   </p>
                 ))}
                 {r.linkedDefects.map((d) => (
-                  <p key={d.defectId} className="text-xs text-slate-600">
+                  <p key={d.defectId} className="text-xs text-ink-soft">
                     Defect:{' '}
                     <Link to={`/defects/${d.defectId}`} className="text-command-600 hover:underline">
                       {d.component}

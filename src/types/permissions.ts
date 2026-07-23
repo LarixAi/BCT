@@ -21,7 +21,9 @@ export type YardPermission =
   | "task.assign"
   | "handover.complete"
   | "incident.create"
-  | "audit.view";
+  | "audit.view"
+  | "plan.view"
+  | "plan.acknowledge";
 
 export const ROLE_PERMISSIONS: Record<YardRole, YardPermission[]> = {
   yard_operative: [
@@ -31,6 +33,7 @@ export const ROLE_PERMISSIONS: Record<YardRole, YardPermission[]> = {
     "equipment.assign",
     "equipment.transfer",
     "handover.complete",
+    "plan.view",
   ],
   yard_manager: [
     "vehicle.view",
@@ -47,6 +50,8 @@ export const ROLE_PERMISSIONS: Record<YardRole, YardPermission[]> = {
     "handover.complete",
     "incident.create",
     "audit.view",
+    "plan.view",
+    "plan.acknowledge",
   ],
   maintenance_user: [
     "vehicle.view",
@@ -56,6 +61,7 @@ export const ROLE_PERMISSIONS: Record<YardRole, YardPermission[]> = {
     "defect.resolve",
     "equipment.assign",
     "audit.view",
+    "plan.view",
   ],
   operations_manager: [
     "vehicle.view",
@@ -72,6 +78,8 @@ export const ROLE_PERMISSIONS: Record<YardRole, YardPermission[]> = {
     "handover.complete",
     "incident.create",
     "audit.view",
+    "plan.view",
+    "plan.acknowledge",
   ],
   company_administrator: [
     "vehicle.view",
@@ -89,6 +97,8 @@ export const ROLE_PERMISSIONS: Record<YardRole, YardPermission[]> = {
     "handover.complete",
     "incident.create",
     "audit.view",
+    "plan.view",
+    "plan.acknowledge",
   ],
-  read_only_auditor: ["vehicle.view", "audit.view"],
+  read_only_auditor: ["vehicle.view", "audit.view", "plan.view"],
 };

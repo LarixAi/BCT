@@ -88,6 +88,7 @@ export const COMMAND_NAV: NavEntry[] = [
     children: [
       { label: 'Company Settings', href: '/settings/company' },
       { label: 'Users and Roles', href: '/settings/users' },
+      { label: 'Invitations', href: '/settings/invitations' },
       { label: 'Integrations', href: '/settings/integrations' },
     ],
   },

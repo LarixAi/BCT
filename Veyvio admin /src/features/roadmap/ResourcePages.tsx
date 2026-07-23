@@ -83,10 +83,10 @@ function ResourcePage({ definition }: { definition: ResourcePageDefinition }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">{definition.title}</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">{definition.description}</p>
+          <h1 className="text-2xl font-semibold text-ink">{definition.title}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-ink-soft">{definition.description}</p>
         </div>
-        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+        <span className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-ink-soft">
           Live backend
         </span>
       </div>
@@ -107,18 +107,18 @@ function ResourcePage({ definition }: { definition: ResourcePageDefinition }) {
           </div>
         ) : isLoading ? (
           <div className="space-y-3" aria-label="Loading">
-            <div className="h-8 animate-pulse rounded bg-slate-100" />
-            <div className="h-8 animate-pulse rounded bg-slate-100" />
-            <div className="h-8 animate-pulse rounded bg-slate-100" />
+            <div className="h-8 animate-pulse rounded bg-surface-muted" />
+            <div className="h-8 animate-pulse rounded bg-surface-muted" />
+            <div className="h-8 animate-pulse rounded bg-surface-muted" />
           </div>
         ) : rows.length === 0 ? (
-          <p className="text-sm text-slate-600">No records currently require attention.</p>
+          <p className="text-sm text-ink-soft">No records currently require attention.</p>
         ) : definition.detail ? (
           <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {definition.columns.map((column) => (
-              <div key={column.key} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{column.label}</dt>
-                <dd className="mt-1 text-sm font-medium capitalize text-slate-900">{formatValue(readValue(rows[0], column.key))}</dd>
+              <div key={column.key} className="rounded-lg border border-border bg-surface-muted px-4 py-3">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted">{column.label}</dt>
+                <dd className="mt-1 text-sm font-medium capitalize text-ink">{formatValue(readValue(rows[0], column.key))}</dd>
               </div>
             ))}
           </dl>
@@ -126,18 +126,18 @@ function ResourcePage({ definition }: { definition: ResourcePageDefinition }) {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                   {definition.columns.map((column) => <th key={column.key} className="pb-2 pr-4 font-medium">{column.label}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, index) => (
-                  <tr key={String(row.id ?? index)} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                  <tr key={String(row.id ?? index)} className="border-b border-border last:border-0 hover:bg-surface-muted">
                     {definition.columns.map((column) => {
                       const value = readValue(row, column.key)
                       const isStatus = column.key.toLowerCase().includes('status') || column.key.toLowerCase().includes('priority')
                       return (
-                        <td key={column.key} className="py-3 pr-4 capitalize text-slate-700">
+                        <td key={column.key} className="py-3 pr-4 capitalize text-ink-soft">
                           {isStatus ? <StatusPill status={formatValue(value)} /> : formatValue(value)}
                         </td>
                       )

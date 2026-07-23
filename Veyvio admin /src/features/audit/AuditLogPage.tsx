@@ -25,8 +25,8 @@ export function AuditLogPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Audit Log</h1>
-        <p className="text-sm text-slate-600">Company activity and change history</p>
+        <h1 className="text-2xl font-semibold text-ink">Audit Log</h1>
+        <p className="text-sm text-ink-soft">Company activity and change history</p>
       </div>
 
       <input
@@ -34,18 +34,18 @@ export function AuditLogPage() {
         placeholder="Search action, entity, user…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full max-w-md rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+        className="w-full max-w-md rounded-lg border border-border px-3 py-1.5 text-sm"
       />
 
       <SectionCard title="Activity log" description={`${filtered.length} entries`}>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-slate-500">No audit entries yet.</p>
+          <p className="text-sm text-muted">No audit entries yet.</p>
         ) : (
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                 <th className="pb-2 pr-4 font-medium">When</th>
                 <th className="pb-2 pr-4 font-medium">User</th>
                 <th className="pb-2 pr-4 font-medium">Entity</th>
@@ -54,17 +54,17 @@ export function AuditLogPage() {
             </thead>
             <tbody>
               {filtered.map((log) => (
-                <tr key={log.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                  <td className="py-2.5 pr-4 text-slate-600">
+                <tr key={log.id} className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
+                  <td className="py-2.5 pr-4 text-ink-soft">
                     {new Date(log.createdAt).toLocaleString('en-GB')}
                   </td>
-                  <td className="py-2.5 pr-4 text-slate-600">
+                  <td className="py-2.5 pr-4 text-ink-soft">
                     {log.user ? `${log.user.firstName} ${log.user.lastName}` : 'System'}
                   </td>
-                  <td className="py-2.5 pr-4 capitalize text-slate-600">
+                  <td className="py-2.5 pr-4 capitalize text-ink-soft">
                     {log.entityType.replace(/_/g, ' ')}
                   </td>
-                  <td className="py-2.5 font-medium text-slate-900">{log.action.replace(/_/g, ' ')}</td>
+                  <td className="py-2.5 font-medium text-ink">{log.action.replace(/_/g, ' ')}</td>
                 </tr>
               ))}
             </tbody>

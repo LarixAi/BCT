@@ -10,20 +10,20 @@ type SystemStateProps = {
 
 function SystemStatePage({ title, description, action, href, detail }: SystemStateProps) {
   return (
-    <main className="grid min-h-screen bg-slate-50">
+    <main className="grid min-h-screen bg-surface-muted">
       <header className="flex h-16 items-center bg-command-950 px-6 text-white">
         <span className="text-lg font-bold tracking-tight">VEYVIO</span>
         <span className="ml-2 text-xs font-semibold tracking-[0.18em] text-command-400">COMMAND</span>
       </header>
       <div className="grid place-items-center px-6 py-12">
-        <section className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-8 text-center">
+        <section className="w-full max-w-lg rounded-xl border border-border bg-surface p-8 text-center">
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-command-50 text-xl font-bold text-command-700">!</div>
-          <h1 className="mt-5 text-2xl font-semibold text-slate-900">{title}</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+          <h1 className="mt-5 text-2xl font-semibold text-ink">{title}</h1>
+          <p className="mt-2 text-sm leading-6 text-ink-soft">{description}</p>
           <Link to={href} className="mt-6 inline-flex rounded-lg bg-command-700 px-4 py-2 text-sm font-semibold text-white hover:bg-command-800">
             {action}
           </Link>
-          <p className="mt-6 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">{detail}</p>
+          <p className="mt-6 border-t border-border pt-4 text-xs leading-5 text-muted">{detail}</p>
         </section>
       </div>
     </main>

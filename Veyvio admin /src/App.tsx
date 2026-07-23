@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { CommandShell } from '@/components/layout/CommandShell'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { ModuleGate } from '@/components/auth/ModuleGate'
+import { PlatformProtectedRoute } from '@/components/auth/PlatformProtectedRoute'
 import { AuthProvider } from '@/lib/auth-context'
 import { OperationalProvider } from '@/lib/context'
 import { LoginPage, SelectCompanyPage } from '@/features/auth/AuthPages'
@@ -118,6 +120,15 @@ import {
   NotFoundPage,
   SessionExpiredPage,
 } from '@/features/system/SystemStatePages'
+import { ModuleUnavailablePage } from '@/features/platform/ModuleUnavailablePage'
+import { PlatformAuditPage } from '@/features/platform/PlatformAuditPage'
+import { PlatformCompaniesPage } from '@/features/platform/PlatformCompaniesPage'
+import { PlatformCompanyDetailPage } from '@/features/platform/PlatformCompanyDetailPage'
+import { PlatformFeatureFlagsPage } from '@/features/platform/PlatformFeatureFlagsPage'
+import { PlatformHealthPage } from '@/features/platform/PlatformHealthPage'
+import { PlatformPlansPage } from '@/features/platform/PlatformPlansPage'
+import { PlatformSubscriptionsPage } from '@/features/platform/PlatformSubscriptionsPage'
+import { PlatformSupportPage } from '@/features/platform/PlatformSupportPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -144,6 +155,19 @@ function App() {
             <Route path="/access-denied" element={<AccessDeniedPage />} />
             <Route path="/session-expired" element={<SessionExpiredPage />} />
             <Route path="/company-unavailable" element={<CompanyUnavailablePage />} />
+            <Route path="/module-unavailable" element={<ModuleUnavailablePage />} />
+
+            <Route element={<PlatformProtectedRoute />}>
+              <Route path="/platform/companies" element={<PlatformCompaniesPage />} />
+              <Route path="/platform/companies/:companyId" element={<PlatformCompanyDetailPage />} />
+              <Route path="/platform/subscriptions" element={<PlatformSubscriptionsPage />} />
+              <Route path="/platform/plans" element={<PlatformPlansPage />} />
+              <Route path="/platform/support" element={<PlatformSupportPage />} />
+              <Route path="/platform/feature-flags" element={<PlatformFeatureFlagsPage />} />
+              <Route path="/platform/audit" element={<PlatformAuditPage />} />
+              <Route path="/platform/health" element={<PlatformHealthPage />} />
+              <Route path="/platform" element={<Navigate to="/platform/companies" replace />} />
+            </Route>
 
             <Route element={<ProtectedRoute />}>
               <Route path="/company-verification" element={<CompanyVerificationPage />} />
@@ -157,6 +181,7 @@ function App() {
                   </OperationalProvider>
                 }
               >
+                <Route element={<ModuleGate />}>
                 <Route index element={<OverviewPage />} />
                 <Route path="live-operations" element={<LiveOperationsPage />} />
                 <Route path="exceptions" element={<ExceptionsPage />} />
@@ -256,6 +281,7 @@ function App() {
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="imports" element={<ImportsPage />} />
                 <Route path="exports" element={<ExportsPage />} />
+                </Route>
               </Route>
             </Route>
 

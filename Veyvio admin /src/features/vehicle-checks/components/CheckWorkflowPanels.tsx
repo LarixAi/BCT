@@ -55,8 +55,8 @@ export function ResolveImpactPanel({ check }: { check: CheckDetailRecord }) {
       ) : (
         <div className="space-y-3">
           <label className="block text-sm">
-            <span className="text-slate-600">Replacement vehicle</span>
-            <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+            <span className="text-ink-soft">Replacement vehicle</span>
+            <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
               {check.replacementCandidates.map((c) => (
                 <option key={c.vehicleId} value={c.vehicleId} disabled={!c.canAllocate}>
                   {c.registrationNumber} — {c.makeModel} ({c.readinessLabel})
@@ -65,14 +65,14 @@ export function ResolveImpactPanel({ check }: { check: CheckDetailRecord }) {
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Reason</span>
-            <input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+            <span className="text-ink-soft">Reason</span>
+            <input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
           </label>
           <div className="flex gap-2">
             <button type="button" disabled={!vehicleId || resolve.isPending} onClick={() => resolve.mutate()} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
               Confirm replacement
             </button>
-            <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium">
+            <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-border px-4 py-2 text-sm font-medium">
               Cancel
             </button>
           </div>
@@ -102,9 +102,9 @@ export function ConditionalReleasePanel({ check }: { check: CheckDetailRecord })
   if (check.conditionalRelease) {
     return (
       <SectionCard title="Conditional release authorised">
-        <p className="text-sm text-slate-700">{check.conditionalRelease.reason}</p>
-        <p className="mt-1 text-xs text-slate-500">Restrictions: {check.conditionalRelease.restrictions}</p>
-        <p className="mt-1 text-xs text-slate-500">By {check.conditionalRelease.authorisedBy}</p>
+        <p className="text-sm text-ink-soft">{check.conditionalRelease.reason}</p>
+        <p className="mt-1 text-xs text-muted">Restrictions: {check.conditionalRelease.restrictions}</p>
+        <p className="mt-1 text-xs text-muted">By {check.conditionalRelease.authorisedBy}</p>
       </SectionCard>
     )
   }
@@ -120,18 +120,18 @@ export function ConditionalReleasePanel({ check }: { check: CheckDetailRecord })
       ) : (
         <div className="space-y-3">
           <label className="block text-sm">
-            <span className="text-slate-600">Reason</span>
-            <input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+            <span className="text-ink-soft">Reason</span>
+            <input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Restrictions</span>
-            <textarea value={restrictions} onChange={(e) => setRestrictions(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+            <span className="text-ink-soft">Restrictions</span>
+            <textarea value={restrictions} onChange={(e) => setRestrictions(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
           </label>
           <div className="flex gap-2">
             <button type="button" disabled={!reason || release.isPending} onClick={() => release.mutate()} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
               Authorise
             </button>
-            <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium">
+            <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-border px-4 py-2 text-sm font-medium">
               Cancel
             </button>
           </div>
@@ -148,10 +148,10 @@ export function SuspiciousFlagsPanel({ check }: { check: CheckDetailRecord }) {
     <SectionCard title="Review flags" description="Unusual check behaviour — requires supervisor review">
       <ul className="space-y-2">
         {check.suspiciousFlags.map((f) => (
-          <li key={f.id} className={`rounded-lg border p-3 text-sm ${f.severity === 'critical' ? 'border-red-200 bg-red-50' : f.severity === 'warning' ? 'border-amber-200 bg-amber-50' : 'border-slate-200'}`}>
+          <li key={f.id} className={`rounded-lg border p-3 text-sm ${f.severity === 'critical' ? 'border-red-200 bg-red-50' : f.severity === 'warning' ? 'border-amber-200 bg-amber-50' : 'border-border'}`}>
             <p className="font-medium">{f.label}</p>
-            <p className="text-slate-600">{f.detail}</p>
-            <p className="mt-1 text-xs text-slate-500">{f.recommendedAction}</p>
+            <p className="text-ink-soft">{f.detail}</p>
+            <p className="mt-1 text-xs text-muted">{f.recommendedAction}</p>
           </li>
         ))}
       </ul>
@@ -162,8 +162,8 @@ export function SuspiciousFlagsPanel({ check }: { check: CheckDetailRecord }) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-2">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

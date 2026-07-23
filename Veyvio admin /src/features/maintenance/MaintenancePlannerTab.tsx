@@ -42,14 +42,14 @@ export function MaintenancePlannerTab({
         <button
           type="button"
           onClick={() => setView('list')}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${view === 'list' ? 'bg-command-50 text-command-800 ring-1 ring-command-500' : 'border border-slate-200'}`}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${view === 'list' ? 'bg-command-50 text-command-800 ring-1 ring-command-500' : 'border border-border'}`}
         >
           List
         </button>
         <button
           type="button"
           onClick={() => setView('month')}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${view === 'month' ? 'bg-command-50 text-command-800 ring-1 ring-command-500' : 'border border-slate-200'}`}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${view === 'month' ? 'bg-command-50 text-command-800 ring-1 ring-command-500' : 'border border-border'}`}
         >
           Month
         </button>
@@ -58,7 +58,7 @@ export function MaintenancePlannerTab({
             <select
               value={filters.depot}
               onChange={(e) => setFilters((f) => ({ ...f, depot: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-border px-2 py-1.5 text-sm"
               aria-label="Filter by depot"
             >
               <option value="all">All depots</option>
@@ -71,7 +71,7 @@ export function MaintenancePlannerTab({
             <select
               value={filters.eventType}
               onChange={(e) => setFilters((f) => ({ ...f, eventType: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-border px-2 py-1.5 text-sm"
               aria-label="Filter by event type"
             >
               <option value="all">All types</option>
@@ -84,7 +84,7 @@ export function MaintenancePlannerTab({
             <select
               value={filters.status}
               onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value as PlannerFilters['status'] }))}
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-border px-2 py-1.5 text-sm"
               aria-label="Filter by status"
             >
               <option value="all">All statuses</option>
@@ -95,7 +95,7 @@ export function MaintenancePlannerTab({
             <select
               value={filters.dueWindow}
               onChange={(e) => setFilters((f) => ({ ...f, dueWindow: e.target.value as PlannerDueWindow }))}
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-border px-2 py-1.5 text-sm"
               aria-label="Filter by due window"
             >
               <option value="all">Any due window</option>
@@ -114,7 +114,7 @@ export function MaintenancePlannerTab({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+                <tr className="border-b border-border text-xs uppercase text-muted">
                   <th className="pb-2 pr-3">Vehicle</th>
                   <th className="pb-2 pr-3">Depot</th>
                   <th className="pb-2 pr-3">Event type</th>
@@ -130,7 +130,7 @@ export function MaintenancePlannerTab({
                 {rows.map((s) => {
                   const conflicts = dutyConflicts?.[s.vehicleId] ?? 0
                   return (
-                    <tr key={s.id} className="border-b border-slate-50">
+                    <tr key={s.id} className="border-b border-border/60">
                       <td className="py-2 pr-3">
                         <Link
                           to={`/vehicles/${s.vehicleId}?tab=Maintenance`}
@@ -139,23 +139,23 @@ export function MaintenancePlannerTab({
                           {s.registrationNumber}
                         </Link>
                       </td>
-                      <td className="py-2 pr-3 text-slate-600">{s.depot}</td>
-                      <td className="py-2 pr-3 text-slate-600">{s.serviceType}</td>
+                      <td className="py-2 pr-3 text-ink-soft">{s.depot}</td>
+                      <td className="py-2 pr-3 text-ink-soft">{s.serviceType}</td>
                       <td className="py-2 pr-3 text-xs tabular-nums">{s.dueDate?.slice(0, 10) ?? '—'}</td>
-                      <td className="py-2 pr-3 tabular-nums text-slate-600">
+                      <td className="py-2 pr-3 tabular-nums text-ink-soft">
                         {s.milesRemaining != null ? s.milesRemaining.toLocaleString() : '—'}
                       </td>
                       <td className="py-2 pr-3">
                         <StatusPill status={s.status} />
                       </td>
-                      <td className="py-2 pr-3 text-slate-600">{s.owner ?? s.workshop ?? '—'}</td>
+                      <td className="py-2 pr-3 text-ink-soft">{s.owner ?? s.workshop ?? '—'}</td>
                       <td className="py-2 pr-3 text-xs">
                         {conflicts > 0 ? (
                           <span className="font-medium text-amber-800" title="Trips on operational date">
                             {conflicts} trip(s) on ops date
                           </span>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-muted">—</span>
                         )}
                       </td>
                       <td className="py-2">

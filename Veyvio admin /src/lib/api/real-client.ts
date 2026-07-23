@@ -46,6 +46,7 @@ import {
 import { normalizeAdBlueRecords } from '@/lib/adblue/normalize'
 import { normalizeVehicleProfile } from '@/lib/vehicles/readiness-projection'
 import { normalizeDriverProfileDocuments } from '@/lib/drivers/document-display'
+import { safeMaintenanceHub } from '@/lib/api/safe-hubs'
 
 const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
@@ -358,10 +359,16 @@ export class ApiClient {
     })
   }
 
-  enableMfa() {
-    return this.fetch<{ recoveryCodes: string[]; mfaEnabled: boolean }>('/auth/mfa/enable', {
+  enableMfa(input?: { code?: string }) {
+    return this.fetch<{
+      recoveryCodes?: string[]
+      mfaEnabled: boolean
+      secret?: string
+      otpauthUri?: string
+      status?: 'pending' | 'active'
+    }>('/auth/mfa/enable', {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify(input?.code ? { code: input.code } : {}),
     })
   }
 
@@ -369,17 +376,16 @@ export class ApiClient {
     challengeId: string
     code: string
     companyId?: string
-    refreshToken?: string
-    accessToken?: string
   }) {
     // Same public-auth fetch pattern as login. Avoid "/mfa/" and "/factor" in the path —
     // Safari / privacy filters often block those and surface TypeError "Load failed".
+    // No session bearer to send — the challengeId + code is the whole credential;
+    // the backend holds the pending session against the challenge itself.
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (SUPABASE_ANON_KEY) {
       headers.apikey = SUPABASE_ANON_KEY
+      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`
     }
-    const bearer = input.accessToken || this.getToken() || SUPABASE_ANON_KEY
-    if (bearer) headers.Authorization = `Bearer ${bearer}`
 
     return fetch(apiUrl('/auth/login/confirm'), {
       method: 'POST',
@@ -388,7 +394,6 @@ export class ApiClient {
         challengeId: input.challengeId,
         code: input.code,
         companyId: input.companyId,
-        refreshToken: input.refreshToken,
       }),
     })
       .then(async (res) => {
@@ -445,6 +450,117 @@ export class ApiClient {
 
   getMe() {
     return this.fetch<AuthUser>('/auth/me')
+  }
+
+  getCompanyEntitlements() {
+    return this.fetch<{
+      planCode: string
+      subscriptionStatus: string
+      tenantStatus: string
+      enabledModules: string[]
+      usageLimits: Record<string, number | null>
+      trialEndsAt: string | null
+      currentPeriodEnd: string | null
+      gracePeriodEndsAt: string | null
+    }>('/company/entitlements')
+  }
+
+  listPlatformCompanies() {
+    return this.fetch<import('./types').PlatformCompanyRow[]>('/platform/companies')
+  }
+
+  getPlatformCompany(companyId: string) {
+    return this.fetch<import('./types').PlatformCompanyDetail>(`/platform/companies/${companyId}`)
+  }
+
+  patchPlatformCompany(
+    companyId: string,
+    body: {
+      tenantStatus?: string
+      planCode?: string
+      subscriptionStatus?: string
+      moduleOverrides?: Array<{ moduleKey: string; enabled: boolean; reason?: string }>
+      usageLimits?: Array<{ limitKey: string; limitValue: number | null; reason?: string }>
+    },
+  ) {
+    return this.fetch<{ ok: boolean; entitlements?: Record<string, unknown> }>(
+      `/platform/companies/${companyId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      },
+    )
+  }
+
+  listPlatformPlans() {
+    return this.fetch<import('./types').PlatformPlanRow[]>('/platform/plans')
+  }
+
+  listPlatformSubscriptions() {
+    return this.fetch<import('./types').PlatformSubscriptionRow[]>('/platform/subscriptions')
+  }
+
+  listPlatformAudit() {
+    return this.fetch<import('./types').PlatformAuditRow[]>('/platform/audit')
+  }
+
+  getPlatformHealth() {
+    return this.fetch<import('./types').PlatformHealth>('/platform/health')
+  }
+
+  listPlatformFeatureFlags() {
+    return this.fetch<import('./types').PlatformFeatureFlag[]>('/platform/feature-flags')
+  }
+
+  patchPlatformFeatureFlag(flagKey: string, body: { enabled?: boolean; description?: string }) {
+    return this.fetch<import('./types').PlatformFeatureFlag>(
+      `/platform/feature-flags/${encodeURIComponent(flagKey)}`,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    )
+  }
+
+  listAllPlatformSupportGrants() {
+    return this.fetch<import('./types').PlatformSupportGrant[]>('/platform/support-grants')
+  }
+
+  listPlatformSupportGrants(companyId: string) {
+    return this.fetch<import('./types').PlatformSupportGrant[]>(
+      `/platform/support-grants?companyId=${encodeURIComponent(companyId)}`,
+    )
+  }
+
+  createPlatformSupportGrant(body: {
+    companyId: string
+    reason: string
+    granteeUserId?: string
+    ticketReference?: string
+    accessLevel?: string
+    durationMinutes?: number
+  }) {
+    return this.fetch('/platform/support-grants', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  }
+
+  revokePlatformSupportGrant(grantId: string) {
+    return this.fetch<{ ok: boolean }>(`/platform/support-grants/${grantId}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  }
+
+  createPlatformCheckout(body: { companyId: string; planCode: string }) {
+    return this.fetch<{
+      checkoutUrl: string | null
+      sessionId: string | null
+      configured?: boolean
+      placeholder?: boolean
+      message?: string
+    }>('/platform/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
   }
 
   getDashboard() {
@@ -1173,7 +1289,43 @@ export class ApiClient {
     if (params?.from) qs.set('from', params.from)
     if (params?.to) qs.set('to', params.to)
     const q = qs.toString()
-    return this.fetch<ReportsSummary>(`/reports/summary${q ? `?${q}` : ''}`)
+    return this.fetch<ReportsSummary | Record<string, unknown>>(`/reports/summary${q ? `?${q}` : ''}`).then(
+      async (raw) => {
+        const data = raw as ReportsSummary
+        if (data?.fleet && data?.safety && data?.operations) return data
+        // Legacy commandPage shell — derive a usable summary from dashboard counts.
+        try {
+          const dash = await this.getDashboard()
+          const from = params?.from ?? new Date().toISOString().slice(0, 10)
+          const to = params?.to ?? from
+          return {
+            fleet: {
+              vehicles: Number(dash.vehiclesInService ?? 0) + Number(dash.vehiclesOffRoad ?? 0),
+              drivers: Number(dash.driversOnDuty ?? 0),
+            },
+            customers: 0,
+            safety: {
+              openDefects: Number(dash.openDefects ?? 0),
+              openIncidents: Number(dash.openIncidents ?? 0),
+            },
+            operations: { dutiesInPeriod: Number(dash.todaysActiveDuties ?? 0) },
+            period: { from, to },
+            generatedAt: new Date().toISOString(),
+          } satisfies ReportsSummary
+        } catch {
+          const from = params?.from ?? new Date().toISOString().slice(0, 10)
+          const to = params?.to ?? from
+          return {
+            fleet: { vehicles: 0, drivers: 0 },
+            customers: 0,
+            safety: { openDefects: 0, openIncidents: 0 },
+            operations: { dutiesInPeriod: 0 },
+            period: { from, to },
+            generatedAt: new Date().toISOString(),
+          } satisfies ReportsSummary
+        }
+      },
+    )
   }
 
   getAnnouncements() {
@@ -1189,7 +1341,41 @@ export class ApiClient {
   }
 
   getUsers() {
-    return this.fetch<UserMembershipRecord[]>('/users')
+    return this.fetch<UserMembershipRecord[] | Record<string, unknown>[]>('/users').then((rows) => {
+      if (!Array.isArray(rows)) return []
+      return rows.map((raw, index) => {
+        const row = raw as Record<string, unknown>
+        const nested = row.user as Record<string, unknown> | undefined
+        if (nested && (nested.firstName != null || nested.email != null)) {
+          return {
+            id: String(row.id ?? index),
+            roleKey: String(row.roleKey ?? 'member'),
+            status: String(row.status ?? 'active'),
+            user: {
+              id: String(nested.id ?? ''),
+              email: String(nested.email ?? ''),
+              firstName: String(nested.firstName ?? ''),
+              lastName: String(nested.lastName ?? ''),
+              status: String(nested.status ?? 'active'),
+              lastLoginAt: (nested.lastLoginAt as string | null | undefined) ?? null,
+            },
+          } satisfies UserMembershipRecord
+        }
+        return {
+          id: String(row.id ?? index),
+          roleKey: String(row.roleKey ?? 'member'),
+          status: String(row.status ?? 'active'),
+          user: {
+            id: String(row.userId ?? row.user_id ?? ''),
+            email: String(row.email ?? ''),
+            firstName: String(row.firstName ?? row.first_name ?? 'User'),
+            lastName: String(row.lastName ?? row.last_name ?? ''),
+            status: String(row.authenticationStatus ?? row.status ?? 'active'),
+            lastLoginAt: (row.lastLoginAt ?? row.last_login_at ?? null) as string | null,
+          },
+        } satisfies UserMembershipRecord
+      })
+    })
   }
 
   getStaff() {
@@ -1305,7 +1491,32 @@ export class ApiClient {
   }
 
   getSchools() {
-    return this.fetch<SchoolRecord[]>('/schools')
+    return this.fetch<SchoolRecord[] | Record<string, unknown>[]>('/schools').then((rows) => {
+      if (!Array.isArray(rows)) return []
+      return rows.map((raw, index) => {
+        const row = raw as Record<string, unknown>
+        const address = row.address
+        let addressText: string | null = null
+        if (typeof address === 'string') addressText = address
+        else if (address && typeof address === 'object') {
+          const parts = ['line1', 'line2', 'city', 'town', 'postcode']
+            .map((key) => {
+              const value = (address as Record<string, unknown>)[key]
+              return value == null ? '' : String(value).trim()
+            })
+            .filter(Boolean)
+          addressText = parts.length ? parts.join(', ') : null
+        }
+        return {
+          id: String(row.id ?? index),
+          name: String(row.name ?? 'School'),
+          address: addressText,
+          customerId: String(row.customerId ?? row.customer_id ?? ''),
+          routeCount: Number(row.routeCount ?? 0),
+          pupilCount: Number(row.pupilCount ?? 0),
+        } satisfies SchoolRecord
+      })
+    })
   }
 
   getMaintenance() {
@@ -1313,7 +1524,9 @@ export class ApiClient {
   }
 
   getMaintenanceHub() {
-    return this.fetch<import('@/lib/maintenance/types').MaintenanceHubData>('/maintenance/hub')
+    return this.fetch<import('@/lib/maintenance/types').MaintenanceHubData>('/maintenance/hub').then((hub) =>
+      safeMaintenanceHub(hub),
+    )
   }
 
   getInspections() {
@@ -1726,7 +1939,22 @@ export class ApiClient {
     if (params?.from) qs.set('from', params.from)
     if (params?.to) qs.set('to', params.to)
     const q = qs.toString()
-    return this.fetch<PerformanceMetrics>(`/reports/performance${q ? `?${q}` : ''}`)
+    return this.fetch<PerformanceMetrics | Record<string, unknown>>(`/reports/performance${q ? `?${q}` : ''}`).then(
+      (raw) => {
+        const data = raw as PerformanceMetrics
+        if (typeof data?.onTimePct === 'number' && data.period?.from) return data
+        const from = params?.from ?? new Date().toISOString().slice(0, 10)
+        const to = params?.to ?? from
+        const metricsBag = (raw as { metrics?: Record<string, unknown> })?.metrics ?? {}
+        return {
+          onTimePct: Number(metricsBag.onTimePct ?? data?.onTimePct ?? 0),
+          completedRuns: Number(metricsBag.completedRuns ?? data?.completedRuns ?? 0),
+          avgDelayMinutes: Number(metricsBag.avgDelayMinutes ?? data?.avgDelayMinutes ?? 0),
+          defectRate: Number(metricsBag.defectRate ?? data?.defectRate ?? 0),
+          period: { from, to },
+        } satisfies PerformanceMetrics
+      },
+    )
   }
 
   getYardSummary() {

@@ -114,7 +114,7 @@ export function VehicleDetailPage() {
     },
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading…</p>
   if (isError || !vehicle) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Vehicle not found'}</p>
   }
@@ -153,7 +153,7 @@ export function VehicleDetailPage() {
         actions={
           <>
             {canEdit && (
-              <Link to={`/vehicles/${vehicle.id}/edit`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <Link to={`/vehicles/${vehicle.id}/edit`} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted">
                 Edit
               </Link>
             )}
@@ -184,50 +184,50 @@ export function VehicleDetailPage() {
         <SectionCard title="Return to service" description="All blockers must be resolved — work order completion alone does not release the vehicle">
           <div className="space-y-3 text-sm">
             <label className="block">
-              <span className="text-slate-600">Release reason</span>
-              <input value={releaseReason} onChange={(e) => setReleaseReason(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+              <span className="text-ink-soft">Release reason</span>
+              <input value={releaseReason} onChange={(e) => setReleaseReason(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
             </label>
             <label className="block">
-              <span className="text-slate-600">Work performed</span>
+              <span className="text-ink-soft">Work performed</span>
               <textarea
                 value={workPerformed}
                 onChange={(e) => setWorkPerformed(e.target.value)}
                 rows={2}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 placeholder="What was repaired or replaced"
               />
             </label>
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="block">
-                <span className="text-slate-600">Labour £</span>
+                <span className="text-ink-soft">Labour £</span>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={labourCost}
                   onChange={(e) => setLabourCost(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
               <label className="block">
-                <span className="text-slate-600">Parts £</span>
+                <span className="text-ink-soft">Parts £</span>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={partsCost}
                   onChange={(e) => setPartsCost(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
               <label className="block">
-                <span className="text-slate-600">Return mileage</span>
+                <span className="text-ink-soft">Return mileage</span>
                 <input
                   type="number"
                   min="0"
                   value={returnMileage}
                   onChange={(e) => setReturnMileage(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
             </div>
@@ -240,7 +240,7 @@ export function VehicleDetailPage() {
               Wheel re-torque complete (if applicable)
             </label>
             <div>
-              <p className="mb-2 text-slate-600">Return-to-service checklist ({openRepairType.replace(/_/g, ' ')})</p>
+              <p className="mb-2 text-ink-soft">Return-to-service checklist ({openRepairType.replace(/_/g, ' ')})</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {checklistItems.map((item) => (
                   <label key={item.id} className="flex items-center gap-2">
@@ -255,8 +255,8 @@ export function VehicleDetailPage() {
               </div>
             </div>
             <label className="block">
-              <span className="text-slate-600">Technician sign-off</span>
-              <input value={technicianSignOff} onChange={(e) => setTechnicianSignOff(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+              <span className="text-ink-soft">Technician sign-off</span>
+              <input value={technicianSignOff} onChange={(e) => setTechnicianSignOff(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
             </label>
             {releaseBlockers.length > 0 && (
               <ul className="list-inside list-disc text-red-700">
@@ -290,13 +290,13 @@ export function VehicleDetailPage() {
         </SectionCard>
       )}
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {TABS.map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`rounded-t-lg px-3 py-2 text-sm font-medium ${tab === t ? 'bg-white text-command-700 ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+            className={`rounded-t-lg px-3 py-2 text-sm font-medium ${tab === t ? 'bg-surface text-command-700 ring-1 ring-border' : 'text-ink-soft hover:text-ink'}`}
           >
             {t}
           </button>
@@ -311,25 +311,25 @@ export function VehicleDetailPage() {
                 <Link to={`/vehicles/${vehicle.id}?tab=damage`} className="font-medium text-command-600 hover:underline">
                   Yard / damage map
                 </Link>
-                <span className="text-slate-500"> — physical readiness and baseline condition</span>
+                <span className="text-muted"> — physical readiness and baseline condition</span>
               </li>
               <li>
                 <Link to={`/defects?vehicle=${encodeURIComponent(vehicle.registrationNumber)}`} className="font-medium text-command-600 hover:underline">
                   Open defects
                 </Link>
-                <span className="text-slate-500"> — {vehicle.openDefectCount} open · condition {vehicle.conditionStatus.replace(/_/g, ' ')}</span>
+                <span className="text-muted"> — {vehicle.openDefectCount} open · condition {vehicle.conditionStatus.replace(/_/g, ' ')}</span>
               </li>
               <li>
                 <Link to={`/maintenance`} className="font-medium text-command-600 hover:underline">
                   Maintenance
                 </Link>
-                <span className="text-slate-500"> — work orders and PMI programme</span>
+                <span className="text-muted"> — work orders and PMI programme</span>
               </li>
               <li>
                 <Link to="/exceptions?module=vehicle" className="font-medium text-command-600 hover:underline">
                   Exceptions inbox
                 </Link>
-                <span className="text-slate-500"> — release blocks needing intervention</span>
+                <span className="text-muted"> — release blocks needing intervention</span>
               </li>
             </ul>
           </SectionCard>
@@ -360,7 +360,7 @@ export function VehicleDetailPage() {
           </div>
           {vehicle.tachograph && (
             <SectionCard title="Tachograph" className="lg:col-span-2">
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink-soft">
                 {vehicle.tachograph.make} {vehicle.tachograph.model} · Next calibration: {vehicle.tachograph.nextCalibrationDate ?? '—'}
               </p>
               {vehicle.tachograph.reviewRequired && (
@@ -375,7 +375,7 @@ export function VehicleDetailPage() {
       {tab === 'Allocations' && (
         <SectionCard title="Today's duties">
           {todayDuties.length === 0 ? (
-            <p className="text-sm text-slate-500">Not allocated today.</p>
+            <p className="text-sm text-muted">Not allocated today.</p>
           ) : (
             <ul className="space-y-2">
               {todayDuties.map((d) => (
@@ -423,23 +423,23 @@ function VehicleReportHistoryTab({ vehicleId }: { vehicleId: string }) {
     queryFn: () => api.getVehicleReports({ vehicleId }),
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading report history…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading report history…</p>
 
   return (
     <SectionCard title="Report history" description={`${reports.length} reports`}>
       {reports.length === 0 ? (
-        <p className="text-sm text-slate-500">No vehicle reports for this asset yet.</p>
+        <p className="text-sm text-muted">No vehicle reports for this asset yet.</p>
       ) : (
         <ul className="space-y-2">
           {reports.map((report) => (
-            <li key={report.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <li key={report.id} className="rounded-lg border border-border px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Link to={`/vehicle-reports/${report.id}`} className="font-medium text-command-700 hover:underline">
                   {report.reference} · {report.title}
                 </Link>
                 <StatusPill status={report.severity === 'critical' ? 'vor' : 'warning'} />
               </div>
-              <p className="text-slate-600">
+              <p className="text-ink-soft">
                 {new Date(report.reportedAt).toLocaleString('en-GB')} · {report.stage.replace(/_/g, ' ')} ·{' '}
                 {report.nextAction}
               </p>
@@ -454,8 +454,8 @@ function VehicleReportHistoryTab({ vehicleId }: { vehicleId: string }) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

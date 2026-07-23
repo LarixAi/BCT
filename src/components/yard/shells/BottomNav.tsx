@@ -12,7 +12,11 @@ export function BottomNav() {
   const pathname = useRouterState({ select: s => s.location.pathname });
 
   return (
-    <nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-accent text-white lg:hidden">
+    <nav
+      aria-label="Main navigation"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-midnight text-white lg:hidden"
+    >
+      <div className="h-[2px] w-full bg-command-500" aria-hidden />
       <div className="mx-auto flex max-w-5xl items-end justify-around px-1 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
         <NavTab to="/" label="Home" icon={<Home className="size-5" />} active={pathname === "/"} />
         <NavTab
@@ -51,17 +55,14 @@ function NavTab({
     <Link
       to={to}
       className={`flex min-h-[52px] min-w-[56px] flex-col items-center gap-0.5 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors ${
-        active ? "text-primary" : "text-white/60 hover:text-white"
+        active ? "text-command-500" : "text-white/60 hover:text-white"
       }`}
     >
       <span
-        className={`mb-0.5 h-0.5 rounded-full bg-primary transition-[width] ${active ? "w-5" : "w-0"}`}
+        className={`mb-0.5 h-0.5 rounded-full bg-command-500 transition-[width] ${active ? "w-5" : "w-0"}`}
         aria-hidden
       />
-      <span
-        className="grid h-6 place-items-center"
-        aria-hidden
-      >
+      <span className="grid h-6 place-items-center" aria-hidden>
         {icon}
       </span>
       {label}

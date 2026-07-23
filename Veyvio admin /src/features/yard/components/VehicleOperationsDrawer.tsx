@@ -76,7 +76,7 @@ export function VehicleOperationsDrawer({
   if (!vehicleProfile) {
     return (
       <SectionCard title="Vehicle operations">
-        <p className="text-sm text-slate-500">Loading vehicle…</p>
+        <p className="text-sm text-muted">Loading vehicle…</p>
       </SectionCard>
     )
   }
@@ -88,7 +88,7 @@ export function VehicleOperationsDrawer({
       <div className="space-y-3 text-sm">
         <div>
           <p className="text-lg font-semibold">{vehicleProfile.registrationNumber}</p>
-          <p className="text-slate-600">
+          <p className="text-ink-soft">
             {vehicleProfile.fleetNumber} · {vehicleProfile.make} {vehicleProfile.model}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -126,7 +126,7 @@ export function VehicleOperationsDrawer({
 
         {vehicleTasks.length > 0 && (
           <div>
-            <p className="mb-1 text-xs font-medium uppercase text-slate-500">Current tasks ({vehicleTasks.length})</p>
+            <p className="mb-1 text-xs font-medium uppercase text-muted">Current tasks ({vehicleTasks.length})</p>
             <ul className="space-y-1 text-xs">
               {vehicleTasks.map((t) => (
                 <TaskLine key={t.id} task={t} />
@@ -146,7 +146,7 @@ export function VehicleOperationsDrawer({
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+        <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           {canRelease && row.presenceState === 'in_yard' && (
             <button
               type="button"
@@ -169,7 +169,7 @@ export function VehicleOperationsDrawer({
             </button>
           )}
           {onClose && (
-            <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600">
+            <button type="button" onClick={onClose} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink-soft">
               Close
             </button>
           )}
@@ -178,14 +178,14 @@ export function VehicleOperationsDrawer({
         {showVorForm && (
           <div className="rounded-lg border border-red-200 bg-red-50/50 p-3">
             <label className="block text-xs">
-              <span className="text-slate-600">VOR reason</span>
-              <input value={vorReason} onChange={(e) => setVorReason(e.target.value)} className="mt-1 w-full rounded border border-slate-200 px-2 py-1" />
+              <span className="text-ink-soft">VOR reason</span>
+              <input value={vorReason} onChange={(e) => setVorReason(e.target.value)} className="mt-1 w-full rounded border border-border px-2 py-1" />
             </label>
             <div className="mt-2 flex gap-2">
               <button type="button" disabled={!vorReason || markVor.isPending} onClick={() => markVor.mutate()} className="rounded bg-red-700 px-3 py-1 text-xs text-white disabled:opacity-50">
                 Confirm VOR
               </button>
-              <button type="button" onClick={() => setShowVorForm(false)} className="text-xs text-slate-600">
+              <button type="button" onClick={() => setShowVorForm(false)} className="text-xs text-ink-soft">
                 Cancel
               </button>
             </div>
@@ -195,15 +195,15 @@ export function VehicleOperationsDrawer({
         {showRtsForm && (
           <div className="rounded-lg border border-command-200 bg-command-50/50 p-3">
             <label className="block text-xs">
-              <span className="text-slate-600">Return-to-service reason</span>
-              <input value={rtsReason} onChange={(e) => setRtsReason(e.target.value)} className="mt-1 w-full rounded border border-slate-200 px-2 py-1" />
+              <span className="text-ink-soft">Return-to-service reason</span>
+              <input value={rtsReason} onChange={(e) => setRtsReason(e.target.value)} className="mt-1 w-full rounded border border-border px-2 py-1" />
             </label>
-            <p className="mt-1 text-xs text-slate-500">Requires post-repair inspection and authorised sign-off.</p>
+            <p className="mt-1 text-xs text-muted">Requires post-repair inspection and authorised sign-off.</p>
             <div className="mt-2 flex gap-2">
               <button type="button" disabled={!rtsReason || returnToService.isPending} onClick={() => returnToService.mutate()} className="rounded bg-command-600 px-3 py-1 text-xs text-white disabled:opacity-50">
                 Authorise return
               </button>
-              <button type="button" onClick={() => setShowRtsForm(false)} className="text-xs text-slate-600">
+              <button type="button" onClick={() => setShowRtsForm(false)} className="text-xs text-ink-soft">
                 Cancel
               </button>
             </div>
@@ -215,8 +215,8 @@ export function VehicleOperationsDrawer({
         </Link>
 
         <div>
-          <p className="mb-1 text-xs font-medium uppercase text-slate-500">Movement history</p>
-          <ul className="space-y-1 text-xs text-slate-600">
+          <p className="mb-1 text-xs font-medium uppercase text-muted">Movement history</p>
+          <ul className="space-y-1 text-xs text-ink-soft">
             {vehicleProfile.auditEvents.slice(-4).reverse().map((e) => (
               <li key={e.id}>
                 {new Date(e.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} — {e.action}
@@ -232,9 +232,9 @@ export function VehicleOperationsDrawer({
 
 function TaskLine({ task }: { task: YardTask }) {
   return (
-    <li className="flex justify-between gap-2 rounded bg-slate-50 px-2 py-1">
+    <li className="flex justify-between gap-2 rounded bg-surface-muted px-2 py-1">
       <span>{task.title}</span>
-      <span className="text-slate-500">{task.status.replace(/_/g, ' ')}</span>
+      <span className="text-muted">{task.status.replace(/_/g, ' ')}</span>
     </li>
   )
 }
@@ -242,8 +242,8 @@ function TaskLine({ task }: { task: YardTask }) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-2">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

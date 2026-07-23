@@ -89,7 +89,7 @@ export function VehicleDamageTab({ vehicle, actorName }: { vehicle: VehicleProfi
                     ? 'border-command-500 bg-command-50 text-command-800'
                     : hasDamage
                       ? 'border-amber-300 bg-amber-50 text-amber-900'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      : 'border-border bg-surface text-ink-soft hover:bg-surface-muted'
                 }`}
                 style={{ gridRow: z.row + 1, gridColumn: z.col + 1 }}
               >
@@ -99,7 +99,7 @@ export function VehicleDamageTab({ vehicle, actorName }: { vehicle: VehicleProfi
           })}
         </div>
         {selectedZone && (
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-ink-soft">
             Selected: <span className="font-medium">{zoneLabel(selectedZone)}</span>
             {' · '}
             {zoneRecords.length} record{zoneRecords.length === 1 ? '' : 's'}
@@ -110,20 +110,20 @@ export function VehicleDamageTab({ vehicle, actorName }: { vehicle: VehicleProfi
       <SectionCard title="Record damage">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
-            <span className="text-slate-600">Body zone</span>
-            <select value={zone} onChange={(e) => setZone(e.target.value as DamageZone)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+            <span className="text-ink-soft">Body zone</span>
+            <select value={zone} onChange={(e) => setZone(e.target.value as DamageZone)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
               {DAMAGE_ZONES.map((z) => (
                 <option key={z.id} value={z.id}>{z.label}</option>
               ))}
             </select>
           </label>
           <label className="text-sm sm:col-span-2">
-            <span className="text-slate-600">Description</span>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+            <span className="text-ink-soft">Description</span>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
           </label>
           <label className="text-sm">
-            <span className="text-slate-600">Classification</span>
-            <select value={classification} onChange={(e) => setClassification(e.target.value as DamageClassification)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+            <span className="text-ink-soft">Classification</span>
+            <select value={classification} onChange={(e) => setClassification(e.target.value as DamageClassification)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
               {Object.entries(DAMAGE_CLASSIFICATION_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
@@ -134,17 +134,17 @@ export function VehicleDamageTab({ vehicle, actorName }: { vehicle: VehicleProfi
             Baseline record (onboarding / intake)
           </label>
           <label className="text-sm sm:col-span-2">
-            <span className="text-slate-600">Photo</span>
+            <span className="text-ink-soft">Photo</span>
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
               onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-              className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium"
+              className="mt-1 block w-full text-sm text-ink-soft file:mr-3 file:rounded-lg file:border-0 file:bg-surface-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
             />
             {imageError && <p className="mt-1 text-xs text-red-700">{imageError}</p>}
             {imageDataUrl && (
-              <img src={imageDataUrl} alt="Damage preview" className="mt-2 max-h-32 rounded-lg border border-slate-200 object-cover" />
+              <img src={imageDataUrl} alt="Damage preview" className="mt-2 max-h-32 rounded-lg border border-border object-cover" />
             )}
           </label>
           <button
@@ -160,21 +160,21 @@ export function VehicleDamageTab({ vehicle, actorName }: { vehicle: VehicleProfi
 
       <SectionCard title="Damage register" description={`${vehicle.damageRecords.length} records on file`}>
         {zoneRecords.length === 0 ? (
-          <p className="text-sm text-slate-500">No damage records{selectedZone ? ' for this zone' : ''}.</p>
+          <p className="text-sm text-muted">No damage records{selectedZone ? ' for this zone' : ''}.</p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-border">
             {zoneRecords.map((r) => (
               <li key={r.id} className="py-3 text-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium text-slate-900">{r.zoneLabel}</p>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                      <p className="font-medium text-ink">{r.zoneLabel}</p>
+                      <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs text-ink-soft">
                         {DAMAGE_CLASSIFICATION_LABELS[r.classification]}
                       </span>
                     </div>
-                    <p className="mt-1 text-slate-700">{r.description}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-ink-soft">{r.description}</p>
+                    <p className="mt-1 text-xs text-muted">
                       {r.reportedBy} · {new Date(r.reportedAt).toLocaleString('en-GB')}
                       {r.baseline && ' · Baseline'}
                       {r.imageFileName && !r.imageDataUrl && ` · ${r.imageFileName}`}
@@ -184,7 +184,7 @@ export function VehicleDamageTab({ vehicle, actorName }: { vehicle: VehicleProfi
                     <img
                       src={r.imageDataUrl}
                       alt={r.imageFileName ?? r.zoneLabel}
-                      className="h-20 w-28 shrink-0 rounded-lg border border-slate-200 object-cover"
+                      className="h-20 w-28 shrink-0 rounded-lg border border-border object-cover"
                     />
                   )}
                 </div>

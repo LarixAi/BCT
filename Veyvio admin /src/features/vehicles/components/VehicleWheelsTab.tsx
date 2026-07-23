@@ -92,8 +92,8 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
 
       <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.9fr)_minmax(0,1.1fr)]">
         <SectionCard title="Vehicle diagram" description="Select a wheel for tread, pressure and asset history">
-          <div className="mx-auto max-w-xs rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="mb-3 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">Front</p>
+          <div className="mx-auto max-w-xs rounded-2xl border border-border bg-surface-muted p-4">
+            <p className="mb-3 text-center text-[10px] font-bold uppercase tracking-widest text-muted">Front</p>
             <div className="grid grid-cols-2 gap-6">
               {(front.length ? front : vehicle.wheelLayout.slice(0, 2)).map((w) => (
                 <WheelButton
@@ -104,7 +104,7 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
                 />
               ))}
             </div>
-            <div className="my-4 h-16 rounded-lg border border-dashed border-slate-300 bg-white/60" />
+            <div className="my-4 h-16 rounded-lg border border-dashed border-border-strong bg-surface/60" />
             <div className="grid grid-cols-2 gap-6">
               {(rear.length ? rear : vehicle.wheelLayout.slice(2)).map((w) => (
                 <WheelButton
@@ -115,7 +115,7 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
                 />
               ))}
             </div>
-            <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">Rear</p>
+            <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-widest text-muted">Rear</p>
           </div>
         </SectionCard>
 
@@ -124,7 +124,7 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
           description="Manufacturer asset identity when fitted in Fleet Resources"
         >
           {!selectedWheel ? (
-            <p className="text-sm text-slate-500">No wheel layout on this vehicle.</p>
+            <p className="text-sm text-muted">No wheel layout on this vehicle.</p>
           ) : (
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <Detail label="Tread depth" value={selectedWheel.treadDepthMm != null ? `${selectedWheel.treadDepthMm.toFixed(1)} mm` : '—'} />
@@ -162,8 +162,8 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
           )}
           {selectedWheel && (
             <div className="mt-4">
-              <p className="mb-1 text-xs font-medium text-slate-500">Tread trend (latest reading)</p>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <p className="mb-1 text-xs font-medium text-muted">Tread trend (latest reading)</p>
+              <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
                 <div
                   className={`h-full rounded-full ${
                     (selectedWheel.treadDepthMm ?? 0) < LEGAL_TREAD_MM
@@ -177,7 +177,7 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
                   }}
                 />
               </div>
-              <p className="mt-1 text-xs text-slate-500">Legal minimum {LEGAL_TREAD_MM} mm</p>
+              <p className="mt-1 text-xs text-muted">Legal minimum {LEGAL_TREAD_MM} mm</p>
             </div>
           )}
         </SectionCard>
@@ -188,19 +188,19 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
         description="Fit, remove and rotate in the shared tyre register"
       >
         {resourceTyres.length === 0 ? (
-          <p className="text-sm text-slate-500">No tyre assets currently fitted to this vehicle.</p>
+          <p className="text-sm text-muted">No tyre assets currently fitted to this vehicle.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {resourceTyres.map((t) => (
               <li
                 key={t.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
               >
                 <div>
                   <p className="font-medium">
                     {t.positionLabel ?? t.position} · {t.internalId}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted">
                     {t.brand} {t.size} · {t.treadDepthMm?.toFixed(1) ?? '—'} mm
                     {t.recommendation ? ` · ${t.recommendation}` : ''}
                   </p>
@@ -216,16 +216,16 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
 
       <SectionCard title="Re-torque tasks">
         {vehicle.retorqueTasks.length === 0 ? (
-          <p className="text-sm text-slate-500">No pending re-torque tasks.</p>
+          <p className="text-sm text-muted">No pending re-torque tasks.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {vehicle.retorqueTasks.map((t) => (
-              <li key={t.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+              <li key={t.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                 <div>
                   <p className="font-medium">
                     {t.positions.join(', ')} — due {new Date(t.dueAt).toLocaleDateString('en-GB')}
                   </p>
-                  <p className="text-xs text-slate-500">Technician: {t.technician}</p>
+                  <p className="text-xs text-muted">Technician: {t.technician}</p>
                 </div>
                 {t.status !== 'completed' && (
                   <button
@@ -264,11 +264,11 @@ function WheelButton({
           ? 'border-command-600 bg-command-50 ring-2 ring-command-200'
           : alert
             ? 'border-amber-400 bg-amber-50 hover:border-amber-500'
-            : 'border-slate-300 bg-white hover:border-command-400'
+            : 'border-border-strong bg-surface hover:border-command-400'
       }`}
     >
       <span className="text-xs font-bold">{wheel.label}</span>
-      <span className="mt-1 text-[10px] tabular-nums text-slate-600">
+      <span className="mt-1 text-[10px] tabular-nums text-ink-soft">
         {wheel.treadDepthMm != null ? `${wheel.treadDepthMm.toFixed(1)} mm` : '—'}
       </span>
       {alert && <StatusPill status="warning" />}
@@ -279,8 +279,8 @@ function WheelButton({
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-medium capitalize text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-medium capitalize text-ink">{value}</dd>
     </div>
   )
 }

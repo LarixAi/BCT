@@ -3,8 +3,13 @@
  * Publication status is separate from execution duty_status.
  */
 import { admin } from './supabase.ts'
-import { apiError, json, readJson } from './http.ts'
+import { apiError, json, readJson, toApiErrorResponse } from './http.ts'
 import type { RequestContext } from './supabase.ts'
+import {
+  assertCompanyScopedDepot,
+  assertCompanyScopedDriver,
+  assertCompanyScopedVehicle,
+} from './tenant-guards.ts'
 
 type Row = Record<string, unknown>
 
@@ -146,6 +151,14 @@ export async function createDraftDuty(context: RequestContext, request: Request)
     return apiError(400, 'Driver and service date are required', 'invalid_input')
   }
 
+  try {
+    await assertCompanyScopedDriver(input.driverId, context.companyId)
+    if (input.vehicleId) await assertCompanyScopedVehicle(input.vehicleId, context.companyId)
+    if (input.depotId) await assertCompanyScopedDepot(input.depotId, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Assignment target not found')
+  }
+
   const eligibility = await evaluateDutyAssignmentEligibility({
     companyId: context.companyId,
     driverId: input.driverId,
@@ -282,6 +295,14 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
   const plannedSignOn = input.plannedSignOnAt !== undefined ? input.plannedSignOnAt : existing.planned_sign_on_at
   const plannedSignOff = input.plannedSignOffAt !== undefined ? input.plannedSignOffAt : existing.planned_sign_off_at
   const vehicleId = input.vehicleId !== undefined ? input.vehicleId : existing.vehicle_id
+
+  try {
+    await assertCompanyScopedDriver(driverId, context.companyId)
+    if (vehicleId) await assertCompanyScopedVehicle(String(vehicleId), context.companyId)
+    if (input.depotId) await assertCompanyScopedDepot(String(input.depotId), context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Assignment target not found')
+  }
 
   const eligibility = await evaluateDutyAssignmentEligibility({
     companyId: context.companyId,

@@ -4,8 +4,10 @@ import {
   buildDriverTrainingRequirements,
   catalogDefsForPermissions,
   defaultTrainingExpiry,
+  getTrainingEligibilityEffect,
   summariseDriverTraining,
 } from './training'
+import { evaluateTrainingEligibility } from './training-eligibility'
 
 function profile(partial: Partial<DriverProfile> & { permissionKeys?: string[] }): Pick<
   DriverProfile,
@@ -19,15 +21,66 @@ function profile(partial: Partial<DriverProfile> & { permissionKeys?: string[] }
   }
 }
 
+function fullProfile(
+  partial: Partial<DriverProfile> & { permissionKeys?: string[] } = {},
+): DriverProfile {
+  const base = profile(partial)
+  return {
+    id: 'drv-1',
+    firstName: 'Alex',
+    lastName: 'Driver',
+    email: 'alex@example.com',
+    phone: null,
+    depotId: 'dep-1',
+    depotName: 'Main',
+    employmentStatus: 'active',
+    operationalStatus: 'active',
+    complianceStatus: 'missing_information',
+    availabilityStatus: 'available',
+    dutyStatus: 'off_duty',
+    operationalEligibility: 'not_eligible',
+    licenceNumber: null,
+    licenceExpiry: null,
+    cpcExpiry: null,
+    dbsExpiry: null,
+    medicalExpiry: null,
+    account: {
+      accountStatus: 'active',
+      inviteStatus: 'accepted',
+      lastAppSyncAt: null,
+      devices: [],
+    },
+    workPermissions: base.workPermissions,
+    documents: base.documents,
+    trainingRequirements: base.trainingRequirements,
+    restrictions: [],
+    eligibilityOverrides: [],
+    documentVersions: [],
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...partial,
+  } as DriverProfile
+}
+
 describe('driver training catalogue', () => {
-  it('always includes MiDAS Standard and core mandatory courses', () => {
+  it('always includes Level 1 mandatory courses before first shift', () => {
     const defs = catalogDefsForPermissions(['community'])
     const keys = defs.map((d) => d.key)
-    expect(keys).toContain('midas_standard')
     expect(keys).toContain('company_induction')
-    expect(keys).toContain('first_aid_efaw')
-    expect(keys).toContain('safeguarding_adults')
-    expect(keys).toContain('manual_handling')
+    expect(keys).toContain('driver_app')
+    expect(keys).toContain('daily_vehicle_checks')
+    expect(keys).toContain('health_safety')
+    expect(keys).toContain('safeguarding')
+    expect(keys).toContain('emergency_procedures')
+    expect(keys).toContain('data_protection_gdpr')
+    expect(keys).toContain('driver_declaration')
+  })
+
+  it('treats MiDAS Standard as vehicle-specific for minibus / community', () => {
+    const defs = catalogDefsForPermissions(['community'])
+    const midas = defs.find((d) => d.key === 'midas_standard')
+    expect(midas?.category).toBe('vehicle')
+    expect(getTrainingEligibilityEffect('midas_standard')).toBe('block_vehicle_type')
   })
 
   it('adds wheelchair / accessible modules when permissions enable', () => {
@@ -36,6 +89,7 @@ describe('driver training catalogue', () => {
     expect(keys).toContain('midas_accessible')
     expect(keys).toContain('wheelchair_restraint')
     expect(keys).toContain('lift_ramp_operation')
+    expect(defs.find((d) => d.key === 'midas_accessible')?.category).toBe('vehicle')
   })
 
   it('adds SEND / school modules when permissions enable', () => {
@@ -46,17 +100,26 @@ describe('driver training catalogue', () => {
     expect(keys).toContain('behaviour_management')
   })
 
+  it('includes optional development courses without eligibility effect', () => {
+    const defs = catalogDefsForPermissions([])
+    const eco = defs.find((d) => d.key === 'eco_driving')
+    expect(eco?.category).toBe('development')
+    expect(eco?.eligibilityEffect).toBe('none')
+  })
+
   it('marks requirements missing without evidence (no fake complete dates)', () => {
     const reqs = buildDriverTrainingRequirements(profile({}))
     expect(reqs.length).toBeGreaterThan(5)
-    expect(reqs.every((r) => r.status === 'missing')).toBe(true)
-    expect(reqs.every((r) => r.completedAt == null)).toBe(true)
-    expect(reqs.find((r) => r.key === 'midas_standard')?.category).toBe('mandatory')
+    expect(reqs.filter((r) => r.category === 'mandatory').every((r) => r.status === 'missing')).toBe(
+      true,
+    )
+    expect(reqs.find((r) => r.key === 'midas_standard')?.category).toBe('vehicle')
   })
 
   it('marks complete from verified documents', () => {
     const reqs = buildDriverTrainingRequirements(
       profile({
+        permissionKeys: ['hospital', 'school'],
         documents: [
           {
             id: 'd1',
@@ -79,6 +142,7 @@ describe('driver training catalogue', () => {
     const firstAid = reqs.find((r) => r.key === 'first_aid_efaw')
     expect(firstAid?.status).toBe('complete')
     expect(firstAid?.expiresAt).toBe('2028-01-01')
+    expect(firstAid?.category).toBe('role')
   })
 
   it('summarises mandatory gaps for the training dashboard', () => {
@@ -86,7 +150,8 @@ describe('driver training catalogue', () => {
     const summary = summariseDriverTraining(reqs)
     expect(summary.fullyTrained).toBe(false)
     expect(summary.mandatoryMissing).toBe(summary.mandatoryTotal)
-    expect(summary.roleTotal).toBeGreaterThan(0)
+    expect(summary.vehicleTotal).toBeGreaterThan(0)
+    expect(summary.complianceScore).toBeLessThan(100)
   })
 
   it('computes catalogue renewal expiry for MiDAS (48 months)', () => {
@@ -107,7 +172,7 @@ describe('driver training catalogue', () => {
             completedAt: '2026-01-10',
             expiresAt: '2030-01-10',
             trainer: 'CTA',
-            category: 'mandatory',
+            category: 'vehicle',
           },
         ],
       }),
@@ -116,5 +181,13 @@ describe('driver training catalogue', () => {
     expect(midas?.status).toBe('complete')
     expect(midas?.completedAt).toBe('2026-01-10')
     expect(midas?.trainer).toBe('CTA')
+  })
+
+  it('evaluates duty eligibility from Level 1 gaps and legal documents', () => {
+    const view = evaluateTrainingEligibility(fullProfile())
+    expect(view.status).toBe('not_eligible')
+    expect(view.blockReasons.length).toBeGreaterThan(0)
+    expect(view.canAssignToVehicle).toBe(false)
+    expect(view.headline).toBe('Not eligible for duty')
   })
 })

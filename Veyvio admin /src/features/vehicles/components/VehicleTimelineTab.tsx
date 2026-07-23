@@ -74,7 +74,7 @@ export function VehicleTimelineTab({ vehicle }: { vehicle: VehicleProfile }) {
               className={`rounded-full px-3 py-1 text-xs font-medium ${
                 filter === f.id
                   ? 'bg-command-600 text-white'
-                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  : 'border border-border bg-surface text-ink-soft hover:bg-surface-muted'
               }`}
             >
               {f.label}
@@ -83,21 +83,21 @@ export function VehicleTimelineTab({ vehicle }: { vehicle: VehicleProfile }) {
         </div>
 
         {filtered.length === 0 ? (
-          <p className="text-sm text-slate-500">No events match this filter.</p>
+          <p className="text-sm text-muted">No events match this filter.</p>
         ) : (
-          <ol className="relative space-y-0 border-l border-slate-200 pl-4">
+          <ol className="relative space-y-0 border-l border-border pl-4">
             {filtered.map((event) => (
               <li key={event.id} className="relative pb-4 last:pb-0">
                 <span className="absolute -left-[21px] top-1.5 size-2.5 rounded-full border-2 border-white bg-command-500" />
-                <div className="rounded-lg border border-slate-100 bg-white px-3 py-2">
+                <div className="rounded-lg border border-border bg-surface px-3 py-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-400">
+                      <p className="text-xs uppercase tracking-wide text-muted">
                         {new Date(event.occurredAt).toLocaleString('en-GB')} · {event.category}
                       </p>
-                      <p className="font-medium text-slate-900">{event.title}</p>
-                      {event.detail && <p className="text-sm text-slate-600">{event.detail}</p>}
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="font-medium text-ink">{event.title}</p>
+                      {event.detail && <p className="text-sm text-ink-soft">{event.detail}</p>}
+                      <p className="mt-1 text-xs text-muted">
                         {[event.actorName, event.source].filter(Boolean).join(' · ') || 'System'}
                       </p>
                     </div>

@@ -104,8 +104,9 @@ const STATUS_STYLES: Record<string, string> = {
   on_file: 'bg-ready/15 text-ready',
 }
 
-export function StatusPill({ status, className }: { status: string; className?: string }) {
-  const key = status.toLowerCase().replace(/\s+/g, '_')
+export function StatusPill({ status, className }: { status?: string | null; className?: string }) {
+  const label = (status ?? 'unknown').toString().trim() || 'unknown'
+  const key = label.toLowerCase().replace(/\s+/g, '_')
   return (
     <span
       className={cn(
@@ -114,7 +115,7 @@ export function StatusPill({ status, className }: { status: string; className?: 
         className,
       )}
     >
-      {status.replace(/_/g, ' ')}
+      {label.replace(/_/g, ' ')}
     </span>
   )
 }

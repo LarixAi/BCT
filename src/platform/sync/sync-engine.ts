@@ -1,8 +1,9 @@
-import { getYardApi, isMockApi } from "@/platform/api";
+import { getYardApi, isMockApi, usesCommandYardApi } from "@/platform/api";
 import type { YardRole } from "@/types/permissions";
 import { saveBootstrapCache, listOutboxMutations } from "@/platform/storage/local-db";
 import { isOnline } from "@/platform/device/connectivity";
-import { applyBootstrapToYard } from "@/platform/yard/hydrate-yard-store";
+import { applyBootstrapToYard, hydrateYardFromApi } from "@/platform/yard/hydrate-yard-store";
+import { getTenancySnapshot } from "@/platform/tenancy/context-store";
 import { notifySyncComplete, notifySyncFailed } from "@/platform/sync/sync-notify";
 import { conflictMessage } from "@/domain/sync/conflict-policy";
 import { useSyncStore } from "./outbox";
@@ -27,7 +28,11 @@ export async function runBootstrapSync(
 
   try {
     const payload = await getYardApi().fetchBootstrap(companyId, depotId, role);
-    await saveBootstrapCache(payload);
+    try {
+      await saveBootstrapCache(payload);
+    } catch {
+      /* IndexedDB may be unavailable — hydrate still applies */
+    }
     applyBootstrapToYard(payload);
     sync.setStatus("synced", payload.syncedAt);
     return { ok: true };
@@ -85,6 +90,16 @@ export async function processOutbox(): Promise<{ processed: number; failed: numb
     notifySyncFailed();
   } else if (processed > 0) {
     notifySyncComplete(processed);
+    if (usesCommandYardApi()) {
+      const tenancy = getTenancySnapshot();
+      if (tenancy.companyId && tenancy.depotId) {
+        void hydrateYardFromApi({
+          companyId: tenancy.companyId,
+          depotId: tenancy.depotId,
+          role: (tenancy.role as YardRole) ?? "yard_manager",
+        });
+      }
+    }
   }
 
   return { processed, failed };

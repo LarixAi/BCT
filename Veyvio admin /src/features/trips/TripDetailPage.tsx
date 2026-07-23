@@ -21,7 +21,7 @@ export function TripDetailPage() {
 
   if (!runId) {
     return (
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-muted">
         Open a trip from a{' '}
         <Link to="/runs" className="text-command-600 hover:underline">
           run detail
@@ -32,7 +32,7 @@ export function TripDetailPage() {
   }
 
   if (isLoading) {
-    return <p className="text-sm text-slate-500">Loading trip…</p>
+    return <p className="text-sm text-muted">Loading trip…</p>
   }
 
   if (!stop || !duty) {
@@ -55,8 +55,8 @@ export function TripDetailPage() {
         >
           ← Back to {duty.reference}
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">{stop.name}</h1>
-        <p className="text-sm text-slate-600">Stop {stop.stopOrder} on {duty.route?.name}</p>
+        <h1 className="mt-2 text-2xl font-semibold text-ink">{stop.name}</h1>
+        <p className="text-sm text-ink-soft">Stop {stop.stopOrder} on {duty.route?.name}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -106,8 +106,8 @@ export function TripDetailPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium capitalize text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium capitalize text-ink">{value}</dd>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { AuthLayout, authInputClass, authPrimaryButtonClass } from '@/components/brand/AuthLayout'
+import { AuthLayout, authInputClass, authLinkClass, authPrimaryButtonClass } from '@/components/brand/AuthLayout'
 import { api, isMockApi } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { tenantSetupPath } from '@/features/auth/SignupPages'
@@ -18,8 +18,6 @@ export function LoginPage() {
     challengeId: string
     companyId?: string | null
     devCode?: string
-    accessToken?: string
-    refreshToken?: string
   } | null>(null)
   const [mfaCode, setMfaCode] = useState('')
 
@@ -34,8 +32,6 @@ export function LoginPage() {
           challengeId: result.mfaChallengeId,
           companyId: result.pendingCompanyId,
           devCode: result.devMfaCode,
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
         })
         setMfaCode(result.devMfaCode ?? '')
         return
@@ -63,8 +59,6 @@ export function LoginPage() {
         challengeId: mfa.challengeId,
         code: mfaCode,
         companyId: mfa.companyId,
-        accessToken: mfa.accessToken,
-        refreshToken: mfa.refreshToken,
       })
       navigate('/')
     } catch (err) {
@@ -80,24 +74,24 @@ export function LoginPage() {
 
   return (
     <AuthLayout
-      title={mfa ? 'Confirm MFA' : 'Sign in'}
+      title={mfa ? 'Confirm MFA' : 'Sign in to Veyvio Command'}
       subtitle={
         mfa
-          ? 'Enter your authenticator or recovery code to open Command'
-          : 'Access your transport operations centre'
+          ? 'Enter the 6-digit code from your authenticator app, or a recovery code'
+          : 'Use the email from your company invitation.'
       }
       footer={
-        <div className="mt-4 space-y-2 text-center text-sm text-muted">
+        <div className="mt-6 space-y-2 text-center text-sm text-muted">
           {!mfa && (
             <p>
-              <Link to="/forgot-password" className="font-medium text-command-600 hover:underline">
+              <Link to="/forgot-password" className={authLinkClass}>
                 Forgot password?
               </Link>
             </p>
           )}
           <p>
             First company representative?{' '}
-            <Link to="/signup" className="font-medium text-command-600 hover:underline">
+            <Link to="/signup" className={authLinkClass}>
               Register your company
             </Link>
           </p>
@@ -121,6 +115,8 @@ export function LoginPage() {
               value={mfaCode}
               onChange={(e) => setMfaCode(e.target.value)}
               required
+              inputMode="numeric"
+              autoComplete="one-time-code"
               className={authInputClass}
             />
           </div>
@@ -192,7 +188,7 @@ export function SelectCompanyPage() {
   if (memberships.length === 0) {
     return (
       <AuthLayout title="No companies available" subtitle="Sign in again to load your company memberships.">
-        <Link to="/login" className="inline-flex w-full items-center justify-center rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700">
+        <Link to="/login" className={`inline-flex items-center justify-center ${authPrimaryButtonClass}`}>
           Back to sign in
         </Link>
       </AuthLayout>
@@ -223,7 +219,7 @@ export function SelectCompanyPage() {
               type="button"
               onClick={() => handleSelect(m.tenantId)}
               disabled={loading != null}
-              className="flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-left hover:border-command-500 hover:bg-command-50 disabled:opacity-60"
+              className="flex w-full items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3 text-left transition hover:border-command-500 hover:bg-command-50 disabled:opacity-60"
             >
               <div>
                 <p className="font-medium text-ink">{m.tenantName}</p>

@@ -37,8 +37,8 @@ function StatusCell({
   children: React.ReactNode
 }) {
   return (
-    <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</span>
+    <div className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</span>
       {children}
       <span className="sr-only">{value}</span>
     </div>

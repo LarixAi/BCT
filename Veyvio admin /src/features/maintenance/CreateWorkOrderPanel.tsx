@@ -54,8 +54,8 @@ export function CreateWorkOrderPanel({
     <SectionCard title="Create work order" description="Links to the vehicle record — completion alone does not return vehicle to service">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm sm:col-span-2">
-          <span className="text-slate-600">Vehicle</span>
-          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+          <span className="text-ink-soft">Vehicle</span>
+          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
             <option value="">Select vehicle…</option>
             {vehicles.map((v) => (
               <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>
@@ -63,24 +63,24 @@ export function CreateWorkOrderPanel({
           </select>
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="text-slate-600">Title</span>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+          <span className="text-ink-soft">Title</span>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
         </label>
         <label className="text-sm">
-          <span className="text-slate-600">Type</span>
-          <select value={type} onChange={(e) => setType(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+          <span className="text-ink-soft">Type</span>
+          <select value={type} onChange={(e) => setType(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
             {Object.entries(WORK_ORDER_TYPE_LABELS).map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
         </label>
         <label className="text-sm">
-          <span className="text-slate-600">Scheduled date</span>
-          <input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+          <span className="text-ink-soft">Scheduled date</span>
+          <input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="text-slate-600">Workshop / provider</span>
-          <input value={provider} onChange={(e) => setProvider(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+          <span className="text-ink-soft">Workshop / provider</span>
+          <input value={provider} onChange={(e) => setProvider(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
         </label>
         <div className="flex gap-2 sm:col-span-2">
           <button
@@ -91,7 +91,7 @@ export function CreateWorkOrderPanel({
           >
             Create work order
           </button>
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
+          <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft">
             Cancel
           </button>
         </div>

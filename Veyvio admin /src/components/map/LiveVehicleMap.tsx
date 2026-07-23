@@ -347,7 +347,7 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
 
     const shellClass = edgeToEdge
       ? `relative w-full overflow-hidden ${className}`
-      : `relative w-full overflow-hidden rounded-lg border border-slate-200 ${className}`
+      : `relative w-full overflow-hidden rounded-lg border border-border ${className}`
 
     const showFloatingCard =
       selectedVehicle &&
@@ -367,7 +367,7 @@ export const LiveVehicleMap = forwardRef<LiveVehicleMapHandle, LiveVehicleMapPro
         />
 
         {!mapReady && !mapError && (
-          <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center text-sm text-slate-500">
+          <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center text-sm text-muted">
             Loading map…
           </div>
         )}

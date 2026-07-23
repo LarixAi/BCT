@@ -44,8 +44,8 @@ export function CreateYardTaskPanel({
     <SectionCard title="Create yard task" description="Task will be delivered to the Yard mobile app when assigned">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm sm:col-span-2">
-          <span className="text-slate-600">Vehicle</span>
-          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+          <span className="text-ink-soft">Vehicle</span>
+          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
             {hub.vehicles.map((v) => (
               <option key={v.vehicleId} value={v.vehicleId}>
                 {v.registrationNumber} — {v.makeModel}
@@ -54,8 +54,8 @@ export function CreateYardTaskPanel({
           </select>
         </label>
         <label className="text-sm">
-          <span className="text-slate-600">Task type</span>
-          <select value={taskType} onChange={(e) => setTaskType(e.target.value as YardTaskType)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+          <span className="text-ink-soft">Task type</span>
+          <select value={taskType} onChange={(e) => setTaskType(e.target.value as YardTaskType)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
             {TASK_TYPES.map((t) => (
               <option key={t} value={t}>
                 {YARD_TASK_TYPE_LABELS[t]}
@@ -64,8 +64,8 @@ export function CreateYardTaskPanel({
           </select>
         </label>
         <label className="text-sm">
-          <span className="text-slate-600">Priority</span>
-          <select value={priority} onChange={(e) => setPriority(e.target.value as YardTaskPriority)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+          <span className="text-ink-soft">Priority</span>
+          <select value={priority} onChange={(e) => setPriority(e.target.value as YardTaskPriority)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {YARD_TASK_PRIORITY_LABELS[p]}
@@ -74,12 +74,12 @@ export function CreateYardTaskPanel({
           </select>
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="text-slate-600">Assign to (optional)</span>
-          <input value={assignedStaffName} onChange={(e) => setAssignedStaffName(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" placeholder="Staff name" />
+          <span className="text-ink-soft">Assign to (optional)</span>
+          <input value={assignedStaffName} onChange={(e) => setAssignedStaffName(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" placeholder="Staff name" />
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="text-slate-600">Instructions</span>
-          <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+          <span className="text-ink-soft">Instructions</span>
+          <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={blockingRelease} onChange={(e) => setBlockingRelease(e.target.checked)} />
@@ -108,7 +108,7 @@ export function CreateYardTaskPanel({
           >
             Create task
           </button>
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
+          <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft">
             Cancel
           </button>
         </div>

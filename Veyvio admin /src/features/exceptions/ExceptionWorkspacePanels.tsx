@@ -36,8 +36,8 @@ export function ExceptionControlBar({
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Exceptions</h1>
-          <p className="mt-0.5 text-sm text-slate-700">
+          <h1 className="text-2xl font-semibold text-ink">Exceptions</h1>
+          <p className="mt-0.5 text-sm text-ink-soft">
             {dateLabel} · {openCount} open · intervention inbox for Command
           </p>
           <p className={cn('mt-1 text-xs', isLoading ? 'text-amber-800' : 'text-emerald-700')}>
@@ -57,13 +57,13 @@ export function ExceptionControlBar({
           <button
             type="button"
             onClick={onRefresh}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
           >
             Refresh
           </button>
           <Link
             to="/live-operations"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
           >
             Live Operations
           </Link>
@@ -71,7 +71,7 @@ export function ExceptionControlBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+        <div className="flex gap-1 rounded-lg bg-surface-muted p-1">
           {([
             { id: 'open', label: 'Open' },
             { id: 'resolved', label: 'Resolved' },
@@ -82,7 +82,7 @@ export function ExceptionControlBar({
               onClick={() => onListTab(tab.id)}
               className={cn(
                 'rounded-md px-3 py-1 text-xs font-medium',
-                listTab === tab.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600',
+                listTab === tab.id ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft',
               )}
             >
               {tab.label}
@@ -94,7 +94,7 @@ export function ExceptionControlBar({
           value={search}
           onChange={(e) => onSearch(e.target.value)}
           placeholder="Search driver, vehicle, run…"
-          className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          className="w-full max-w-xs rounded-lg border border-border px-3 py-1.5 text-sm"
         />
         <div className="flex flex-wrap gap-1">
           {EXCEPTION_SMART_FILTERS.filter((f) => f.id !== 'resolved').map((v) => (
@@ -106,7 +106,7 @@ export function ExceptionControlBar({
                 'rounded-full px-2.5 py-1 text-[11px] font-medium',
                 smart === v.id
                   ? 'bg-command-600 text-white'
-                  : 'bg-white text-slate-600 ring-1 ring-slate-200',
+                  : 'bg-surface text-ink-soft ring-1 ring-border',
               )}
             >
               {v.label}
@@ -182,22 +182,22 @@ export function ExceptionSummaryStrip({
           type="button"
           onClick={() => onSelect(c.id)}
           className={cn(
-            'rounded-xl border bg-white p-3 text-left transition hover:border-command-400',
-            active === c.id ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200',
+            'rounded-xl border bg-surface p-3 text-left transition hover:border-command-400',
+            active === c.id ? 'border-command-500 ring-1 ring-command-500' : 'border-border',
             c.tone === 'danger' && active !== c.id && 'border-red-200',
             c.tone === 'warning' && active !== c.id && 'border-amber-200',
           )}
         >
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{c.title}</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{c.title}</p>
           <p
             className={cn(
               'mt-1 text-2xl font-bold tabular-nums',
-              c.tone === 'danger' ? 'text-red-800' : c.tone === 'warning' ? 'text-amber-800' : 'text-slate-900',
+              c.tone === 'danger' ? 'text-red-800' : c.tone === 'warning' ? 'text-amber-800' : 'text-ink',
             )}
           >
             {c.value}
           </p>
-          <p className="mt-1 text-[11px] text-slate-600">{c.sub}</p>
+          <p className="mt-1 text-[11px] text-ink-soft">{c.sub}</p>
         </button>
       ))}
     </div>

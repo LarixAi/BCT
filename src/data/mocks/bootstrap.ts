@@ -1,8 +1,10 @@
 import * as fx from "@/data/fixtures";
+import { bays as defaultYardBays } from "@/data/fixtures";
 import { initialVehicleEquipment, initialDepotStock } from "@/data/equipment-fixtures";
 import { initialTasks } from "@/data/tasks-fixtures";
 import * as cfx from "@/data/condition-fixtures";
 import { initialAdBlueRefills } from "@/data/adblue-fixtures";
+import { buildDemoOperationalPlan } from "@/data/plan-fixtures";
 import type {
   CustodyEvent,
   DamageObservation,
@@ -14,13 +16,21 @@ import type {
   VehicleConditionSnapshot,
   VehicleInspection,
 } from "@/types/condition";
+import type { OperationalDayPlan } from "@/types/plan";
 import { ROLE_PERMISSIONS, type YardRole } from "@/types/permissions";
 import type { YardTask } from "@/types/tasks";
+
+export const BOOTSTRAP_SCHEMA_VERSION = 6;
+
+export const COMMAND_HUB_BOOTSTRAP_SOURCE = "command-hub" as const;
+
+export type BootstrapDataSource = "mock" | typeof COMMAND_HUB_BOOTSTRAP_SOURCE;
 
 export interface BootstrapPayload {
   companyId: string;
   depotId: string;
   syncedAt: string;
+  dataSource?: BootstrapDataSource;
   vehicles: typeof fx.vehicles;
   bays: typeof fx.bays;
   trips: typeof fx.trips;
@@ -44,15 +54,15 @@ export interface BootstrapPayload {
   custodyTimeline: CustodyEvent[];
   repairWorkOrders: RepairWorkOrder[];
   adblueRefills: typeof initialAdBlueRefills;
+  operationalPlan: OperationalDayPlan | null;
 }
-
-export const BOOTSTRAP_SCHEMA_VERSION = 5;
 
 export function buildBootstrapPayload(companyId: string, depotId: string, role: YardRole = "yard_manager"): BootstrapPayload {
   return {
     companyId,
     depotId,
     syncedAt: new Date().toISOString(),
+    dataSource: "mock",
     schemaVersion: BOOTSTRAP_SCHEMA_VERSION,
     vehicles: fx.vehicles,
     bays: fx.bays,
@@ -76,6 +86,45 @@ export function buildBootstrapPayload(companyId: string, depotId: string, role: 
     custodyTimeline: cfx.custodyTimeline,
     repairWorkOrders: cfx.repairWorkOrders,
     adblueRefills: initialAdBlueRefills,
+    operationalPlan: buildDemoOperationalPlan(companyId, depotId),
+  };
+}
+
+/** Live Command hub — structural bays only; no demo fleet, trips, or plan. */
+export function buildLiveBootstrapShell(
+  companyId: string,
+  depotId: string,
+  role: YardRole = "yard_manager",
+): BootstrapPayload {
+  return {
+    companyId,
+    depotId,
+    syncedAt: new Date().toISOString(),
+    dataSource: COMMAND_HUB_BOOTSTRAP_SOURCE,
+    schemaVersion: BOOTSTRAP_SCHEMA_VERSION,
+    vehicles: [],
+    bays: defaultYardBays.map(b => ({ ...b })),
+    trips: [],
+    defects: [],
+    vorCases: [],
+    movements: [],
+    yardChecks: [],
+    equipment: {},
+    depotStock: {},
+    permissions: ROLE_PERMISSIONS[role],
+    shiftWindow: "Day shift",
+    tasks: [],
+    conditionProfiles: {},
+    inspections: [],
+    inspectionMedia: [],
+    damageRecords: [],
+    damageObservations: [],
+    damageReviews: [],
+    conditionSnapshots: [],
+    custodyTimeline: [],
+    repairWorkOrders: [],
+    adblueRefills: [],
+    operationalPlan: null,
   };
 }
 
@@ -84,6 +133,18 @@ export function normalizeBootstrapPayload(
   payload: Partial<BootstrapPayload> & Pick<BootstrapPayload, "companyId" | "depotId">,
   role: YardRole = "yard_manager",
 ): BootstrapPayload {
+  if (payload.dataSource === COMMAND_HUB_BOOTSTRAP_SOURCE) {
+    const shell = buildLiveBootstrapShell(payload.companyId, payload.depotId, role);
+    return {
+      ...shell,
+      ...payload,
+      dataSource: COMMAND_HUB_BOOTSTRAP_SOURCE,
+      schemaVersion: payload.schemaVersion ?? BOOTSTRAP_SCHEMA_VERSION,
+      permissions: payload.permissions ?? shell.permissions,
+      bays: payload.bays ?? shell.bays,
+    };
+  }
+
   const defaults = buildBootstrapPayload(payload.companyId, payload.depotId, role);
   return {
     ...defaults,
@@ -102,5 +163,7 @@ export function normalizeBootstrapPayload(
     custodyTimeline: payload.custodyTimeline ?? defaults.custodyTimeline,
     repairWorkOrders: payload.repairWorkOrders ?? defaults.repairWorkOrders,
     adblueRefills: payload.adblueRefills ?? defaults.adblueRefills,
+    operationalPlan:
+      payload.operationalPlan === undefined ? defaults.operationalPlan : payload.operationalPlan,
   };
 }

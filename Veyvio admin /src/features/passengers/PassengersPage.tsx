@@ -27,8 +27,8 @@ export function PassengersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Passengers</h1>
-        <p className="text-sm text-slate-600">Passengers on active routes — mobility and safeguarding flags</p>
+        <h1 className="text-2xl font-semibold text-ink">Passengers</h1>
+        <p className="text-sm text-ink-soft">Passengers on active routes — mobility and safeguarding flags</p>
       </div>
 
       <input
@@ -36,16 +36,16 @@ export function PassengersPage() {
         placeholder="Search name, route, customer…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full max-w-md rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+        className="w-full max-w-md rounded-lg border border-border px-3 py-1.5 text-sm"
       />
 
       <SectionCard title="Passenger register" description={`${filtered.length} passengers`}>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : (
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                 <th className="pb-2 pr-4 font-medium">Name</th>
                 <th className="pb-2 pr-4 font-medium">Customer</th>
                 <th className="pb-2 pr-4 font-medium">Route</th>
@@ -57,12 +57,12 @@ export function PassengersPage() {
             </thead>
             <tbody>
               {filtered.map((p) => (
-                <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                <tr key={p.id} className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
                   <td className="py-2.5 pr-4 font-medium">{p.firstName} {p.lastName}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{p.customerName ?? '—'}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{p.routeName ?? '—'}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{p.needsWheelchair ? 'Yes' : 'No'}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{p.safeguardingFlag ? 'Yes' : 'No'}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{p.customerName ?? '—'}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{p.routeName ?? '—'}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{p.needsWheelchair ? 'Yes' : 'No'}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{p.safeguardingFlag ? 'Yes' : 'No'}</td>
                   <td className="py-2.5">
                     <StatusPill status={p.status ?? 'active'} />
                   </td>

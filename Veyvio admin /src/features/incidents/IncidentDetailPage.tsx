@@ -45,7 +45,7 @@ export function IncidentDetailPage() {
     enabled: !!id,
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading incident…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading incident…</p>
   if (isError || !incident) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Incident not found'}</p>
   }
@@ -80,26 +80,26 @@ export function IncidentDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Link to="/incidents" className="text-sm text-command-600 hover:underline">← Incidents</Link>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">{incident.incidentRef}</h1>
-          <p className="text-lg text-slate-800">{incident.title}</p>
+          <h1 className="mt-1 text-2xl font-semibold text-ink">{incident.incidentRef}</h1>
+          <p className="text-lg text-ink">{incident.title}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">{SEVERITY_DISPLAY[incident.severity]}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{STATUS_LABELS[incident.status]}</span>
+            <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-ink-soft">{STATUS_LABELS[incident.status]}</span>
             {incident.isSafeguarding && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">Safeguarding</span>}
             {!incident.isAcknowledged && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">Unacknowledged</span>}
             <IncidentRiskBadge risk={incident.riskScore} />
           </div>
-          <p className="mt-2 text-sm text-slate-600">{incident.location ?? incident.depotName} · {new Date(incident.occurredAt).toLocaleString('en-GB')}</p>
+          <p className="mt-2 text-sm text-ink-soft">{incident.location ?? incident.depotName} · {new Date(incident.occurredAt).toLocaleString('en-GB')}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <IncidentExportPacksButton incident={incident} />
           {incident.operationalLinks.vehicleId && (
-            <Link to={`/vehicles/${incident.operationalLinks.vehicleId}`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+            <Link to={`/vehicles/${incident.operationalLinks.vehicleId}`} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
               Open vehicle
             </Link>
           )}
           {incident.operationalLinks.linkedDefectId && (
-            <Link to={`/defects/${incident.operationalLinks.linkedDefectId}`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+            <Link to={`/defects/${incident.operationalLinks.linkedDefectId}`} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
               Linked defect
             </Link>
           )}
@@ -107,16 +107,16 @@ export function IncidentDetailPage() {
       </div>
 
       {incident.operationalSummary && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">{incident.operationalSummary}</div>
+        <div className="rounded-xl border border-border bg-surface-muted p-4 text-sm text-ink">{incident.operationalSummary}</div>
       )}
 
       <IncidentDriverIntakePanel incident={incident} />
 
       <IncidentSafetyControlsPanel incident={incident} />
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {tabs.map((t) => (
-          <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === t.id ? 'border-b-2 border-command-600 text-command-700' : 'text-slate-600'}`}>
+          <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === t.id ? 'border-b-2 border-command-600 text-command-700' : 'text-ink-soft'}`}>
             {t.label}
           </button>
         ))}
@@ -164,11 +164,11 @@ export function IncidentDetailPage() {
         <SectionCard title="Timeline" description="Chronological record — corrections appear as new entries">
           <ul className="space-y-2" data-testid="incident-timeline">
             {incident.timeline.map((e) => (
-              <li key={e.id} className="flex gap-3 border-b border-slate-50 pb-2 text-sm">
-                <time className="shrink-0 text-xs text-slate-500">{new Date(e.occurredAt).toLocaleString('en-GB')}</time>
+              <li key={e.id} className="flex gap-3 border-b border-border/60 pb-2 text-sm">
+                <time className="shrink-0 text-xs text-muted">{new Date(e.occurredAt).toLocaleString('en-GB')}</time>
                 <div>
                   <p className="font-medium">{e.action}{e.isSystem ? ' (system)' : ''}</p>
-                  <p className="text-xs text-slate-500">{e.actorName}{e.detail ? ` · ${e.detail}` : ''}</p>
+                  <p className="text-xs text-muted">{e.actorName}{e.detail ? ` · ${e.detail}` : ''}</p>
                 </div>
               </li>
             ))}
@@ -191,14 +191,14 @@ export function IncidentDetailPage() {
         <div className="space-y-4">
           <SectionCard title="Regulatory assessments" description="Assessment checklist — not automatic legal conclusions">
             {incident.regulatoryAssessments.length === 0 ? (
-              <p className="text-sm text-slate-500">No external assessments required.</p>
+              <p className="text-sm text-muted">No external assessments required.</p>
             ) : (
-              <ul className="divide-y divide-slate-100" data-testid="regulatory-assessments">
+              <ul className="divide-y divide-border" data-testid="regulatory-assessments">
                 {incident.regulatoryAssessments.map((r) => (
                   <li key={r.id} className="py-3 first:pt-0">
                     <p className="font-medium">{r.label}</p>
-                    <p className="text-sm text-slate-600">Status: {r.status.replace(/_/g, ' ')}</p>
-                    {r.decision && <p className="text-sm text-slate-600">Decision: {r.decision}</p>}
+                    <p className="text-sm text-ink-soft">Status: {r.status.replace(/_/g, ' ')}</p>
+                    {r.decision && <p className="text-sm text-ink-soft">Decision: {r.decision}</p>}
                     {r.deadline && <p className="text-xs text-amber-700">Deadline: {new Date(r.deadline).toLocaleString('en-GB')}</p>}
                   </li>
                 ))}
@@ -214,25 +214,25 @@ export function IncidentDetailPage() {
         <div className="space-y-4">
           <SectionCard title="Corrective actions">
           {incident.correctiveActions.length === 0 ? (
-            <p className="text-sm text-slate-500">No corrective actions yet.</p>
+            <p className="text-sm text-muted">No corrective actions yet.</p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-border">
               {incident.correctiveActions.map((a) => (
                 <li key={a.id} className="flex justify-between gap-2 py-3 first:pt-0">
                   <div>
                     <p className="font-medium">{a.title}</p>
-                    <p className="text-sm text-slate-600">{a.description}</p>
-                    <p className="text-xs text-slate-500">{a.ownerName} · Due {new Date(a.dueDate).toLocaleDateString('en-GB')}</p>
+                    <p className="text-sm text-ink-soft">{a.description}</p>
+                    <p className="text-xs text-muted">{a.ownerName} · Due {new Date(a.dueDate).toLocaleDateString('en-GB')}</p>
                   </div>
-                  <span className={`text-xs font-medium ${a.status === 'overdue' ? 'text-red-700' : 'text-slate-600'}`}>{a.status}</span>
+                  <span className={`text-xs font-medium ${a.status === 'overdue' ? 'text-red-700' : 'text-ink-soft'}`}>{a.status}</span>
                 </li>
               ))}
             </ul>
           )}
           {incident.immediateActions.length > 0 && (
-            <div className="mt-6 border-t border-slate-100 pt-4">
-              <p className="text-sm font-medium text-slate-900">Immediate actions taken</p>
-              <ul className="mt-2 space-y-1 text-sm text-slate-700">
+            <div className="mt-6 border-t border-border pt-4">
+              <p className="text-sm font-medium text-ink">Immediate actions taken</p>
+              <ul className="mt-2 space-y-1 text-sm text-ink-soft">
                 {incident.immediateActions.map((a) => (
                   <li key={a.id}>{a.action} — {a.completedBy} ({new Date(a.completedAt).toLocaleString('en-GB')})</li>
                 ))}
@@ -281,8 +281,8 @@ export function IncidentDetailPage() {
 function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex gap-2">
-      <dt className="w-36 shrink-0 text-slate-500">{label}</dt>
-      <dd className="font-medium capitalize text-slate-900">{value}</dd>
+      <dt className="w-36 shrink-0 text-muted">{label}</dt>
+      <dd className="font-medium capitalize text-ink">{value}</dd>
     </div>
   )
 }

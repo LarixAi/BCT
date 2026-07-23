@@ -6,14 +6,14 @@ export default function VeyvioSidebarExample() {
   const [pathname, setPathname] = useState('/')
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-surface-muted">
       <VeyvioSidebar pathname={pathname} onNavigate={setPathname} />
 
       <main className="min-w-0 flex-1 p-6 pt-20 lg:p-10">
         <div className="mx-auto max-w-6xl">
           <p className="text-sm font-medium text-emerald-700">Veyvio Command</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">Current route</h1>
-          <p className="mt-3 rounded-2xl border border-slate-200 bg-white p-6 text-slate-600 shadow-sm">
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-ink">Current route</h1>
+          <p className="mt-3 rounded-2xl border border-border bg-surface p-6 text-ink-soft shadow-sm">
             {pathname}
           </p>
         </div>

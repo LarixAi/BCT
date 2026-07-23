@@ -288,7 +288,7 @@ export function DepotOnboardingWizard() {
     else goStep(prev)
   }
 
-  if (id && isLoading) return <p className="text-sm text-slate-500">Loading depot…</p>
+  if (id && isLoading) return <p className="text-sm text-muted">Loading depot…</p>
 
   const capacityWarn = validateDepotCapacity(
     selectedVehicleIds.length,
@@ -299,10 +299,10 @@ export function DepotOnboardingWizard() {
     <div className="space-y-4">
       <DepotBackLink />
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">
+        <h1 className="text-2xl font-semibold text-ink">
           {isNew ? 'Add depot' : `Set up ${depot?.name ?? 'depot'}`}
         </h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-ink-soft">
           Guided setup for a new operational headquarters. New depots stay planned until you activate them.
         </p>
       </div>
@@ -324,12 +324,12 @@ export function DepotOnboardingWizard() {
                       ? 'border-command-500 bg-command-50'
                       : done
                         ? 'border-emerald-200 bg-emerald-50/50'
-                        : 'border-slate-200 bg-white',
+                        : 'border-border bg-surface',
                     isNew && i > 0 && 'cursor-not-allowed opacity-50',
                   )}
                 >
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Step {i + 1}</p>
-                  <p className={cn('text-sm font-semibold', active ? 'text-command-800' : 'text-slate-900')}>{s.label}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Step {i + 1}</p>
+                  <p className={cn('text-sm font-semibold', active ? 'text-command-800' : 'text-ink')}>{s.label}</p>
                 </button>
               </li>
             )
@@ -354,11 +354,11 @@ export function DepotOnboardingWizard() {
                 <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
                 <Field label="Timezone" value={form.timezone} onChange={(v) => setForm({ ...form, timezone: v })} />
                 <label className="block text-sm">
-                  <span className="text-slate-600">Status</span>
+                  <span className="text-ink-soft">Status</span>
                   <select
                     value={form.status}
                     onChange={(e) => setForm({ ...form, status: e.target.value as DepotStatus })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                   >
                     {Object.entries(DEPOT_STATUS_LABELS).map(([k, label]) => (
                       <option key={k} value={k}>
@@ -445,8 +445,8 @@ export function DepotOnboardingWizard() {
             <SectionCard title="Fleet assignment" description="Soft-assign existing resources to this depot">
               <div className="grid gap-6 lg:grid-cols-2">
                 <div>
-                  <p className="mb-2 text-sm font-medium text-slate-800">Vehicles</p>
-                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                  <p className="mb-2 text-sm font-medium text-ink">Vehicles</p>
+                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
                     {vehicles.map((v) => (
                       <label key={v.id} className="flex items-center gap-2 text-sm">
                         <input
@@ -459,14 +459,14 @@ export function DepotOnboardingWizard() {
                           }
                         />
                         {v.registrationNumber}
-                        <span className="text-xs text-slate-400">({v.homeDepotName})</span>
+                        <span className="text-xs text-muted">({v.homeDepotName})</span>
                       </label>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="mb-2 text-sm font-medium text-slate-800">Drivers</p>
-                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
+                  <p className="mb-2 text-sm font-medium text-ink">Drivers</p>
+                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
                     {drivers.map((d) => (
                       <label key={d.id} className="flex items-center gap-2 text-sm">
                         <input
@@ -479,7 +479,7 @@ export function DepotOnboardingWizard() {
                           }
                         />
                         {d.firstName} {d.lastName}
-                        <span className="text-xs text-slate-400">({d.depotName})</span>
+                        <span className="text-xs text-muted">({d.depotName})</span>
                       </label>
                     ))}
                   </div>
@@ -504,7 +504,7 @@ export function DepotOnboardingWizard() {
                     ['fuelDiesel', 'Diesel fuel'],
                   ] as const
                 ).map(([key, label]) => (
-                  <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
+                  <label key={key} className="flex items-center gap-2 text-sm text-ink-soft">
                     <input
                       type="checkbox"
                       checked={form.facilities[key]}
@@ -564,7 +564,7 @@ export function DepotOnboardingWizard() {
                   type="button"
                   disabled={pending}
                   onClick={() => activate.mutate(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
                 >
                   Save as planned
                 </button>
@@ -585,7 +585,7 @@ export function DepotOnboardingWizard() {
               <button
                 type="button"
                 onClick={handleBack}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
               >
                 Back
               </button>
@@ -621,7 +621,7 @@ function Field({
   const inputId = `depot-field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   return (
     <label htmlFor={inputId} className={cn('block text-sm', className)}>
-      <span className="text-slate-600">
+      <span className="text-ink-soft">
         {label}
         {required ? ' *' : ''}
       </span>
@@ -630,7 +630,7 @@ function Field({
         value={value}
         required={required}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+        className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
       />
     </label>
   )
@@ -639,8 +639,8 @@ function Field({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

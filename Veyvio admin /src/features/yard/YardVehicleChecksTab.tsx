@@ -10,16 +10,16 @@ export function YardVehicleChecksTab({ hub }: { hub: YardHubData }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[340px_1fr]">
       <SectionCard title="Driver vehicle checks">
-        <p className="mb-3 text-sm text-slate-600">
+        <p className="mb-3 text-sm text-ink-soft">
           Full walkaround submissions from drivers — odometer photo, questions, answers and defect images.
         </p>
         {checks.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
+          <p className="rounded-lg border border-dashed border-border bg-surface-muted px-3 py-6 text-center text-sm text-ink-soft">
             No vehicle checks received yet. When a driver submits a walkaround, it appears here and in Admin → Vehicle
             Checks.
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-border">
             {checks.map((check) => (
               <li key={check.id}>
                 <button
@@ -27,11 +27,11 @@ export function YardVehicleChecksTab({ hub }: { hub: YardHubData }) {
                   onClick={() => setSelected(check)}
                   className={`w-full px-1 py-3 text-left ${selected?.id === check.id ? 'bg-command-50' : ''}`}
                 >
-                  <p className="font-semibold tabular-nums text-slate-900">{check.registrationNumber}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="font-semibold tabular-nums text-ink">{check.registrationNumber}</p>
+                  <p className="text-xs text-muted">
                     {check.driverName ?? 'Driver'} · {check.result === 'fail' ? 'Failed' : 'Passed'}
                   </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
+                  <p className="mt-0.5 text-xs text-muted">
                     {check.submittedAt
                       ? new Date(check.submittedAt).toLocaleString('en-GB', {
                           day: 'numeric',
@@ -63,7 +63,7 @@ export function YardVehicleChecksTab({ hub }: { hub: YardHubData }) {
         }
       >
         {!selected ? (
-          <p className="text-sm text-slate-500">Select a check to review.</p>
+          <p className="text-sm text-muted">Select a check to review.</p>
         ) : (
           <div className="space-y-4">
             <dl className="grid gap-2 text-sm sm:grid-cols-2">
@@ -83,7 +83,7 @@ export function YardVehicleChecksTab({ hub }: { hub: YardHubData }) {
 
             {selected.odometerPhotoDataUrl ? (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Odometer photo</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Odometer photo</p>
                 <img
                   src={selected.odometerPhotoDataUrl}
                   alt="Odometer evidence"
@@ -93,7 +93,7 @@ export function YardVehicleChecksTab({ hub }: { hub: YardHubData }) {
             ) : null}
 
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                 Questions & answers ({selected.sections?.length ?? 0})
               </p>
               <ul className="space-y-2">
@@ -102,10 +102,10 @@ export function YardVehicleChecksTab({ hub }: { hub: YardHubData }) {
                   return (
                     <li
                       key={section.id}
-                      className={`rounded-lg border p-3 ${failed ? 'border-red-200 bg-red-50/40' : 'border-slate-200'}`}
+                      className={`rounded-lg border p-3 ${failed ? 'border-red-200 bg-red-50/40' : 'border-border'}`}
                     >
-                      <p className="text-xs uppercase text-slate-500">{section.section.replace(/_/g, ' ')}</p>
-                      <p className="text-sm font-medium text-slate-900">{section.question}</p>
+                      <p className="text-xs uppercase text-muted">{section.section.replace(/_/g, ' ')}</p>
+                      <p className="text-sm font-medium text-ink">{section.question}</p>
                       <p className={`mt-1 text-sm font-semibold ${failed ? 'text-red-800' : 'text-emerald-800'}`}>
                         {section.answer}
                       </p>
@@ -125,14 +125,14 @@ export function YardVehicleChecksTab({ hub }: { hub: YardHubData }) {
 
             {(selected.evidence?.length ?? 0) > 0 ? (
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                   Evidence ({selected.evidence.length})
                 </p>
                 <ul className="grid gap-3 sm:grid-cols-2">
                   {selected.evidence.map((item) => (
-                    <li key={item.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+                    <li key={item.id} className="rounded-lg border border-border p-3 text-sm">
                       <p className="font-medium capitalize">{item.kind.replace(/_/g, ' ')}</p>
-                      <p className="text-slate-600">{item.label}</p>
+                      <p className="text-ink-soft">{item.label}</p>
                       {item.url ? (
                         <img src={item.url} alt={item.label} className="mt-2 max-h-40 w-full rounded-md object-cover" />
                       ) : null}
@@ -150,9 +150,9 @@ export function YardVehicleChecksTab({ hub }: { hub: YardHubData }) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+    <div className="flex justify-between gap-2 rounded-lg bg-surface-muted px-3 py-2">
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

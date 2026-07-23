@@ -21,6 +21,9 @@ export function formatAuthError(message = "") {
   if (message.toLowerCase().includes("invalid login credentials")) {
     return "Incorrect email or password.";
   }
+  if (/invalid refresh token|refresh token not found|refresh_token/i.test(message)) {
+    return "Saved fingerprint sign-in expired. Sign in with your password, then set up fingerprint again.";
+  }
   return message || "Sign in failed.";
 }
 

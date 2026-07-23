@@ -63,30 +63,59 @@ export function reconcileDriverEligibility(profile: DriverProfile): DriverEligib
 
   const mandatoryGaps = (profile.trainingRequirements ?? []).filter((req) => {
     if (req.category !== 'mandatory') return false
-    return req.status === 'missing' || req.status === 'expired' || req.status === 'failed'
+    return (
+      req.status === 'missing' ||
+      req.status === 'expired' ||
+      req.status === 'failed' ||
+      req.status === 'assigned' ||
+      req.status === 'in_progress'
+    )
   })
 
-  if (mandatoryGaps.length && (ONBOARDING_OPS.has(op) || op === 'eligible' || op === 'restricted')) {
-    warnings.push({
+  const vehicleGaps = (profile.trainingRequirements ?? []).filter((req) => {
+    if (req.category !== 'vehicle') return false
+    return (
+      req.status === 'missing' ||
+      req.status === 'expired' ||
+      req.status === 'failed' ||
+      req.status === 'assigned' ||
+      req.status === 'in_progress'
+    )
+  })
+
+  // Level 1 mandatory training must be complete before RELEASE STATUS can be Eligible.
+  if (mandatoryGaps.length > 0) {
+    failures.push({
       code: 'training_not_started',
-      message: `${mandatoryGaps.length} mandatory training items not started in Command (induction, MiDAS, etc.) — assign from Training`,
+      message:
+        mandatoryGaps.length === 1
+          ? `${mandatoryGaps[0]!.label} is still outstanding — complete it under Training before release`
+          : `${mandatoryGaps.length} mandatory training courses still outstanding — complete them under Training before release`,
+      severity: 'block',
+      category: 'compliance',
+    })
+  }
+
+  // Level 2 vehicle modules restrict assignment types but do not block overall release
+  // once mandatory training is complete.
+  if (vehicleGaps.length > 0 && mandatoryGaps.length === 0) {
+    warnings.push({
+      code: 'vehicle_training_incomplete',
+      message: `${vehicleGaps.length} vehicle-specific course${vehicleGaps.length === 1 ? '' : 's'} still outstanding (e.g. MiDAS) — some vehicle types stay blocked`,
       severity: 'warning',
       category: 'compliance',
     })
-  } else {
-    for (const req of mandatoryGaps) {
-      failures.push({
-        code: `training_${req.key}`,
-        message: `${name}: ${req.label} — ${req.status.replace(/_/g, ' ')}`,
-        severity: 'block',
-        category: 'compliance',
-      })
-    }
   }
 
   // Preserve non-training warnings from API (e.g. custom overrides)
   for (const w of profile.eligibility?.warnings ?? []) {
-    if (w.code.startsWith('training_') || w.code === 'training_not_started') continue
+    if (
+      w.code.startsWith('training_') ||
+      w.code === 'training_not_started' ||
+      w.code === 'vehicle_training_incomplete'
+    ) {
+      continue
+    }
     if (!warnings.some((x) => x.code === w.code)) warnings.push(w)
   }
 

@@ -19,4 +19,19 @@
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
     </style>
+
+    <!--
+      Required by @capgo/capacitor-native-biometric's AuthActivity (its AndroidManifest.xml
+      references android:theme="@style/AppTheme.Transparent"). Without this style the app
+      crashes with a resource-not-found error every time a biometric-protected read/write
+      launches that activity — i.e. every biometric enable and every biometric unlock.
+    -->
+    <style name="AppTheme.Transparent" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

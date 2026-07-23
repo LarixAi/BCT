@@ -245,7 +245,7 @@ export const LiveOperationsMap = forwardRef<LiveOperationsMapHandle, LiveOperati
           />
 
           {!isMapReady && !mapError && (
-            <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center text-sm text-slate-500">
+            <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center text-sm text-muted">
               Loading map…
             </div>
           )}

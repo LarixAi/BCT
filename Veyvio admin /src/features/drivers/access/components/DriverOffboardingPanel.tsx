@@ -40,22 +40,22 @@ export function DriverOffboardingPanel({
 
       {showOffboard ? (
         <div className="space-y-2 rounded-lg border border-critical/20 bg-critical/5 p-3">
-          <p className="text-sm font-medium text-slate-900">Offboard driver</p>
-          <p className="text-xs text-slate-600">
+          <p className="text-sm font-medium text-ink">Offboard driver</p>
+          <p className="text-xs text-ink-soft">
             Ends sessions, revokes devices, and archives identity. Historical records are retained.
           </p>
           <input
             type="date"
             value={offboardEndDate}
             onChange={(e) => setOffboardEndDate(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="w-full rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <textarea
             value={offboardReason}
             onChange={(e) => setOffboardReason(e.target.value)}
             rows={2}
             placeholder="Reason required"
-            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="w-full rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <button
             type="button"

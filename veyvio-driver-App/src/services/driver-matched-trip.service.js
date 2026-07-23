@@ -45,7 +45,7 @@ export async function findPendingMatchedTripNotification(userId) {
   const supabase = getSupabaseClient();
   const { data } = await supabase
     .from("notifications")
-    .select("id, entity_id, notification_type, status, created_at")
+    .select("id, source_entity_id, notification_type, status, created_at")
     .eq("recipient_user_id", userId)
     .eq("notification_type", "phv_trip_assigned")
     .eq("status", "unread")
@@ -53,7 +53,7 @@ export async function findPendingMatchedTripNotification(userId) {
     .limit(1)
     .maybeSingle();
 
-  return data?.entity_id ? { jobId: data.entity_id, notificationId: data.id } : null;
+  return data?.source_entity_id ? { jobId: data.source_entity_id, notificationId: data.id } : null;
 }
 
 function mapBookingRow(booking) {

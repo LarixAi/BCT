@@ -50,7 +50,7 @@ export function EditBookingPage() {
   })
 
   if (isLoading || !booking) {
-    return <p className="text-sm text-slate-500">Loading…</p>
+    return <p className="text-sm text-muted">Loading…</p>
   }
 
   const working = draft ?? (booking as BookingDraft)
@@ -61,8 +61,8 @@ export function EditBookingPage() {
         <Link to={`/bookings/${id}`} className="text-sm font-medium text-command-600 hover:underline">
           ← Back to booking
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-900">Edit {booking.reference}</h1>
-        <p className="text-sm text-slate-600">Changes are not applied silently — review impact first</p>
+        <h1 className="mt-1 text-2xl font-semibold text-ink">Edit {booking.reference}</h1>
+        <p className="text-sm text-ink-soft">Changes are not applied silently — review impact first</p>
       </div>
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -86,7 +86,7 @@ export function EditBookingPage() {
               type="button"
               onClick={() => setApplyScope(scope)}
               className={`rounded-full px-3 py-1 text-xs font-medium ${
-                applyScope === scope ? 'bg-command-600 text-white' : 'bg-slate-100 text-slate-600'
+                applyScope === scope ? 'bg-command-600 text-white' : 'bg-surface-muted text-ink-soft'
               }`}
             >
               {label}
@@ -108,7 +108,7 @@ export function EditBookingPage() {
 
       {showImpact && impact && (
         <SectionCard title="This change will affect">
-          <ul className="list-inside list-disc space-y-1 text-sm text-slate-700">
+          <ul className="list-inside list-disc space-y-1 text-sm text-ink-soft">
             {impact.items.map((item) => (
               <li key={item}>{item}</li>
             ))}
@@ -137,7 +137,7 @@ export function EditBookingPage() {
         >
           Save changes
         </button>
-        <Link to={`/bookings/${id}`} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium">
+        <Link to={`/bookings/${id}`} className="rounded-lg border border-border px-4 py-2 text-sm font-medium">
           Cancel
         </Link>
       </div>

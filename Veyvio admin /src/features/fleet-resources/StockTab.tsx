@@ -24,15 +24,15 @@ export function StockTab({ hub }: { hub: FleetResourcesHubData }) {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Depot stock</h2>
-        <p className="text-sm text-slate-600">
+        <h2 className="text-lg font-semibold text-ink">Depot stock</h2>
+        <p className="text-sm text-ink-soft">
           Levels move only through ledger transactions — purchases, issues, transfers and adjustments.
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-3 py-2">Depot</th>
               <th className="px-3 py-2">Resource</th>
@@ -45,7 +45,7 @@ export function StockTab({ hub }: { hub: FleetResourcesHubData }) {
           </thead>
           <tbody>
             {hub.stock.map((s) => (
-              <tr key={s.id} className="border-t border-slate-100">
+              <tr key={s.id} className="border-t border-border">
                 <td className="px-3 py-2">{s.depotName}</td>
                 <td className="px-3 py-2 font-medium">{s.resourceName}</td>
                 <td className="px-3 py-2">{RESOURCE_CATEGORY_LABEL[s.category]}</td>
@@ -71,10 +71,10 @@ export function StockTab({ hub }: { hub: FleetResourcesHubData }) {
       </div>
 
       <section className="space-y-3">
-        <h3 className="text-base font-semibold text-slate-900">Stock transfers</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <h3 className="text-base font-semibold text-ink">Stock transfers</h3>
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-3 py-2">Resource</th>
                 <th className="px-3 py-2">Qty</th>
@@ -88,13 +88,13 @@ export function StockTab({ hub }: { hub: FleetResourcesHubData }) {
             <tbody>
               {hub.stockTransfers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={7} className="px-3 py-6 text-center text-muted">
                     No transfers in progress.
                   </td>
                 </tr>
               ) : (
                 hub.stockTransfers.map((t) => (
-                  <tr key={t.id} className="border-t border-slate-100">
+                  <tr key={t.id} className="border-t border-border">
                     <td className="px-3 py-2 font-medium">{t.resourceName}</td>
                     <td className="px-3 py-2 tabular-nums">
                       {t.quantity}

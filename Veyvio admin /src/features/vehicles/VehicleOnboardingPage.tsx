@@ -44,7 +44,7 @@ export function VehicleOnboardingPage() {
     },
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading…</p>
   if (isError || !vehicle) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Vehicle not found'}</p>
   }
@@ -63,7 +63,7 @@ export function VehicleOnboardingPage() {
       <VehicleProfileHeader
         vehicle={vehicle}
         actions={
-          <Link to={`/vehicles/${vehicle.id}`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <Link to={`/vehicles/${vehicle.id}`} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted">
             View profile
           </Link>
         }
@@ -72,10 +72,10 @@ export function VehicleOnboardingPage() {
       <SectionCard title="Onboarding wizard" description="Eight stages from identity verification to release approval">
         <div className="mb-6">
           <div className="mb-1 flex justify-between text-sm">
-            <span className="font-medium text-slate-700">Progress</span>
-            <span className="text-slate-600">{progress}%</span>
+            <span className="font-medium text-ink-soft">Progress</span>
+            <span className="text-ink-soft">{progress}%</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
             <div className="h-full rounded-full bg-command-600 transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>
@@ -104,16 +104,16 @@ export function VehicleOnboardingPage() {
                       ? 'border-emerald-200 bg-emerald-50/50'
                       : isCurrent
                         ? 'border-command-300 bg-command-50/40'
-                        : 'border-slate-200 bg-white'
+                        : 'border-border bg-surface'
                   }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-slate-500">Stage {index + 1}</p>
-                      <p className="font-medium text-slate-900">{stage.label}</p>
-                      <p className="mt-1 text-sm text-slate-600">{stage.description}</p>
+                      <p className="text-xs font-medium text-muted">Stage {index + 1}</p>
+                      <p className="font-medium text-ink">{stage.label}</p>
+                      <p className="mt-1 text-sm text-ink-soft">{stage.description}</p>
                       {hint && isCurrent && (
-                        <p className="mt-2 text-sm text-slate-700">
+                        <p className="mt-2 text-sm text-ink-soft">
                           {hint.text}
                           {hint.href && (
                             <Link to={`/vehicles/${vehicle.id}?tab=${hint.href}`} className="ml-2 font-medium text-command-600 hover:underline">
@@ -126,7 +126,7 @@ export function VehicleOnboardingPage() {
                         <OnboardingChecklist checks={checks} vehicleId={vehicle.id} showOnlyIncomplete={stage.status === 'complete'} />
                       )}
                       {stage.completedAt && (
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-muted">
                           Completed {new Date(stage.completedAt).toLocaleString('en-GB')}
                           {stage.completedBy && ` by ${stage.completedBy}`}
                         </p>
@@ -196,13 +196,13 @@ function OnboardingChecklist({
   if (items.length === 0) return null
 
   return (
-    <ul className="mt-3 space-y-1 rounded-lg border border-slate-200 bg-white/80 p-3 text-sm">
+    <ul className="mt-3 space-y-1 rounded-lg border border-border bg-surface/80 p-3 text-sm">
       {items.map((check) => (
         <li key={check.id} className="flex items-start gap-2">
-          <span className={check.met ? 'text-emerald-600' : 'text-slate-400'} aria-hidden>
+          <span className={check.met ? 'text-emerald-600' : 'text-muted'} aria-hidden>
             {check.met ? '✓' : '○'}
           </span>
-          <span className={check.met ? 'text-slate-600 line-through' : 'text-slate-800'}>
+          <span className={check.met ? 'text-ink-soft line-through' : 'text-ink'}>
             {check.label}
             {!check.met && check.href && (
               <Link to={`/vehicles/${vehicleId}?tab=${check.href}`} className="ml-2 text-command-600 hover:underline">
@@ -220,7 +220,7 @@ function StageBadge({ status }: { status: VehicleProfile['onboarding']['stages']
   const styles = {
     complete: 'bg-emerald-100 text-emerald-800',
     in_progress: 'bg-command-100 text-command-800',
-    pending: 'bg-slate-100 text-slate-600',
+    pending: 'bg-surface-muted text-ink-soft',
     blocked: 'bg-red-100 text-red-800',
   }
   const labels = {

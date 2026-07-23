@@ -91,7 +91,7 @@ export function DigitalPmiForm({
   if (!checklist) {
     return (
       <SectionCard title="Digital PMI" description="Checklist not initialised on this work order">
-        <p className="text-sm text-slate-600">Create or open a PMI work order to start the digital form.</p>
+        <p className="text-sm text-ink-soft">Create or open a PMI work order to start the digital form.</p>
       </SectionCard>
     )
   }
@@ -106,18 +106,18 @@ export function DigitalPmiForm({
     >
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <StatusPill status={complete ? 'pass' : workOrder.status} />
-        <span className="tabular-nums text-slate-700">
+        <span className="tabular-nums text-ink-soft">
           {progress.answered}/{progress.total} items · {progress.failed} fail · {progress.advisory} advisory
         </span>
         {onClose && (
-          <button type="button" onClick={onClose} className="ml-auto text-xs font-medium text-slate-600 hover:underline">
+          <button type="button" onClick={onClose} className="ml-auto text-xs font-medium text-ink-soft hover:underline">
             Close form
           </button>
         )}
       </div>
 
       <label className="mb-4 block max-w-md text-sm">
-        <span className="text-slate-600">Inspector name</span>
+        <span className="text-ink-soft">Inspector name</span>
         <input
           value={inspectorName}
           onChange={(e) => setInspectorName(e.target.value)}
@@ -129,7 +129,7 @@ export function DigitalPmiForm({
               })
             }
           }}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+          className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
         />
       </label>
 
@@ -137,7 +137,7 @@ export function DigitalPmiForm({
         <nav className="space-y-3 text-sm">
           {sections.map(([section, items]) => (
             <div key={section}>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{section}</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{section}</p>
               <ul className="space-y-0.5">
                 {items.map((item) => {
                   const row = checklist.items.find((i) => i.templateItemId === item.id)
@@ -147,11 +147,11 @@ export function DigitalPmiForm({
                         type="button"
                         onClick={() => setActiveId(item.id)}
                         className={`w-full rounded-md px-2 py-1.5 text-left ${
-                          activeId === item.id ? 'bg-command-50 text-command-800 ring-1 ring-command-500' : 'hover:bg-slate-50'
+                          activeId === item.id ? 'bg-command-50 text-command-800 ring-1 ring-command-500' : 'hover:bg-surface-muted'
                         }`}
                       >
                         <span className="block truncate">{item.label}</span>
-                        <span className="text-[11px] text-slate-500">{row?.result ?? 'unchecked'}</span>
+                        <span className="text-[11px] text-muted">{row?.result ?? 'unchecked'}</span>
                       </button>
                     </li>
                   )
@@ -162,10 +162,10 @@ export function DigitalPmiForm({
         </nav>
 
         {activeTemplate && activeResult && (
-          <div className="space-y-3 rounded-xl border border-slate-200 p-4 text-sm">
+          <div className="space-y-3 rounded-xl border border-border p-4 text-sm">
             <div>
-              <h3 className="font-semibold text-slate-900">{activeTemplate.label}</h3>
-              {activeTemplate.helpText && <p className="mt-1 text-xs text-slate-500">{activeTemplate.helpText}</p>}
+              <h3 className="font-semibold text-ink">{activeTemplate.label}</h3>
+              {activeTemplate.helpText && <p className="mt-1 text-xs text-muted">{activeTemplate.helpText}</p>}
               {activeTemplate.required && <p className="mt-1 text-xs font-medium text-amber-800">Required</p>}
               {activeTemplate.requiresBrakeEvidence && (
                 <p className="mt-1 text-xs font-medium text-red-800">Brake performance evidence required</p>
@@ -173,7 +173,7 @@ export function DigitalPmiForm({
             </div>
 
             <fieldset>
-              <legend className="text-xs font-medium text-slate-600">Result</legend>
+              <legend className="text-xs font-medium text-ink-soft">Result</legend>
               <div className="mt-1 flex flex-wrap gap-2">
                 {RESULT_OPTIONS.filter((o) => o.id !== 'unchecked' || activeResult.result === 'unchecked').map((opt) => (
                   <button
@@ -190,7 +190,7 @@ export function DigitalPmiForm({
                     className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
                       activeResult.result === opt.id
                         ? 'border-command-500 bg-command-50 text-command-800'
-                        : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                        : 'border-border text-ink-soft hover:bg-surface-muted'
                     }`}
                   >
                     {opt.label}
@@ -200,7 +200,7 @@ export function DigitalPmiForm({
             </fieldset>
 
             <label className="block">
-              <span className="text-xs text-slate-600">Item notes</span>
+              <span className="text-xs text-ink-soft">Item notes</span>
               <textarea
                 defaultValue={activeResult.notes ?? ''}
                 key={`${activeTemplate.id}-notes-${activeResult.notes}`}
@@ -211,13 +211,13 @@ export function DigitalPmiForm({
                   }
                 }}
                 rows={2}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               />
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="text-xs text-slate-600">Evidence type</span>
+                <span className="text-xs text-ink-soft">Evidence type</span>
                 <select
                   value={activeResult.evidence.kind}
                   onChange={(e) =>
@@ -227,7 +227,7 @@ export function DigitalPmiForm({
                       inspectorName,
                     })
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 >
                   {EVIDENCE_OPTIONS.map((o) => (
                     <option key={o.id} value={o.id}>
@@ -237,7 +237,7 @@ export function DigitalPmiForm({
                 </select>
               </label>
               <label className="block">
-                <span className="text-xs text-slate-600">Evidence file name (stub)</span>
+                <span className="text-xs text-ink-soft">Evidence file name (stub)</span>
                 <input
                   defaultValue={activeResult.evidence.fileName ?? ''}
                   key={`${activeTemplate.id}-file-${activeResult.evidence.fileName}`}
@@ -258,13 +258,13 @@ export function DigitalPmiForm({
                       })
                     }
                   }}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 />
               </label>
             </div>
 
             <label className="block">
-              <span className="text-xs text-slate-600">Evidence note</span>
+              <span className="text-xs text-ink-soft">Evidence note</span>
               <input
                 defaultValue={activeResult.evidence.note ?? ''}
                 key={`${activeTemplate.id}-evnote-${activeResult.evidence.note}`}
@@ -279,14 +279,14 @@ export function DigitalPmiForm({
                     })
                   }
                 }}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               />
             </label>
           </div>
         )}
       </div>
 
-      <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+      <div className="mt-4 space-y-2 border-t border-border pt-4">
         {!complete && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             <p className="font-medium">Cannot complete PMI yet</p>

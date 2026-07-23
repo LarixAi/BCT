@@ -57,7 +57,7 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
       >
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+            <tr className="border-b border-border text-xs uppercase text-muted">
               <th className="pb-2 pr-3 font-medium">Vehicle</th>
               <th className="pb-2 pr-3 font-medium">Component</th>
               <th className="pb-2 pr-3 font-medium">Description</th>
@@ -71,7 +71,7 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
           </thead>
           <tbody>
             {defects.map((d) => (
-              <tr key={d.id} className="border-b border-slate-50 hover:bg-slate-50">
+              <tr key={d.id} className="border-b border-border/60 hover:bg-surface-muted">
                 <td className="py-2.5 pr-3">
                   <Link to={`/vehicles/${d.vehicleId}?tab=Defects`} className="font-medium text-command-600 hover:underline">
                     {d.registrationNumber}
@@ -81,7 +81,7 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
                 <td className="py-2.5 pr-3 max-w-[220px] truncate">{d.description}</td>
                 <td className="py-2.5 pr-3">{DEFECT_SEVERITY_LABELS[d.severity]}</td>
                 <td className="py-2.5 pr-3"><StatusPill status={d.status} /></td>
-                <td className="py-2.5 pr-3 capitalize text-slate-600">{d.triageStatus.replace(/_/g, ' ')}</td>
+                <td className="py-2.5 pr-3 capitalize text-ink-soft">{d.triageStatus.replace(/_/g, ' ')}</td>
                 <td className="py-2.5 pr-3">
                   {d.linkedWorkOrderId ? (
                     <Link
@@ -91,10 +91,10 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
                       {d.linkedWorkOrderId}
                     </Link>
                   ) : (
-                    <span className="text-slate-400">—</span>
+                    <span className="text-muted">—</span>
                   )}
                 </td>
-                <td className="py-2.5 pr-3 text-slate-600">{d.operationalImpact}</td>
+                <td className="py-2.5 pr-3 text-ink-soft">{d.operationalImpact}</td>
                 <td className="py-2.5">
                   {d.status !== 'closed' && d.triageStatus === 'pending' && (
                     <button type="button" onClick={() => setSelected(d)} className="text-xs font-medium text-command-600 hover:underline">
@@ -112,11 +112,11 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
         <SectionCard title={`Triage defect — ${selected.registrationNumber}`} description={selected.description}>
           <div className="space-y-3 text-sm">
             <label className="block">
-              <span className="text-slate-600">Triage decision</span>
+              <span className="text-ink-soft">Triage decision</span>
               <select
                 value={triageStatus}
                 onChange={(e) => setTriageStatus(e.target.value as DefectTriageStatus)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
               >
                 <option value="validated">Validated — raise work</option>
                 <option value="deferred">Deferred</option>
@@ -125,8 +125,8 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
               </select>
             </label>
             <label className="block">
-              <span className="text-slate-600">Notes</span>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" rows={2} />
+              <span className="text-ink-soft">Notes</span>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" rows={2} />
             </label>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={createWorkOrder} onChange={(e) => setCreateWorkOrder(e.target.checked)} />
@@ -145,7 +145,7 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
               >
                 Confirm triage
               </button>
-              <button type="button" onClick={() => setSelected(null)} className="rounded-lg px-4 py-2 text-sm text-slate-600">
+              <button type="button" onClick={() => setSelected(null)} className="rounded-lg px-4 py-2 text-sm text-ink-soft">
                 Cancel
               </button>
             </div>

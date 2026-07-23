@@ -72,7 +72,7 @@ export default function DriverSupabaseDocuments({ driver }) {
     try {
       const command = await listDocumentsViaCommand();
       setWired(Boolean(command.ok));
-      const rows = await loadDriverDocuments(driver.id);
+      const rows = await loadDriverDocuments(driver.id, { driver });
       setDocuments(rows);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load documents");

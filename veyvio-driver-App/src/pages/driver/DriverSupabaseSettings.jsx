@@ -5,6 +5,7 @@ import DriverOperationalHeader from "@/components/driver/operational/DriverOpera
 import DriverPhvContractTab from "@/components/driver/settings/DriverPhvContractTab";
 import DriverPcoDocumentsTab from "@/components/driver/settings/DriverPcoDocumentsTab";
 import SettingsWorkSetupCards from "@/components/driver/settings/SettingsWorkSetupCards";
+import SecurityAndSignInSection from "@/components/driver/settings/SecurityAndSignInSection";
 import {
   SettingsContactRow,
   SettingsDetailRows,
@@ -341,6 +342,8 @@ export default function DriverSupabaseSettings({ driver }) {
                 </div>
               </section>
             ) : null}
+
+            <SecurityAndSignInSection driver={driver} />
 
             <section>
               <DriverSectionTitle>More</DriverSectionTitle>

@@ -34,7 +34,7 @@ export function StaffPage() {
     setSearchParams(searchParams, { replace: true })
   }
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading staff…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading staff…</p>
   if (isError || !hub) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load staff'}</p>
   }
@@ -81,8 +81,8 @@ export function StaffPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Staff</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Staff</h1>
+          <p className="text-sm text-ink-soft">
             Manage internal staff, depot access, roles, training and user accounts.
           </p>
         </div>
@@ -105,23 +105,23 @@ export function StaffPage() {
             className={`rounded-xl border p-3 text-left transition ${
               filter === card.filterKey && tab === 'all'
                 ? 'border-command-500 bg-command-50 ring-1 ring-command-500'
-                : 'border-slate-200 bg-white hover:border-slate-300'
+                : 'border-border bg-surface hover:border-border-strong'
             }`}
           >
-            <p className="text-xl font-bold tabular-nums text-slate-900">{summary[card.id]}</p>
-            <p className="text-xs text-slate-600">{card.label}</p>
+            <p className="text-xl font-bold tabular-nums text-ink">{summary[card.id]}</p>
+            <p className="text-xs text-ink-soft">{card.label}</p>
           </button>
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {STAFF_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === t.id ? 'bg-white text-command-700 ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900'
+              tab === t.id ? 'bg-surface text-command-700 ring-1 ring-border' : 'text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}

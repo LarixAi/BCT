@@ -19,8 +19,8 @@ const MARK_CELL: Record<CalendarDayMark, string> = {
   sick: 'bg-violet-100 text-violet-950',
   approved_leave: 'bg-sky-100 text-sky-950',
   unauthorised: 'bg-red-100 text-red-900',
-  rest: 'bg-slate-50 text-slate-400',
-  empty: 'bg-white text-slate-300',
+  rest: 'bg-surface-muted text-muted',
+  empty: 'bg-surface text-muted',
 }
 
 const MARK_GLYPH: Record<CalendarDayMark, string> = {
@@ -51,11 +51,11 @@ export function PersonAttendancePanel({
       api.getAttendancePersonProfile({ personId, personName }),
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading attendance…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading attendance…</p>
   if (!profile?.score || typeof profile.score.score !== 'number') {
     return (
       <SectionCard title="Attendance">
-        <p className="text-sm text-slate-500">No attendance profile for this person yet.</p>
+        <p className="text-sm text-muted">No attendance profile for this person yet.</p>
       </SectionCard>
     )
   }
@@ -95,7 +95,7 @@ export function PersonAttendancePanel({
                   'rounded-full px-2.5 py-1 text-xs font-medium',
                   period === opt.id
                     ? 'bg-command-600 text-white'
-                    : 'border border-slate-200 bg-white text-slate-600',
+                    : 'border border-border bg-surface text-ink-soft',
                 )}
               >
                 {opt.label}
@@ -107,14 +107,14 @@ export function PersonAttendancePanel({
         <button
           type="button"
           onClick={() => setShowScoreDetail((v) => !v)}
-          className="flex w-full flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left hover:border-command-400"
+          className="flex w-full flex-wrap items-end justify-between gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3 text-left hover:border-command-400"
         >
           <div>
-            <p className="text-3xl font-semibold tabular-nums text-slate-900">
+            <p className="text-3xl font-semibold tabular-nums text-ink">
               {p.score.score}
-              <span className="text-lg font-medium text-slate-500"> / 100</span>
+              <span className="text-lg font-medium text-muted"> / 100</span>
             </p>
-            <p className="text-sm font-medium text-slate-700">
+            <p className="text-sm font-medium text-ink-soft">
               {SCORE_BAND_LABEL[p.score.band] ?? 'Score'}
               {p.liveStatus ? ` · Today: ${ATTENDANCE_STATUS_LABEL[p.liveStatus]}` : ''}
             </p>
@@ -126,7 +126,7 @@ export function PersonAttendancePanel({
 
         {showScoreDetail && (
           <div className="mt-3 space-y-2">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted">
               Weights: attendance 40% · punctuality 30% · unauthorised 15% · missed clock-ins 5% ·
               early departure 5% · evidence 5%. Approved leave and certified sickness do not reduce
               the score.
@@ -135,18 +135,18 @@ export function PersonAttendancePanel({
               {scoreContributors.map((c) => (
                 <li
                   key={c.id}
-                  className="flex justify-between gap-3 rounded-lg border border-slate-100 px-3 py-2"
+                  className="flex justify-between gap-3 rounded-lg border border-border px-3 py-2"
                 >
                   <div>
-                    <p className="font-medium text-slate-900">{c.label}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="font-medium text-ink">{c.label}</p>
+                    <p className="text-xs text-muted">
                       {c.date} · {c.category}
                     </p>
                   </div>
                   <span
                     className={cn(
                       'tabular-nums font-semibold',
-                      c.impact < 0 ? 'text-red-700' : c.impact > 0 ? 'text-emerald-700' : 'text-slate-500',
+                      c.impact < 0 ? 'text-red-700' : c.impact > 0 ? 'text-emerald-700' : 'text-muted',
                     )}
                   >
                     {c.impact > 0 ? `+${c.impact}` : c.impact}
@@ -173,7 +173,7 @@ export function PersonAttendancePanel({
       <SectionCard title="Attendance calendar" description={`${monthLabel(calendarMonth)}`}>
         <div className="grid grid-cols-7 gap-1 text-center text-xs">
           {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-            <div key={`${d}-${i}`} className="py-1 font-semibold text-slate-500">
+            <div key={`${d}-${i}`} className="py-1 font-semibold text-muted">
               {d}
             </div>
           ))}
@@ -194,7 +194,7 @@ export function PersonAttendancePanel({
             ),
           )}
         </div>
-        <p className="mt-3 text-xs text-slate-500">
+        <p className="mt-3 text-xs text-muted">
           ✓ On time · L Late · S Sick · A Approved leave · U Unauthorised · — Rest
         </p>
       </SectionCard>
@@ -202,15 +202,15 @@ export function PersonAttendancePanel({
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard title="Upcoming leave">
           {upcomingLeave.length === 0 ? (
-            <p className="text-sm text-slate-500">None</p>
+            <p className="text-sm text-muted">None</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {upcomingLeave.map((l) => (
-                <li key={l.id} className="rounded-lg border border-slate-200 px-3 py-2">
-                  <p className="font-medium text-slate-900">
+                <li key={l.id} className="rounded-lg border border-border px-3 py-2">
+                  <p className="font-medium text-ink">
                     {l.startDate === l.endDate ? l.startDate : `${l.startDate} → ${l.endDate}`}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted">
                     {l.status.replace(/_/g, ' ')} · {l.leaveType.replace(/_/g, ' ')}
                   </p>
                 </li>
@@ -224,7 +224,7 @@ export function PersonAttendancePanel({
 
         <SectionCard title="Return-to-work">
           {returnToWork.length === 0 ? (
-            <p className="text-sm text-slate-500">No outstanding interviews</p>
+            <p className="text-sm text-muted">No outstanding interviews</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {returnToWork.map((r) => (
@@ -232,11 +232,11 @@ export function PersonAttendancePanel({
                   key={r.id}
                   className={cn(
                     'rounded-lg border px-3 py-2',
-                    r.completed ? 'border-slate-200' : 'border-amber-200 bg-amber-50',
+                    r.completed ? 'border-border' : 'border-amber-200 bg-amber-50',
                   )}
                 >
                   <p className="font-medium">{r.summary}</p>
-                  <p className="text-xs text-slate-500">{r.date}</p>
+                  <p className="text-xs text-muted">{r.date}</p>
                 </li>
               ))}
             </ul>
@@ -246,15 +246,15 @@ export function PersonAttendancePanel({
 
       <SectionCard title="Recent attendance events">
         {recentEvents.length === 0 ? (
-          <p className="text-sm text-slate-500">No recent events</p>
+          <p className="text-sm text-muted">No recent events</p>
         ) : (
           <ol className="space-y-2 text-sm">
             {recentEvents.map((e) => (
-              <li key={e.id} className="flex gap-3 border-b border-slate-50 pb-2">
-                <span className="w-14 shrink-0 font-mono text-xs text-slate-500">
+              <li key={e.id} className="flex gap-3 border-b border-border/60 pb-2">
+                <span className="w-14 shrink-0 font-mono text-xs text-muted">
                   {new Date(e.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                 </span>
-                <span className="text-slate-800">{e.label}</span>
+                <span className="text-ink">{e.label}</span>
               </li>
             ))}
           </ol>
@@ -264,13 +264,13 @@ export function PersonAttendancePanel({
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard title="Manager notes">
           {managerNotes.length === 0 ? (
-            <p className="text-sm text-slate-500">No notes</p>
+            <p className="text-sm text-muted">No notes</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {managerNotes.map((n) => (
-                <li key={n.id} className="rounded-lg border border-slate-100 px-3 py-2">
-                  <p className="text-slate-800">{n.note}</p>
-                  <p className="mt-1 text-xs text-slate-500">
+                <li key={n.id} className="rounded-lg border border-border px-3 py-2">
+                  <p className="text-ink">{n.note}</p>
+                  <p className="mt-1 text-xs text-muted">
                     {n.author} · {new Date(n.at).toLocaleString('en-GB')}
                   </p>
                 </li>
@@ -281,16 +281,16 @@ export function PersonAttendancePanel({
 
         <SectionCard title="Adjustments and disputes">
           {adjustments.length === 0 ? (
-            <p className="text-sm text-slate-500">No adjustments</p>
+            <p className="text-sm text-muted">No adjustments</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {adjustments.map((a) => (
-                <li key={a.id} className="rounded-lg border border-slate-100 px-3 py-2">
-                  <p className="font-medium text-slate-900">
+                <li key={a.id} className="rounded-lg border border-border px-3 py-2">
+                  <p className="font-medium text-ink">
                     {a.original} → {a.corrected}
                   </p>
-                  <p className="text-slate-700">{a.reason}</p>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="text-ink-soft">{a.reason}</p>
+                  <p className="mt-1 text-xs text-muted">
                     {a.actor} · {new Date(a.at).toLocaleString('en-GB')}
                   </p>
                 </li>
@@ -301,7 +301,7 @@ export function PersonAttendancePanel({
       </div>
 
       {profileHref && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted">
           Linked profile:{' '}
           <Link to={profileHref} className="font-medium text-command-700 hover:underline">
             {personName}
@@ -326,8 +326,8 @@ export function PersonAttendancePanel({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

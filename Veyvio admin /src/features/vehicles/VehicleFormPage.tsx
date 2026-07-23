@@ -98,15 +98,15 @@ export function VehicleFormPage() {
     onError: (err) => setError(err instanceof Error ? err.message : 'Could not save vehicle'),
   })
 
-  if (!isEdit) return <p className="text-sm text-slate-500">Redirecting to Add vehicle wizard…</p>
-  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>
+  if (!isEdit) return <p className="text-sm text-muted">Redirecting to Add vehicle wizard…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading…</p>
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <VehicleBackLink />
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Edit vehicle</h1>
-        <p className="text-sm text-slate-600">
+        <h1 className="text-2xl font-semibold text-ink">Edit vehicle</h1>
+        <p className="text-sm text-ink-soft">
           Update vehicle identity and specification. Release status is recalculated automatically.
         </p>
       </div>
@@ -116,28 +116,28 @@ export function VehicleFormPage() {
       <SectionCard title="Identity">
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm">
-            <span className="text-slate-600">Registration</span>
+            <span className="text-ink-soft">Registration</span>
             <input
               required
               value={registrationNumber}
               onChange={(e) => setRegistrationNumber(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Fleet number</span>
+            <span className="text-ink-soft">Fleet number</span>
             <input
               value={fleetNumber}
               onChange={(e) => setFleetNumber(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
           <label className="block text-sm sm:col-span-2">
-            <span className="text-slate-600">VIN / chassis number</span>
+            <span className="text-ink-soft">VIN / chassis number</span>
             <input
               value={vin}
               onChange={(e) => setVin(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2"
             />
           </label>
         </div>
@@ -146,39 +146,39 @@ export function VehicleFormPage() {
       <SectionCard title="Specification">
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm">
-            <span className="text-slate-600">Make</span>
-            <input required value={make} onChange={(e) => setMake(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+            <span className="text-ink-soft">Make</span>
+            <input required value={make} onChange={(e) => setMake(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Model</span>
-            <input required value={model} onChange={(e) => setModel(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+            <span className="text-ink-soft">Model</span>
+            <input required value={model} onChange={(e) => setModel(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Category</span>
-            <select value={vehicleCategory} onChange={(e) => setVehicleCategory(e.target.value as VehicleCategory)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+            <span className="text-ink-soft">Category</span>
+            <select value={vehicleCategory} onChange={(e) => setVehicleCategory(e.target.value as VehicleCategory)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
               {Object.entries(VEHICLE_CATEGORY_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Home depot</span>
-            <select value={homeDepotId} onChange={(e) => setHomeDepotId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+            <span className="text-ink-soft">Home depot</span>
+            <select value={homeDepotId} onChange={(e) => setHomeDepotId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
               <option value="depot-wembley">Wembley Depot</option>
               <option value="depot-croydon">Croydon Depot</option>
             </select>
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Seating capacity</span>
-            <input type="number" min={1} value={seatingCapacity} onChange={(e) => setSeatingCapacity(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+            <span className="text-ink-soft">Seating capacity</span>
+            <input type="number" min={1} value={seatingCapacity} onChange={(e) => setSeatingCapacity(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Wheelchair positions</span>
-            <input type="number" min={0} value={wheelchairCapacity} onChange={(e) => setWheelchairCapacity(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+            <span className="text-ink-soft">Wheelchair positions</span>
+            <input type="number" min={0} value={wheelchairCapacity} onChange={(e) => setWheelchairCapacity(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600">Fuel type</span>
-            <select value={fuelType} onChange={(e) => setFuelType(e.target.value as FuelType)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+            <span className="text-ink-soft">Fuel type</span>
+            <select value={fuelType} onChange={(e) => setFuelType(e.target.value as FuelType)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
               {Object.entries(FUEL_TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
@@ -186,8 +186,8 @@ export function VehicleFormPage() {
           </label>
           {!isEdit && (
             <label className="block text-sm">
-              <span className="text-slate-600">Ownership</span>
-              <select value={ownershipType} onChange={(e) => setOwnershipType(e.target.value as OwnershipType)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2">
+              <span className="text-ink-soft">Ownership</span>
+              <select value={ownershipType} onChange={(e) => setOwnershipType(e.target.value as OwnershipType)} className="mt-1 w-full rounded-lg border border-border px-3 py-2">
                 {Object.entries(OWNERSHIP_TYPE_LABELS).map(([k, v]) => (
                   <option key={k} value={k}>{v}</option>
                 ))}
@@ -196,8 +196,8 @@ export function VehicleFormPage() {
           )}
           {isEdit && (
             <label className="block text-sm">
-              <span className="text-slate-600">Mileage</span>
-              <input type="number" value={mileage} onChange={(e) => setMileage(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2" />
+              <span className="text-ink-soft">Mileage</span>
+              <input type="number" value={mileage} onChange={(e) => setMileage(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-2" />
             </label>
           )}
         </div>

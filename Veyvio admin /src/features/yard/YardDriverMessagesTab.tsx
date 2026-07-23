@@ -34,15 +34,15 @@ export function YardDriverMessagesTab({ hub }: { hub: YardHubData }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
       <SectionCard title="Driver → Yard messages">
-        <p className="mb-3 text-sm text-slate-600">
+        <p className="mb-3 text-sm text-ink-soft">
           Messages drivers send to Yard (or both). Replies show in the Driver app from Yard.
         </p>
         {messages.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-600">
+          <p className="rounded-lg border border-dashed border-border bg-surface-muted px-3 py-6 text-center text-sm text-ink-soft">
             No yard messages yet. Drivers choose “Yard” or “Dispatch and Yard” in Contact ops.
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-border">
             {messages.map((m) => (
               <li key={`${m.id}-${m.sentAt}`}>
                 <button
@@ -52,9 +52,9 @@ export function YardDriverMessagesTab({ hub }: { hub: YardHubData }) {
                     selected?.conversationId === m.conversationId ? 'bg-command-50' : ''
                   }`}
                 >
-                  <p className="font-medium text-slate-900">{m.driverName}</p>
-                  <p className="text-sm text-slate-700">{m.subject}</p>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{m.body}</p>
+                  <p className="font-medium text-ink">{m.driverName}</p>
+                  <p className="text-sm text-ink-soft">{m.subject}</p>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted">{m.body}</p>
                 </button>
               </li>
             ))}
@@ -76,15 +76,15 @@ export function YardDriverMessagesTab({ hub }: { hub: YardHubData }) {
         }
       >
         {!selected ? (
-          <p className="text-sm text-slate-500">Select a message to reply.</p>
+          <p className="text-sm text-muted">Select a message to reply.</p>
         ) : (
           <div className="space-y-3">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div className="rounded-lg border border-border bg-surface-muted p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                 {selected.driverName} · {selected.sourceApp || 'DRIVER'}
               </p>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{selected.body}</p>
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 whitespace-pre-wrap text-sm text-ink">{selected.body}</p>
+              <p className="mt-2 text-xs text-muted">
                 {selected.sentAt
                   ? new Date(selected.sentAt).toLocaleString('en-GB')
                   : '—'}
@@ -94,7 +94,7 @@ export function YardDriverMessagesTab({ hub }: { hub: YardHubData }) {
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               rows={4}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm"
               placeholder="Reply as Yard…"
             />
             {error ? <p className="text-sm text-red-600">{error}</p> : null}

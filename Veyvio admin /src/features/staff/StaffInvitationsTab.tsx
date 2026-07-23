@@ -7,11 +7,11 @@ export function StaffInvitationsTab({ invitations }: { invitations: StaffDirecto
   return (
     <SectionCard title="Pending invitations" description="Staff who have been added but have not activated their accounts">
       {invitations.length === 0 ? (
-        <p className="text-sm text-slate-500">No pending invitations.</p>
+        <p className="text-sm text-muted">No pending invitations.</p>
       ) : (
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+            <tr className="border-b border-border text-xs uppercase text-muted">
               <th className="pb-2 pr-3 font-medium">Staff member</th>
               <th className="pb-2 pr-3 font-medium">Role</th>
               <th className="pb-2 pr-3 font-medium">Depot</th>
@@ -21,7 +21,7 @@ export function StaffInvitationsTab({ invitations }: { invitations: StaffDirecto
           </thead>
           <tbody>
             {invitations.map((row) => (
-              <tr key={row.staffId} className="border-b border-slate-50">
+              <tr key={row.staffId} className="border-b border-border/60">
                 <td className="py-2.5 pr-3">
                   <Link to={`/staff/${row.staffId}?tab=Account`} className="font-medium text-command-600 hover:underline">
                     {row.firstName} {row.lastName}

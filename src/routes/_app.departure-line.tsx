@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useYard } from "@/store/yard";
 import { drivers } from "@/data/fixtures";
@@ -47,6 +47,11 @@ function DepartureLine() {
       <SectionHeader
         title={`Departure Line · ${trips.length}`}
         sub={`${ready.length} ready · ${blocked.length} blocked · ${departed.length} departed · ${onLine.length} staged`}
+        action={
+          <Link to="/plan" className="text-[10px] font-bold uppercase tracking-widest text-primary">
+            Day plan →
+          </Link>
+        }
       />
 
       <section className="space-y-2">

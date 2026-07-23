@@ -35,18 +35,18 @@ export function PublishDutyDialog({
     : 'End of day before service'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">Publish duty to {driverName}?</h2>
-        <p className="mt-2 text-sm text-slate-600">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-midnight/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-surface p-5 shadow-xl">
+        <h2 className="text-lg font-semibold text-ink">Publish duty to {driverName}?</h2>
+        <p className="mt-2 text-sm text-ink-soft">
           {duty.dutyDate}, {formatTime(duty.startTime)}–{formatTime(duty.endTime)}
         </p>
-        <ul className="mt-3 space-y-1 text-sm text-slate-700">
+        <ul className="mt-3 space-y-1 text-sm text-ink-soft">
           <li>Vehicle {vehicle}</li>
           <li>{duty.route?.name ?? duty.reference}</li>
           <li>Driver acknowledgement required by: {deadline}</li>
         </ul>
-        <p className="mt-3 text-xs text-slate-500">
+        <p className="mt-3 text-xs text-muted">
           Once published, this duty appears in Veyvio Driver. Draft duties stay hidden from the driver.
         </p>
         {error ? (
@@ -59,7 +59,7 @@ export function PublishDutyDialog({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Cancel
           </button>
@@ -94,7 +94,7 @@ export function publicationBadge(status: string | undefined) {
   if (value === 'cancelled') {
     return {
       label: 'Cancelled',
-      className: 'bg-slate-200 text-slate-700',
+      className: 'bg-surface-muted text-ink-soft',
     }
   }
   return {

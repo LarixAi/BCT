@@ -46,7 +46,7 @@ export function DriverOnboardingLayout({
                   ? 'border-command-500 bg-command-50'
                   : done
                     ? 'border-ready/40 bg-ready/5'
-                    : 'border-border bg-white',
+                    : 'border-border bg-surface',
               )}
             >
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{i + 1}</p>

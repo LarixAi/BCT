@@ -102,10 +102,32 @@ const MOCK_USER: AuthUser = {
   email: 'demo@veyvio.com',
   firstName: 'Larone',
   lastName: 'Laing',
-  platformRole: null,
+  platformRole: 'platform_admin',
   activeTenantId: 'tenant-demo',
   tenantName: 'Metro Transport Ltd',
   tenantStatus: 'ACTIVE',
+  planCode: 'enterprise',
+  subscriptionStatus: 'active',
+  enabledModules: [
+    'identity',
+    'tenancy',
+    'operations',
+    'dispatch',
+    'workforce',
+    'fleet',
+    'yard',
+    'maintenance',
+    'safety',
+    'compliance',
+    'customers',
+    'passengers',
+    'commercial',
+    'communications',
+    'reporting',
+    'integrations',
+    'audit',
+  ],
+  usageLimits: { drivers: null, vehicles: null, depots: null },
   mfaEnabled: true,
   role: 'company_owner',
   permissions: [
@@ -849,7 +871,14 @@ export class MockApiClient {
     ]
   }
 
-  async createInvitation(input: { email: string; roleName?: string }) {
+  async createInvitation(input: {
+    email: string
+    roleName?: string
+    roleIds?: string[]
+    depotIds?: string[]
+    appType?: 'COMMAND' | 'DRIVER' | 'YARD'
+    expiresInDays?: number
+  }) {
     await delay(60)
     return {
       invitation: {
@@ -857,7 +886,7 @@ export class MockApiClient {
         email: input.email,
         expiresAt: new Date(Date.now() + 86400000 * 7).toISOString(),
         status: 'pending',
-        appType: 'COMMAND',
+        appType: input.appType ?? 'COMMAND',
       },
       devInvitationToken: 'demo-invite-token',
     }
@@ -899,11 +928,22 @@ export class MockApiClient {
     return { ok: true }
   }
 
-  async enableMfa() {
+  async enableMfa(input?: { code?: string }) {
     await delay(50)
+    if (input?.code) {
+      if (!/^\d{6}$/.test(input.code.trim())) throw new Error('That authenticator code is incorrect or has expired')
+      return {
+        recoveryCodes: ['AAAA1111', 'BBBB2222', 'CCCC3333', 'DDDD4444', 'EEEE5555', 'FFFF6666', 'GGGG7777', 'HHHH8888'],
+        mfaEnabled: true,
+        status: 'active' as const,
+      }
+    }
     return {
-      recoveryCodes: ['AAAA1111', 'BBBB2222', 'CCCC3333', 'DDDD4444', 'EEEE5555', 'FFFF6666', 'GGGG7777', 'HHHH8888'],
-      mfaEnabled: true,
+      secret: 'JBSWY3DPEHPK3PXP',
+      otpauthUri: 'otpauth://totp/Veyvio%20Command:demo@veyvio.com?secret=JBSWY3DPEHPK3PXP&issuer=Veyvio%20Command&algorithm=SHA1&digits=6&period=30',
+      mfaEnabled: false,
+      status: 'pending' as const,
+      recoveryCodes: [] as string[],
     }
   }
 
@@ -911,8 +951,6 @@ export class MockApiClient {
     challengeId: string
     code: string
     companyId?: string
-    refreshToken?: string
-    accessToken?: string
   }) {
     await delay(50)
     if (!input.challengeId || !input.code) throw new Error('MFA challenge and code are required')
@@ -983,9 +1021,176 @@ export class MockApiClient {
     }>
   }
 
+  async listPlatformCompanies() {
+    await delay(40)
+    return [
+      {
+        id: 'tenant-demo',
+        legalName: 'Metro Transport Ltd',
+        tradingName: 'Metro Transport Ltd',
+        tenantStatus: 'ACTIVE',
+        subscriptionStatus: 'active',
+        planCode: 'enterprise',
+        currentPeriodEnd: null,
+        trialEndsAt: null,
+        timezone: 'Europe/London',
+        createdAt: new Date().toISOString(),
+        activatedAt: new Date().toISOString(),
+      },
+    ]
+  }
+
+  async getPlatformCompany(companyId: string) {
+    await delay(40)
+    const row = (await this.listPlatformCompanies())[0]
+    return {
+      ...row,
+      id: companyId || row.id,
+      gracePeriodEndsAt: null,
+      providerCustomerRef: null,
+      stripeSubscriptionId: null,
+      entitlements: {
+        planCode: 'enterprise',
+        subscriptionStatus: 'active',
+        tenantStatus: 'ACTIVE',
+        enabledModules: MOCK_USER.enabledModules ?? [],
+        usageLimits: { drivers: null, vehicles: null, depots: null },
+      },
+      subscriptionEvents: [],
+      moduleOverrides: [] as import('./types').PlatformModuleOverride[],
+      supportGrants: [] as import('./types').PlatformSupportGrant[],
+    }
+  }
+
+  async patchPlatformCompany(_companyId: string, _body: Record<string, unknown>) {
+    await delay(40)
+    return { ok: true }
+  }
+
+  async listPlatformPlans() {
+    await delay(30)
+    return [
+      { code: 'starter', name: 'Starter', description: 'Core ops', modules: ['operations', 'fleet', 'workforce'] },
+      { code: 'professional', name: 'Professional', description: 'Ops + safety', modules: MOCK_USER.enabledModules ?? [] },
+      { code: 'enterprise', name: 'Enterprise', description: 'Full platform', modules: MOCK_USER.enabledModules ?? [] },
+    ]
+  }
+
+  async listPlatformSubscriptions() {
+    await delay(30)
+    const companies = await this.listPlatformCompanies()
+    return companies.map((c) => ({
+      companyId: c.id,
+      tradingName: c.tradingName,
+      legalName: c.legalName,
+      tenantStatus: c.tenantStatus,
+      subscriptionStatus: c.subscriptionStatus ?? 'active',
+      planCode: c.planCode ?? 'enterprise',
+      currentPeriodEnd: c.currentPeriodEnd,
+      trialEndsAt: c.trialEndsAt,
+      gracePeriodEndsAt: null,
+      providerCustomerRef: null,
+      updatedAt: c.createdAt,
+    }))
+  }
+
+  async listPlatformAudit() {
+    await delay(30)
+    return [] as import('./types').PlatformAuditRow[]
+  }
+
+  async getPlatformHealth() {
+    await delay(30)
+    return {
+      status: 'ok',
+      surface: 'veyvio-platform',
+      checkedAt: new Date().toISOString(),
+      billingMode: 'placeholder',
+      database: 'connected',
+      counts: { companies: 1, activeSubscriptions: 1, featureFlags: 3 },
+    }
+  }
+
+  async listPlatformFeatureFlags() {
+    await delay(30)
+    return [
+      {
+        key: 'saas_billing_live',
+        description: 'Enable SaaS Stripe Checkout live mode',
+        enabled: false,
+        updatedAt: null,
+      },
+      {
+        key: 'self_serve_signup',
+        description: 'Allow public self-serve purchase flow',
+        enabled: false,
+        updatedAt: null,
+      },
+      {
+        key: 'usage_limit_enforcement',
+        description: 'Enforce usage limits on create paths',
+        enabled: false,
+        updatedAt: null,
+      },
+    ]
+  }
+
+  async patchPlatformFeatureFlag(flagKey: string, body: { enabled?: boolean }) {
+    await delay(30)
+    const flags = await this.listPlatformFeatureFlags()
+    const flag = flags.find((f) => f.key === flagKey) ?? flags[0]
+    return { ...flag, enabled: body.enabled ?? flag.enabled, updatedAt: new Date().toISOString() }
+  }
+
+  async listAllPlatformSupportGrants() {
+    await delay(30)
+    return [] as import('./types').PlatformSupportGrant[]
+  }
+
+  async listPlatformSupportGrants(_companyId: string) {
+    await delay(30)
+    return [] as import('./types').PlatformSupportGrant[]
+  }
+
+  async createPlatformSupportGrant(_body: Record<string, unknown>) {
+    await delay(40)
+    return { ok: true }
+  }
+
+  async revokePlatformSupportGrant(_grantId: string) {
+    await delay(30)
+    return { ok: true }
+  }
+
+  async createPlatformCheckout(_body: { companyId: string; planCode: string }) {
+    await delay(40)
+    return {
+      checkoutUrl: null,
+      sessionId: null,
+      configured: false,
+      placeholder: true,
+      message:
+        'SaaS billing is a placeholder. Set plan and tenant status manually until Checkout is enabled.',
+    }
+  }
+
   async getMe(): Promise<AuthUser> {
     await delay(50)
     return MOCK_USER
+  }
+
+  async getCompanyEntitlements() {
+    await delay(40)
+    return {
+      planCode: MOCK_USER.planCode ?? 'enterprise',
+      subscriptionStatus: MOCK_USER.subscriptionStatus ?? 'active',
+      tenantStatus: MOCK_USER.tenantStatus ?? 'ACTIVE',
+      enabledModules: MOCK_USER.enabledModules ?? [],
+      usageLimits: MOCK_USER.usageLimits ?? { drivers: null, vehicles: null, depots: null },
+      trialEndsAt: null,
+      currentPeriodEnd: null,
+      gracePeriodEndsAt: null,
+    }
   }
 
   async getDashboard(): Promise<DashboardSummary> {

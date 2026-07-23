@@ -225,11 +225,13 @@ export interface StaffUserAccount {
   authProvider: string
   activeSessionCount: number
   temporaryAccessExpiresAt: string | null
-  lastAccessReviewAt: string | null
-  accessReviewDueAt: string | null
-  ssoEnabled: boolean
-  mfaPolicy: 'standard' | 'elevated_required' | 'enforced'
-  contractorAccessExpiresAt: string | null
+  lastAccessReviewAt?: string | null
+  accessReviewDueAt?: string | null
+  ssoEnabled?: boolean
+  mfaPolicy?: 'standard' | 'elevated_required' | 'enforced'
+  contractorAccessExpiresAt?: string | null
+  /** Dev-only: returned when email delivery is not configured. */
+  devInvitationToken?: string | null
 }
 
 export interface StaffQualification {

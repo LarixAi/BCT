@@ -64,11 +64,11 @@ export function ChecksLiveTab({ hub }: { hub: ChecksHubData }) {
   return (
     <SectionCard title="Live checks" description={`${hub.liveChecks.length} checks currently in progress`}>
       {hub.liveChecks.length === 0 ? (
-        <p className="text-sm text-slate-500">No checks in progress.</p>
+        <p className="text-sm text-muted">No checks in progress.</p>
       ) : (
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+            <tr className="border-b border-border text-xs uppercase text-muted">
               <th className="pb-2 pr-3 font-medium">Vehicle</th>
               <th className="pb-2 pr-3 font-medium">Checker</th>
               <th className="pb-2 pr-3 font-medium">Type</th>
@@ -80,11 +80,11 @@ export function ChecksLiveTab({ hub }: { hub: ChecksHubData }) {
           </thead>
           <tbody>
             {hub.liveChecks.map((c) => (
-              <tr key={c.checkId} className="border-b border-slate-50">
+              <tr key={c.checkId} className="border-b border-border/60">
                 <td className="py-2.5 pr-3 font-medium">{c.registrationNumber}</td>
-                <td className="py-2.5 pr-3 text-slate-600">{c.performedBy}</td>
-                <td className="py-2.5 pr-3 text-slate-600">{c.checkTypeLabel}</td>
-                <td className="py-2.5 pr-3 text-slate-600">{c.currentSection}</td>
+                <td className="py-2.5 pr-3 text-ink-soft">{c.performedBy}</td>
+                <td className="py-2.5 pr-3 text-ink-soft">{c.checkTypeLabel}</td>
+                <td className="py-2.5 pr-3 text-ink-soft">{c.currentSection}</td>
                 <td className="py-2.5 pr-3 tabular-nums">{c.completionPercent}%</td>
                 <td className="py-2.5 pr-3">
                   <StatusPill status={c.syncStatus} />

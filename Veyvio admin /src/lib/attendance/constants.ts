@@ -42,7 +42,7 @@ export const ATTENDANCE_TONE_CLASS: Record<
   critical: 'bg-red-100 text-red-900 ring-red-200',
   info: 'bg-sky-100 text-sky-950 ring-sky-200',
   sick: 'bg-violet-100 text-violet-950 ring-violet-200',
-  muted: 'bg-slate-100 text-slate-700 ring-slate-200',
+  muted: 'bg-surface-muted text-ink-soft ring-border',
   cover: 'bg-teal-100 text-teal-950 ring-teal-200',
 }
 
@@ -55,7 +55,7 @@ export const ATTENDANCE_STRIP_CLASS: Record<
   critical: 'border-l-red-600',
   info: 'border-l-sky-500',
   sick: 'border-l-violet-500',
-  muted: 'border-l-slate-300',
+  muted: 'border-l-border-strong',
   cover: 'border-l-teal-500',
 }
 

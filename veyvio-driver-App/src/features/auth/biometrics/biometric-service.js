@@ -78,15 +78,21 @@ export async function verifyDriverIdentity(opts = {}) {
   if (!Capacitor.isNativePlatform()) return false;
 
   const useFallback = opts.useFallback !== false;
+  const timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : 45000;
 
   try {
-    await NativeBiometric.verifyIdentity({
-      reason: "Unlock Veyvio Driver",
-      title: "Driver verification",
-      subtitle: "Confirm that you are the assigned driver",
-      description: "Use your device security to continue.",
-      useFallback,
-    });
+    await Promise.race([
+      NativeBiometric.verifyIdentity({
+        reason: "Unlock Veyvio Driver",
+        title: "Driver verification",
+        subtitle: "Confirm that you are the assigned driver",
+        description: "Use your device security to continue.",
+        useFallback,
+      }),
+      new Promise((_, reject) => {
+        globalThis.setTimeout(() => reject(new Error("biometric_timeout")), timeoutMs);
+      }),
+    ]);
     return true;
   } catch {
     return false;

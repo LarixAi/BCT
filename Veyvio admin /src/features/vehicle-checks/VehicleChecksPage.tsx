@@ -49,7 +49,7 @@ export function VehicleChecksPage() {
     queryClient.invalidateQueries({ queryKey: ['checks-hub'] })
   }
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading vehicle checks…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading vehicle checks…</p>
   if (isError || !hub) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load vehicle checks'}</p>
   }
@@ -62,14 +62,14 @@ export function VehicleChecksPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Vehicle Checks</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Vehicle Checks</h1>
+          <p className="text-sm text-ink-soft">
             Monitor vehicle safety checks, review reported defects and control vehicle release across the operation.
           </p>
-          <p className="text-xs text-slate-500">{safeHub.operationalDate}</p>
+          <p className="text-xs text-muted">{safeHub.operationalDate}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={refresh} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+          <button type="button" onClick={refresh} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
             Refresh
           </button>
           {canStart && (
@@ -99,11 +99,11 @@ export function VehicleChecksPage() {
                   setTab('overview')
                 }}
                 className={`rounded-xl border p-3 text-left transition ${
-                  filter === card.filterKey ? 'border-command-500 bg-command-50 ring-1 ring-command-500' : 'border-slate-200 bg-white hover:border-slate-300'
+                  filter === card.filterKey ? 'border-command-500 bg-command-50 ring-1 ring-command-500' : 'border-border bg-surface hover:border-border-strong'
                 }`}
               >
-                <p className="text-xl font-bold tabular-nums text-slate-900">{safeHub.summary[card.id]}</p>
-                <p className="text-xs text-slate-600">{card.label}</p>
+                <p className="text-xl font-bold tabular-nums text-ink">{safeHub.summary[card.id]}</p>
+                <p className="text-xs text-ink-soft">{card.label}</p>
                 {sub != null && typeof sub === 'number' && sub > 0 && (
                   <p className="mt-1 text-xs text-amber-700">
                     {card.subKey === 'oldestInProgressMinutes' ? `Oldest started ${sub} min ago` : `${sub} need attention`}
@@ -115,21 +115,21 @@ export function VehicleChecksPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {CHECKS_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === t.id ? 'bg-white text-command-700 ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900'
+              tab === t.id ? 'bg-surface text-command-700 ring-1 ring-border' : 'text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}
             {t.id === 'action' && actionCount > 0 && (
               <span className="ml-1.5 rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-800">{actionCount}</span>
             )}
-            {t.phase && <span className="ml-1 text-xs text-slate-400">P{t.phase}</span>}
+            {t.phase && <span className="ml-1 text-xs text-muted">P{t.phase}</span>}
           </button>
         ))}
       </div>
@@ -140,9 +140,9 @@ export function VehicleChecksPage() {
           placeholder="Search vehicles, drivers, check type…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-md rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          className="w-full max-w-md rounded-lg border border-border px-3 py-1.5 text-sm"
         />
-        <select value={depotId} onChange={(e) => setDepotId(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm" aria-label="Depot">
+        <select value={depotId} onChange={(e) => setDepotId(e.target.value)} className="rounded-lg border border-border px-3 py-1.5 text-sm" aria-label="Depot">
           <option value="all">All depots</option>
           {safeHub.depots.map((d) => (
             <option key={d.id} value={d.id}>

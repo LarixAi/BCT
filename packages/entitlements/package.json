@@ -1,0 +1,13 @@
+{
+  "name": "@veyvio/entitlements",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "sync:edge": "cp src/index.ts \"../../Veyvio admin /supabase/functions/_shared/entitlements-core.ts\""
+  }
+}

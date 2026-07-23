@@ -69,8 +69,8 @@ export function TripsPage() {
       <div className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Trips</h1>
-            <p className="mt-0.5 text-sm text-slate-700">
+            <h1 className="text-2xl font-semibold text-ink">Trips</h1>
+            <p className="mt-0.5 text-sm text-ink-soft">
               {operationalDate} · What journeys are taking place?
             </p>
             <p className={cn('mt-1 text-xs', isFetching ? 'text-amber-800' : 'text-emerald-700')}>
@@ -83,13 +83,13 @@ export function TripsPage() {
             <button
               type="button"
               onClick={() => refetch()}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Refresh
             </button>
             <Link
               to="/runs"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Runs
             </Link>
@@ -101,7 +101,7 @@ export function TripsPage() {
             </Link>
             <Link
               to="/bookings"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Bookings
             </Link>
@@ -114,7 +114,7 @@ export function TripsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search passenger, school, driver, trip…"
-            className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="w-full max-w-xs rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <div className="flex flex-wrap gap-1">
             {FILTERS.map((f) => (
@@ -124,7 +124,7 @@ export function TripsPage() {
                 onClick={() => setFilter(f.id)}
                 className={cn(
                   'rounded-full px-2.5 py-1 text-[11px] font-medium',
-                  filter === f.id ? 'bg-command-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200',
+                  filter === f.id ? 'bg-command-600 text-white' : 'bg-surface text-ink-soft ring-1 ring-border',
                 )}
               >
                 {f.label}
@@ -150,13 +150,13 @@ export function TripsPage() {
             type="button"
             onClick={() => setFilter(card.id)}
             className={cn(
-              'rounded-xl border bg-white p-3 text-left transition hover:border-command-400',
-              filter === card.id ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200',
+              'rounded-xl border bg-surface p-3 text-left transition hover:border-command-400',
+              filter === card.id ? 'border-command-500 ring-1 ring-command-500' : 'border-border',
               'tone' in card && card.tone === 'danger' && filter !== card.id && 'border-red-200',
               'tone' in card && card.tone === 'warning' && filter !== card.id && 'border-amber-200',
             )}
           >
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{card.title}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{card.title}</p>
             <p
               className={cn(
                 'mt-1 text-2xl font-bold tabular-nums',
@@ -164,7 +164,7 @@ export function TripsPage() {
                   ? 'text-red-800'
                   : 'tone' in card && card.tone === 'warning'
                     ? 'text-amber-800'
-                    : 'text-slate-900',
+                    : 'text-ink',
               )}
             >
               {card.value}
@@ -177,13 +177,13 @@ export function TripsPage() {
         <SectionCard title="Trip board" description={`${filtered.length} journeys`} className="min-h-0 overflow-hidden" flush>
           <div className="min-h-0 flex-1 overflow-auto">
             {isLoading ? (
-              <p className="p-4 text-sm text-slate-500">Loading…</p>
+              <p className="p-4 text-sm text-muted">Loading…</p>
             ) : filtered.length === 0 ? (
-              <p className="p-8 text-center text-sm text-slate-500">No trips match this filter.</p>
+              <p className="p-8 text-center text-sm text-muted">No trips match this filter.</p>
             ) : (
               <table className="min-w-full text-left text-sm">
-                <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-wide text-slate-500">
-                  <tr className="border-b border-slate-200">
+                <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wide text-muted">
+                  <tr className="border-b border-border">
                     <th className="px-3 py-2 font-medium">Trip</th>
                     <th className="px-3 py-2 font-medium">Pickup</th>
                     <th className="px-3 py-2 font-medium">Passengers</th>
@@ -202,15 +202,15 @@ export function TripsPage() {
                         key={trip.id}
                         onClick={() => selectTrip(trip.id)}
                         className={cn(
-                          'cursor-pointer border-b border-slate-100 hover:bg-slate-50',
+                          'cursor-pointer border-b border-border hover:bg-surface-muted',
                           selectedId === trip.id && 'bg-command-50',
                         )}
                       >
                         <td className="px-3 py-2.5">
-                          <p className="font-semibold text-slate-900">{trip.reference}</p>
-                          <p className="text-xs text-slate-500">{trip.routeName ?? '—'}</p>
+                          <p className="font-semibold text-ink">{trip.reference}</p>
+                          <p className="text-xs text-muted">{trip.routeName ?? '—'}</p>
                         </td>
-                        <td className="px-3 py-2.5 tabular-nums text-slate-700">
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">
                           {firstJob?.plannedPickupTime
                             ? new Date(firstJob.plannedPickupTime).toLocaleTimeString([], {
                                 hour: '2-digit',
@@ -218,7 +218,7 @@ export function TripsPage() {
                               })
                             : '—'}
                         </td>
-                        <td className="px-3 py-2.5 tabular-nums text-slate-700">
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">
                           {trip.passengersOnboard}/{trip.totalJobCount}
                           {trip.delayMinutes > 0 && (
                             <span className="ml-1 text-xs font-medium text-amber-800">+{trip.delayMinutes}m</span>
@@ -227,7 +227,7 @@ export function TripsPage() {
                         <td className="px-3 py-2.5 font-mono text-xs tabular-nums">
                           {trip.vehicleRegistration ?? '—'}
                         </td>
-                        <td className="px-3 py-2.5 text-slate-700">{trip.driverName ?? 'Unassigned'}</td>
+                        <td className="px-3 py-2.5 text-ink-soft">{trip.driverName ?? 'Unassigned'}</td>
                         <td className="px-3 py-2.5">
                           {trip.dutyId ? (
                             <Link
@@ -263,7 +263,7 @@ function TripDetailPanel({ trip }: { trip: OperationalTrip | null }) {
   if (!trip) {
     return (
       <SectionCard title="Selected trip" description="Journey card">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted">
           Select a trip to see passengers, pickup/drop-off and actions. Runs organise the driver — trips organise the passengers.
         </p>
       </SectionCard>
@@ -287,18 +287,18 @@ function TripDetailPanel({ trip }: { trip: OperationalTrip | null }) {
         <Row label="Delay" value={trip.delayMinutes > 0 ? `${trip.delayMinutes} min` : 'None'} />
 
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Passengers</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted">Passengers</p>
           <ul className="mt-2 space-y-2">
             {(trip.jobs ?? []).length === 0 && (
-              <li className="text-slate-500">No passenger jobs on this trip.</li>
+              <li className="text-muted">No passenger jobs on this trip.</li>
             )}
             {(trip.jobs ?? []).map((job) => (
-              <li key={job.id} className="rounded-lg border border-slate-100 px-2.5 py-2">
-                <p className="font-medium text-slate-900">{job.passengerName}</p>
-                <p className="text-xs text-slate-500">
+              <li key={job.id} className="rounded-lg border border-border px-2.5 py-2">
+                <p className="font-medium text-ink">{job.passengerName}</p>
+                <p className="text-xs text-muted">
                   {job.pickupAddress} → {job.dropoffAddress}
                 </p>
-                <p className="mt-1 text-[11px] capitalize text-slate-600">
+                <p className="mt-1 text-[11px] capitalize text-ink-soft">
                   {job.status.replace(/_/g, ' ')}
                   {job.wheelchairRequired ? ' · Wheelchair' : ''}
                   {job.escortRequired ? ' · Escort' : ''}
@@ -318,20 +318,20 @@ function TripDetailPanel({ trip }: { trip: OperationalTrip | null }) {
           {trip.dutyId && (
             <Link
               to={`/runs/${trip.dutyId}`}
-              className="rounded-lg border border-slate-200 px-2 py-2 text-center text-xs font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-2 py-2 text-center text-xs font-medium hover:bg-surface-muted"
             >
               Open parent run
             </Link>
           )}
           <Link
             to={`/messages?compose=1&to=${encodeURIComponent(trip.driverName ?? '')}&run=${encodeURIComponent(trip.runReference ?? trip.reference)}`}
-            className="rounded-lg border border-slate-200 px-2 py-2 text-center text-xs font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-2 py-2 text-center text-xs font-medium hover:bg-surface-muted"
           >
             Message driver
           </Link>
           <Link
             to={`/exceptions?create=1&run=${encodeURIComponent(trip.runReference ?? trip.reference)}`}
-            className="rounded-lg border border-slate-200 px-2 py-2 text-center text-xs font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-2 py-2 text-center text-xs font-medium hover:bg-surface-muted"
           >
             Create exception
           </Link>
@@ -343,9 +343,9 @@ function TripDetailPanel({ trip }: { trip: OperationalTrip | null }) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3 border-b border-slate-100 pb-2">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-medium capitalize text-slate-900">{value}</span>
+    <div className="flex justify-between gap-3 border-b border-border pb-2">
+      <span className="text-muted">{label}</span>
+      <span className="text-right font-medium capitalize text-ink">{value}</span>
     </div>
   )
 }

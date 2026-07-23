@@ -15,11 +15,11 @@ function StatusBlock({
   status?: string
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+    <div className="rounded-lg border border-border bg-surface-muted/80 px-3 py-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {status ? <StatusPill status={status} /> : null}
-        <p className="text-sm font-semibold text-slate-900">{value}</p>
+        <p className="text-sm font-semibold text-ink">{value}</p>
       </div>
     </div>
   )
@@ -70,12 +70,12 @@ export function DriverAccessStatusGrid({
       </div>
 
       {canSignIn && eligibilityBlocked ? (
-        <div className="mt-4 rounded-lg border border-attention/40 bg-attention/10 px-4 py-3 text-sm text-slate-900">
+        <div className="mt-4 rounded-lg border border-attention/40 bg-attention/10 px-4 py-3 text-sm text-ink">
           <p className="font-medium">Driver can sign in but cannot start duty.</p>
           {blockingFailure ? (
-            <p className="mt-1 text-slate-700">Blocking requirement: {blockingFailure.message}</p>
+            <p className="mt-1 text-ink-soft">Blocking requirement: {blockingFailure.message}</p>
           ) : (
-            <p className="mt-1 text-slate-700">
+            <p className="mt-1 text-ink-soft">
               Eligibility is {ELIGIBILITY_LABELS[operationalEligibility].toLowerCase()}.
             </p>
           )}
@@ -83,15 +83,15 @@ export function DriverAccessStatusGrid({
       ) : null}
 
       {isAccountSuspended(account.accountStatus) && account.suspension ? (
-        <div className="mt-4 rounded-lg border border-critical/30 bg-critical/10 px-4 py-3 text-sm text-slate-900">
+        <div className="mt-4 rounded-lg border border-critical/30 bg-critical/10 px-4 py-3 text-sm text-ink">
           <p className="font-medium">Access suspended — sign-in blocked.</p>
-          <p className="mt-1 text-slate-700">
+          <p className="mt-1 text-ink-soft">
             {suspensionCategoryLabel}: {account.suspension.reason}
           </p>
           {account.suspension.driverMessage ? (
-            <p className="mt-1 text-slate-600">Driver message: {account.suspension.driverMessage}</p>
+            <p className="mt-1 text-ink-soft">Driver message: {account.suspension.driverMessage}</p>
           ) : null}
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted">
             Suspended by {account.suspension.suspendedBy} · {formatDateTime(account.suspension.suspendedAt)}
             {account.suspension.restoreAt
               ? ` · restore ${formatDateTime(account.suspension.restoreAt)}`

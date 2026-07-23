@@ -4,8 +4,8 @@ import type { FleetResourcesHubData } from '@/lib/fleet-resources/types'
 const severityClass = {
   critical: 'border-red-200 bg-red-50 text-red-950',
   high: 'border-amber-200 bg-amber-50 text-amber-950',
-  medium: 'border-slate-200 bg-slate-50 text-slate-900',
-  low: 'border-slate-200 bg-white text-slate-700',
+  medium: 'border-border bg-surface-muted text-ink',
+  low: 'border-border bg-surface text-ink-soft',
 } as const
 
 export function OverviewTab({
@@ -35,19 +35,19 @@ export function OverviewTab({
             key={c.label}
             type="button"
             onClick={() => onOpenFilter(c.tab, c.filter)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-command-300 hover:bg-slate-50"
+            className="rounded-xl border border-border bg-surface px-4 py-3 text-left hover:border-command-300 hover:bg-surface-muted"
           >
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{c.label}</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{c.value}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">{c.label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">{c.value}</p>
           </button>
         ))}
       </div>
 
       <section>
-        <h2 className="text-lg font-semibold text-slate-900">Needs attention</h2>
-        <p className="text-sm text-slate-600">Exceptions before routine — resolve these before the next shift peak.</p>
+        <h2 className="text-lg font-semibold text-ink">Needs attention</h2>
+        <p className="text-sm text-ink-soft">Exceptions before routine — resolve these before the next shift peak.</p>
         {hub.alerts.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">No resource exceptions open.</p>
+          <p className="mt-3 text-sm text-muted">No resource exceptions open.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {hub.alerts.slice(0, 12).map((a) => (

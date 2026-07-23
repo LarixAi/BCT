@@ -27,8 +27,8 @@ export function ComplianceRulesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Compliance Rules</h1>
-        <p className="text-sm text-slate-600">Document expiry monitoring and assignment enforcement settings</p>
+        <h1 className="text-2xl font-semibold text-ink">Compliance Rules</h1>
+        <p className="text-sm text-ink-soft">Document expiry monitoring and assignment enforcement settings</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -40,7 +40,7 @@ export function ComplianceRulesPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Automation settings" description="Enforcement rules applied at dispatch">
           {settingsLoading ? (
-            <p className="text-sm text-slate-500">Loading…</p>
+            <p className="text-sm text-muted">Loading…</p>
           ) : settings ? (
             <dl className="space-y-2 text-sm">
               <Row
@@ -58,17 +58,17 @@ export function ComplianceRulesPage() {
               <Row label="Notify roles" value={formatRoleList(settings.notifyRoles)} />
             </dl>
           ) : (
-            <p className="text-sm text-slate-500">Automation settings are not available for this company yet.</p>
+            <p className="text-sm text-muted">Automation settings are not available for this company yet.</p>
           )}
         </SectionCard>
 
         <SectionCard title="Filter window">
-          <label className="text-sm text-slate-600">
+          <label className="text-sm text-ink-soft">
             Show documents expiring within
             <select
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="ml-2 rounded-lg border border-slate-200 px-2 py-1 text-sm"
+              className="ml-2 rounded-lg border border-border px-2 py-1 text-sm"
             >
               {[14, 30, 60, 90].map((d) => (
                 <option key={d} value={d}>
@@ -82,13 +82,13 @@ export function ComplianceRulesPage() {
 
       <SectionCard title="Expiring documents" description={`${items.length} items within ${days} days`}>
         {expiringLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : items.length === 0 ? (
-          <p className="text-sm text-slate-500">No documents expiring in this window.</p>
+          <p className="text-sm text-muted">No documents expiring in this window.</p>
         ) : (
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                 <th className="pb-2 pr-4 font-medium">Entity</th>
                 <th className="pb-2 pr-4 font-medium">Type</th>
                 <th className="pb-2 pr-4 font-medium">Document</th>
@@ -113,18 +113,18 @@ function ComplianceRow({ item }: { item: ComplianceItemRecord }) {
   const href = item.entityType === 'vehicle' ? `/vehicles/${item.entityId}` : `/drivers/${item.entityId}`
 
   return (
-    <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+    <tr className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
       <td className="py-2.5 pr-4">
         <Link to={href} className="font-medium text-command-600 hover:underline">
           {item.entityLabel}
         </Link>
       </td>
-      <td className="py-2.5 pr-4 capitalize text-slate-600">{item.entityType}</td>
-      <td className="py-2.5 pr-4 text-slate-600">{item.documentType}</td>
-      <td className="py-2.5 pr-4 text-slate-600">
+      <td className="py-2.5 pr-4 capitalize text-ink-soft">{item.entityType}</td>
+      <td className="py-2.5 pr-4 text-ink-soft">{item.documentType}</td>
+      <td className="py-2.5 pr-4 text-ink-soft">
         {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-GB') : '—'}
       </td>
-      <td className="py-2.5 pr-4 text-slate-600">{item.daysUntilExpiry ?? '—'}</td>
+      <td className="py-2.5 pr-4 text-ink-soft">{item.daysUntilExpiry ?? '—'}</td>
       <td className="py-2.5">
         <StatusPill status={item.status} />
       </td>
@@ -134,9 +134,9 @@ function ComplianceRow({ item }: { item: ComplianceItemRecord }) {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <p className="text-2xl font-bold tabular-nums">{value}</p>
-      <p className="text-sm text-slate-600">{label}</p>
+      <p className="text-sm text-ink-soft">{label}</p>
     </div>
   )
 }
@@ -144,8 +144,8 @@ function StatCard({ label, value }: { label: string; value: number }) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium capitalize text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium capitalize text-ink">{value}</dd>
     </div>
   )
 }

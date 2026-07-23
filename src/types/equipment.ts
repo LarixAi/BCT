@@ -17,6 +17,12 @@ export type EqStatus =
   | "incomplete"
   | "low";
 
+export interface EquipmentCheckRecord {
+  checkedAt: string;
+  checkedBy: string;
+  present: boolean;
+}
+
 export interface FixedItem {
   id: string;               // asset id, e.g. FE-00491
   defId: string;            // slug, e.g. fire-extinguisher
@@ -26,6 +32,7 @@ export interface FixedItem {
   inspectionDueDate?: string;
   count?: { present: number; required: number };
   note?: string;
+  lastCheck?: EquipmentCheckRecord;
 }
 
 export interface KitComponent {
@@ -42,6 +49,9 @@ export interface AssignedItem {
   components?: KitComponent[]; // when kit
   assignedAt: string;
   assignedBy: string;
+  /** Sticker identity — scanned via veyvio:equipment:{qrCode} */
+  qrCode?: string;
+  lastCheck?: EquipmentCheckRecord;
 }
 
 export interface ConsumableLine {
@@ -57,6 +67,7 @@ export interface DocumentItem {
   label: string;
   status: EqStatus;         // present | missing
   detail?: string;
+  lastCheck?: EquipmentCheckRecord;
 }
 
 export interface VehicleEquipment {
@@ -92,7 +103,10 @@ export interface EquipmentAuditEvent {
     | "reported-expired"
     | "sent-for-inspection"
     | "replaced"
-    | "cleared";
+    | "cleared"
+    | "presence-confirmed"
+    | "presence-denied"
+    | "transferred";
   target: string;
   detail: string;
 }

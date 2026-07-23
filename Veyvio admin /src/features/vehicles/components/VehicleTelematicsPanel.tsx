@@ -26,7 +26,7 @@ export function VehicleTelematicsPanel({ vehicle }: { vehicle: VehicleProfile })
   if (!t?.connected) {
     return (
       <SectionCard title="Live telematics" description="GPS and fuel data from connected devices">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted">
           No live feed for this vehicle. Telematics appears when the vehicle is on an active duty with GPS reporting.
         </p>
       </SectionCard>
@@ -42,7 +42,7 @@ export function VehicleTelematicsPanel({ vehicle }: { vehicle: VehicleProfile })
 
   return (
     <SectionCard title="Live telematics" description={`${t.provider} · last sync ${freshness}`} flush>
-      <div className="border-b border-slate-100 p-4">
+      <div className="border-b border-border p-4">
         <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <Row label="Position" value={t.latitude != null && t.longitude != null ? `${t.latitude.toFixed(4)}, ${t.longitude.toFixed(4)}` : '—'} />
           <Row label="Speed" value={t.speedMph != null ? `${t.speedMph} mph` : '—'} />
@@ -84,8 +84,8 @@ export function VehicleTelematicsPanel({ vehicle }: { vehicle: VehicleProfile })
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

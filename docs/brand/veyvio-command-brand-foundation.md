@@ -76,7 +76,30 @@ Command primary accent is **Veyvio Blue** (`#2F6BFF`). Chrome and sign-in use **
 
 ---
 
-## 4. Voice (UI copy)
+## 4. Light & dark theme
+
+Command ships both a light theme (day) and a dark theme (night). This is the one deliberate exception to the "don't use Driver's colours" rule in Section 1: **dark mode intentionally borrows Driver's black + teal register**, so Command feels like the same platform after hours as Driver's auth/splash screens. Light mode stays Command Blue.
+
+| Token | Light | Dark | Use |
+| --- | --- | --- | --- |
+| Command accent (500/600) | `#2F6BFF` (Veyvio Blue) | `#4A8FA3` (Driver Teal) | Active nav, links, primary buttons |
+| Command accent hover (700) | `#1F4ED8` (darker) | `#7FB3C4` (lighter) | Hover / pressed — dark surfaces brighten on hover instead of darkening |
+| Chrome (midnight/sidebar) | `#0B1526` | `#000000` | Sidebar, auth hero panel — pure black in dark mode, matching Driver's splash |
+| Page background | `#F2F5F9` | `#0D1420` | App canvas |
+| Surface | `#FFFFFF` | `#131B2B` | Cards, panels, inputs |
+| Surface muted | `#F8FAFC` | `#0F1826` | Nested panels |
+| Ink / Ink soft / Muted | `#101828` / `#344054` / `#667085` | `#EDF1F7` / `#C4CCDA` / `#8A93A6` | Text |
+| Border / Border strong | `#DCE2EA` / `#C7D0DD` | `#233049` / `#2D3B57` | Dividers, inputs |
+
+Status colours (Ready, Attention, Critical, VOR) stay the same hex in both themes — they're semantic, not accent, and already legible on dark surfaces.
+
+**Resolution order:** OS `prefers-color-scheme`, then an explicit user override (light/dark toggle, persisted). "System" is the default — there's no separate default theme choice to make.
+
+**Source of truth:** `Veyvio admin /src/index.css` (`@theme` + dark overrides), `Veyvio admin /src/lib/theme-context.tsx` (provider/toggle logic).
+
+---
+
+## 5. Voice (UI copy)
 
 Clear, calm, direct, operational — like a strong transport controller on a busy shift.
 
@@ -87,7 +110,7 @@ Clear, calm, direct, operational — like a strong transport controller on a bus
 
 ---
 
-## 5. Chrome rules
+## 6. Chrome rules
 
 * **Sidebar:** Midnight, grouped navigation, Command Blue active item, wordmark at top
 * **Top bar:** Company · operational date · depot · search · sync/connection · alerts · profile
@@ -96,6 +119,8 @@ Clear, calm, direct, operational — like a strong transport controller on a bus
 
 ---
 
-## 6. Implementation notes
+## 7. Implementation notes
 
-Tokens live in `Veyvio admin /src/index.css` (`@theme`). Wordmark: `src/components/brand/CommandWordmark.tsx`. Auth shell: `src/components/brand/AuthLayout.tsx`.
+Tokens live in `Veyvio admin /src/index.css` (`@theme` + dark overrides). Wordmark: `src/components/brand/CommandWordmark.tsx`. Auth shell: `src/components/brand/AuthLayout.tsx`. Theme provider / toggle: `src/lib/theme-context.tsx`, `src/components/layout/ThemeToggle.tsx`.
+
+Colour utilities across the app resolve through CSS custom properties (`bg-page`, `text-ink`, `bg-surface`, `border-border`, `text-command-600`, …), so most screens re-theme automatically. Screens still styled with raw Tailwind greys (`bg-slate-*`, `text-slate-*`) predate this system and won't react to dark mode until swept onto the shared tokens.

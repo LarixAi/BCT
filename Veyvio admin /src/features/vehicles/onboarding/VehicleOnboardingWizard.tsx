@@ -311,7 +311,7 @@ export function VehicleOnboardingWizard() {
     else goStep(prev)
   }
 
-  if (id && isLoading) return <p className="text-sm text-slate-500">Loading vehicle…</p>
+  if (id && isLoading) return <p className="text-sm text-muted">Loading vehicle…</p>
 
   const probeEligible = vehicle
     ? vehicle.lifecycleStatus === 'awaiting_onboarding'
@@ -323,10 +323,10 @@ export function VehicleOnboardingWizard() {
     <div className="space-y-4">
       <VehicleBackLink />
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">
+        <h1 className="text-2xl font-semibold text-ink">
           {isNew ? 'Add vehicle' : `Onboard ${vehicle?.registrationNumber ?? 'vehicle'}`}
         </h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-ink-soft">
           One shared vehicle record for Admin, Yard, Maintenance and Driver. New vehicles stay awaiting onboarding until
           approved.
         </p>
@@ -354,12 +354,12 @@ export function VehicleOnboardingWizard() {
                       ? 'border-command-500 bg-command-50'
                       : done
                         ? 'border-emerald-200 bg-emerald-50/50'
-                        : 'border-slate-200 bg-white',
+                        : 'border-border bg-surface',
                     isNew && i > 0 && 'cursor-not-allowed opacity-50',
                   )}
                 >
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Step {i + 1}</p>
-                  <p className={cn('text-sm font-semibold', active ? 'text-command-800' : 'text-slate-900')}>{s.label}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Step {i + 1}</p>
+                  <p className={cn('text-sm font-semibold', active ? 'text-command-800' : 'text-ink')}>{s.label}</p>
                 </button>
               </li>
             )
@@ -385,11 +385,11 @@ export function VehicleOnboardingWizard() {
                 <Field label="Model" value={form.model} onChange={(v) => setForm({ ...form, model: v })} required />
                 <Field label="Model year" value={form.modelYear} onChange={(v) => setForm({ ...form, modelYear: v })} type="number" />
                 <label className="block text-sm">
-                  <span className="text-slate-600">Category</span>
+                  <span className="text-ink-soft">Category</span>
                   <select
                     value={form.vehicleCategory}
                     onChange={(e) => setForm({ ...form, vehicleCategory: e.target.value as VehicleCategory })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                   >
                     {Object.entries(VEHICLE_CATEGORY_LABELS).map(([k, label]) => (
                       <option key={k} value={k}>
@@ -399,11 +399,11 @@ export function VehicleOnboardingWizard() {
                   </select>
                 </label>
                 <label className="block text-sm sm:col-span-2">
-                  <span className="text-slate-600">Home depot</span>
+                  <span className="text-ink-soft">Home depot</span>
                   <select
                     value={form.homeDepotId}
                     onChange={(e) => setForm({ ...form, homeDepotId: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                   >
                     {depots.map((d) => (
                       <option key={d.id} value={d.id}>
@@ -420,11 +420,11 @@ export function VehicleOnboardingWizard() {
             <SectionCard title="Ownership" description="Path toggles which agreement fields apply (Phase 1).">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm sm:col-span-2">
-                  <span className="text-slate-600">Ownership path</span>
+                  <span className="text-ink-soft">Ownership path</span>
                   <select
                     value={form.ownershipType}
                     onChange={(e) => setForm({ ...form, ownershipType: e.target.value as OwnershipType })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                   >
                     {Object.entries(OWNERSHIP_TYPE_LABELS).map(([k, label]) => (
                       <option key={k} value={k}>
@@ -440,7 +440,7 @@ export function VehicleOnboardingWizard() {
                   className="sm:col-span-2"
                 />
               </div>
-              <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-slate-600">
+              <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-ink-soft">
                 {OWNERSHIP_DOCS[form.ownershipType].map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -471,11 +471,11 @@ export function VehicleOnboardingWizard() {
                   type="number"
                 />
                 <label className="block text-sm">
-                  <span className="text-slate-600">Fuel type</span>
+                  <span className="text-ink-soft">Fuel type</span>
                   <select
                     value={form.fuelType}
                     onChange={(e) => setForm({ ...form, fuelType: e.target.value as FuelType })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                   >
                     {Object.entries(FUEL_TYPE_LABELS).map(([k, label]) => (
                       <option key={k} value={k}>
@@ -543,11 +543,11 @@ export function VehicleOnboardingWizard() {
             <SectionCard title="Depot and Yard" description="Where the vehicle lives when not on duty.">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm sm:col-span-2">
-                  <span className="text-slate-600">Home depot</span>
+                  <span className="text-ink-soft">Home depot</span>
                   <select
                     value={form.homeDepotId}
                     onChange={(e) => setForm({ ...form, homeDepotId: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                   >
                     {depots.map((d) => (
                       <option key={d.id} value={d.id}>
@@ -568,7 +568,7 @@ export function VehicleOnboardingWizard() {
 
           {step === 'equipment' && (
             <SectionCard title="Equipment" description="Confirm inventory has been started on the vehicle profile.">
-              <label className="flex items-start gap-2 text-sm text-slate-700">
+              <label className="flex items-start gap-2 text-sm text-ink-soft">
                 <input
                   type="checkbox"
                   checked={form.equipmentConfirmed}
@@ -590,7 +590,7 @@ export function VehicleOnboardingWizard() {
 
           {step === 'baseline_inspection' && (
             <SectionCard title="Baseline inspection" description="Yard records baseline body condition.">
-              <label className="flex items-start gap-2 text-sm text-slate-700">
+              <label className="flex items-start gap-2 text-sm text-ink-soft">
                 <input
                   type="checkbox"
                   checked={form.baselineConfirmed}
@@ -610,11 +610,11 @@ export function VehicleOnboardingWizard() {
           {step === 'driver_checks' && (
             <SectionCard title="Driver checks template" description="Template drivers use at point of use.">
               <label className="block text-sm">
-                <span className="text-slate-600">Walkaround template</span>
+                <span className="text-ink-soft">Walkaround template</span>
                 <select
                   value={form.driverCheckTemplate}
                   onChange={(e) => setForm({ ...form, driverCheckTemplate: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
                 >
                   <option value="standard_walkaround">Standard walkaround</option>
                   <option value="accessible_minibus">Accessible minibus</option>
@@ -629,7 +629,7 @@ export function VehicleOnboardingWizard() {
             <SectionCard title="Eligibility rules" description="Capabilities Dispatch may require.">
               <div className="space-y-2">
                 {VEHICLE_CAPABILITY_OPTIONS.map((opt) => (
-                  <label key={opt.key} className="flex items-center gap-2 text-sm text-slate-700">
+                  <label key={opt.key} className="flex items-center gap-2 text-sm text-ink-soft">
                     <input
                       type="checkbox"
                       checked={form.capabilityKeys.includes(opt.key)}
@@ -664,7 +664,7 @@ export function VehicleOnboardingWizard() {
               </dl>
 
               <div className="mt-4 space-y-2">
-                <p className="text-sm font-medium text-slate-800">Release decision</p>
+                <p className="text-sm font-medium text-ink">Release decision</p>
                 <StatusPill status={vehicle.releaseDecision} />
                 {vehicle.readiness.blockingReasons.length > 0 && (
                   <ul className="list-disc pl-5 text-sm text-red-700">
@@ -683,7 +683,7 @@ export function VehicleOnboardingWizard() {
               </div>
 
               {vehicle.readiness.warningReasons.length > 0 && (
-                <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
+                <label className="mt-4 flex items-start gap-2 text-sm text-ink-soft">
                   <input type="checkbox" checked={ackWarnings} onChange={(e) => setAckWarnings(e.target.checked)} className="mt-1" />
                   <span>I acknowledge the warnings above. Hard safety blocks still cannot be overridden.</span>
                 </label>
@@ -694,7 +694,7 @@ export function VehicleOnboardingWizard() {
                   type="button"
                   disabled={pending}
                   onClick={() => navigate(`/vehicles/${vehicle.id}`)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
                 >
                   Save draft
                 </button>
@@ -731,7 +731,7 @@ export function VehicleOnboardingWizard() {
               <button
                 type="button"
                 onClick={handleBack}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
               >
                 Back
               </button>
@@ -769,7 +769,7 @@ function Field({
   const inputId = `veh-field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   return (
     <label htmlFor={inputId} className={cn('block text-sm', className)}>
-      <span className="text-slate-600">
+      <span className="text-ink-soft">
         {label}
         {required ? ' *' : ''}
       </span>
@@ -779,7 +779,7 @@ function Field({
         value={value}
         required={required}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+        className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
       />
     </label>
   )
@@ -788,8 +788,8 @@ function Field({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

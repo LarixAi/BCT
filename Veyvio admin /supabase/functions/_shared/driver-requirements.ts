@@ -20,6 +20,9 @@ const TRAINING_KEYS = new Set([
   'daily_vehicle_checks',
   'health_safety',
   'emergency_procedures',
+  'safeguarding',
+  'data_protection_gdpr',
+  'driver_declaration',
   'manual_handling',
   'midas_standard',
   'safeguarding_adults',
@@ -33,6 +36,17 @@ const TRAINING_KEYS = new Set([
   'infection_prevention',
   'dementia_awareness',
   'driver_cpc',
+  'passenger_assistant',
+  'school_transport',
+  'adult_social_care',
+  'mental_health_awareness',
+  'medication_awareness',
+  'conflict_management',
+  'eco_driving',
+  'customer_excellence',
+  'advanced_driving',
+  'driver_mentor',
+  'leadership',
 ])
 
 const QUALIFICATION_KEYS = new Set([

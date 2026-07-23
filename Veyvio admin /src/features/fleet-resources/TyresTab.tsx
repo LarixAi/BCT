@@ -71,8 +71,8 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Tyre register</h2>
-          <p className="text-sm text-slate-600">
+          <h2 className="text-lg font-semibold text-ink">Tyre register</h2>
+          <p className="text-sm text-ink-soft">
             Individual assets with fit / remove / rotate — re-torque links to the vehicle wheels tab.
           </p>
         </div>
@@ -80,7 +80,7 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
           type="button"
           onClick={() => rotate.mutate()}
           disabled={rotate.isPending}
-          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted disabled:opacity-60"
         >
           Rotate AB12 CDE fronts
         </button>
@@ -102,7 +102,7 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
             className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
               filter === id
                 ? 'bg-command-600 text-white'
-                : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
+                : 'border border-border text-ink-soft hover:bg-surface-muted'
             }`}
           >
             {label}
@@ -112,10 +112,10 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
 
       {byVehicle.size > 0 && filter !== 'stock' && (
         <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-800">Vehicle position map</h3>
+          <h3 className="text-sm font-semibold text-ink">Vehicle position map</h3>
           <div className="grid gap-3 md:grid-cols-2">
             {[...byVehicle.entries()].map(([vehicleId, list]) => (
-              <div key={vehicleId} className="rounded-xl border border-slate-200 p-3">
+              <div key={vehicleId} className="rounded-xl border border-border p-3">
                 <Link
                   to={`/vehicles/${vehicleId}?tab=wheels`}
                   className="font-semibold tabular-nums text-command-700 hover:underline"
@@ -129,11 +129,11 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
                       className={`rounded-lg border px-2 py-1.5 ${
                         t.recommendation || t.status === 'awaiting_retorque'
                           ? 'border-amber-200 bg-amber-50'
-                          : 'border-slate-100 bg-slate-50'
+                          : 'border-border bg-surface-muted'
                       }`}
                     >
                       <div className="font-medium">{t.positionLabel ?? t.position}</div>
-                      <div className="text-xs text-slate-600">
+                      <div className="text-xs text-ink-soft">
                         {t.treadDepthMm?.toFixed(1) ?? '—'} mm · {TYRE_STATUS_LABEL[t.status]}
                       </div>
                     </li>
@@ -145,9 +145,9 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
         </section>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-3 py-2">ID</th>
               <th className="px-3 py-2">Spec</th>
@@ -160,11 +160,11 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
           </thead>
           <tbody>
             {rows.map((t) => (
-              <tr key={t.id} className="border-t border-slate-100">
+              <tr key={t.id} className="border-t border-border">
                 <td className="px-3 py-2 font-medium tabular-nums">{t.internalId}</td>
                 <td className="px-3 py-2">
                   {t.brand} {t.size}
-                  <div className="text-xs text-slate-500">DOT {t.dotCode}</div>
+                  <div className="text-xs text-muted">DOT {t.dotCode}</div>
                 </td>
                 <td className="px-3 py-2">{TYRE_STATUS_LABEL[t.status]}</td>
                 <td className="px-3 py-2">
@@ -179,7 +179,7 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
                     t.depotName ?? '—'
                   )}
                   {t.positionLabel && (
-                    <div className="text-xs text-slate-500">{t.positionLabel}</div>
+                    <div className="text-xs text-muted">{t.positionLabel}</div>
                   )}
                   {t.recommendation && (
                     <div className="text-xs text-amber-800">{t.recommendation}</div>

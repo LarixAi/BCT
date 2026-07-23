@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill, expiryTone, formatDate } from '@/components/ui/status'
+import { cn } from '@/lib/cn'
 import {
   REQUIREMENT_TYPE_OPTIONS,
   buildCoreComplianceSlots,
@@ -9,6 +10,7 @@ import {
   isDocumentPendingAdminReview,
   listSupplementaryComplianceDocuments,
 } from '@/lib/drivers/compliance'
+import type { ComplianceRequirementSlot } from '@/lib/drivers/compliance'
 import {
   driverDocumentFileLabel,
   enrichDriverDocumentsForCompliance,
@@ -37,6 +39,155 @@ function defaultDocumentDueDate() {
   const d = new Date()
   d.setDate(d.getDate() + 7)
   return d.toISOString().slice(0, 10)
+}
+
+function StatTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: 'critical' | 'attention' | 'ready' | 'neutral'
+}) {
+  const toneClasses: Record<typeof tone, string> = {
+    critical: 'border-critical/25 bg-critical/5 text-critical',
+    attention: 'border-attention/25 bg-attention/5 text-attention',
+    ready: 'border-ready/25 bg-ready/5 text-ready',
+    neutral: 'border-border bg-page text-ink-soft',
+  }
+  return (
+    <div className={cn('rounded-lg border px-3 py-2', toneClasses[tone])}>
+      <p className="text-lg font-semibold tabular-nums">{value}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide opacity-80">{label}</p>
+    </div>
+  )
+}
+
+function RequirementCard({
+  slot,
+  canVerify,
+  onOpenDocument,
+  onApprove,
+  approvePending,
+  onDecline,
+  onRequest,
+  requestPending,
+  onUploadForThem,
+}: {
+  slot: ComplianceRequirementSlot
+  canVerify: boolean
+  onOpenDocument: (documentId: string) => void
+  onApprove: (documentId: string) => void
+  approvePending: boolean
+  onDecline: (documentId: string) => void
+  onRequest: (definitionKey: string) => void
+  requestPending: boolean
+  onUploadForThem: (definitionKey: string) => void
+}) {
+  const doc = slot.primary
+  const displayStatus = slot.status === 'under_review' ? 'awaiting_review' : slot.status
+  const accent =
+    displayStatus === 'verified' || displayStatus === 'expiring_soon'
+      ? 'bg-ready'
+      : displayStatus === 'awaiting_review' || displayStatus === 'request_sent'
+        ? 'bg-attention'
+        : 'bg-critical'
+
+  return (
+    <div className="flex overflow-hidden rounded-lg border border-border bg-surface">
+      <div className={cn('w-1 flex-shrink-0', accent)} aria-hidden />
+      <div className="flex flex-1 flex-wrap items-start justify-between gap-4 p-3">
+        <div className="min-w-[180px] flex-1 basis-56">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-ink">{slot.label}</p>
+            <StatusPill status={displayStatus} />
+          </div>
+          <p className="mt-0.5 text-xs text-muted">
+            Upload or request a clear photo, including expiry date.
+          </p>
+          {doc?.rejectionReason ? <p className="mt-1 text-xs text-critical">{doc.rejectionReason}</p> : null}
+          {slot.lastRequestedAt ? (
+            <p className="mt-1 text-xs text-muted">
+              Last requested {formatDate(String(slot.lastRequestedAt).slice(0, 10))}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-soft">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Submitted</p>
+            <p>{doc ? formatDocumentSubmittedAt(doc.createdAt ?? doc.updatedAt) : '—'}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Source</p>
+            <p>{doc ? sourceLabel(doc.sourceApp) : '—'}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">Expiry</p>
+            <p>{formatDocumentExpiry(doc?.expiryDate)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted">File</p>
+            {doc?.fileObjectId ? (
+              <button
+                type="button"
+                onClick={() => onOpenDocument(doc.id)}
+                className="font-medium text-command-700 hover:underline"
+              >
+                View file
+              </button>
+            ) : (
+              <span className="text-muted">No file yet</span>
+            )}
+          </div>
+        </div>
+
+        {canVerify ? (
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-2 self-center">
+            {doc && isDocumentPendingAdminReview(doc.verificationStatus) ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onApprove(doc.id)}
+                  disabled={approvePending}
+                  className="rounded border border-ready/30 bg-ready/10 px-2 py-1 text-xs font-medium text-ready hover:bg-ready/15 disabled:opacity-50"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDecline(doc.id)}
+                  className="rounded border border-critical/30 bg-critical/5 px-2 py-1 text-xs font-medium text-critical hover:bg-critical/10"
+                >
+                  Decline
+                </button>
+              </>
+            ) : null}
+            {slot.status === 'missing' || slot.status === 'rejected' || slot.status === 'request_sent' ? (
+              <button
+                type="button"
+                onClick={() => onRequest(slot.definitionKey)}
+                disabled={requestPending}
+                className="rounded border border-border px-2 py-1 text-xs font-medium text-command-700 hover:bg-command-50 disabled:opacity-50"
+              >
+                {requestPending ? 'Sending…' : slot.status === 'request_sent' ? 'Resend request' : 'Request from driver'}
+              </button>
+            ) : null}
+            {!doc ? (
+              <button
+                type="button"
+                onClick={() => onUploadForThem(slot.definitionKey)}
+                className="rounded border border-border px-2 py-1 text-xs font-medium text-ink-soft hover:bg-page"
+              >
+                Upload for them
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
 }
 
 export function DriverComplianceTab({
@@ -103,7 +254,18 @@ export function DriverComplianceTab({
     [documents, coreSlots],
   )
 
+  const { attentionSlots, verifiedSlots } = useMemo(() => {
+    const attention: typeof coreSlots = []
+    const verified: typeof coreSlots = []
+    for (const slot of coreSlots) {
+      if (slot.status === 'verified' || slot.status === 'expiring_soon') verified.push(slot)
+      else attention.push(slot)
+    }
+    return { attentionSlots: attention, verifiedSlots: verified }
+  }, [coreSlots])
+
   const pendingReviewCount = documents.filter(isAwaitingReview).length
+  const supplementaryPendingReviewCount = supplementaryDocuments.filter(isAwaitingReview).length
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['driver-profile', driver.id] })
@@ -264,22 +426,13 @@ export function DriverComplianceTab({
           )
         }
       >
-        <p className="mb-3 text-xs text-slate-500">
+        <p className="mb-3 text-xs text-muted">
           Each required document appears once below — even when nothing is uploaded yet. Approve evidence when it is
-          valid, or request a clear photo (including expiry date) from the driver. Extra uploads (e.g. card backs)
-          appear separately at the bottom.
+          valid, or request a clear photo (including expiry date) from the driver.
         </p>
 
-        {pendingReviewCount > 0 ? (
-          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            {pendingReviewCount === 1
-              ? 'One document is waiting for your review.'
-              : `${pendingReviewCount} documents are waiting for your review.`}
-          </p>
-        ) : null}
-
         {requestFeedback ? (
-          <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+          <p className="mb-3 rounded-lg border border-ready/25 bg-ready/5 px-3 py-2 text-sm text-ready">
             {requestFeedback}
           </p>
         ) : null}
@@ -290,146 +443,85 @@ export function DriverComplianceTab({
           </p>
         ) : null}
 
-        <h3 className="mb-2 text-sm font-semibold text-slate-800">Required compliance documents</h3>
-        <table className="mb-6 w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
-              <th className="pb-2 pr-4">Document</th>
-              <th className="pb-2 pr-4">Status</th>
-              <th className="pb-2 pr-4">Submitted</th>
-              <th className="pb-2 pr-4">Source</th>
-              <th className="pb-2 pr-4">Expiry</th>
-              <th className="pb-2 pr-4">File</th>
-              {canVerify ? <th className="pb-2">Actions</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {coreSlots.map((slot) => {
-              const doc = slot.primary
-              const requestingThis =
-                requestMissing.isPending && requestMissing.variables === slot.definitionKey
-              const displayStatus =
-                slot.status === 'under_review'
-                  ? 'awaiting_review'
-                  : slot.status
-              return (
-                <tr key={slot.definitionKey} className="border-b border-slate-50 align-top">
-                  <td className="py-2.5 pr-4">
-                    <p className="font-medium">{slot.label}</p>
-                    <p className="text-xs text-slate-500">
-                      Upload or request a clear photo of the document, including expiry date.
-                    </p>
-                    {slot.lastRequestedAt ? (
-                      <p className="mt-1 text-xs text-slate-400">
-                        Last requested {formatDate(String(slot.lastRequestedAt).slice(0, 10))}
-                      </p>
-                    ) : null}
-                  </td>
-                  <td className="py-2.5 pr-4">
-                    <StatusPill status={displayStatus} />
-                    {doc?.rejectionReason ? (
-                      <p className="mt-1 text-xs text-red-700">{doc.rejectionReason}</p>
-                    ) : null}
-                  </td>
-                  <td className="py-2.5 pr-4 text-slate-600">
-                    {doc ? formatDocumentSubmittedAt(doc.createdAt ?? doc.updatedAt) : '—'}
-                  </td>
-                  <td className="py-2.5 pr-4 text-slate-600">
-                    {doc ? sourceLabel(doc.sourceApp) : '—'}
-                  </td>
-                  <td className="py-2.5 pr-4 text-slate-600">
-                    {formatDocumentExpiry(doc?.expiryDate)}
-                  </td>
-                  <td className="py-2.5 pr-4 text-slate-600">
-                    {doc?.fileObjectId ? (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs">{driverDocumentFileLabel(doc)}</span>
-                        <button
-                          type="button"
-                          onClick={() => openDocument(doc.id)}
-                          className="text-left text-xs font-medium text-command-700 hover:underline"
-                        >
-                          View file
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-400">No file yet</span>
-                    )}
-                  </td>
-                  {canVerify ? (
-                    <td className="py-2.5">
-                      <div className="flex flex-wrap gap-2">
-                        {doc && isAwaitingReview(doc) ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => verify.mutate(doc.id)}
-                              disabled={verify.isPending}
-                              className="text-xs font-medium text-emerald-700 hover:underline"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRejectDocId(doc.id)
-                                setRejectReason('')
-                                setRequestResubmitOnReject(true)
-                              }}
-                              className="text-xs font-medium text-red-700 hover:underline"
-                            >
-                              Decline
-                            </button>
-                          </>
-                        ) : null}
-                        {slot.status === 'missing' ||
-                        slot.status === 'rejected' ||
-                        slot.status === 'request_sent' ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRequestFeedback(null)
-                              requestMissing.mutate(slot.definitionKey)
-                            }}
-                            disabled={requestMissing.isPending}
-                            className="text-xs font-medium text-command-700 hover:underline disabled:opacity-50"
-                          >
-                            {requestingThis
-                              ? 'Sending…'
-                              : slot.status === 'request_sent'
-                                ? 'Resend request'
-                                : 'Request from driver'}
-                          </button>
-                        ) : null}
-                        {!doc ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRequirementType(slot.definitionKey)
-                              setShowUpload(true)
-                            }}
-                            className="text-xs font-medium text-slate-600 hover:underline"
-                          >
-                            Upload for them
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  ) : null}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatTile label="Needs attention" value={attentionSlots.length} tone={attentionSlots.length ? 'critical' : 'neutral'} />
+          <StatTile label="Awaiting review" value={pendingReviewCount} tone={pendingReviewCount ? 'attention' : 'neutral'} />
+          <StatTile label="Verified" value={verifiedSlots.length} tone="ready" />
+          <StatTile label="Required total" value={coreSlots.length} tone="neutral" />
+        </div>
+
+        {attentionSlots.length > 0 ? (
+          <div className="mb-5">
+            <h3 className="mb-2 text-sm font-semibold text-ink">Needs your attention</h3>
+            <div className="space-y-2">
+              {attentionSlots.map((slot) => (
+                <RequirementCard
+                  key={slot.definitionKey}
+                  slot={slot}
+                  canVerify={canVerify}
+                  onOpenDocument={openDocument}
+                  onApprove={(documentId) => verify.mutate(documentId)}
+                  approvePending={verify.isPending}
+                  onDecline={(documentId) => {
+                    setRejectDocId(documentId)
+                    setRejectReason('')
+                    setRequestResubmitOnReject(true)
+                  }}
+                  onRequest={(definitionKey) => {
+                    setRequestFeedback(null)
+                    requestMissing.mutate(definitionKey)
+                  }}
+                  requestPending={requestMissing.isPending}
+                  onUploadForThem={(definitionKey) => {
+                    setRequirementType(definitionKey)
+                    setShowUpload(true)
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {verifiedSlots.length > 0 ? (
+          <div className="mb-5">
+            <h3 className="mb-2 text-sm font-semibold text-ink">Verified</h3>
+            <div className="space-y-2">
+              {verifiedSlots.map((slot) => (
+                <RequirementCard
+                  key={slot.definitionKey}
+                  slot={slot}
+                  canVerify={canVerify}
+                  onOpenDocument={openDocument}
+                  onApprove={(documentId) => verify.mutate(documentId)}
+                  approvePending={verify.isPending}
+                  onDecline={(documentId) => {
+                    setRejectDocId(documentId)
+                    setRejectReason('')
+                    setRequestResubmitOnReject(true)
+                  }}
+                  onRequest={(definitionKey) => {
+                    setRequestFeedback(null)
+                    requestMissing.mutate(definitionKey)
+                  }}
+                  requestPending={requestMissing.isPending}
+                  onUploadForThem={(definitionKey) => {
+                    setRequirementType(definitionKey)
+                    setShowUpload(true)
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {showUpload && (
-          <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <div className="mb-4 grid gap-3 rounded-lg border border-border bg-page p-3 sm:grid-cols-2">
             <label className="block text-sm sm:col-span-2">
-              <span className="text-slate-600">Requirement type</span>
+              <span className="text-ink-soft">Requirement type</span>
               <select
                 value={requirementType}
                 onChange={(e) => setRequirementType(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-1.5"
               >
                 {REQUIREMENT_TYPE_OPTIONS.map((o) => (
                   <option key={o.type} value={o.type}>
@@ -439,20 +531,20 @@ export function DriverComplianceTab({
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Reference number</span>
+              <span className="text-ink-soft">Reference number</span>
               <input
                 value={referenceNumber}
                 onChange={(e) => setReferenceNumber(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-1.5"
               />
             </label>
             <label className="block text-sm">
-              <span className="text-slate-600">Expiry date</span>
+              <span className="text-ink-soft">Expiry date</span>
               <input
                 type="date"
                 value={expiryDate}
                 onChange={(e) => setExpiryDate(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-1.5"
               />
             </label>
             <button
@@ -467,117 +559,128 @@ export function DriverComplianceTab({
         )}
 
         {supplementaryDocuments.length > 0 ? (
-          <>
-        <h3 className="mb-1 text-sm font-semibold text-slate-800">Additional uploads</h3>
-        <p className="mb-2 text-xs text-slate-500">
-          Extra photos and non-core evidence — not shown in the required list above.
-        </p>
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
-              <th className="pb-2 pr-4">Requirement</th>
-              <th className="pb-2 pr-4">Submitted</th>
-              <th className="pb-2 pr-4">Source</th>
-              <th className="pb-2 pr-4">Expiry</th>
-              <th className="pb-2 pr-4">Verification</th>
-              <th className="pb-2 pr-4">File</th>
-              {canVerify && <th className="pb-2">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-              {supplementaryDocuments.map((doc) => (
-                <tr key={doc.id} className="border-b border-slate-50">
-                  <td className="py-2.5 pr-4 font-medium">{doc.label}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">
-                    {formatDocumentSubmittedAt(doc.createdAt ?? doc.updatedAt)}
-                  </td>
-                  <td className="py-2.5 pr-4 text-slate-600">{sourceLabel(doc.sourceApp)}</td>
-                  <td className="py-2.5 pr-4">
-                    <span className={expiryTone(doc.expiryDate) === 'expired' ? 'text-red-700' : ''}>
-                      {formatDocumentExpiry(doc.expiryDate)}
-                    </span>
-                  </td>
-                  <td className="py-2.5 pr-4">
-                    <StatusPill status={doc.verificationStatus} />
-                    {doc.rejectionReason && (
-                      <p className="mt-1 text-xs text-red-700">{doc.rejectionReason}</p>
-                    )}
-                  </td>
-                  <td className="py-2.5 pr-4 text-slate-600">
-                    <div className="flex flex-col gap-1">
-                      <span>{driverDocumentFileLabel(doc)}</span>
-                      {doc.fileObjectId ? (
-                        <button
-                          type="button"
-                          onClick={() => openDocument(doc.id)}
-                          className="text-left text-xs font-medium text-command-700 hover:underline"
-                        >
-                          View file
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">No file attached</span>
-                      )}
-                    </div>
-                  </td>
-                  {canVerify && (
-                    <td className="py-2.5">
-                      <div className="flex flex-col gap-2">
-                        {isAwaitingReview(doc) && (
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => verify.mutate(doc.id)}
-                              disabled={verify.isPending}
-                              className="text-xs font-medium text-emerald-700 hover:underline"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRejectDocId(doc.id)
-                                setRejectReason('')
-                                setRequestResubmitOnReject(true)
-                              }}
-                              className="text-xs font-medium text-red-700 hover:underline"
-                            >
-                              Decline
-                            </button>
+          <details className="group rounded-lg border border-border" open={supplementaryPendingReviewCount > 0}>
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-sm font-semibold text-ink">
+              <span className="flex items-center gap-2">
+                Additional uploads
+                <span className="rounded-full bg-page px-1.5 py-0.5 text-xs font-medium text-muted">
+                  {supplementaryDocuments.length}
+                </span>
+              </span>
+              <span className="text-xs font-normal text-muted transition group-open:hidden">Show</span>
+              <span className="hidden text-xs font-normal text-muted transition group-open:inline">Hide</span>
+            </summary>
+            <div className="border-t border-border px-3 pb-3 pt-2">
+              <p className="mb-2 text-xs text-muted">
+                Extra photos and non-core evidence — not shown in the required list above.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs uppercase text-muted">
+                      <th className="pb-2 pr-4">Requirement</th>
+                      <th className="pb-2 pr-4">Submitted</th>
+                      <th className="pb-2 pr-4">Source</th>
+                      <th className="pb-2 pr-4">Expiry</th>
+                      <th className="pb-2 pr-4">Verification</th>
+                      <th className="pb-2 pr-4">File</th>
+                      {canVerify && <th className="pb-2">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {supplementaryDocuments.map((doc) => (
+                      <tr key={doc.id} className="border-b border-border/60 last:border-b-0">
+                        <td className="py-2.5 pr-4 font-medium text-ink">{doc.label}</td>
+                        <td className="py-2.5 pr-4 text-ink-soft">
+                          {formatDocumentSubmittedAt(doc.createdAt ?? doc.updatedAt)}
+                        </td>
+                        <td className="py-2.5 pr-4 text-ink-soft">{sourceLabel(doc.sourceApp)}</td>
+                        <td className="py-2.5 pr-4">
+                          <span className={expiryTone(doc.expiryDate) === 'expired' ? 'text-critical' : 'text-ink-soft'}>
+                            {formatDocumentExpiry(doc.expiryDate)}
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-4">
+                          <StatusPill status={doc.verificationStatus} />
+                          {doc.rejectionReason && <p className="mt-1 text-xs text-critical">{doc.rejectionReason}</p>}
+                        </td>
+                        <td className="py-2.5 pr-4 text-ink-soft">
+                          <div className="flex flex-col gap-1">
+                            <span>{driverDocumentFileLabel(doc)}</span>
+                            {doc.fileObjectId ? (
+                              <button
+                                type="button"
+                                onClick={() => openDocument(doc.id)}
+                                className="text-left text-xs font-medium text-command-700 hover:underline"
+                              >
+                                View file
+                              </button>
+                            ) : (
+                              <span className="text-xs text-muted">No file attached</span>
+                            )}
                           </div>
+                        </td>
+                        {canVerify && (
+                          <td className="py-2.5">
+                            <div className="flex flex-col gap-2">
+                              {isAwaitingReview(doc) && (
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => verify.mutate(doc.id)}
+                                    disabled={verify.isPending}
+                                    className="text-xs font-medium text-ready hover:underline"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRejectDocId(doc.id)
+                                      setRejectReason('')
+                                      setRequestResubmitOnReject(true)
+                                    }}
+                                    className="text-xs font-medium text-critical hover:underline"
+                                  >
+                                    Decline
+                                  </button>
+                                </div>
+                              )}
+                              {doc.verificationStatus === 'rejected' && (
+                                <button
+                                  type="button"
+                                  onClick={() => resubmit.mutate(doc)}
+                                  disabled={resubmit.isPending}
+                                  className="text-left text-xs font-medium text-command-700 hover:underline"
+                                >
+                                  Ask driver to resend
+                                </button>
+                              )}
+                            </div>
+                          </td>
                         )}
-                        {doc.verificationStatus === 'rejected' && (
-                          <button
-                            type="button"
-                            onClick={() => resubmit.mutate(doc)}
-                            disabled={resubmit.isPending}
-                            className="text-left text-xs font-medium text-command-700 hover:underline"
-                          >
-                            Ask driver to resend
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-          </tbody>
-        </table>
-          </>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
         ) : null}
 
         {rejectDocId && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3">
+          <div className="mt-4 rounded-lg border border-critical/25 bg-critical/5 p-3">
             <label className="block text-sm">
-              <span className="text-red-900">Reason for decline (shown to driver)</span>
+              <span className="text-critical">Reason for decline (shown to driver)</span>
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={2}
                 placeholder="e.g. Expiry date not visible — upload a clear photo of the full card."
-                className="mt-1 w-full rounded-lg border border-red-200 px-3 py-1.5"
+                className="mt-1 w-full rounded-lg border border-critical/25 px-3 py-1.5"
               />
             </label>
-            <label className="mt-2 flex items-center gap-2 text-sm text-red-900">
+            <label className="mt-2 flex items-center gap-2 text-sm text-critical">
               <input
                 type="checkbox"
                 checked={requestResubmitOnReject}
@@ -590,11 +693,11 @@ export function DriverComplianceTab({
                 type="button"
                 onClick={() => reject.mutate(rejectDocId)}
                 disabled={reject.isPending}
-                className="rounded-lg bg-red-700 px-3 py-1 text-xs font-medium text-white"
+                className="rounded-lg bg-critical px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
               >
                 Confirm decline
               </button>
-              <button type="button" onClick={() => setRejectDocId(null)} className="text-xs text-slate-600">
+              <button type="button" onClick={() => setRejectDocId(null)} className="text-xs text-ink-soft">
                 Cancel
               </button>
             </div>
@@ -604,10 +707,10 @@ export function DriverComplianceTab({
 
       {driver.documentVersions.length > 0 && (
         <SectionCard title="Document history">
-          <p className="mb-2 text-xs text-slate-500">Previous evidence is never overwritten.</p>
+          <p className="mb-2 text-xs text-muted">Previous evidence is never overwritten.</p>
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-4">Requirement</th>
                 <th className="pb-2 pr-4">Replaced</th>
                 <th className="pb-2 pr-4">By</th>
@@ -616,10 +719,10 @@ export function DriverComplianceTab({
             </thead>
             <tbody>
               {driver.documentVersions.map((v) => (
-                <tr key={v.id} className="border-b border-slate-50">
+                <tr key={v.id} className="border-b border-border/60 last:border-b-0">
                   <td className="py-2 pr-4">{v.label}</td>
-                  <td className="py-2 pr-4 text-slate-600">{formatDate(v.replacedAt.slice(0, 10))}</td>
-                  <td className="py-2 pr-4 text-slate-600">{v.replacedBy}</td>
+                  <td className="py-2 pr-4 text-ink-soft">{formatDate(v.replacedAt.slice(0, 10))}</td>
+                  <td className="py-2 pr-4 text-ink-soft">{v.replacedBy}</td>
                   <td className="py-2">
                     <StatusPill status={v.verificationStatus} />
                   </td>

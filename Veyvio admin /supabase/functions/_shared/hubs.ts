@@ -320,13 +320,28 @@ export async function projectMaintenanceHub(companyId: string) {
 
   return {
     summary: {
+      attention: {
+        dueToday: 0,
+        dueWithin14Days: 0,
+        overdue: 0,
+        vor,
+        safetyCriticalDefects: (defects ?? []).filter((d) =>
+          ['critical', 'dangerous', 'major'].includes(String(d.severity)),
+        ).length,
+        inWorkshop: inMaintenance,
+        awaitingParts: (workOrders ?? []).filter((w) => w.status === 'awaiting_parts').length,
+        readyForRelease: (workOrders ?? []).filter((w) => w.status === 'completed').length,
+      },
       fleetAvailability: {
         total,
         available,
+        availableWithAdvisory: 0,
         inMaintenance,
         vor,
         awaitingInspection: (vehicles ?? []).filter((v) => v.operational_status === 'awaiting_check').length,
         awaitingParts: (workOrders ?? []).filter((w) => w.status === 'awaiting_parts').length,
+        readyForRelease: (workOrders ?? []).filter((w) => w.status === 'completed').length,
+        dueSoonUsable: 0,
       },
       maintenanceRisk: {
         overdueServices: 0,
@@ -335,6 +350,7 @@ export async function projectMaintenanceHub(companyId: string) {
         repeatDefectVehicles: 0,
         motApproaching: 0,
         tachoApproaching: 0,
+        missingEvidence: 0,
       },
       workshopPosition: {
         notStarted: (workOrders ?? []).filter((w) => w.status === 'open' || w.status === 'draft').length,
@@ -347,14 +363,21 @@ export async function projectMaintenanceHub(companyId: string) {
     },
     priorityQueue: workOrderRows.slice(0, 10).map((wo) => ({
       id: wo.workOrderId,
-      priorityGroup: 'workshop',
+      priorityGroup: 'attention',
       vehicleId: wo.vehicleId,
       registrationNumber: wo.registrationNumber,
       fleetNumber: wo.fleetNumber,
       depot: wo.depot,
+      issue: wo.title ?? 'Work order',
+      operationalImpact: 'Workshop capacity',
+      maintenanceStage: wo.status ?? 'scheduled',
+      severity: 'advisory',
       title: wo.title,
       status: wo.status,
       dueAt: wo.targetCompletionDate,
+      deadline: wo.targetCompletionDate,
+      responsiblePerson: wo.managerName,
+      recommendedAction: null,
     })),
     fleetRows: (vehicles ?? []).map((v: Row) => ({
       vehicleId: v.id,
@@ -367,6 +390,28 @@ export async function projectMaintenanceHub(companyId: string) {
     })),
     workOrders: workOrderRows,
     schedule: [],
+    calendar: [],
+    parts: [],
+    suppliers: [],
+    downtime: {
+      averageDowntimeHours: 0,
+      vehiclesOnDowntime: vor,
+      repeatVorEvents: 0,
+      averageApprovalDelayHours: 0,
+      averagePartsWaitHours: 0,
+      recentEvents: [],
+    },
+    intelligence: {
+      maintenanceCostPerMile: [],
+      repeatDefectCategories: [],
+      highCostVehicles: [],
+      plannedVsUnplanned: { planned: 0, unplanned: workOrderRows.length },
+      warrantySavings: 0,
+      supplierScores: [],
+      fleetAvgCostPerMile: null,
+      unplannedSharePercent: workOrderRows.length ? 100 : 0,
+      costAlerts: [],
+    },
     defects: (defects ?? []).map((d: Row) => {
       const vehicle = (vehicles ?? []).find((v) => v.id === d.vehicle_id) as Row | undefined
       return {
@@ -393,25 +438,6 @@ export async function projectMaintenanceHub(companyId: string) {
         linkedWorkOrderId: null,
       }
     }),
-    calendar: [],
-    suppliers: [],
-    parts: [],
-    downtime: {
-      averageDowntimeHours: 0,
-      vehiclesOnDowntime: vor + inMaintenance,
-      repeatVorEvents: 0,
-      averageApprovalDelayHours: 0,
-      averagePartsWaitHours: 0,
-      recentEvents: [],
-    },
-    intelligence: {
-      maintenanceCostPerMile: [],
-      repeatDefectCategories: [],
-      highCostVehicles: [],
-      plannedVsUnplanned: { planned: 0, unplanned: 0 },
-      warrantySavings: 0,
-      supplierScores: [],
-    },
   }
 }
 

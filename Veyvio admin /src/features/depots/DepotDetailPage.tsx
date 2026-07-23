@@ -88,7 +88,7 @@ export function DepotDetailPage() {
 
   const zones = DEPOT_ZONES[id ?? ''] ?? []
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading depot…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading depot…</p>
   if (isError || !depot) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Depot not found'}</p>
   }
@@ -103,13 +103,13 @@ export function DepotDetailPage() {
           <>
             <Link
               to={`/yard?depot=${depot.id}`}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted"
             >
               Open Yard
             </Link>
             <Link
               to={`/vehicles?filter=all`}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted"
             >
               Open Vehicles
             </Link>
@@ -121,14 +121,14 @@ export function DepotDetailPage() {
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{stubNotice}</div>
       )}
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {DEPOT_WORKSPACE_TABS.map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => selectTab(t)}
             className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === t ? 'bg-white text-command-700 ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900'
+              tab === t ? 'bg-surface text-command-700 ring-1 ring-border' : 'text-ink-soft hover:text-ink'
             }`}
           >
             {t}
@@ -148,16 +148,16 @@ export function DepotDetailPage() {
       {tab === 'Vehicles' && (
         <SectionCard title="Vehicles at this depot" description="Home assignment and on-site presence — open a vehicle for full profile">
           <div className="mb-3 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full bg-slate-100 px-2 py-1">Assigned {homeVehicles.length}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-1">On site {onSiteVehicles.length}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-1">
+            <span className="rounded-full bg-surface-muted px-2 py-1">Assigned {homeVehicles.length}</span>
+            <span className="rounded-full bg-surface-muted px-2 py-1">On site {onSiteVehicles.length}</span>
+            <span className="rounded-full bg-surface-muted px-2 py-1">
               VOR {homeVehicles.filter((v) => v.operationalStatus === 'vor').length}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+                <tr className="border-b border-border text-xs uppercase text-muted">
                   <th className="pb-2 pr-3">Vehicle</th>
                   <th className="pb-2 pr-3">Type</th>
                   <th className="pb-2 pr-3">Operational</th>
@@ -167,18 +167,18 @@ export function DepotDetailPage() {
               </thead>
               <tbody>
                 {depotVehicles.map((v) => (
-                  <tr key={v.id} className="border-b border-slate-50">
+                  <tr key={v.id} className="border-b border-border/60">
                     <td className="py-2 pr-3">
                       <Link to={`/vehicles/${v.id}`} className="font-medium text-command-600 hover:underline">
                         {v.registrationNumber}
                       </Link>
-                      <p className="text-xs text-slate-500">{v.homeDepotId === id ? 'Home' : 'Visiting'}</p>
+                      <p className="text-xs text-muted">{v.homeDepotId === id ? 'Home' : 'Visiting'}</p>
                     </td>
-                    <td className="py-2 pr-3 text-slate-600">{VEHICLE_CATEGORY_LABELS[v.vehicleCategory]}</td>
+                    <td className="py-2 pr-3 text-ink-soft">{VEHICLE_CATEGORY_LABELS[v.vehicleCategory]}</td>
                     <td className="py-2 pr-3">
                       <StatusPill status={v.operationalStatus} />
                     </td>
-                    <td className="py-2 pr-3 text-xs text-slate-600">{v.yardStatus.replace(/_/g, ' ')}</td>
+                    <td className="py-2 pr-3 text-xs text-ink-soft">{v.yardStatus.replace(/_/g, ' ')}</td>
                     <td className="py-2">
                       <button
                         type="button"
@@ -204,7 +204,7 @@ export function DepotDetailPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+                <tr className="border-b border-border text-xs uppercase text-muted">
                   <th className="pb-2 pr-3">Name</th>
                   <th className="pb-2 pr-3">Status</th>
                   <th className="pb-2 pr-3">Licence</th>
@@ -213,7 +213,7 @@ export function DepotDetailPage() {
               </thead>
               <tbody>
                 {depotDrivers.map((d) => (
-                  <tr key={d.id} className="border-b border-slate-50">
+                  <tr key={d.id} className="border-b border-border/60">
                     <td className="py-2 pr-3">
                       <Link to={`/drivers/${d.id}`} className="font-medium text-command-600 hover:underline">
                         {d.firstName} {d.lastName}
@@ -222,7 +222,7 @@ export function DepotDetailPage() {
                     <td className="py-2 pr-3">
                       <StatusPill status={d.operationalStatus} />
                     </td>
-                    <td className="py-2 pr-3 text-xs text-slate-600">{d.licenceExpiry ? formatDate(d.licenceExpiry) : '—'}</td>
+                    <td className="py-2 pr-3 text-xs text-ink-soft">{d.licenceExpiry ? formatDate(d.licenceExpiry) : '—'}</td>
                     <td className="py-2">
                       <Link to="/messages" className="text-xs font-medium text-command-600 hover:underline">
                         Message
@@ -232,7 +232,7 @@ export function DepotDetailPage() {
                 ))}
                 {depotDrivers.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-4 text-sm text-slate-500">
+                    <td colSpan={4} className="py-4 text-sm text-muted">
                       No drivers with this primary depot.
                     </td>
                   </tr>
@@ -266,11 +266,11 @@ export function DepotDetailPage() {
               .filter((v) => v.nextMaintenanceDate || v.motExpiry || v.tachographCalibrationExpiry)
               .slice(0, 12)
               .map((v) => (
-                <li key={v.id} className="flex flex-wrap justify-between gap-2 border-b border-slate-50 py-2">
+                <li key={v.id} className="flex flex-wrap justify-between gap-2 border-b border-border/60 py-2">
                   <Link to={`/vehicles/${v.id}`} className="font-medium text-command-600 hover:underline">
                     {v.registrationNumber}
                   </Link>
-                  <span className="text-slate-600">
+                  <span className="text-ink-soft">
                     {[
                       v.nextMaintenanceDate && `Service ${formatDate(v.nextMaintenanceDate)}`,
                       v.motExpiry && `MOT ${formatDate(v.motExpiry)}`,
@@ -292,7 +292,7 @@ export function DepotDetailPage() {
         <SectionCard title="Depot equipment" description="Site inventory — not vehicle-mounted kit">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2">Item</th>
                 <th className="pb-2">Available</th>
                 <th className="pb-2">Assigned</th>
@@ -301,8 +301,8 @@ export function DepotDetailPage() {
             </thead>
             <tbody>
               {depot.equipment.map((e) => (
-                <tr key={e.id} className="border-b border-slate-50">
-                  <td className="py-2 font-medium text-slate-900">{e.name}</td>
+                <tr key={e.id} className="border-b border-border/60">
+                  <td className="py-2 font-medium text-ink">{e.name}</td>
                   <td className="py-2 tabular-nums">{e.available}</td>
                   <td className="py-2 tabular-nums">{e.assigned}</td>
                   <td className="py-2 tabular-nums text-red-700">{e.broken || '—'}</td>
@@ -366,9 +366,9 @@ export function DepotDetailPage() {
         <SectionCard title="Depot documents" description="Site certificates and plans">
           <ul className="space-y-2 text-sm">
             {depot.documents.map((d) => (
-              <li key={d.id} className="flex justify-between gap-2 border-b border-slate-50 py-2">
-                <span className="font-medium text-slate-900">{d.label}</span>
-                <span className="text-slate-600">
+              <li key={d.id} className="flex justify-between gap-2 border-b border-border/60 py-2">
+                <span className="font-medium text-ink">{d.label}</span>
+                <span className="text-ink-soft">
                   <StatusPill status={d.status} />
                   {d.expiryDate ? ` · ${formatDate(d.expiryDate)}` : ''}
                 </span>
@@ -471,10 +471,10 @@ function OverviewTab({
               (v.currentLocationLabel ?? v.parkingBay ?? '').toLowerCase().includes(z.label.split(' ')[0]!.toLowerCase()),
             )
             return (
-              <div key={z.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{z.kind}</p>
-                <p className="font-medium text-slate-900">{z.label}</p>
-                <p className="mt-1 text-xs text-slate-600">{inZone.length} vehicles</p>
+              <div key={z.id} className="rounded-lg border border-border bg-surface-muted p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">{z.kind}</p>
+                <p className="font-medium text-ink">{z.label}</p>
+                <p className="mt-1 text-xs text-ink-soft">{inZone.length} vehicles</p>
                 <ul className="mt-2 space-y-1">
                   {inZone.slice(0, 3).map((v) => (
                     <li key={v.id}>
@@ -545,11 +545,11 @@ function DepotSettingsForm({
         <Field label="Depot manager" value={managerName} onChange={setManagerName} />
         <Field label="Vehicle capacity" value={vehicleCapacity} onChange={setVehicleCapacity} />
         <label className="block text-sm">
-          <span className="text-slate-600">Status</span>
+          <span className="text-ink-soft">Status</span>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as typeof status)}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+            className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
           >
             {Object.entries(DEPOT_STATUS_LABELS).map(([k, label]) => (
               <option key={k} value={k}>
@@ -584,11 +584,11 @@ function Field({
 }) {
   return (
     <label className={`block text-sm ${className ?? ''}`}>
-      <span className="text-slate-600">{label}</span>
+      <span className="text-ink-soft">{label}</span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+        className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
       />
     </label>
   )
@@ -597,8 +597,8 @@ function Field({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

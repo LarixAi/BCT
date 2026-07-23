@@ -35,7 +35,7 @@ export function ScheduleStep({
   if (!showRecurrence) {
     return (
       <SectionCard title="Schedule" description="One-off journey — no recurrence pattern needed">
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-ink-soft">
           Trip dates are set on the Journey step. Recurring transport uses a pattern with trips generated 4–8 weeks ahead.
         </p>
       </SectionCard>
@@ -47,17 +47,17 @@ export function ScheduleStep({
       <SectionCard title="Recurrence pattern" description="Trips generated 4–8 weeks ahead — not years of fixed records">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">
-            <span className="text-slate-600">Start date</span>
-            <input type="date" value={rec.startDate} onChange={(e) => setRec({ startDate: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">Start date</span>
+            <input type="date" value={rec.startDate} onChange={(e) => setRec({ startDate: e.target.value })} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
           <label className="text-sm">
-            <span className="text-slate-600">End date</span>
-            <input type="date" value={rec.endDate} onChange={(e) => setRec({ endDate: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+            <span className="text-ink-soft">End date</span>
+            <input type="date" value={rec.endDate} onChange={(e) => setRec({ endDate: e.target.value })} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" />
           </label>
         </div>
 
         <div className="mt-4">
-          <p className="text-sm text-slate-600">Days of the week</p>
+          <p className="text-sm text-ink-soft">Days of the week</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {DAYS.map((d) => (
               <button
@@ -65,7 +65,7 @@ export function ScheduleStep({
                 type="button"
                 onClick={() => toggleDay(d.id)}
                 className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  rec.daysOfWeek.includes(d.id) ? 'bg-command-600 text-white' : 'bg-slate-100 text-slate-600'
+                  rec.daysOfWeek.includes(d.id) ? 'bg-command-600 text-white' : 'bg-surface-muted text-ink-soft'
                 }`}
               >
                 {d.label}
@@ -81,14 +81,14 @@ export function ScheduleStep({
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
-            <p className="text-sm font-medium text-slate-900">Morning</p>
+            <p className="text-sm font-medium text-ink">Morning</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <TimeField label="Pickup" value={rec.morningPickupTime} onChange={(v) => setRec({ morningPickupTime: v })} />
               <TimeField label="Arrival" value={rec.morningArrivalTime} onChange={(v) => setRec({ morningArrivalTime: v })} />
             </div>
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-900">Afternoon</p>
+            <p className="text-sm font-medium text-ink">Afternoon</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <TimeField label="Pickup" value={rec.afternoonPickupTime} onChange={(v) => setRec({ afternoonPickupTime: v })} />
               <TimeField label="Drop-off" value={rec.afternoonDropoffTime} onChange={(v) => setRec({ afternoonDropoffTime: v })} />
@@ -103,8 +103,8 @@ export function ScheduleStep({
 function TimeField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <label className="text-xs">
-      <span className="text-slate-500">{label}</span>
-      <input type="time" value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1" />
+      <span className="text-muted">{label}</span>
+      <input type="time" value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-2 py-1" />
     </label>
   )
 }

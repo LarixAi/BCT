@@ -5,16 +5,16 @@ export function AnalyticsTab({ hub }: { hub: FleetResourcesHubData }) {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Operational intelligence</h2>
-        <p className="text-sm text-slate-600">
+        <h2 className="text-lg font-semibold text-ink">Operational intelligence</h2>
+        <p className="text-sm text-ink-soft">
           Fuel anomalies, consumption baselines, stock forecasts and tyre recommendations.
         </p>
       </div>
 
       <section className="space-y-3">
-        <h3 className="text-base font-semibold text-slate-900">Fuel anomalies</h3>
+        <h3 className="text-base font-semibold text-ink">Fuel anomalies</h3>
         {hub.anomalies.length === 0 ? (
-          <p className="text-sm text-slate-500">No fuel anomalies in the current ledger window.</p>
+          <p className="text-sm text-muted">No fuel anomalies in the current ledger window.</p>
         ) : (
           <ul className="space-y-2">
             {hub.anomalies.map((a) => (
@@ -25,7 +25,7 @@ export function AnalyticsTab({ hub }: { hub: FleetResourcesHubData }) {
                     ? 'border-red-200 bg-red-50'
                     : a.severity === 'high'
                       ? 'border-amber-200 bg-amber-50'
-                      : 'border-slate-200 bg-white'
+                      : 'border-border bg-surface'
                 }`}
               >
                 <div className="flex flex-wrap justify-between gap-2">
@@ -47,10 +47,10 @@ export function AnalyticsTab({ hub }: { hub: FleetResourcesHubData }) {
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-base font-semibold text-slate-900">Consumption baselines</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <h3 className="text-base font-semibold text-ink">Consumption baselines</h3>
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-3 py-2">Vehicle</th>
                 <th className="px-3 py-2">Actual MPG</th>
@@ -62,13 +62,13 @@ export function AnalyticsTab({ hub }: { hub: FleetResourcesHubData }) {
             <tbody>
               {hub.baselines.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={5} className="px-3 py-6 text-center text-muted">
                     Need multiple odometer-linked fills to calculate MPG.
                   </td>
                 </tr>
               ) : (
                 hub.baselines.map((b) => (
-                  <tr key={b.vehicleId} className="border-t border-slate-100">
+                  <tr key={b.vehicleId} className="border-t border-border">
                     <td className="px-3 py-2">
                       <Link
                         to={`/vehicles/${b.vehicleId}`}
@@ -94,10 +94,10 @@ export function AnalyticsTab({ hub }: { hub: FleetResourcesHubData }) {
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-base font-semibold text-slate-900">Stock forecast (7 days)</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <h3 className="text-base font-semibold text-ink">Stock forecast (7 days)</h3>
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-3 py-2">Depot</th>
                 <th className="px-3 py-2">Resource</th>
@@ -109,7 +109,7 @@ export function AnalyticsTab({ hub }: { hub: FleetResourcesHubData }) {
             </thead>
             <tbody>
               {hub.forecasts.map((f) => (
-                <tr key={`${f.depotName}-${f.resourceItemId}`} className="border-t border-slate-100">
+                <tr key={`${f.depotName}-${f.resourceItemId}`} className="border-t border-border">
                   <td className="px-3 py-2">{f.depotName}</td>
                   <td className="px-3 py-2 font-medium">{f.resourceName}</td>
                   <td className="px-3 py-2 tabular-nums">
@@ -123,7 +123,7 @@ export function AnalyticsTab({ hub }: { hub: FleetResourcesHubData }) {
                   <td className="px-3 py-2 tabular-nums">
                     {f.daysUntilStockout != null ? f.daysUntilStockout : '—'}
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{f.recommendation}</td>
+                  <td className="px-3 py-2 text-ink-soft">{f.recommendation}</td>
                 </tr>
               ))}
             </tbody>
@@ -132,12 +132,12 @@ export function AnalyticsTab({ hub }: { hub: FleetResourcesHubData }) {
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-base font-semibold text-slate-900">Tyre wear / alignment</h3>
+        <h3 className="text-base font-semibold text-ink">Tyre wear / alignment</h3>
         <ul className="space-y-2 text-sm">
           {hub.tyres
             .filter((t) => t.recommendation)
             .map((t) => (
-              <li key={t.id} className="rounded-xl border border-slate-200 px-4 py-3">
+              <li key={t.id} className="rounded-xl border border-border px-4 py-3">
                 <span className="font-semibold tabular-nums">{t.registrationNumber ?? t.depotName}</span>
                 {' — '}
                 {t.internalId}: {t.recommendation}
@@ -155,7 +155,7 @@ export function AnalyticsTab({ hub }: { hub: FleetResourcesHubData }) {
               </li>
             ))}
           {hub.tyres.every((t) => !t.recommendation) && (
-            <li className="text-slate-500">No tyre wear recommendations open.</li>
+            <li className="text-muted">No tyre wear recommendations open.</li>
           )}
         </ul>
       </section>

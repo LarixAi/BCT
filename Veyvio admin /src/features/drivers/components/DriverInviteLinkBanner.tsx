@@ -81,16 +81,16 @@ export function DriverInviteLinkBanner({
       )}
       {!opensDriverApp ? (
         <p className="mt-2 text-xs opacity-80">
-          Tip: set <code className="rounded bg-white/70 px-1">VITE_DRIVER_APP_URL</code> in Admin (for example{' '}
-          <code className="rounded bg-white/70 px-1">http://192.168.1.136:8081</code>) so this link opens the Driver app.
+          Tip: set <code className="rounded bg-surface/70 px-1">VITE_DRIVER_APP_URL</code> in Admin (for example{' '}
+          <code className="rounded bg-surface/70 px-1">http://192.168.1.136:8081</code>) so this link opens the Driver app.
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <code className="max-w-full break-all rounded bg-white/80 px-2 py-1 text-xs text-slate-800">{href}</code>
+        <code className="max-w-full break-all rounded bg-surface/80 px-2 py-1 text-xs text-ink">{href}</code>
         <button
           type="button"
           onClick={() => void copyLink()}
-          className="rounded-lg border border-current/20 bg-white px-3 py-1.5 text-xs font-medium hover:bg-white/80"
+          className="rounded-lg border border-current/20 bg-surface px-3 py-1.5 text-xs font-medium hover:bg-surface/80"
         >
           {copied ? 'Copied' : 'Copy link'}
         </button>

@@ -15,6 +15,12 @@ const baseSession: SessionState = {
   hasSeenWelcome: false,
   bootstrapComplete: false,
   biometricUnlockedThisSession: false,
+  mfaChallengeId: null,
+  pendingCompanyId: null,
+  pendingMemberships: [],
+  requiresTenantSelection: false,
+  devMfaCode: null,
+  enabledModules: [],
 };
 
 const authedSession: SessionState = {

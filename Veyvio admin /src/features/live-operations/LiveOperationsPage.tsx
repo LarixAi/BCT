@@ -88,7 +88,7 @@ export function LiveOperationsPage() {
   }
 
   if (isLoading && !model) {
-    return <p className="text-sm text-slate-500">Loading live operations…</p>
+    return <p className="text-sm text-muted">Loading live operations…</p>
   }
 
   if (isError || !model) {
@@ -125,7 +125,7 @@ export function LiveOperationsPage() {
       <LiveCriticalIncidentsBanner />
 
       {depotId !== 'all' && (
-        <p className="text-xs text-slate-500">Depot filter from command bar: {depotId}</p>
+        <p className="text-xs text-muted">Depot filter from command bar: {depotId}</p>
       )}
 
       {!model.trackingEnabled && (

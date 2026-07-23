@@ -24,7 +24,7 @@ export class PageErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return (
-        <div className="mx-auto max-w-xl space-y-3 rounded-xl border border-critical/30 bg-white p-6">
+        <div className="mx-auto max-w-xl space-y-3 rounded-xl border border-critical/30 bg-surface p-6">
           <h1 className="text-lg font-semibold text-ink">{this.props.title ?? 'This page could not be shown'}</h1>
           <p className="text-sm text-muted">
             Something failed while loading this screen. The rest of Command is still available — try another page or refresh.

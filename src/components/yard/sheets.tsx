@@ -19,6 +19,8 @@ import { drivers } from "@/data/fixtures";
 import { toast } from "sonner";
 import { yardCopy } from "@/copy/yard-messages";
 import { YardConfirmDialog } from "@/components/yard/YardConfirmDialog";
+import { EquipmentAssetLabel, PrintEquipmentLabelButton } from "@/components/yard/EquipmentAssetLabel";
+import { buildEquipmentStickerCode } from "@/domain/equipment/equipment-qr";
 
 const ZONE_TO_REASON: Record<BayZone, MovementReason> = {
   Parking: "Move to parking",
@@ -50,6 +52,8 @@ export function SheetHost() {
         {sheet?.kind === "vor" && <VorTriageSheet caseId={sheet.caseId} />}
         {sheet?.kind === "quick" && <QuickPickSheet />}
         {sheet?.kind === "assign-equipment" && <AssignEquipmentSheet vehicleId={sheet.vehicleId} />}
+        {sheet?.kind === "equipment-label" && <EquipmentLabelSheet vehicleId={sheet.vehicleId} itemId={sheet.itemId} />}
+        {sheet?.kind === "transfer-equipment" && <TransferEquipmentSheet vehicleId={sheet.vehicleId} itemId={sheet.itemId} />}
         {sheet?.kind === "restock-consumable" && <RestockConsumableSheet vehicleId={sheet.vehicleId} defId={sheet.defId} />}
         {sheet?.kind === "report-equipment-issue" && <ReportEquipmentIssueSheet vehicleId={sheet.vehicleId} itemId={sheet.itemId} itemKind={sheet.itemKind} />}
         {sheet?.kind === "unassign-equipment" && <UnassignEquipmentSheet vehicleId={sheet.vehicleId} itemId={sheet.itemId} />}
@@ -430,6 +434,7 @@ const ISSUE_TYPES: { key: "missing" | "damaged" | "expired" | "inspection"; labe
 function AssignEquipmentSheet({ vehicleId }: { vehicleId: string }) {
   const vehicle = useYard(s => s.vehicles.find(v => v.id === vehicleId));
   const assign = useYard(s => s.assignEquipment);
+  const openSheet = useYard(s => s.openSheet);
   const close = useYard(s => s.closeSheet);
   const [defId, setDefId] = useState("hi-vis");
   const [asset, setAsset] = useState("");
@@ -446,12 +451,13 @@ function AssignEquipmentSheet({ vehicleId }: { vehicleId: string }) {
     { defId: "breakdown-pack", label: "Breakdown pack", prefix: "BD" },
   ];
   const opt = options.find(o => o.defId === defId)!;
-  const suggested = `${opt.prefix}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+  const suggested = buildEquipmentStickerCode(opt.prefix);
 
   const submit = () => {
-    const id = asset.trim() || suggested;
+    const stickerCode = asset.trim() || suggested;
+    const id = stickerCode;
     const item = defId === "wheelchair-set" ? {
-      id, defId, label,
+      id, defId, label, qrCode: stickerCode,
       status: "complete" as const,
       components: [
         { id: `${id}-C1`, label: "Clamp 1", present: true },
@@ -461,10 +467,11 @@ function AssignEquipmentSheet({ vehicleId }: { vehicleId: string }) {
         { id: `${id}-B`, label: "Occupant Belt", present: true },
         { id: `${id}-R`, label: "Restraint", present: true },
       ],
-    } : { id, defId, label, status: "present" as const };
-    assign(vehicle.id, item);
+    } : { id, defId, label, qrCode: stickerCode, status: "present" as const };
+    const itemId = assign(vehicle.id, item);
+    if (!itemId) return;
     toast.success(yardCopy.toast.equipment.assigned(label, vehicle.reg));
-    close();
+    openSheet({ kind: "equipment-label", vehicleId: vehicle.id, itemId });
   };
 
   return (
@@ -486,15 +493,119 @@ function AssignEquipmentSheet({ vehicleId }: { vehicleId: string }) {
           </div>
         </div>
         <div>
-          <Label className="text-[10px] uppercase tracking-widest text-muted font-bold">Asset ID (scan or enter)</Label>
+          <Label className="text-[10px] uppercase tracking-widest text-muted font-bold">Sticker label</Label>
+          <Input value={label} onChange={e => setLabel(e.target.value)} className="mt-2" placeholder="Name on printed sticker" />
+        </div>
+        <div>
+          <Label className="text-[10px] uppercase tracking-widest text-muted font-bold">QR / asset code (scan or enter)</Label>
           <Input value={asset} onChange={e => setAsset(e.target.value)} placeholder={suggested} className="mt-2 font-mono" />
-          <p className="text-[10px] text-muted mt-1">Leave blank to auto-generate {suggested}.</p>
+          <p className="text-[10px] text-muted mt-1">Leave blank to auto-generate {suggested}. Print the sticker after assigning.</p>
         </div>
       </div>
       <SheetFooter className="p-0 mt-6 flex-row gap-2">
         <Button variant="outline" onClick={close} className="flex-1">Cancel</Button>
         <PermissionGate permission="equipment.assign" fallback={<Button disabled className="flex-1 uppercase tracking-widest font-bold">No permission</Button>}>
-          <Button onClick={submit} className="flex-1 bg-primary hover:bg-primary/90 text-white uppercase tracking-widest font-bold">Confirm Assign</Button>
+          <Button onClick={submit} disabled={!label.trim()} className="flex-1 bg-primary hover:bg-primary/90 text-white uppercase tracking-widest font-bold">Assign & print label</Button>
+        </PermissionGate>
+      </SheetFooter>
+    </div>
+  );
+}
+
+function EquipmentLabelSheet({ vehicleId, itemId }: { vehicleId: string; itemId: string }) {
+  const vehicle = useYard(s => s.vehicles.find(v => v.id === vehicleId));
+  const item = useYard(s => s.equipment[vehicleId]?.assigned.find(a => a.id === itemId));
+  const close = useYard(s => s.closeSheet);
+
+  if (!vehicle || !item) return null;
+  const qrCode = item.qrCode ?? item.id;
+
+  return (
+    <div className="p-5">
+      <SheetHeader className="p-0 mb-4">
+        <SheetTitle className="font-display uppercase tracking-tight">Print equipment sticker</SheetTitle>
+        <SheetDescription>Stick this label on the physical item. Yard staff can scan it to transfer between vehicles.</SheetDescription>
+      </SheetHeader>
+      <EquipmentAssetLabel
+        label={item.label}
+        assetId={item.id}
+        qrCode={qrCode}
+        vehicleReg={vehicle.reg}
+        vehicleBay={vehicle.bayId}
+        assignedBy={item.assignedBy}
+      />
+      <SheetFooter className="p-0 mt-6 flex-col gap-2">
+        <PrintEquipmentLabelButton
+          label={item.label}
+          assetId={item.id}
+          qrCode={qrCode}
+          vehicleReg={vehicle.reg}
+          vehicleBay={vehicle.bayId}
+          assignedBy={item.assignedBy}
+        />
+        <Button variant="outline" onClick={close} className="w-full">Done</Button>
+      </SheetFooter>
+    </div>
+  );
+}
+
+function TransferEquipmentSheet({ vehicleId, itemId }: { vehicleId: string; itemId: string }) {
+  const vehicle = useYard(s => s.vehicles.find(v => v.id === vehicleId));
+  const vehicles = useYard(s => s.vehicles);
+  const item = useYard(s => s.equipment[vehicleId]?.assigned.find(a => a.id === itemId));
+  const transfer = useYard(s => s.transferEquipment);
+  const openSheet = useYard(s => s.openSheet);
+  const close = useYard(s => s.closeSheet);
+  const canTransfer = useCan("equipment.transfer");
+  const [targetId, setTargetId] = useState<string | null>(null);
+
+  if (!vehicle || !item) return null;
+
+  const targets = vehicles.filter(v => v.id !== vehicleId);
+
+  const submit = () => {
+    if (!targetId || !canTransfer) return;
+    const target = vehicles.find(v => v.id === targetId);
+    if (!target) return;
+    transfer(vehicle.id, itemId, targetId);
+    toast.success(yardCopy.toast.equipment.transferred(item.label, target.reg));
+    close();
+    openSheet({ kind: "equipment-label", vehicleId: targetId, itemId });
+  };
+
+  return (
+    <div className="p-5">
+      <SheetHeader className="p-0 mb-4">
+        <SheetTitle className="font-display uppercase tracking-tight">Transfer equipment</SheetTitle>
+        <SheetDescription>
+          {item.label} <span className="font-mono">({item.qrCode ?? item.id})</span> — currently on <RegPlate reg={vehicle.reg} />
+        </SheetDescription>
+      </SheetHeader>
+      {!canTransfer ? (
+        <p className="text-sm text-muted">Only Yard staff with transfer permission can move equipment between vehicles.</p>
+      ) : (
+        <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+          {targets.map(v => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => setTargetId(v.id)}
+              className={`w-full text-left p-3 rounded-xs border flex items-center justify-between gap-3 ${targetId === v.id ? "border-primary bg-primary/5" : "border-border bg-white hover:border-primary"}`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="font-mono text-sm font-bold text-muted">{v.bayId}</span>
+                <RegPlate reg={v.reg} />
+              </div>
+              <StatusChip status={v.status} />
+            </button>
+          ))}
+          {targets.length === 0 && <p className="text-xs text-muted">No other vehicles available.</p>}
+        </div>
+      )}
+      <SheetFooter className="p-0 mt-6 flex-row gap-2">
+        <Button variant="outline" onClick={close} className="flex-1">Cancel</Button>
+        <PermissionGate permission="equipment.transfer" fallback={<Button disabled className="flex-1 uppercase tracking-widest font-bold">Yard transfer only</Button>}>
+          <Button onClick={submit} disabled={!targetId} className="flex-1 bg-primary hover:bg-primary/90 text-white uppercase tracking-widest font-bold">Transfer</Button>
         </PermissionGate>
       </SheetFooter>
     </div>
@@ -705,8 +816,8 @@ function ScanSimulatorSheet({ vehicleId }: { vehicleId: string }) {
   return (
     <div className="p-5">
       <SheetHeader className="p-0 mb-4">
-        <SheetTitle className="font-display uppercase tracking-tight flex items-center gap-2"><Camera className="size-4 text-primary" /> Scan Asset (Simulator)</SheetTitle>
-        <SheetDescription>Tap any asset to open its report sheet — real camera scanning coming soon.</SheetDescription>
+        <SheetTitle className="font-display uppercase tracking-tight flex items-center gap-2"><Camera className="size-4 text-primary" /> Scan Asset</SheetTitle>
+        <SheetDescription>Tap an asset to report an issue, or scan its QR sticker from the main Scan page to transfer between vehicles.</SheetDescription>
       </SheetHeader>
       <div className="space-y-1 max-h-[60vh] overflow-y-auto">
         {items.map(i => (

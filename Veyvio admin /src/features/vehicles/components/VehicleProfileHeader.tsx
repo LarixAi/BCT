@@ -28,13 +28,13 @@ export function VehicleProfileHeader({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-lg font-semibold text-slate-600">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-lg font-semibold text-ink-soft">
             {vehicle.registrationNumber.slice(0, 2)}
           </div>
           <div>
             <p className="text-sm font-medium text-command-600">{vehicle.reference}</p>
-            <h1 className="text-2xl font-semibold text-slate-900">{vehicle.registrationNumber}</h1>
-            <p className="text-sm text-slate-600">
+            <h1 className="text-2xl font-semibold text-ink">{vehicle.registrationNumber}</h1>
+            <p className="text-sm text-ink-soft">
               {vehicle.make} {vehicle.model} · {vehicle.seatingCapacity} seats
               {vehicle.wheelchairCapacity > 0 && ` · ${vehicle.wheelchairCapacity} wheelchair`}
             </p>
@@ -48,7 +48,7 @@ export function VehicleProfileHeader({
 
       <div className="grid gap-4 lg:grid-cols-3">
         <VehicleReadinessCard vehicle={vehicle} />
-        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm lg:col-span-2">
+        <div className="rounded-xl border border-border bg-surface p-4 text-sm lg:col-span-2">
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Meta label="Fleet number" value={vehicle.fleetNumber ?? '—'} />
             <Meta label="Category" value={VEHICLE_CATEGORY_LABELS[vehicle.vehicleCategory]} />
@@ -79,8 +79,8 @@ export function VehicleProfileHeader({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

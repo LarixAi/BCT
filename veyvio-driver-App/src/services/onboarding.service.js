@@ -442,7 +442,7 @@ export async function getDriverOnboardingPrefill(driverId) {
     supabase
       .from("drivers")
       .select(
-        "full_name, email, phone, date_of_birth, address_json, emergency_contact_json, license_no, licence_categories, license_expiry, dvla_check_code, penalty_points, dqc_number, cpc_expiry, dbs_expiry, tacho_card_number, tacho_card_expiry, onboarding_status",
+        "full_name, email, phone, date_of_birth, address_json, emergency_contact_json, license_no, licence_categories, license_expiry, licence_expiry_date, dvla_check_code, penalty_points, dqc_number, cpc_expiry, cpc_expiry_date, dbs_expiry, dbs_expiry_date, tacho_card_number, tacho_card_expiry, onboarding_status",
       )
       .eq("id", driverId)
       .single(),
@@ -484,7 +484,7 @@ export async function getDriverOnboardingPrefill(driverId) {
     penaltyPoints: row?.penalty_points != null ? String(row.penalty_points) : "",
     dqcNumber: row?.dqc_number ?? "",
     cpcExpiry: toDateInput(row?.cpc_expiry),
-    dbsExpiry: toDateInput(row?.dbs_expiry),
+    dbsExpiry: toDateInput(row?.dbs_expiry_date ?? row?.dbs_expiry),
     tachoCardNumber: row?.tacho_card_number ?? "",
     tachoCardExpiry: toDateInput(row?.tacho_card_expiry),
   };
@@ -506,7 +506,7 @@ export async function getDriverOnboardingPrefill(driverId) {
     penaltyPoints: row?.penalty_points != null,
     dqcNumber: Boolean(row?.dqc_number?.trim()),
     cpcExpiry: Boolean(row?.cpc_expiry),
-    dbsExpiry: Boolean(row?.dbs_expiry),
+    dbsExpiry: Boolean(row?.dbs_expiry_date ?? row?.dbs_expiry),
     tachoCardNumber: Boolean(row?.tacho_card_number?.trim()),
     tachoCardExpiry: Boolean(row?.tacho_card_expiry),
   };
@@ -563,7 +563,7 @@ export async function getDriverOnboardingState(driver) {
     getDriverOnboardingRequirements(driver.id),
   ]);
 
-  const documents = await loadDriverDocuments(driver.id);
+  const documents = await loadDriverDocuments(driver.id, { driver });
   const commandProgress = await fetchCommandOnboardingProgress(supabase, driver.id);
   let serverCompletedStepKeys = commandProgress?.completedStepKeys ?? [];
 
@@ -801,13 +801,13 @@ export async function updateDbsDetailsForComplianceGap(driverId, organisationId,
 
   const { data: driver, error: driverError } = await supabase
     .from("drivers")
-    .select("onboarding_status, dbs_expiry, can_do_school_runs")
+    .select("status, dbs_expiry_date")
     .eq("id", driverId)
-    .eq("organisation_id", organisationId)
+    .eq("company_id", organisationId)
     .maybeSingle();
   if (driverError) throw new Error(friendlyOnboardingError(driverError, "save"));
   if (!driver) throw new Error("Driver profile not found.");
-  if (driver.dbs_expiry) throw new Error("DBS expiry is already on file — pull to refresh if the app still shows a blocker.");
+  if (driver.dbs_expiry_date) throw new Error("DBS expiry is already on file — pull to refresh if the app still shows a blocker.");
 
   const requirements = await getDriverOnboardingRequirements(driverId);
   if (!requirements.requiresDbs) {
@@ -825,23 +825,11 @@ export async function updateDbsDetailsForComplianceGap(driverId, organisationId,
     throw new Error("Please upload your DBS certificate.");
   }
 
-  const isActiveDriver = ["active", "temporary_access"].includes(driver.onboarding_status);
-  if (isActiveDriver) {
-    const { error: rpcError } = await supabase.rpc("driver_backfill_dbs_expiry", {
-      p_expiry: dbsExpiry,
-    });
-    if (rpcError) throw new Error(friendlyOnboardingError(rpcError, "save"));
-    return;
-  }
-
-  const { error } = await supabase
-    .from("drivers")
-    .update({
-      dbs_expiry: dbsExpiry,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", driverId)
-    .eq("organisation_id", organisationId);
+  // drivers has no client-writable UPDATE policy — a driver can only change their
+  // own dbs_expiry_date through this SECURITY DEFINER RPC, not a direct update.
+  const { error } = await supabase.rpc("driver_backfill_dbs_expiry", {
+    p_expiry: dbsExpiry,
+  });
   if (error) throw new Error(friendlyOnboardingError(error, "save"));
 
   await supabase
@@ -1009,7 +997,9 @@ async function persistFullSubmission(driverId, organisationId, form) {
         form.penaltyPoints != null && form.penaltyPoints !== "" ? Number(form.penaltyPoints) : null,
       dqc_number: form.dqcNumber || null,
       cpc_expiry: form.cpcExpiry || null,
+      cpc_expiry_date: form.cpcExpiry || null,
       dbs_expiry: form.dbsExpiry || null,
+      dbs_expiry_date: form.dbsExpiry || null,
       updated_at: now,
     })
     .eq("id", driverId)

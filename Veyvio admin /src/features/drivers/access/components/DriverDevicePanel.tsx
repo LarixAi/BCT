@@ -21,23 +21,23 @@ export function DriverDevicePanel({
   return (
     <SectionCard title="Registered devices" description="Devices trusted for Driver app sign-in">
       {devices.length === 0 ? (
-        <p className="text-sm text-slate-500">No registered devices.</p>
+        <p className="text-sm text-muted">No registered devices.</p>
       ) : (
         <ul className="space-y-2 text-sm">
           {devices.map((device) => (
-            <li key={device.id} className="rounded-lg border border-slate-200 px-3 py-3">
+            <li key={device.id} className="rounded-lg border border-border px-3 py-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="font-medium">{device.label}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted">
                     {device.operatingSystem ?? device.platform}
                     {device.appVersion ? ` · App ${device.appVersion}` : ''}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted">
                     Registered {formatDateTime(device.registeredAt)} · Last active{' '}
                     {formatDateTime(device.lastSeenAt)}
                   </p>
-                  <p className="mt-1 text-xs text-slate-600">
+                  <p className="mt-1 text-xs text-ink-soft">
                     {device.securityStatus === 'trusted' ? 'Trusted' : device.securityStatus}
                     {device.biometricUnlock
                       ? ` · Biometric unlock: ${device.biometricMethod ?? 'enabled'}`
@@ -65,7 +65,7 @@ export function DriverDevicePanel({
                         setDeviceReason((prev) => ({ ...prev, [device.id]: e.target.value }))
                       }
                       placeholder="Reason to revoke"
-                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                      className="rounded-lg border border-border px-2 py-1 text-xs"
                     />
                     <button
                       type="button"

@@ -35,14 +35,14 @@ export function TransferNotificationPanel({ tripId }: { tripId: string }) {
     <SectionCard title="Driver notification tracking" description="Delivery and acknowledgement status">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+          <tr className="border-b border-border text-xs uppercase text-muted">
             <th className="pb-2 pr-3 font-medium">Recipient</th>
             <th className="pb-2 font-medium">Status</th>
           </tr>
         </thead>
         <tbody>
           {latest.notifications.map((n) => (
-            <tr key={n.channel} className="border-b border-slate-50 last:border-0">
+            <tr key={n.channel} className="border-b border-border/60 last:border-0">
               <td className="py-2 pr-3">{CHANNEL_LABEL[n.channel]}</td>
               <td className="py-2">
                 <span
@@ -51,7 +51,7 @@ export function TransferNotificationPanel({ tripId }: { tripId: string }) {
                       ? 'bg-emerald-100 text-emerald-800'
                       : n.status === 'failed' || n.status === 'rejected' || n.status === 'offline'
                         ? 'bg-red-100 text-red-800'
-                        : 'bg-slate-100 text-slate-700'
+                        : 'bg-surface-muted text-ink-soft'
                   }`}
                 >
                   {STATUS_LABEL[n.status]}

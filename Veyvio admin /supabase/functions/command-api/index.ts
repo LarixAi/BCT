@@ -25,6 +25,10 @@ import {
   attendanceProfile,
 } from '../_shared/attendance.ts'
 import {
+  effectiveDocumentVerificationStatus,
+  resolveProjectedDocumentExpiry,
+} from '../_shared/document-verification.ts'
+import {
   driverRequirementHistory,
   listDriverRequirements,
   patchDriverRequirement,
@@ -60,6 +64,34 @@ import {
   notifyCompanyAdmins,
 } from '../_shared/notifications.ts'
 import { seedDemoCompany } from '../_shared/seed-demo.ts'
+import { resolveEntitlements } from '../_shared/entitlements.ts'
+import {
+  assertCompanyScopedDefect,
+  assertCompanyScopedDriver,
+  assertCompanyScopedDuty,
+  assertCompanyScopedVehicle,
+  moduleForApiPath,
+  requireModule,
+} from '../_shared/tenant-guards.ts'
+import {
+  companyEntitlements,
+  platformAudit,
+  platformBillingWebhook,
+  platformCheckout,
+  platformCompanies,
+  platformCompanyDetail,
+  platformFeatureFlags,
+  platformHealth,
+  platformPatchCompany,
+  platformPatchFeatureFlag,
+  platformPlans,
+  platformSeedIsolation,
+  platformSubscriptions,
+  platformSupportGrant,
+  platformSupportGrantRevoke,
+  platformSupportGrantsAll,
+  platformSupportGrantsList,
+} from '../_shared/platform-admin.ts'
 import { admin, authenticate, ensurePlatformUser, publicClient } from '../_shared/supabase.ts'
 import {
   acceptCompanyContracts,
@@ -70,7 +102,8 @@ import {
   createMfaLoginChallenge,
   createSupportGrant,
   createUserSession,
-  enableMfaForUser,
+  beginMfaForUser,
+  confirmMfaForUser,
   findAuthUserByEmail,
   friendlyInviteError,
   listCompanyInvitations,
@@ -298,14 +331,16 @@ async function login(request: Request) {
   const primaryCompanyId = options.length === 1 ? String(options[0].tenantId) : null
   if (await userNeedsMfaChallenge(data.user.id, primaryCompanyId)) {
     try {
+      // The password-verified session is not handed to the client yet — it's
+      // held server-side against the challenge and only exchanged for a real
+      // session once the code is verified (see verifyMfa below).
       const challenge = await createMfaLoginChallenge(
         data.user.id,
+        data.session.refresh_token,
         request.headers.get('x-forwarded-for'),
         request.headers.get('user-agent'),
       )
       return json({
-        accessToken: data.session.access_token,
-        refreshToken: data.session.refresh_token,
         requiresMfaChallenge: true,
         mfaChallengeId: challenge.challengeId,
         devMfaCode: challenge.devMfaCode,
@@ -401,6 +436,10 @@ async function selectTenant(request: Request) {
 async function authUser(
   user: { id: string; email?: string; app_metadata?: Row; user_metadata?: Row },
   companyId: string,
+  extras?: {
+    platformRole?: string | null
+    entitlements?: Awaited<ReturnType<typeof resolveEntitlements>> | null
+  },
 ) {
   const [{ data: profile }, { data: membership }, { data: company }] = await Promise.all([
     admin.from('users').select('*').eq('id', user.id).maybeSingle(),
@@ -422,25 +461,36 @@ async function authUser(
     permissions = (rolePerms ?? []).map((p: { permission_code: string }) => p.permission_code)
   }
 
+  const entitlements = extras?.entitlements ?? (await resolveEntitlements(companyId))
+
   return {
     id: user.id,
     email: user.email ?? '',
     firstName: profile?.first_name ?? user.user_metadata?.first_name ?? '',
     lastName: profile?.last_name ?? user.user_metadata?.last_name ?? '',
-    platformRole: null,
+    platformRole: extras?.platformRole ?? null,
     activeTenantId: companyId,
     activeCompanyId: companyId,
     tenantName: company?.trading_name ?? company?.legal_name ?? null,
-    tenantStatus: company?.tenant_status ?? 'ACTIVE',
+    tenantStatus: entitlements.tenantStatus || company?.tenant_status || 'ACTIVE',
     mfaEnabled: Boolean(profile?.mfa_enabled),
     role: roleName,
     permissions,
+    planCode: entitlements.planCode,
+    subscriptionStatus: entitlements.subscriptionStatus,
+    enabledModules: entitlements.enabledModules,
+    usageLimits: entitlements.usageLimits,
   }
 }
 
 async function getMe(request: Request) {
   const context = await authenticate(request)
-  return json(await authUser(context.user, context.companyId))
+  return json(
+    await authUser(context.user, context.companyId, {
+      platformRole: context.platformRole,
+      entitlements: context.entitlements,
+    }),
+  )
 }
 
 function formatDepotAddress(address: unknown): string {
@@ -755,6 +805,13 @@ async function driverBootstrap(request: Request) {
       depotIds,
       activeDepotId: depotId,
       accessStatus,
+    },
+    entitlements: {
+      planCode: context.entitlements?.planCode ?? null,
+      subscriptionStatus: context.entitlements?.subscriptionStatus ?? null,
+      enabledModules: context.entitlements?.enabledModules ?? [],
+      tenantStatus: context.entitlements?.tenantStatus ?? context.tenantStatus ?? null,
+      usageLimits: context.entitlements?.usageLimits ?? {},
     },
     operator: {
       companyId: context.companyId,
@@ -1948,14 +2005,23 @@ function decodeBase64FilePayload(value: string): Uint8Array | null {
   }
 }
 
-function mapDriverDocumentRow(row: Row) {
+function mapDriverDocumentRow(row: Row, driver?: Row) {
+  const expiryDate = resolveProjectedDocumentExpiry(
+    driver ?? {},
+    row.requirement_type,
+    row.expiry_date,
+  )
+  const verificationStatus = effectiveDocumentVerificationStatus(
+    row.verification_status,
+    expiryDate,
+  )
   return {
     id: String(row.id),
     requirementType: String(row.requirement_type ?? ''),
     label: String(row.label ?? row.requirement_type ?? 'Document'),
     referenceNumber: row.reference_number ? String(row.reference_number) : null,
-    expiryDate: row.expiry_date ? String(row.expiry_date) : null,
-    verificationStatus: String(row.verification_status ?? 'uploaded'),
+    expiryDate,
+    verificationStatus,
     rejectionReason: row.rejection_reason ? String(row.rejection_reason) : null,
     fileName: row.file_name ? String(row.file_name) : null,
     storagePath: row.storage_path ? String(row.storage_path) : null,
@@ -2187,19 +2253,30 @@ async function driverListDocuments(request: Request) {
   const resolved = await resolveDriverAppAccount(context)
   if ('error' in resolved && resolved.error) return resolved.error
   const appAccount = resolved.appAccount!
+  const driverId = String(appAccount.driver_id)
 
-  const { data, error } = await admin
-    .from('driver_documents')
-    .select(
-      'id, requirement_type, label, reference_number, expiry_date, verification_status, rejection_reason, file_name, created_at, updated_at',
-    )
-    .eq('company_id', context.companyId)
-    .eq('driver_id', String(appAccount.driver_id))
-    .order('updated_at', { ascending: false })
-    .limit(100)
+  const [{ data, error }, { data: driverRow }] = await Promise.all([
+    admin
+      .from('driver_documents')
+      .select(
+        'id, requirement_type, label, reference_number, expiry_date, verification_status, rejection_reason, file_name, created_at, updated_at',
+      )
+      .eq('company_id', context.companyId)
+      .eq('driver_id', driverId)
+      .order('updated_at', { ascending: false })
+      .limit(100),
+    admin
+      .from('drivers')
+      .select(
+        'licence_expiry_date, cpc_expiry_date, dbs_expiry_date, medical_expiry_date, tacho_card_expiry',
+      )
+      .eq('company_id', context.companyId)
+      .eq('id', driverId)
+      .maybeSingle(),
+  ])
 
   if (error) return apiError(500, error.message, 'database_error')
-  return json((data ?? []).map((row: Row) => mapDriverDocumentRow(row)))
+  return json((data ?? []).map((row: Row) => mapDriverDocumentRow(row, (driverRow as Row) ?? {})))
 }
 
 function normalizeMessageAudience(value: unknown) {
@@ -2599,11 +2676,172 @@ async function driverMarkMessageRead(request: Request, conversationId: string) {
   return json({ ok: true, conversationId, readAt: now })
 }
 
+async function listCompanyUsers(request: Request) {
+  const context = await authenticate(request)
+  const { data: memberships, error } = await admin
+    .from('company_memberships')
+    .select('id, status, role_ids, user_id, users(id, email, first_name, last_name, authentication_status, last_login_at)')
+    .eq('company_id', context.companyId)
+    .order('created_at', { ascending: false })
+  if (error) return apiError(500, error.message, 'database_error')
+
+  const roleIds = new Set<string>()
+  for (const membership of memberships ?? []) {
+    for (const roleId of (membership.role_ids as string[] | null) ?? []) roleIds.add(String(roleId))
+  }
+
+  const { data: roles } = roleIds.size
+    ? await admin.from('roles').select('id, name').in('id', [...roleIds])
+    : { data: [] as Row[] }
+  const roleNameById = new Map((roles ?? []).map((role: Row) => [String(role.id), String(role.name ?? 'member')]))
+
+  return json(
+    (memberships ?? []).map((membership: Row) => {
+      const user = (membership.users as Row | null) ?? null
+      const membershipRoleIds = (membership.role_ids as string[] | null) ?? []
+      const roleKey = membershipRoleIds.map((id) => roleNameById.get(String(id))).find(Boolean) ?? 'member'
+      return {
+        id: String(membership.id),
+        roleKey,
+        status: String(membership.status ?? 'active'),
+        user: {
+          id: String(user?.id ?? membership.user_id ?? ''),
+          email: String(user?.email ?? ''),
+          firstName: String(user?.first_name ?? ''),
+          lastName: String(user?.last_name ?? ''),
+          status: String(user?.authentication_status ?? 'active'),
+          lastLoginAt: user?.last_login_at ? String(user.last_login_at) : null,
+        },
+      }
+    }),
+  )
+}
+
+async function listSchools(request: Request) {
+  const context = await authenticate(request)
+  const { data: schools, error } = await admin
+    .from('schools')
+    .select('id, name, address, customer_id, status')
+    .eq('company_id', context.companyId)
+    .order('name')
+  if (error) return apiError(500, error.message, 'database_error')
+
+  return json(
+    (schools ?? []).map((school: Row) => {
+      const address = school.address
+      let addressText: string | null = null
+      if (typeof address === 'string') addressText = address
+      else if (address && typeof address === 'object') {
+        const row = address as Row
+        addressText = [row.line1, row.line2, row.city, row.postcode, row.town]
+          .map((part) => (part == null ? '' : String(part).trim()))
+          .filter(Boolean)
+          .join(', ') || null
+      }
+      return {
+        id: String(school.id),
+        name: String(school.name ?? 'School'),
+        address: addressText,
+        customerId: school.customer_id ? String(school.customer_id) : '',
+        routeCount: 0,
+        pupilCount: 0,
+      }
+    }),
+  )
+}
+
+async function reportsSummary(request: Request) {
+  const context = await authenticate(request)
+  const url = new URL(request.url)
+  const from = url.searchParams.get('from') ?? new Date().toISOString().slice(0, 10)
+  const to = url.searchParams.get('to') ?? from
+  const companyId = context.companyId
+
+  const counts = await Promise.all([
+    admin.from('vehicles').select('*', { count: 'exact', head: true }).eq('company_id', companyId),
+    admin.from('drivers').select('*', { count: 'exact', head: true }).eq('company_id', companyId),
+    admin.from('customers').select('*', { count: 'exact', head: true }).eq('company_id', companyId),
+    admin.from('defects').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '("closed","rejected")'),
+    admin.from('incidents').select('*', { count: 'exact', head: true }).eq('company_id', companyId).neq('status', 'closed'),
+    admin
+      .from('duties')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('service_date', from)
+      .lte('service_date', to),
+  ])
+
+  return json({
+    fleet: {
+      vehicles: counts[0].count ?? 0,
+      drivers: counts[1].count ?? 0,
+    },
+    customers: counts[2].count ?? 0,
+    safety: {
+      openDefects: counts[3].count ?? 0,
+      openIncidents: counts[4].count ?? 0,
+    },
+    operations: {
+      dutiesInPeriod: counts[5].count ?? 0,
+    },
+    period: { from, to },
+    generatedAt: new Date().toISOString(),
+  })
+}
+
+async function reportsPerformance(request: Request) {
+  const context = await authenticate(request)
+  const url = new URL(request.url)
+  const from = url.searchParams.get('from') ?? new Date().toISOString().slice(0, 10)
+  const to = url.searchParams.get('to') ?? from
+  const companyId = context.companyId
+
+  const [{ data: duties }, { count: defectCount }, { count: vehicleCount }] = await Promise.all([
+    admin
+      .from('duties')
+      .select('id, status')
+      .eq('company_id', companyId)
+      .gte('service_date', from)
+      .lte('service_date', to),
+    admin
+      .from('defects')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('created_at', `${from}T00:00:00.000Z`)
+      .lte('created_at', `${to}T23:59:59.999Z`),
+    admin.from('vehicles').select('*', { count: 'exact', head: true }).eq('company_id', companyId),
+  ])
+
+  const rows = duties ?? []
+  const completed = rows.filter((d) => String(d.status) === 'completed')
+  const onTimePct = completed.length ? 100 : rows.length ? 0 : 100
+  const avgDelayMinutes = 0
+  const fleet = vehicleCount ?? 0
+  const defectRate = fleet > 0 ? Math.round(((defectCount ?? 0) / fleet) * 1000) / 10 : 0
+
+  return json({
+    onTimePct,
+    completedRuns: completed.length,
+    avgDelayMinutes,
+    defectRate,
+    period: { from, to },
+  })
+}
+
 async function listResource(request: Request, resource: string, id?: string) {
   const context = await authenticate(request)
   const table = LIST_RESOURCES[resource]
   if (table === undefined) return apiError(404, 'API resource not found', 'not_found')
   if (table === null) return json(id ? null : [])
+
+  try {
+    if (id && resource === 'defects') await assertCompanyScopedDefect(id, context.companyId)
+    if (id && resource === 'vehicles') await assertCompanyScopedVehicle(id, context.companyId)
+    if (id && resource === 'drivers') await assertCompanyScopedDriver(id, context.companyId)
+    if (id && resource === 'duties') await assertCompanyScopedDuty(id, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Record not found')
+  }
 
   let query = admin.from(table).select('*').eq('company_id', context.companyId)
   if (id) query = query.eq('id', id).limit(1)
@@ -3169,124 +3407,497 @@ async function emptyHub(moduleKey: string) {
   return json(empty[moduleKey] ?? {})
 }
 
+async function loadYardOpsTasks(companyId: string, depotId?: string | null) {
+  try {
+    let query = admin
+      .from('yard_tasks')
+      .select('*')
+      .eq('company_id', companyId)
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false })
+      .limit(100)
+    if (depotId) query = query.eq('depot_id', depotId)
+    const { data, error } = await query
+    if (error) {
+      console.error('yard tasks load failed', error.message)
+      return []
+    }
+    return (data ?? []).map((row: Row) => ({
+      id: String(row.id),
+      depotId: row.depot_id ? String(row.depot_id) : '',
+      vehicleId: row.vehicle_id ? String(row.vehicle_id) : '',
+      registrationNumber: String(row.registration_number ?? '—'),
+      taskType: String(row.task_type ?? 'move_vehicle'),
+      title: String(row.title ?? 'Yard task'),
+      priority: String(row.priority ?? 'routine'),
+      status: String(row.status ?? 'open'),
+      assignedStaffId: row.assigned_staff_id ? String(row.assigned_staff_id) : null,
+      assignedStaffName: row.assigned_staff_name ? String(row.assigned_staff_name) : null,
+      dueAt: row.due_at ? String(row.due_at) : null,
+      instructions: row.instructions ? String(row.instructions) : null,
+      evidenceRequired: Boolean(row.evidence_required),
+      blockingRelease: Boolean(row.blocking_release),
+      syncStatus: String(row.sync_status ?? 'synced'),
+      createdAt: String(row.created_at ?? new Date().toISOString()),
+      completedAt: row.completed_at ? String(row.completed_at) : null,
+      createdBy: String(row.created_by ?? 'System'),
+    }))
+  } catch (error) {
+    console.error('yard tasks load failed', error)
+    return []
+  }
+}
+
+async function loadYardOpsMovements(companyId: string, depotId?: string | null) {
+  try {
+    let query = admin
+      .from('yard_movements')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (depotId) query = query.eq('depot_id', depotId)
+    const { data, error } = await query
+    if (error) {
+      console.error('yard movements load failed', error.message)
+      return []
+    }
+    return (data ?? []).map((row: Row) => ({
+      id: String(row.id),
+      vehicleId: String(row.vehicle_id),
+      registrationNumber: String(row.registration_number ?? '—'),
+      fromLocation: String(row.from_location ?? 'Unknown'),
+      toLocation: String(row.to_location ?? 'Unknown'),
+      reason: String(row.reason ?? ''),
+      status: String(row.status ?? 'completed'),
+      requestedBy: String(row.requested_by ?? 'System'),
+      completedBy: row.completed_by ? String(row.completed_by) : null,
+      startedAt: String(row.started_at ?? row.created_at ?? new Date().toISOString()),
+      completedAt: row.completed_at ? String(row.completed_at) : null,
+      depotId: row.depot_id ? String(row.depot_id) : '',
+      depotName: row.depot_name ? String(row.depot_name) : 'Depot',
+    }))
+  } catch (error) {
+    console.error('yard movements load failed', error)
+    return []
+  }
+}
+
+const YARD_TASK_TYPE_LABELS: Record<string, string> = {
+  return_inspection: 'Return inspection',
+  pre_departure_inspection: 'Pre-departure inspection',
+  move_vehicle: 'Move vehicle',
+  clean_interior: 'Clean interior',
+  clean_exterior: 'Clean exterior',
+  refuel: 'Refuel',
+  charge: 'Charge',
+  check_fluids: 'Check fluids',
+  check_tyres: 'Check tyres',
+  replenish_equipment: 'Replenish equipment',
+  prepare_for_service: 'Prepare for service',
+}
+
+async function yardHubData(context: Awaited<ReturnType<typeof authenticate>>, requestedDepot?: string | null) {
+  const [accessibleDepots, { data: vehicles }] = await Promise.all([
+    loadMembershipDepots(context),
+    admin
+      .from('vehicles')
+      .select('id, registration, fleet_number, make, model, vehicle_class, primary_depot_id, operational_status, updated_at, depots(id, name)')
+      .eq('company_id', context.companyId)
+      .order('registration')
+      .limit(500),
+  ])
+
+  const depotList = accessibleDepots.map((d: Row) => ({ id: String(d.id), name: String(d.name ?? 'Depot') }))
+  const accessibleIds = new Set(depotList.map((d) => d.id))
+  const activeDepot =
+    depotList.find((d) => d.id === requestedDepot) ??
+    depotList[0] ??
+    { id: '', name: 'All depots' }
+
+  const filtered = (vehicles ?? []).filter((v: Row) => {
+    const primary = v.primary_depot_id ? String(v.primary_depot_id) : ''
+    if (accessibleIds.size && primary && !accessibleIds.has(primary)) return false
+    if (!activeDepot.id) return true
+    if (requestedDepot && String(requestedDepot).startsWith('depot-')) return true
+    return !primary || primary === activeDepot.id
+  })
+
+  const [tasks, movements] = await Promise.all([
+    loadYardOpsTasks(context.companyId, activeDepot.id || null),
+    loadYardOpsMovements(context.companyId, activeDepot.id || null),
+  ])
+
+  const openTasksByVehicle = new Map<string, number>()
+  for (const task of tasks) {
+    if (!['open', 'assigned', 'in_progress', 'awaiting_sync'].includes(task.status)) continue
+    if (!task.vehicleId) continue
+    openTasksByVehicle.set(task.vehicleId, (openTasksByVehicle.get(task.vehicleId) ?? 0) + 1)
+  }
+
+  const vehicleRows = filtered.map((v: Row) => {
+    const depot = (v.depots as Row | null) ?? {}
+    const op = String(v.operational_status ?? 'available')
+    const vor = op === 'vor' || op === 'quarantined'
+    const inWorkshop = ['maintenance', 'in_workshop', 'awaiting_parts'].includes(op)
+    const inspection = op === 'awaiting_check' || op === 'under_inspection' || op === 'onboarding'
+    const vehicleId = String(v.id)
+    return {
+      vehicleId,
+      registrationNumber: v.registration ?? '—',
+      fleetNumber: v.fleet_number ?? null,
+      vehicleCategory: v.vehicle_class ?? 'vehicle',
+      makeModel: [v.make, v.model].filter(Boolean).join(' ') || '—',
+      depotId: v.primary_depot_id ?? activeDepot.id,
+      depotName: depot.name ?? activeDepot.name,
+      zone: inWorkshop ? 'Workshop' : inspection ? 'Inspection' : 'Yard',
+      bay: null,
+      presenceState: 'on_site',
+      activityState: inWorkshop ? 'maintenance' : inspection ? 'inspection' : 'idle',
+      readinessState: vor ? 'vor' : inWorkshop ? 'work_required' : inspection ? 'awaiting_inspection' : 'ready_for_service',
+      custodyState: inWorkshop ? 'maintenance' : 'yard',
+      openTaskCount: openTasksByVehicle.get(vehicleId) ?? 0,
+      assignedStaffName: null,
+      nextDeparture: null,
+      lastMovementAt: null,
+      lastMovementBy: null,
+      lastUpdatedSource: 'Command',
+      lastUpdatedAt: v.updated_at ?? new Date().toISOString(),
+      exceptionLabels: vor ? ['VOR'] : [],
+      locationConfidence: v.primary_depot_id ? 'confirmed' : 'unknown',
+    }
+  })
+
+  const summary = {
+    onSite: vehicleRows.length,
+    readyForService: vehicleRows.filter((v) => v.readinessState === 'ready_for_service').length,
+    workRequired: vehicleRows.filter((v) => v.readinessState === 'work_required').length,
+    awaitingInspection: vehicleRows.filter((v) => v.readinessState === 'awaiting_inspection').length,
+    vor: vehicleRows.filter((v) => v.readinessState === 'vor').length,
+    departingSoon: 0,
+    locationUnknown: vehicleRows.filter((v) => v.locationConfidence === 'unknown').length,
+  }
+
+  return {
+    depotId: activeDepot.id,
+    depotName: activeDepot.name,
+    shiftLabel: 'Day shift',
+    operationalDate: new Date().toISOString().slice(0, 10),
+    summary,
+    vehicles: vehicleRows,
+    movements,
+    auditEvents: [],
+    tasks,
+    exceptions: vehicleRows
+      .filter((v) => v.readinessState === 'vor')
+      .map((v) => ({
+        id: `ex-${v.vehicleId}`,
+        severity: 'critical',
+        vehicleId: v.vehicleId,
+        registrationNumber: v.registrationNumber,
+        depotId: v.depotId,
+        title: `${v.registrationNumber} is VOR`,
+        detail: 'Vehicle is off the road',
+        detectedAt: v.lastUpdatedAt,
+        operationalImpact: 'Cannot enter service',
+        ownerName: null,
+        recommendedAction: 'Review VOR case and return-to-service',
+        escalationStatus: 'open',
+      })),
+    handover: null,
+    mapMarkers: vehicleRows.map((v) => ({
+      vehicleId: v.vehicleId,
+      registrationNumber: v.registrationNumber,
+      zoneId: v.zone === 'Workshop' ? 'workshop' : v.zone === 'Inspection' ? 'inspection' : 'yard',
+      bay: v.bay,
+      readinessState: v.readinessState,
+      activityState: v.activityState,
+      openTaskCount: v.openTaskCount,
+      nextDeparture: v.nextDeparture,
+      locationConfidence: v.locationConfidence,
+    })),
+    depots: depotList.length ? depotList : [{ id: activeDepot.id || 'default', name: activeDepot.name }],
+    zones: [
+      { id: 'yard', label: 'Yard', kind: 'bay' },
+      { id: 'workshop', label: 'Workshop', kind: 'workshop' },
+      { id: 'inspection', label: 'Inspection', kind: 'inspection' },
+    ],
+    driverMessages: await loadYardDriverMessagesForHub(context.companyId),
+    bodyworkReports: await loadYardBodyworkReportsForHub(context.companyId),
+    vehicleChecks: await loadYardVehicleChecksForHub(context.companyId),
+  }
+}
+
+async function createYardTaskRoute(request: Request) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request)
+    const vehicleId = String(input.vehicleId ?? '')
+    const actorName = String(input.actorName ?? context.user.email ?? 'Yard user')
+    if (!vehicleId) return apiError(400, 'vehicleId is required')
+
+    const { data: vehicle, error: vehicleError } = await admin
+      .from('vehicles')
+      .select('id, registration, primary_depot_id, depots(name)')
+      .eq('company_id', context.companyId)
+      .eq('id', vehicleId)
+      .maybeSingle()
+    if (vehicleError || !vehicle) return apiError(404, 'Vehicle not found')
+
+    const taskType = String(input.taskType ?? 'move_vehicle')
+    const title = String(input.title ?? YARD_TASK_TYPE_LABELS[taskType] ?? 'Yard task')
+    const depot = (vehicle.depots as Row | null) ?? {}
+    const now = new Date().toISOString()
+
+    const { error } = await admin.from('yard_tasks').insert({
+      company_id: context.companyId,
+      depot_id: vehicle.primary_depot_id ?? null,
+      vehicle_id: vehicle.id,
+      registration_number: vehicle.registration ?? '—',
+      task_type: taskType,
+      title,
+      priority: String(input.priority ?? 'routine'),
+      status: input.assignedStaffName ? 'assigned' : 'open',
+      assigned_staff_name: input.assignedStaffName ? String(input.assignedStaffName) : null,
+      due_at: input.dueAt ? String(input.dueAt) : null,
+      instructions: input.instructions ? String(input.instructions) : null,
+      evidence_required: Boolean(input.evidenceRequired),
+      blocking_release: Boolean(input.blockingRelease),
+      created_by: actorName,
+      source_app: 'command',
+      created_at: now,
+      updated_at: now,
+    })
+    if (error) return apiError(400, error.message)
+
+    const depotId = vehicle.primary_depot_id ? String(vehicle.primary_depot_id) : null
+    return json(await yardHubData(context, depotId))
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Could not create yard task')
+  }
+}
+
+async function startYardTaskRoute(request: Request, taskId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request).catch(() => ({} as Row))
+    const actorName = String(input.actorName ?? context.user.email ?? 'Yard user')
+    const { data: task, error: loadError } = await admin
+      .from('yard_tasks')
+      .select('id, depot_id')
+      .eq('company_id', context.companyId)
+      .eq('id', taskId)
+      .maybeSingle()
+    if (loadError || !task) return apiError(404, 'Task not found')
+
+    const { error } = await admin
+      .from('yard_tasks')
+      .update({
+        status: 'in_progress',
+        assigned_staff_name: input.assignedStaffName ? String(input.assignedStaffName) : actorName,
+        source_app: 'yard',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', taskId)
+      .eq('company_id', context.companyId)
+    if (error) return apiError(400, error.message)
+
+    return json(await yardHubData(context, task.depot_id ? String(task.depot_id) : null))
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Could not start yard task')
+  }
+}
+
+async function completeYardTaskRoute(request: Request, taskId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request)
+    const actorName = String(input.actorName ?? context.user.email ?? 'Yard user')
+    const { data: task, error: loadError } = await admin
+      .from('yard_tasks')
+      .select('id, depot_id')
+      .eq('company_id', context.companyId)
+      .eq('id', taskId)
+      .maybeSingle()
+    if (loadError || !task) return apiError(404, 'Task not found')
+
+    const now = new Date().toISOString()
+    const { error } = await admin
+      .from('yard_tasks')
+      .update({
+        status: 'completed',
+        completed_at: now,
+        completion_note: input.notes ? String(input.notes) : input.note ? String(input.note) : null,
+        source_app: 'yard',
+        updated_at: now,
+      })
+      .eq('id', taskId)
+      .eq('company_id', context.companyId)
+    if (error) return apiError(400, error.message)
+
+    return json(await yardHubData(context, task.depot_id ? String(task.depot_id) : null))
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Could not complete yard task')
+  }
+}
+
+async function recordYardMovementRoute(request: Request) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request)
+    const vehicleId = String(input.vehicleId ?? '')
+    const actorName = String(input.actorName ?? context.user.email ?? 'Yard user')
+    const destinationBay = String(input.destinationBay ?? input.toBayId ?? '')
+    const reason = String(input.reason ?? input.note ?? 'Yard move')
+    if (!vehicleId || !destinationBay) return apiError(400, 'vehicleId and destinationBay are required')
+
+    const { data: vehicle, error: vehicleError } = await admin
+      .from('vehicles')
+      .select('id, registration, primary_depot_id, depots(name)')
+      .eq('company_id', context.companyId)
+      .eq('id', vehicleId)
+      .maybeSingle()
+    if (vehicleError || !vehicle) return apiError(404, 'Vehicle not found')
+
+    const depot = (vehicle.depots as Row | null) ?? {}
+    const now = new Date().toISOString()
+    const fromLocation = input.fromLocation ? String(input.fromLocation) : input.fromBayId ? String(input.fromBayId) : 'Yard'
+
+    const { error } = await admin.from('yard_movements').insert({
+      company_id: context.companyId,
+      depot_id: vehicle.primary_depot_id ?? null,
+      depot_name: depot.name ? String(depot.name) : null,
+      vehicle_id: vehicle.id,
+      registration_number: vehicle.registration ?? '—',
+      from_location: fromLocation,
+      to_location: destinationBay,
+      reason,
+      status: 'completed',
+      requested_by: actorName,
+      completed_by: actorName,
+      started_at: now,
+      completed_at: now,
+      note: input.note ? String(input.note) : null,
+      source_app: input.sourceApp ? String(input.sourceApp) : 'yard',
+      created_at: now,
+    })
+    if (error) return apiError(400, error.message)
+
+    const depotId = vehicle.primary_depot_id ? String(vehicle.primary_depot_id) : null
+    return json(await yardHubData(context, depotId))
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Could not record yard movement')
+  }
+}
+
+async function applyYardMutationRoute(request: Request) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request)
+    const type = String(input.type ?? '')
+    const payload = (input.payload ?? {}) as Row
+    const depotId = String(input.depotId ?? payload.depotId ?? '')
+    const actorName = context.user.email ?? 'Yard user'
+
+    if (type === 'vehicle.move') {
+      return recordYardMovementRoute(
+        new Request(request.url, {
+          method: 'POST',
+          headers: request.headers,
+          body: JSON.stringify({
+            vehicleId: payload.vehicleId,
+            destinationBay: payload.toBayId ?? payload.destinationBay,
+            fromBayId: payload.fromBayId,
+            reason: payload.reason ?? payload.note ?? 'Yard move',
+            note: payload.note,
+            actorName,
+            sourceApp: 'yard',
+          }),
+        }),
+      )
+    }
+
+    if (type === 'task.update') {
+      const taskId = String(payload.taskId ?? '')
+      const action = String(payload.action ?? '')
+      if (!taskId) return apiError(400, 'taskId is required')
+
+      if (action === 'complete') {
+        return completeYardTaskRoute(
+          new Request(request.url, {
+            method: 'POST',
+            headers: request.headers,
+            body: JSON.stringify({ taskId, notes: payload.note, actorName }),
+          }),
+          taskId,
+        )
+      }
+      if (action === 'accept' || action === 'start') {
+        return startYardTaskRoute(
+          new Request(request.url, {
+            method: 'POST',
+            headers: request.headers,
+            body: JSON.stringify({ actorName, assignedStaffName: payload.assigneeName }),
+          }),
+          taskId,
+        )
+      }
+    }
+
+    return json({ ok: true, serverId: `ack_${Date.now()}` })
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Yard mutation failed')
+  }
+}
+
+async function loadMembershipDepots(context: { companyId: string; membershipId: string }): Promise<Row[]> {
+  const { data: accessRows } = await admin
+    .from('depot_access')
+    .select('depot_id, depots(id, company_id, name, code, address, status)')
+    .eq('membership_id', context.membershipId)
+
+  const fromAccess = (accessRows ?? [])
+    .map((row: Row) => row.depots as Row | null)
+    .filter((depot): depot is Row =>
+      Boolean(depot && String(depot.company_id) === context.companyId && depot.status !== 'archived'),
+    )
+
+  if (fromAccess.length) return fromAccess
+
+  const { data: companyDepots } = await admin
+    .from('depots')
+    .select('id, company_id, name, code, address, status')
+    .eq('company_id', context.companyId)
+    .neq('status', 'archived')
+    .order('name')
+  return companyDepots ?? []
+}
+
+async function yardDepots(request: Request) {
+  const context = await authenticate(request)
+  try {
+    const depots = await loadMembershipDepots(context)
+    return json(
+      depots.map((d) => ({
+        id: String(d.id),
+        name: String(d.name ?? 'Depot'),
+        code: d.code ? String(d.code) : null,
+        address: d.address ? String(d.address) : null,
+        status: d.status ? String(d.status) : null,
+        companyId: String(d.company_id ?? context.companyId),
+      })),
+    )
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Yard depots failed')
+  }
+}
+
 async function yardHub(request: Request) {
   const context = await authenticate(request)
   try {
     const url = new URL(request.url)
     const requestedDepot = url.searchParams.get('depotId') ?? url.searchParams.get('depot')
-
-    const [{ data: depots }, { data: vehicles }] = await Promise.all([
-      admin.from('depots').select('id, name').eq('company_id', context.companyId).order('name'),
-      admin
-        .from('vehicles')
-        .select('id, registration, fleet_number, make, model, vehicle_class, primary_depot_id, operational_status, updated_at, depots(id, name)')
-        .eq('company_id', context.companyId)
-        .order('registration')
-        .limit(500),
-    ])
-
-    const depotList = (depots ?? []).map((d: Row) => ({ id: String(d.id), name: String(d.name ?? 'Depot') }))
-    const activeDepot =
-      depotList.find((d) => d.id === requestedDepot) ??
-      depotList[0] ??
-      { id: '', name: 'All depots' }
-
-    const filtered = (vehicles ?? []).filter((v: Row) => {
-      if (!activeDepot.id) return true
-      if (requestedDepot && String(requestedDepot).startsWith('depot-')) return true
-      return !v.primary_depot_id || String(v.primary_depot_id) === activeDepot.id
-    })
-
-    const vehicleRows = filtered.map((v: Row) => {
-      const depot = (v.depots as Row | null) ?? {}
-      const op = String(v.operational_status ?? 'available')
-      const vor = op === 'vor' || op === 'quarantined'
-      const inWorkshop = ['maintenance', 'in_workshop', 'awaiting_parts'].includes(op)
-      const inspection = op === 'awaiting_check' || op === 'under_inspection' || op === 'onboarding'
-      return {
-        vehicleId: v.id,
-        registrationNumber: v.registration ?? '—',
-        fleetNumber: v.fleet_number ?? null,
-        vehicleCategory: v.vehicle_class ?? 'vehicle',
-        makeModel: [v.make, v.model].filter(Boolean).join(' ') || '—',
-        depotId: v.primary_depot_id ?? activeDepot.id,
-        depotName: depot.name ?? activeDepot.name,
-        zone: inWorkshop ? 'Workshop' : inspection ? 'Inspection' : 'Yard',
-        bay: null,
-        presenceState: 'on_site',
-        activityState: inWorkshop ? 'maintenance' : inspection ? 'inspection' : 'idle',
-        readinessState: vor ? 'vor' : inWorkshop ? 'work_required' : inspection ? 'awaiting_inspection' : 'ready_for_service',
-        custodyState: inWorkshop ? 'maintenance' : 'yard',
-        openTaskCount: 0,
-        assignedStaffName: null,
-        nextDeparture: null,
-        lastMovementAt: null,
-        lastMovementBy: null,
-        lastUpdatedSource: 'Command',
-        lastUpdatedAt: v.updated_at ?? new Date().toISOString(),
-        exceptionLabels: vor ? ['VOR'] : [],
-        locationConfidence: v.primary_depot_id ? 'confirmed' : 'unknown',
-      }
-    })
-
-    const summary = {
-      onSite: vehicleRows.length,
-      readyForService: vehicleRows.filter((v) => v.readinessState === 'ready_for_service').length,
-      workRequired: vehicleRows.filter((v) => v.readinessState === 'work_required').length,
-      awaitingInspection: vehicleRows.filter((v) => v.readinessState === 'awaiting_inspection').length,
-      vor: vehicleRows.filter((v) => v.readinessState === 'vor').length,
-      departingSoon: 0,
-      locationUnknown: vehicleRows.filter((v) => v.locationConfidence === 'unknown').length,
-    }
-
-    return json({
-      depotId: activeDepot.id,
-      depotName: activeDepot.name,
-      shiftLabel: 'Day shift',
-      operationalDate: new Date().toISOString().slice(0, 10),
-      summary,
-      vehicles: vehicleRows,
-      movements: [],
-      auditEvents: [],
-      tasks: [],
-      exceptions: vehicleRows
-        .filter((v) => v.readinessState === 'vor')
-        .map((v) => ({
-          id: `ex-${v.vehicleId}`,
-          severity: 'critical',
-          vehicleId: v.vehicleId,
-          registrationNumber: v.registrationNumber,
-          depotId: v.depotId,
-          title: `${v.registrationNumber} is VOR`,
-          detail: 'Vehicle is off the road',
-          detectedAt: v.lastUpdatedAt,
-          operationalImpact: 'Cannot enter service',
-          ownerName: null,
-          recommendedAction: 'Review VOR case and return-to-service',
-          escalationStatus: 'open',
-        })),
-      handover: null,
-      mapMarkers: vehicleRows.map((v) => ({
-        vehicleId: v.vehicleId,
-        registrationNumber: v.registrationNumber,
-        zoneId: v.zone === 'Workshop' ? 'workshop' : v.zone === 'Inspection' ? 'inspection' : 'yard',
-        bay: v.bay,
-        readinessState: v.readinessState,
-        activityState: v.activityState,
-        openTaskCount: v.openTaskCount,
-        nextDeparture: v.nextDeparture,
-        locationConfidence: v.locationConfidence,
-      })),
-      depots: depotList.length ? depotList : [{ id: activeDepot.id || 'default', name: activeDepot.name }],
-      zones: [
-        { id: 'yard', label: 'Yard', kind: 'bay' },
-        { id: 'workshop', label: 'Workshop', kind: 'workshop' },
-        { id: 'inspection', label: 'Inspection', kind: 'inspection' },
-      ],
-      driverMessages: await loadYardDriverMessagesForHub(context.companyId),
-      bodyworkReports: await loadYardBodyworkReportsForHub(context.companyId),
-      vehicleChecks: await loadYardVehicleChecksForHub(context.companyId),
-    })
+    return json(await yardHubData(context, requestedDepot))
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'Yard hub failed')
   }
@@ -3835,6 +4446,263 @@ async function loadYardVehicleChecksForHub(companyId: string) {
   }
 }
 
+function resolveStaffInvitationAppType(applications: unknown, roleKey: string): 'COMMAND' | 'YARD' | 'DRIVER' {
+  const apps = Array.isArray(applications) ? applications.map(String) : []
+  if (apps.includes('yard') || ['yard_manager', 'yard_operative', 'contractor'].includes(roleKey)) return 'YARD'
+  if (apps.includes('driver') || roleKey === 'driver') return 'DRIVER'
+  return 'COMMAND'
+}
+
+function staffRoleLabel(roleKey: string): string {
+  return roleKey.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+async function loadStaffMember(companyId: string, staffId: string) {
+  const { data, error } = await admin
+    .from('staff_members')
+    .select('*, depots(id, name)')
+    .eq('company_id', companyId)
+    .eq('id', staffId)
+    .maybeSingle()
+  if (error || !data) throw new Error('Staff member not found')
+  return data as Row
+}
+
+async function projectStaffProfile(companyId: string, staffId: string, inviteMeta?: Row | null, roleKey = 'dispatcher') {
+  const row = await loadStaffMember(companyId, staffId)
+  const depot = (row.depots as Row | null) ?? {}
+  const email = row.email ? String(row.email).toLowerCase() : ''
+  const nowIso = new Date().toISOString()
+
+  let pendingInvite: Row | null = inviteMeta ?? null
+  if (!pendingInvite && email) {
+    const { data } = await admin
+      .from('invitations')
+      .select('id, status, expires_at, app_type, created_at')
+      .eq('company_id', companyId)
+      .eq('email', email)
+      .eq('status', 'pending')
+      .is('accepted_at', null)
+      .is('revoked_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    pendingInvite = data as Row | null
+  }
+
+  const hasUser = Boolean(row.user_id)
+  const invitePending = Boolean(pendingInvite)
+  const accountStatus = hasUser ? 'active' : invitePending ? 'invitation_pending' : 'no_account'
+
+  return {
+    id: String(row.id),
+    personId: `person-${row.id}`,
+    reference: row.employee_number ? String(row.employee_number) : `STF-${String(row.id).slice(0, 8)}`,
+    firstName: String(row.first_name ?? ''),
+    lastName: String(row.last_name ?? ''),
+    preferredName: row.preferred_name ? String(row.preferred_name) : null,
+    employeeNumber: row.employee_number ? String(row.employee_number) : null,
+    pronouns: null,
+    jobTitle: String(row.job_title ?? 'Staff'),
+    department: 'Operations',
+    departmentId: row.department_id ? String(row.department_id) : 'dept-operations',
+    team: null,
+    employmentStatus: 'active',
+    dutyStatus: 'off_duty',
+    contractType: 'full_time',
+    startDate: nowIso.slice(0, 10),
+    endDate: null,
+    lineManagerId: null,
+    lineManagerName: null,
+    costCentre: null,
+    workEmail: email,
+    personalEmail: null,
+    workPhone: null,
+    mobilePhone: row.phone ? String(row.phone) : null,
+    preferredContactMethod: 'email' as const,
+    emergencyContactName: null,
+    emergencyContactPhone: null,
+    primaryDepotId: row.primary_depot_id ? String(row.primary_depot_id) : '',
+    primaryDepotName: depot.name ? String(depot.name) : '—',
+    depotAssignments: row.primary_depot_id
+      ? [{
+          depotId: String(row.primary_depot_id),
+          depotName: depot.name ? String(depot.name) : 'Depot',
+          assignmentType: 'primary' as const,
+          roleAtDepot: String(row.job_title ?? 'Staff'),
+          startDate: nowIso.slice(0, 10),
+          endDate: null,
+          status: 'active' as const,
+        }]
+      : [],
+    roleAssignments: [{
+      roleKey,
+      roleLabel: staffRoleLabel(roleKey),
+      scopeType: 'depot' as const,
+      scopeLabel: depot.name ? String(depot.name) : 'Depot',
+      depotIds: row.primary_depot_id ? [String(row.primary_depot_id)] : [],
+      elevated: false,
+      effectiveFrom: nowIso.slice(0, 10),
+      expiresAt: null,
+    }],
+    applications: [{
+      application: pendingInvite?.app_type === 'YARD' ? 'yard' : 'command',
+      enabled: hasUser || invitePending,
+      status: hasUser ? 'enabled' : invitePending ? 'invitation_pending' : 'disabled',
+    }],
+    account: {
+      userAccountId: row.user_id ? String(row.user_id) : null,
+      loginEmail: email,
+      accountStatus,
+      invitationStatus: invitePending ? 'sent' : hasUser ? 'accepted' : 'not_sent',
+      invitationSentAt: pendingInvite?.created_at ? String(pendingInvite.created_at) : null,
+      invitationAcceptedAt: hasUser ? nowIso : null,
+      invitationExpiresAt: pendingInvite?.expires_at ? String(pendingInvite.expires_at) : null,
+      accountCreatedAt: hasUser ? nowIso : null,
+      lastLoginAt: null,
+      lastFailedLoginAt: null,
+      mfaEnabled: false,
+      authProvider: 'email',
+      activeSessionCount: 0,
+      temporaryAccessExpiresAt: null,
+      devInvitationToken: inviteMeta?.invitationToken ? String(inviteMeta.invitationToken) : null,
+    },
+    qualifications: [],
+    documents: [],
+    documentVersions: [],
+    sessions: [],
+    devices: [],
+    governanceAlerts: [],
+    lifecycleWorkflow: [],
+    trainingRequirements: [],
+    trainingStatus: 'not_required',
+    trainingAccessBlocks: [],
+    linkedDriverId: null,
+    linkedDriverName: null,
+    openTaskCount: 0,
+    overdueTaskCount: 0,
+    tasks: [],
+    workingPattern: null,
+    shifts: [],
+    dutySessions: [],
+    currentDutySessionId: null,
+    onCall: false,
+    overtimeAvailable: false,
+    responsibilities: [],
+    operationalAlerts: [],
+    auditEvents: [],
+    createdAt: row.created_at ? String(row.created_at) : nowIso,
+    updatedAt: row.updated_at ? String(row.updated_at) : nowIso,
+  }
+}
+
+async function createStaff(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  const firstName = String(input.firstName ?? '').trim()
+  const lastName = String(input.lastName ?? '').trim()
+  const workEmail = String(input.workEmail ?? '').trim().toLowerCase()
+  const jobTitle = String(input.jobTitle ?? '').trim()
+  if (!firstName || !lastName) return apiError(400, 'First and last name are required')
+  if (!workEmail.includes('@')) return apiError(400, 'A valid work email is required')
+  if (!jobTitle) return apiError(400, 'Job title is required')
+
+  const roleKey = String(input.roleKey ?? 'dispatcher')
+  const primaryDepotId = isUuid(input.primaryDepotId) ? String(input.primaryDepotId) : null
+  const scopeDepotIds = Array.isArray(input.scopeDepotIds)
+    ? input.scopeDepotIds.filter((id: unknown) => isUuid(id)).map(String)
+    : primaryDepotId
+      ? [primaryDepotId]
+      : []
+
+  const { data: staff, error: staffError } = await admin
+    .from('staff_members')
+    .insert({
+      company_id: context.companyId,
+      first_name: firstName,
+      last_name: lastName,
+      preferred_name: input.preferredName ? String(input.preferredName) : null,
+      employee_number: input.employeeNumber ? String(input.employeeNumber) : null,
+      job_title: jobTitle,
+      department_id: isUuid(input.departmentId) ? input.departmentId : null,
+      primary_depot_id: primaryDepotId,
+      email: workEmail,
+      phone: input.mobilePhone ? String(input.mobilePhone) : null,
+      employment_status: 'active',
+      status: 'active',
+      created_by: context.user.id,
+      updated_by: context.user.id,
+      source_app: 'COMMAND',
+    })
+    .select('id')
+    .single()
+  if (staffError || !staff) return apiError(400, staffError?.message ?? 'Staff member could not be created')
+
+  let inviteMeta: Row | null = null
+  if (input.sendInvitation !== false) {
+    try {
+      const appType = resolveStaffInvitationAppType(input.applications, roleKey)
+      const invite = await createCompanyInvitation({
+        companyId: context.companyId,
+        invitedBy: context.user.id,
+        email: workEmail,
+        roleName: roleKey,
+        depotIds: scopeDepotIds,
+        appType,
+        expiresInDays: 7,
+      })
+      inviteMeta = { ...invite.invitation, invitationToken: invite.invitationToken }
+    } catch (inviteError) {
+      return apiError(400, inviteError instanceof Error ? inviteError.message : 'Invitation could not be created')
+    }
+  }
+
+  const profile = await projectStaffProfile(context.companyId, String(staff.id), inviteMeta, roleKey)
+  return json(profile, 201)
+}
+
+async function getStaffProfile(request: Request, staffId: string) {
+  const context = await authenticate(request)
+  try {
+    const profile = await projectStaffProfile(context.companyId, staffId)
+    return json(profile)
+  } catch (error) {
+    return apiError(404, error instanceof Error ? error.message : 'Staff member not found')
+  }
+}
+
+async function sendStaffInvitation(request: Request, staffId: string) {
+  const context = await authenticate(request)
+  try {
+    const row = await loadStaffMember(context.companyId, staffId)
+    const email = row.email ? String(row.email).trim().toLowerCase() : ''
+    if (!email) return apiError(400, 'Add a work email before sending an invitation.')
+
+    const input = await readJson<Row>(request).catch(() => ({} as Row))
+    const roleKey = String(input.roleKey ?? 'yard_manager')
+    const appType = resolveStaffInvitationAppType(input.applications, roleKey)
+    const depotIds = row.primary_depot_id ? [String(row.primary_depot_id)] : []
+
+    const invite = await createCompanyInvitation({
+      companyId: context.companyId,
+      invitedBy: context.user.id,
+      email,
+      roleName: roleKey,
+      depotIds,
+      appType,
+      expiresInDays: input.expiresInDays ? Number(input.expiresInDays) : 7,
+    })
+
+    const profile = await projectStaffProfile(context.companyId, staffId, {
+      ...invite.invitation,
+      invitationToken: invite.invitationToken,
+    }, roleKey)
+    return json(profile)
+  } catch (error) {
+    return apiError(400, error instanceof Error ? error.message : 'Invitation could not be sent')
+  }
+}
+
 async function staffHub(request: Request) {
   const context = await authenticate(request)
   try {
@@ -4061,6 +4929,7 @@ async function health() {
 async function driverProfiles(request: Request, driverId?: string) {
   try {
     const context = await authenticate(request)
+    if (driverId) await assertCompanyScopedDriver(driverId, context.companyId)
     const result = await projectDriverProfile(context.companyId, driverId)
     if (driverId && !result) return apiError(404, 'Driver not found', 'not_found')
     return json(result)
@@ -4082,11 +4951,12 @@ async function driverSummary(request: Request) {
 async function vehicleProfiles(request: Request, vehicleId?: string) {
   const context = await authenticate(request)
   try {
+    if (vehicleId) await assertCompanyScopedVehicle(vehicleId, context.companyId)
     const result = await projectVehicleProfile(context.companyId, vehicleId)
     if (vehicleId && !result) return apiError(404, 'Vehicle not found', 'not_found')
     return json(result)
   } catch (error) {
-    return apiError(500, error instanceof Error ? error.message : 'Vehicle projection failed')
+    return toApiErrorResponse(error, 'Vehicle projection failed')
   }
 }
 
@@ -4113,22 +4983,24 @@ async function dutiesList(request: Request, dutyId?: string) {
   const context = await authenticate(request)
   const date = new URL(request.url).searchParams.get('date')
   try {
+    if (dutyId) await assertCompanyScopedDuty(dutyId, context.companyId)
     const result = await projectDuties(context.companyId, date, dutyId)
     if (dutyId && !result) return apiError(404, 'Duty not found', 'not_found')
     return json(result)
   } catch (error) {
-    return apiError(500, error instanceof Error ? error.message : 'Duty projection failed')
+    return toApiErrorResponse(error, 'Duty projection failed')
   }
 }
 
 async function dutyTrack(request: Request, dutyId: string) {
   const context = await authenticate(request)
   try {
+    await assertCompanyScopedDuty(dutyId, context.companyId)
     const track = await projectDutyTrack(context.companyId, dutyId)
     if (!track) return apiError(404, 'Duty not found', 'not_found')
     return json(track)
   } catch (error) {
-    return apiError(500, error instanceof Error ? error.message : 'Duty track failed')
+    return toApiErrorResponse(error, 'Duty track failed')
   }
 }
 
@@ -4257,6 +5129,11 @@ async function createDriver(request: Request) {
 
 async function updateDriver(request: Request, driverId: string) {
   const context = await authenticate(request)
+  try {
+    await assertCompanyScopedDriver(driverId, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Driver not found')
+  }
   const input = await readJson<Row>(request)
 
   const { data: current, error: loadError } = await admin
@@ -5526,7 +6403,12 @@ async function resetPassword(request: Request) {
 async function setupMfa(request: Request) {
   const context = await authenticate(request)
   try {
-    const result = await enableMfaForUser(context.user.id, context.companyId)
+    const input = await readJson<{ code?: string }>(request).catch(() => ({} as { code?: string }))
+    if (input.code?.trim()) {
+      const result = await confirmMfaForUser(context.user.id, input.code.trim(), context.companyId)
+      return json(result)
+    }
+    const result = await beginMfaForUser(context.user.id, context.companyId)
     return json(result)
   } catch (error) {
     return apiError(400, error instanceof Error ? error.message : 'MFA could not be enabled')
@@ -5534,19 +6416,22 @@ async function setupMfa(request: Request) {
 }
 
 async function verifyMfa(request: Request) {
-  const context = await authenticate(request, false)
-  const input = await readJson<{ challengeId?: string; code?: string; companyId?: string; refreshToken?: string }>(request)
+  // No Authorization bearer is expected here — the caller has no valid session
+  // until the code below is verified. The challenge itself (id + code) is the
+  // only credential; the resulting session comes from the token stored
+  // server-side when the challenge was created, never from client input.
+  const input = await readJson<{ challengeId?: string; code?: string; companyId?: string }>(request)
   if (!input.challengeId || !input.code) return apiError(400, 'MFA challenge and code are required')
   try {
-    await verifyMfaLoginChallenge(input.challengeId, input.code, context.user.id)
+    const { userId, refreshToken } = await verifyMfaLoginChallenge(input.challengeId, input.code)
     const companyId = input.companyId
     if (companyId) {
-      return activateCompany(context.user.id, companyId, input.refreshToken, request)
+      return activateCompany(userId, companyId, refreshToken, request)
     }
     const { data: memberships } = await admin
       .from('company_memberships')
       .select('company_id, companies(trading_name, legal_name)')
-      .eq('user_id', context.user.id)
+      .eq('user_id', userId)
       .eq('status', 'active')
     const options = (memberships ?? []).map((membership: Row) => {
       const company = membership.companies as Row | null
@@ -5558,14 +6443,21 @@ async function verifyMfa(request: Request) {
       }
     })
     if (options.length === 1) {
-      return activateCompany(context.user.id, options[0].tenantId as string, input.refreshToken, request)
+      return activateCompany(userId, options[0].tenantId as string, refreshToken, request)
     }
-    const bearer = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? null
+    // Multiple companies — MFA has passed, so refresh the verified session now
+    // and let the client complete company selection with a real, scoped token.
+    const { data: refreshed, error: refreshError } = await publicClient().auth.refreshSession({
+      refresh_token: refreshToken,
+    })
+    if (refreshError || !refreshed.session) {
+      return apiError(401, 'Sign in again to select a company', 'session_refresh_failed')
+    }
     return json({
       requiresTenantSelection: true,
       memberships: options,
-      accessToken: bearer,
-      refreshToken: input.refreshToken ?? null,
+      accessToken: refreshed.session.access_token,
+      refreshToken: refreshed.session.refresh_token,
     })
   } catch (error) {
     return apiError(401, error instanceof Error ? error.message : 'MFA verification failed', 'mfa_failed')
@@ -5682,6 +6574,69 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   const path = routePath(request)
   const segments = path.split('/').filter(Boolean)
 
+  // Platform admin (Veyvio staff) — no company module gate
+  if (path === 'platform/companies' && request.method === 'GET') return platformCompanies(request)
+  if (
+    segments[0] === 'platform' &&
+    segments[1] === 'companies' &&
+    segments[2] &&
+    !segments[3] &&
+    request.method === 'GET'
+  ) {
+    return platformCompanyDetail(request, segments[2])
+  }
+  if (segments[0] === 'platform' && segments[1] === 'companies' && segments[2] && request.method === 'PATCH') {
+    return platformPatchCompany(request, segments[2])
+  }
+  if (path === 'platform/plans' && request.method === 'GET') return platformPlans(request)
+  if (path === 'platform/subscriptions' && request.method === 'GET') return platformSubscriptions(request)
+  if (path === 'platform/audit' && request.method === 'GET') return platformAudit(request)
+  if (path === 'platform/health' && request.method === 'GET') return platformHealth(request)
+  if (path === 'platform/feature-flags' && request.method === 'GET') return platformFeatureFlags(request)
+  if (
+    segments[0] === 'platform' &&
+    segments[1] === 'feature-flags' &&
+    segments[2] &&
+    request.method === 'PATCH'
+  ) {
+    return platformPatchFeatureFlag(request, segments[2])
+  }
+  if (path === 'platform/support-grants' && request.method === 'GET') {
+    const companyId = new URL(request.url).searchParams.get('companyId')
+    if (!companyId) return platformSupportGrantsAll(request)
+    return platformSupportGrantsList(request)
+  }
+  if (path === 'platform/support-grants' && request.method === 'POST') return platformSupportGrant(request)
+  if (
+    segments[0] === 'platform' &&
+    segments[1] === 'support-grants' &&
+    segments[2] &&
+    segments[3] === 'revoke' &&
+    request.method === 'POST'
+  ) {
+    return platformSupportGrantRevoke(request, segments[2])
+  }
+  if (path === 'platform/billing/checkout' && request.method === 'POST') return platformCheckout(request)
+  if (path === 'platform/billing/webhook' && request.method === 'POST') return platformBillingWebhook(request)
+  if (path === 'system/seed-isolation' && request.method === 'POST') return platformSeedIsolation(request)
+
+  // Entitlement gate for licensed modules (skip auth/public/platform/system)
+  const moduleKey = moduleForApiPath(path)
+  if (
+    moduleKey &&
+    !path.startsWith('auth/') &&
+    !path.startsWith('platform/') &&
+    !path.startsWith('system/') &&
+    path !== 'health'
+  ) {
+    try {
+      const context = await authenticate(request)
+      requireModule(context, moduleKey)
+    } catch (error) {
+      return toApiErrorResponse(error, 'Access denied')
+    }
+  }
+
   if (path === 'health') return health()
   if (path === 'auth/login' && request.method === 'POST') return login(request)
   if (path === 'auth/signup' && request.method === 'POST') return signup(request)
@@ -5733,7 +6688,12 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'driver/bootstrap' && request.method === 'GET') return driverBootstrap(request)
   if (path === 'driver/location' && request.method === 'POST') return driverPostLocation(request)
   if (path === 'dashboard' && request.method === 'GET') return dashboard(request)
+  if (path === 'users' && request.method === 'GET') return listCompanyUsers(request)
+  if (path === 'schools' && request.method === 'GET') return listSchools(request)
+  if (path === 'reports/summary' && request.method === 'GET') return reportsSummary(request)
+  if (path === 'reports/performance' && request.method === 'GET') return reportsPerformance(request)
   if (path === 'dispatch/live' && request.method === 'GET') return liveDispatch(request)
+  if (path === 'company/entitlements' && request.method === 'GET') return companyEntitlements(request)
   if (path === 'company' && ['GET', 'PATCH'].includes(request.method)) return company(request)
   if (path === 'availability' && request.method === 'GET') return availability(request)
   if (path === 'cancellations' && request.method === 'GET') return cancellations(request)
@@ -6100,7 +7060,24 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
 
   if (path === 'staff/hub' && request.method === 'GET') return staffHub(request)
+  if (path === 'staff' && request.method === 'POST') return createStaff(request)
+  if (segments[0] === 'staff' && segments[1] && !segments[2] && request.method === 'GET') {
+    return getStaffProfile(request, segments[1])
+  }
+  if (segments[0] === 'staff' && segments[2] === 'invitation' && request.method === 'POST') {
+    return sendStaffInvitation(request, segments[1])
+  }
   if (path === 'yard/hub' && request.method === 'GET') return yardHub(request)
+  if (path === 'yard/depots' && request.method === 'GET') return yardDepots(request)
+  if (path === 'yard/movements' && request.method === 'POST') return recordYardMovementRoute(request)
+  if (path === 'yard/mutations' && request.method === 'POST') return applyYardMutationRoute(request)
+  if (path === 'yard/tasks' && request.method === 'POST') return createYardTaskRoute(request)
+  if (segments[0] === 'yard' && segments[1] === 'tasks' && segments[2] && segments[3] === 'complete' && request.method === 'POST') {
+    return completeYardTaskRoute(request, segments[2])
+  }
+  if (segments[0] === 'yard' && segments[1] === 'tasks' && segments[2] && segments[3] === 'start' && request.method === 'POST') {
+    return startYardTaskRoute(request, segments[2])
+  }
   if (path === 'checks/hub' && request.method === 'GET') return checksHub(request)
   if (segments[0] === 'checks' && segments[1] && request.method === 'GET') {
     return getCheckDetail(request, segments[1])

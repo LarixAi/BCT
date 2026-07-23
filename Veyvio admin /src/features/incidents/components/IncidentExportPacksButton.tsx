@@ -16,14 +16,14 @@ export function IncidentExportPacksButton({ incident }: { incident: IncidentDeta
       <button
         type="button"
         onClick={() => downloadTextFile(`${incident.incidentRef}-regulator-${date}.txt`, buildRegulatorExportPack(incident))}
-        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+        className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
       >
         Regulator pack
       </button>
       <button
         type="button"
         onClick={() => downloadTextFile(`${incident.incidentRef}-insurer-${date}.txt`, buildInsurerExportPack(incident))}
-        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+        className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
       >
         Insurer pack
       </button>

@@ -42,7 +42,7 @@ export function RunDetailPage() {
   })
 
   if (isLoading) {
-    return <p className="text-sm text-slate-500">Loading run…</p>
+    return <p className="text-sm text-muted">Loading run…</p>
   }
 
   if (isError || !duty) {
@@ -172,8 +172,8 @@ export function RunDetailPage() {
         <Link to="/runs" className="text-sm font-medium text-command-600 hover:underline">
           ← Back to runs
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">{duty.reference}</h1>
-        <p className="text-sm text-slate-600">{duty.route?.name ?? 'No route assigned'}</p>
+        <h1 className="mt-2 text-2xl font-semibold text-ink">{duty.reference}</h1>
+        <p className="text-sm text-ink-soft">{duty.route?.name ?? 'No route assigned'}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -183,7 +183,7 @@ export function RunDetailPage() {
         <InfoCard label="End" value={formatDutyClock(duty.endTime)} />
       </div>
 
-      <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 pb-px">
+      <nav className="flex gap-1 overflow-x-auto border-b border-border pb-px">
         {RUN_TABS.filter((t) => (t === 'Change history' ? Boolean(opsTrip) : true)).map((label) => (
           <button
             key={label}
@@ -192,8 +192,8 @@ export function RunDetailPage() {
             className={cn(
               'shrink-0 rounded-t-lg px-3 py-2 text-sm font-medium',
               tab === label
-                ? 'border border-b-0 border-slate-200 bg-white text-command-700'
-                : 'text-slate-600 hover:text-slate-900',
+                ? 'border border-b-0 border-border bg-surface text-command-700'
+                : 'text-ink-soft hover:text-ink',
             )}
           >
             {label}
@@ -245,7 +245,7 @@ export function RunDetailPage() {
           </SectionCard>
 
           <SectionCard title="Notes">
-            <p className="text-sm text-slate-600">{duty.notes ?? 'No notes recorded.'}</p>
+            <p className="text-sm text-ink-soft">{duty.notes ?? 'No notes recorded.'}</p>
           </SectionCard>
         </div>
       )}
@@ -272,7 +272,7 @@ export function RunDetailPage() {
       {tab === 'Stops' && (
         <SectionCard title="Stops / trips" description={`${stops.length} stops on this run`}>
           {stops.length === 0 ? (
-            <p className="text-sm text-slate-500">No stops defined for this route.</p>
+            <p className="text-sm text-muted">No stops defined for this route.</p>
           ) : (
             <ol className="space-y-2">
               {stops
@@ -283,9 +283,9 @@ export function RunDetailPage() {
                   return (
                     <li
                       key={stop.id}
-                      className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 text-sm"
+                      className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm"
                     >
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-ink-soft">
                         {stop.stopOrder}
                       </span>
                       <div className="flex-1">
@@ -296,9 +296,9 @@ export function RunDetailPage() {
                           {stop.name}
                         </Link>
                         {stop.address && (
-                          <p className="mt-0.5 text-xs text-slate-500">{stop.address}</p>
+                          <p className="mt-0.5 text-xs text-muted">{stop.address}</p>
                         )}
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-muted">
                           {stop.pickupTime && `Pickup ${stop.pickupTime}`}
                           {stop.pickupTime && stop.dropoffTime && ' · '}
                           {stop.dropoffTime && `Drop-off ${stop.dropoffTime}`}
@@ -308,7 +308,7 @@ export function RunDetailPage() {
                         className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
                           checkpoint?.arrivedAt
                             ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-slate-100 text-slate-600'
+                            : 'bg-surface-muted text-ink-soft'
                         }`}
                       >
                         {checkpoint?.arrivedAt ? 'Arrived' : 'Pending'}
@@ -340,9 +340,9 @@ function formatDutyClock(value: string | null | undefined): string {
 
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold capitalize text-slate-900">{value}</p>
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold capitalize text-ink">{value}</p>
     </div>
   )
 }
@@ -350,8 +350,8 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

@@ -86,7 +86,7 @@ export function MaintenancePage() {
     setSearchParams(params, { replace: true })
   }
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading maintenance…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading maintenance…</p>
   if (isError || !hub) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load maintenance'}</p>
   }
@@ -97,8 +97,8 @@ export function MaintenancePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Maintenance</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Maintenance</h1>
+          <p className="text-sm text-ink-soft">
             Plan inspections, control repairs and keep every vehicle roadworthy.
           </p>
         </div>
@@ -115,14 +115,14 @@ export function MaintenancePage() {
           <button
             type="button"
             onClick={() => setTab('planner')}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Schedule maintenance
           </button>
           <button
             type="button"
             onClick={() => openCreateWorkOrder({ type: 'external', title: 'External workshop work' })}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Record external work
           </button>
@@ -140,14 +140,14 @@ export function MaintenancePage() {
         />
       )}
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {MAINTENANCE_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === t.id ? 'bg-white text-command-700 ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900'
+              tab === t.id ? 'bg-surface text-command-700 ring-1 ring-border' : 'text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}

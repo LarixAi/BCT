@@ -4,6 +4,7 @@
  */
 import { HttpError } from './http.ts'
 import { admin } from './supabase.ts'
+import { buildOtpauthUri, generateTotpSecret, verifyTotpCode } from './totp.ts'
 
 const encoder = new TextEncoder()
 
@@ -394,6 +395,14 @@ export function assertTenantCanOperate(tenantStatus: string | null | undefined) 
   // Pending states: allow authenticated setup routes only — callers decide.
 }
 
+/** Enforce lifecycle on every authenticated company-scoped request. */
+export function enforceTenantLifecycle(tenantStatus: string, method: string): void {
+  assertTenantCanOperate(tenantStatus)
+  if (tenantStatus === 'READ_ONLY' && !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())) {
+    throw new HttpError(403, 'This company is read-only until billing is resolved', 'tenant_read_only')
+  }
+}
+
 export async function createUserSession(input: {
   userId: string
   companyId: string
@@ -630,7 +639,7 @@ export async function createCompanyInvitation(input: {
           is_system_role: false,
           created_by: input.invitedBy,
           updated_by: input.invitedBy,
-          source_app: 'COMMAND',
+          source_app: input.appType === 'YARD' ? 'YARD' : input.appType === 'DRIVER' ? 'DRIVER' : 'COMMAND',
         })
         .select('id')
         .single()
@@ -658,7 +667,7 @@ export async function createCompanyInvitation(input: {
       status: 'pending',
       created_by: input.invitedBy,
       updated_by: input.invitedBy,
-      source_app: 'COMMAND',
+      source_app: input.appType === 'YARD' ? 'YARD' : input.appType === 'DRIVER' ? 'DRIVER' : 'COMMAND',
     })
     .select('id, email, expires_at, status, app_type')
     .single()
@@ -822,7 +831,7 @@ export async function acceptInvitation(input: {
         accepted_at: acceptedAt,
         created_by: invitation.invited_by,
         updated_by: userId,
-        source_app: appType === 'DRIVER' ? 'DRIVER' : 'COMMAND',
+        source_app: appType === 'DRIVER' ? 'DRIVER' : appType === 'YARD' ? 'YARD' : 'COMMAND',
       })
       .select('id')
       .single()
@@ -836,6 +845,7 @@ export async function acceptInvitation(input: {
       accepted_at: acceptedAt,
       role_ids: invitation.role_ids ?? [],
       updated_by: userId,
+      source_app: appType === 'DRIVER' ? 'DRIVER' : appType === 'YARD' ? 'YARD' : 'COMMAND',
     }).eq('id', membershipId)
   }
 
@@ -937,6 +947,16 @@ export async function acceptInvitation(input: {
         updated_at: acceptedAt,
       }).eq('id', staffId).eq('company_id', invitation.company_id)
     }
+  } else if (appType === 'YARD' || appType === 'COMMAND') {
+    // Yard / Command invites are created from Staff or Settings — link the staff profile by email.
+    await admin.from('staff_members').update({
+      user_id: userId,
+      updated_by: userId,
+      updated_at: acceptedAt,
+    })
+      .eq('company_id', invitation.company_id)
+      .eq('email', email)
+      .is('user_id', null)
   }
 
   await admin.from('invitations').update({
@@ -1046,31 +1066,117 @@ export async function completePasswordReset(token: string, newPassword: string, 
   return { ok: true }
 }
 
-export async function enableMfaForUser(userId: string, companyId?: string | null) {
-  const recoveryCodes = Array.from({ length: 8 }, () => randomToken(4).slice(0, 8).toUpperCase())
-  await admin.from('mfa_recovery_codes').delete().eq('user_id', userId).is('used_at', null)
-  await admin.from('mfa_recovery_codes').insert(
-    await Promise.all(recoveryCodes.map(async (code) => ({
-      user_id: userId,
-      code_hash: await sha256Hex(code),
-    }))),
-  )
-  await admin.from('user_mfa_methods').insert({
+/**
+ * Start authenticator enrollment: issue a TOTP secret + otpauth URI for QR apps.
+ * MFA stays off until confirmMfaForUser verifies a live authenticator code.
+ */
+export async function beginMfaForUser(userId: string, companyId?: string | null) {
+  const { data: profile } = await admin.from('users').select('email, mfa_enabled').eq('id', userId).maybeSingle()
+  if (!profile?.email) throw new Error('Account email is required to set up MFA')
+  if (profile.mfa_enabled) {
+    throw new Error('MFA is already enabled on this account')
+  }
+
+  const secret = generateTotpSecret()
+  const otpauthUri = buildOtpauthUri({
+    secret,
+    accountName: String(profile.email),
+    issuer: 'Veyvio Command',
+  })
+
+  await admin
+    .from('user_mfa_methods')
+    .update({ is_primary: false, disabled_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('method_type', 'authenticator_app')
+    .is('disabled_at', null)
+
+  const { error } = await admin.from('user_mfa_methods').insert({
     user_id: userId,
     method_type: 'authenticator_app',
     label: 'Authenticator app',
     is_primary: true,
-    metadata: { enrolledVia: 'command_setup' },
+    totp_secret: secret,
+    disabled_at: new Date().toISOString(),
+    metadata: { enrolledVia: 'command_setup', status: 'pending' },
   })
+  if (error) throw new Error(error.message)
+
+  await recordSecurityEvent({
+    companyId,
+    actorUserId: userId,
+    eventType: 'auth.mfa_setup_started',
+    message: 'Authenticator MFA setup started',
+    severity: 'info',
+  })
+
+  return {
+    secret,
+    otpauthUri,
+    mfaEnabled: false,
+    status: 'pending' as const,
+  }
+}
+
+/**
+ * Confirm authenticator enrollment with a current TOTP code, then issue recovery codes.
+ */
+export async function confirmMfaForUser(userId: string, code: string, companyId?: string | null) {
+  const { data: method } = await admin
+    .from('user_mfa_methods')
+    .select('id, totp_secret, disabled_at')
+    .eq('user_id', userId)
+    .eq('method_type', 'authenticator_app')
+    .order('enabled_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!method?.totp_secret) {
+    throw new Error('Start authenticator setup before confirming the code')
+  }
+
+  const ok = await verifyTotpCode(String(method.totp_secret), code)
+  if (!ok) throw new Error('That authenticator code is incorrect or has expired')
+
+  const recoveryCodes = Array.from({ length: 8 }, () => randomToken(4).slice(0, 8).toUpperCase())
+  await admin.from('mfa_recovery_codes').delete().eq('user_id', userId).is('used_at', null)
+  await admin.from('mfa_recovery_codes').insert(
+    await Promise.all(recoveryCodes.map(async (recovery) => ({
+      user_id: userId,
+      code_hash: await sha256Hex(recovery),
+    }))),
+  )
+
+  await admin
+    .from('user_mfa_methods')
+    .update({
+      disabled_at: null,
+      is_primary: true,
+      last_used_at: new Date().toISOString(),
+      metadata: { enrolledVia: 'command_setup', status: 'active' },
+    })
+    .eq('id', method.id)
+
   await admin.from('users').update({ mfa_enabled: true }).eq('id', userId)
   await recordSecurityEvent({
     companyId,
     actorUserId: userId,
     eventType: 'auth.mfa_enabled',
-    message: 'MFA enabled for user',
+    message: 'Authenticator MFA enabled for user',
     severity: 'attention',
   })
-  return { recoveryCodes, mfaEnabled: true }
+
+  return { recoveryCodes, mfaEnabled: true, status: 'active' as const }
+}
+
+/** @deprecated Prefer beginMfaForUser + confirmMfaForUser. Kept for one-shot callers. */
+export async function enableMfaForUser(userId: string, companyId?: string | null) {
+  const started = await beginMfaForUser(userId, companyId)
+  return {
+    ...started,
+    recoveryCodes: [] as string[],
+    mfaEnabled: false,
+  }
 }
 
 export async function listCompanyInvitations(companyId: string) {
@@ -1120,13 +1226,25 @@ export async function userNeedsMfaChallenge(userId: string, companyId?: string |
   return (roles ?? []).some((r) => PRIVILEGED_ROLES.has(String(r.name)))
 }
 
-export async function createMfaLoginChallenge(userId: string, ipAddress?: string | null, userAgent?: string | null) {
+/**
+ * Creates the challenge and stores the pending refresh token server-side —
+ * the caller never receives a usable session until the code is verified.
+ * `devMfaCode` is only ever populated when MFA_DEV_MODE is explicitly set,
+ * which must never be configured as a secret on a real/hosted project.
+ */
+export async function createMfaLoginChallenge(
+  userId: string,
+  refreshToken: string,
+  ipAddress?: string | null,
+  userAgent?: string | null,
+) {
   const code = String(Math.floor(100000 + Math.random() * 900000))
   const { data, error } = await admin
     .from('mfa_login_challenges')
     .insert({
       user_id: userId,
       code_hash: await sha256Hex(code),
+      refresh_token: refreshToken,
       expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
       created_ip: ipAddress ?? null,
       user_agent: userAgent ?? null,
@@ -1141,23 +1259,52 @@ export async function createMfaLoginChallenge(userId: string, ipAddress?: string
     ipAddress,
     userAgent,
   })
-  return { challengeId: data.id as string, devMfaCode: code }
+  const devMode = Deno.env.get('MFA_DEV_MODE') === 'true'
+  return { challengeId: data.id as string, devMfaCode: devMode ? code : undefined }
 }
 
-export async function verifyMfaLoginChallenge(challengeId: string, code: string, userId: string) {
+/**
+ * Verifies the code against the stored challenge (looked up by challengeId
+ * alone — the caller has no session yet, so there is nothing else to check
+ * them against) and hands back the pending refresh token on success so the
+ * route can mint a real session. This is the only place a session becomes
+ * usable after an MFA-required login.
+ */
+export async function verifyMfaLoginChallenge(challengeId: string, code: string) {
   const { data: challenge } = await admin
     .from('mfa_login_challenges')
     .select('*')
     .eq('id', challengeId)
-    .eq('user_id', userId)
     .is('consumed_at', null)
     .maybeSingle()
   if (!challenge || new Date(challenge.expires_at).getTime() < Date.now()) {
     throw new Error('This MFA challenge is invalid or has expired')
   }
 
-  const codeHash = await sha256Hex(code.trim())
+  const userId = challenge.user_id as string
+  const normalised = code.trim().replace(/\s+/g, '')
+  const codeHash = await sha256Hex(normalised)
   let matched = challenge.code_hash === codeHash
+
+  if (!matched) {
+    const { data: method } = await admin
+      .from('user_mfa_methods')
+      .select('id, totp_secret')
+      .eq('user_id', userId)
+      .eq('method_type', 'authenticator_app')
+      .is('disabled_at', null)
+      .order('enabled_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (method?.totp_secret && (await verifyTotpCode(String(method.totp_secret), normalised))) {
+      matched = true
+      await admin
+        .from('user_mfa_methods')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('id', method.id)
+    }
+  }
+
   if (!matched) {
     const { data: recovery } = await admin
       .from('mfa_recovery_codes')
@@ -1179,7 +1326,7 @@ export async function verifyMfaLoginChallenge(challengeId: string, code: string,
     eventType: 'auth.mfa_challenge_passed',
     message: 'MFA challenge verified',
   })
-  return { ok: true }
+  return { ok: true, userId, refreshToken: challenge.refresh_token as string }
 }
 
 export async function createSupportGrant(input: {
@@ -1249,6 +1396,7 @@ export async function listSupportGrants(companyId: string) {
   if (error) throw new Error(error.message)
   return (data ?? []).map((row) => ({
     id: row.id,
+    companyId: row.company_id,
     granteeUserId: row.grantee_user_id,
     grantedBy: row.granted_by,
     reason: row.reason,
@@ -1258,6 +1406,40 @@ export async function listSupportGrants(companyId: string) {
     expiresAt: row.expires_at,
     revokedAt: row.revoked_at,
   }))
+}
+
+export async function revokeSupportGrant(input: {
+  grantId: string
+  actorUserId: string
+  companyId?: string
+}) {
+  const now = new Date().toISOString()
+  let query = admin
+    .from('privileged_access_grants')
+    .update({ revoked_at: now })
+    .eq('id', input.grantId)
+    .is('revoked_at', null)
+  if (input.companyId) query = query.eq('company_id', input.companyId)
+
+  const { data, error } = await query.select('id, company_id').maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Support grant not found or already revoked')
+
+  await admin
+    .from('support_access_sessions')
+    .update({ ended_at: now })
+    .eq('grant_id', input.grantId)
+    .is('ended_at', null)
+
+  await recordSecurityEvent({
+    companyId: String(data.company_id),
+    actorUserId: input.actorUserId,
+    eventType: 'support.access_revoked',
+    message: 'Support access grant revoked',
+    severity: 'attention',
+  })
+
+  return { id: data.id, companyId: data.company_id, revokedAt: now }
 }
 
 export async function requestCompanyExport(input: {

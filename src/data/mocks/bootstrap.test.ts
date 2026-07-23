@@ -8,6 +8,9 @@ describe("buildBootstrapPayload", () => {
     expect(payload.depotId).toBe("dep_b3");
     expect(payload.vehicles.length).toBeGreaterThan(0);
     expect(payload.permissions).toContain("vehicle.mark_vor");
+    expect(payload.permissions).toContain("plan.view");
     expect(payload.tasks.length).toBeGreaterThan(0);
+    expect(payload.operationalPlan?.staging.length).toBeGreaterThan(0);
+    expect(payload.schemaVersion).toBeGreaterThanOrEqual(6);
   });
 });

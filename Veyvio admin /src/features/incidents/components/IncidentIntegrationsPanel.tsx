@@ -25,17 +25,17 @@ export function IncidentIntegrationsPanel() {
   return (
     <SectionCard title="Telematics event bus" description="Incoming vehicle system events awaiting incident creation">
       {feed.length === 0 ? (
-        <p className="text-sm text-slate-500">No telematics events in queue.</p>
+        <p className="text-sm text-muted">No telematics events in queue.</p>
       ) : (
-        <ul className="divide-y divide-slate-100" data-testid="telematics-feed">
+        <ul className="divide-y divide-border" data-testid="telematics-feed">
           {feed.map((item) => (
             <li key={item.id} className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0">
               <div>
-                <p className="font-medium text-slate-900">
+                <p className="font-medium text-ink">
                   {item.eventType.replace(/_/g, ' ')} — {item.vehicleRegistration}
                 </p>
-                <p className="text-sm text-slate-600">{item.location}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm text-ink-soft">{item.location}</p>
+                <p className="text-xs text-muted">
                   {item.telematicsReference} · {new Date(item.occurredAt).toLocaleString('en-GB')}
                 </p>
                 {item.processed && item.linkedIncidentId && (
@@ -45,7 +45,7 @@ export function IncidentIntegrationsPanel() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${item.processed ? 'bg-slate-100 text-slate-600' : 'bg-amber-100 text-amber-900'}`}>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${item.processed ? 'bg-surface-muted text-ink-soft' : 'bg-amber-100 text-amber-900'}`}>
                   {item.processed ? 'Processed' : 'Pending'}
                 </span>
                 {canProcess && !item.processed && (
@@ -65,7 +65,7 @@ export function IncidentIntegrationsPanel() {
         </ul>
       )}
       {hub && (
-        <p className="mt-4 text-xs text-slate-500" data-testid="risk-summary">
+        <p className="mt-4 text-xs text-muted" data-testid="risk-summary">
           Risk scoring: {hub.riskSummary.highRiskCount} high-risk open incidents · avg score {hub.riskSummary.avgScore}
           {pending.length > 0 && ` · ${pending.length} telematics event(s) pending`}
         </p>

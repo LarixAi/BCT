@@ -32,6 +32,14 @@ export function getLastBiometricDriverId() {
   }
 }
 
+export function clearLastBiometricDriverId() {
+  try {
+    localStorage.removeItem(LAST_DRIVER_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Whether the UI should be covered by the biometric lock screen.
  * Pass `navigating: true` when external turn-by-turn navigation is active.
@@ -76,7 +84,10 @@ export async function unlockBiometricAppLock(driverId) {
   const verified = await verifyDriverIdentity(opts);
   if (!verified) {
     void reportDriverSecurityEvent("driver.biometric_unlock_failed", { driverId }).catch(() => undefined);
-    return { ok: false, message: "Verification was cancelled." };
+    return {
+      ok: false,
+      message: "Authentication cancelled. No changes were made. Try again, or use your password.",
+    };
   }
 
   saveBiometricPreference(driverId, { lastUnlockAt: new Date().toISOString() });
@@ -87,4 +98,21 @@ export async function unlockBiometricAppLock(driverId) {
 
 export function resetBiometricLockOnSignOut() {
   clearBiometricUnlocked();
+}
+
+/**
+ * Whether an auth-state-change event is safe to rebind the biometric-protected
+ * refresh token on. Supabase rotates the refresh token on every use, including
+ * routine background TOKEN_REFRESHED while the app just sits open — skip that
+ * and the Keychain/Keystore copy goes stale, silently breaking fingerprint
+ * sign-in and forcing the driver back to password + re-setup. The one
+ * exception: the very first TOKEN_REFRESHED right after cold launch, which can
+ * race the native Activity before it's ready (this crashed boot on Samsung).
+ * @param {string} event
+ * @param {boolean} hasBooted
+ */
+export function shouldRebindBiometricCredential(event, hasBooted) {
+  if (event === "SIGNED_IN") return true;
+  if (event === "TOKEN_REFRESHED") return Boolean(hasBooted);
+  return false;
 }

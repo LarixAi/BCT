@@ -30,7 +30,7 @@ export function PassengersStep({
   return (
     <div className="space-y-4">
       <SectionCard title="Add passengers" description="Operational summaries only — full profiles stay restricted">
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-border">
           {passengers.map((p) => {
             const selected = draft.passengers.find((x) => x.passengerId === p.id)
             return (
@@ -43,20 +43,20 @@ export function PassengersStep({
                     className="mt-1"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-slate-900">
+                    <p className="font-medium text-ink">
                       {p.firstName} {p.lastName}
                     </p>
                     {selected ? (
-                      <div className="mt-2 rounded-lg bg-slate-50 p-3 text-sm">
-                        <p className="text-xs font-semibold uppercase text-slate-500">Requirements</p>
-                        <ul className="mt-1 list-inside list-disc text-slate-700">
+                      <div className="mt-2 rounded-lg bg-surface-muted p-3 text-sm">
+                        <p className="text-xs font-semibold uppercase text-muted">Requirements</p>
+                        <ul className="mt-1 list-inside list-disc text-ink-soft">
                           {selected.requirements.map((r) => (
                             <li key={r}>{r}</li>
                           ))}
                         </ul>
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-500">{p.routeName ?? p.customerName}</p>
+                      <p className="text-xs text-muted">{p.routeName ?? p.customerName}</p>
                     )}
                   </div>
                 </label>

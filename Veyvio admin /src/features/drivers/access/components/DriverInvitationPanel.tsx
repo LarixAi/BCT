@@ -21,21 +21,21 @@ export function DriverInvitationPanel({
 
       <SectionCard title="Invitation history" description="Every invite attempt and its result">
         {(account.invitationHistory ?? []).length === 0 ? (
-          <p className="text-sm text-slate-500">No invitation history yet.</p>
+          <p className="text-sm text-muted">No invitation history yet.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {account.invitationHistory.map((entry) => (
-              <li key={entry.id} className="rounded-lg border border-slate-200 px-3 py-2">
+              <li key={entry.id} className="rounded-lg border border-border px-3 py-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium">{INVITATION_HISTORY_LABELS[entry.stage]}</p>
-                  <p className="text-xs text-slate-500">{formatDateTime(entry.createdAt)}</p>
+                  <p className="text-xs text-muted">{formatDateTime(entry.createdAt)}</p>
                 </div>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-ink-soft">
                   {[entry.channel, entry.destination, entry.actor ? `by ${entry.actor}` : null]
                     .filter(Boolean)
                     .join(' · ')}
                 </p>
-                {entry.detail ? <p className="mt-1 text-xs text-slate-500">{entry.detail}</p> : null}
+                {entry.detail ? <p className="mt-1 text-xs text-muted">{entry.detail}</p> : null}
               </li>
             ))}
           </ul>

@@ -17,15 +17,15 @@ export function PurchasingTab({ hub }: { hub: FleetResourcesHubData }) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Purchase requests</h2>
-        <p className="text-sm text-slate-600">
+        <h2 className="text-lg font-semibold text-ink">Purchase requests</h2>
+        <p className="text-sm text-ink-soft">
           Approvals stay separate from the requester — no self-approval for spend above policy.
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-3 py-2">Resource</th>
               <th className="px-3 py-2">Qty</th>
@@ -40,16 +40,16 @@ export function PurchasingTab({ hub }: { hub: FleetResourcesHubData }) {
           <tbody>
             {hub.purchaseRequests.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-muted">
                   No purchase requests.
                 </td>
               </tr>
             ) : (
               hub.purchaseRequests.map((p) => (
-                <tr key={p.id} className="border-t border-slate-100">
+                <tr key={p.id} className="border-t border-border">
                   <td className="px-3 py-2">
                     <div className="font-medium">{p.resourceName}</div>
-                    <div className="text-xs text-slate-500">{p.reason}</div>
+                    <div className="text-xs text-muted">{p.reason}</div>
                   </td>
                   <td className="px-3 py-2 tabular-nums">
                     {p.quantity}

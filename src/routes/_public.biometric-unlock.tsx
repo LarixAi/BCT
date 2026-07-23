@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useSessionStore } from "@/platform/auth/session-store";
-import { Button } from "@/components/ui/button";
 import { Fingerprint } from "lucide-react";
+import { useSessionStore } from "@/platform/auth/session-store";
+import { YardAuthPrimaryButton, YardMobileAuthLayout } from "@/components/auth/YardMobileAuthLayout";
 
 export const Route = createFileRoute("/_public/biometric-unlock")({
   head: () => ({ meta: [{ title: "Unlock — Veyvio Yard" }] }),
@@ -18,18 +18,21 @@ function BiometricUnlockPage() {
   }
 
   return (
-    <div className="flex min-h-[70vh] flex-col items-center justify-center text-center space-y-6 animate-in-up">
-      <Fingerprint className="size-16 text-primary" />
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight">Unlock Veyvio Yard</h1>
-        <p className="mt-1 text-sm text-muted">Use Face ID, Touch ID, or your device biometrics.</p>
+    <YardMobileAuthLayout
+      title="Unlock Veyvio Yard"
+      subtitle="Use Face ID, Touch ID, or your device biometrics."
+      centerContent
+      animate
+    >
+      <div className="flex flex-col items-center gap-6 py-4">
+        <Fingerprint className="size-16 text-[#12A89D]" aria-hidden />
+        <YardAuthPrimaryButton ready onClick={handleUnlock}>
+          Unlock
+        </YardAuthPrimaryButton>
+        <button type="button" className="yard-auth-link text-sm">
+          Use app PIN instead
+        </button>
       </div>
-      <Button onClick={handleUnlock} className="bg-accent hover:bg-accent/90 text-white uppercase tracking-widest font-bold px-8">
-        Unlock
-      </Button>
-      <button type="button" className="text-[10px] font-bold uppercase tracking-widest text-muted hover:text-foreground">
-        Use app PIN instead
-      </button>
-    </div>
+    </YardMobileAuthLayout>
   );
 }

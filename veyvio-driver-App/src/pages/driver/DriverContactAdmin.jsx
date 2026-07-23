@@ -116,7 +116,7 @@ export default function DriverContactAdmin({ driver }) {
             {submitting ? "Sending…" : "Send message"}
           </Button>
           <Button type="button" variant="ghost" asChild className="w-full text-muted-foreground">
-            <Link to="/threads">View past conversations</Link>
+            <Link to="/messages">View past conversations</Link>
           </Button>
         </form>
       </div>

@@ -91,7 +91,7 @@ export function MaintenanceTechnicianTab({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+      <div className="rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-ink-soft">
         Technician portal shell — workshop execution for open jobs. Full mobile tech app and bay assignment are
         Phase 2e+. Status moves still follow Maintenance lifecycle rules.
       </div>
@@ -103,7 +103,7 @@ export function MaintenanceTechnicianTab({
           className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
             filter === 'bay'
               ? 'border-command-500 bg-command-50 text-command-800'
-              : 'border-slate-200 text-slate-700'
+              : 'border-border text-ink-soft'
           }`}
         >
           Workshop bay
@@ -114,18 +114,18 @@ export function MaintenanceTechnicianTab({
           className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
             filter === 'mine'
               ? 'border-command-500 bg-command-50 text-command-800'
-              : 'border-slate-200 text-slate-700'
+              : 'border-border text-ink-soft'
           }`}
         >
           Assigned to me
         </button>
-        <span className="text-xs text-slate-500">{queue.length} jobs in queue</span>
+        <span className="text-xs text-muted">{queue.length} jobs in queue</span>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <SectionCard title="Job queue" description="Tap a job to execute">
           {queue.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted">
               {filter === 'mine' ? 'No jobs assigned to you right now.' : 'No open workshop jobs.'}
             </p>
           ) : (
@@ -144,14 +144,14 @@ export function MaintenanceTechnicianTab({
                       className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
                         active
                           ? 'border-command-500 bg-command-50 ring-1 ring-command-500'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
+                          : 'border-border bg-surface hover:border-border-strong'
                       }`}
                     >
-                      <p className="font-semibold tabular-nums text-slate-900">{w.registrationNumber}</p>
-                      <p className="text-slate-700">{w.title}</p>
+                      <p className="font-semibold tabular-nums text-ink">{w.registrationNumber}</p>
+                      <p className="text-ink-soft">{w.title}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <StatusPill status={w.status} />
-                        <span className="text-[11px] text-slate-500">
+                        <span className="text-[11px] text-muted">
                           {WORK_ORDER_TYPE_LABELS[w.type] ?? w.type}
                         </span>
                       </div>
@@ -170,20 +170,20 @@ export function MaintenanceTechnicianTab({
           >
             <div className="space-y-4 text-sm">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-slate-100 p-3">
-                  <p className="text-xs text-slate-500">Type</p>
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-xs text-muted">Type</p>
                   <p className="font-medium">{WORK_ORDER_TYPE_LABELS[selected.type] ?? selected.type}</p>
                 </div>
-                <div className="rounded-lg border border-slate-100 p-3">
-                  <p className="text-xs text-slate-500">Technician</p>
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-xs text-muted">Technician</p>
                   <p className="font-medium">{selected.technicianName ?? 'Unassigned'}</p>
                 </div>
-                <div className="rounded-lg border border-slate-100 p-3">
-                  <p className="text-xs text-slate-500">Provider</p>
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-xs text-muted">Provider</p>
                   <p className="font-medium">{selected.provider ?? '—'}</p>
                 </div>
-                <div className="rounded-lg border border-slate-100 p-3">
-                  <p className="text-xs text-slate-500">Estimate</p>
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-xs text-muted">Estimate</p>
                   <p className="font-medium">
                     {selected.estimateTotal != null
                       ? `£${selected.estimateTotal.toFixed(2)}`
@@ -196,29 +196,29 @@ export function MaintenanceTechnicianTab({
               </div>
 
               {selected.diagnosis && (
-                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
+                <p className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-ink-soft">
                   Diagnosis on record: {selected.diagnosis}
                 </p>
               )}
 
               <label className="block">
-                <span className="text-slate-600">Workshop notes</span>
+                <span className="text-ink-soft">Workshop notes</span>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-2"
                   placeholder="Record findings, parts used, road-test notes…"
                 />
               </label>
 
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                   Quick actions
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {quick.length === 0 ? (
-                    <p className="text-xs text-slate-500">No transitions available from this status.</p>
+                    <p className="text-xs text-muted">No transitions available from this status.</p>
                   ) : (
                     quick.map((a) => (
                       <button
@@ -236,9 +236,9 @@ export function MaintenanceTechnicianTab({
               </div>
 
               {selected.type === 'pmi' && selectedVehicle && selectedWoEntity && (
-                <div className="rounded-lg border border-slate-200 px-3 py-2">
-                  <p className="font-medium text-slate-900">Digital PMI checklist</p>
-                  <p className="text-xs text-slate-600">
+                <div className="rounded-lg border border-border px-3 py-2">
+                  <p className="font-medium text-ink">Digital PMI checklist</p>
+                  <p className="text-xs text-ink-soft">
                     Complete inspection items and brake evidence before marking the job complete.
                   </p>
                   <button
@@ -291,7 +291,7 @@ export function MaintenanceTechnicianTab({
           </SectionCard>
         ) : (
           <SectionCard title="Job execution" description="Select a job from the queue">
-            <p className="text-sm text-slate-500">No job selected.</p>
+            <p className="text-sm text-muted">No job selected.</p>
           </SectionCard>
         )}
       </div>

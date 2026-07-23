@@ -21,6 +21,7 @@ import {
   Info,
   MessageSquare,
   Camera,
+  CalendarDays,
 } from "lucide-react";
 import { ChevronRight } from "lucide-react";
 
@@ -50,6 +51,7 @@ const WORKFLOW_LINKS = [
 ] as const;
 
 const OPS_LINKS = [
+  { to: "/plan", label: "Day plan", icon: CalendarDays, desc: "Tomorrow's staging order and duties" },
   { to: "/arrivals", label: "Arrivals", icon: LogIn, desc: "Record returning vehicles" },
   { to: "/defects", label: "Defects", icon: TriangleAlert, desc: "Open vehicle defects" },
   { to: "/vor", label: "VOR Board", icon: ShieldAlert, desc: "Off-road triage" },

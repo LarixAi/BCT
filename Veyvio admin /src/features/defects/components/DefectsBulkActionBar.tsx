@@ -48,14 +48,14 @@ export function DefectsBulkActionBar({
 
   return (
     <div className="rounded-xl border border-command-200 bg-command-50/50 p-3" data-testid="bulk-action-bar">
-      <p className="text-sm font-medium text-slate-900">{selected.length} defects selected</p>
+      <p className="text-sm font-medium text-ink">{selected.length} defects selected</p>
       {hasCritical && (
         <p className="mt-1 text-xs text-red-700">Safety-critical defects cannot be bulk-assigned or noted — deselect them first.</p>
       )}
       <div className="mt-3 flex flex-wrap items-end gap-2">
         <label className="text-sm">
-          <span className="text-slate-600">Assign technician</span>
-          <input value={assignee} onChange={(e) => setAssignee(e.target.value)} className="ml-2 rounded-lg border border-slate-200 px-2 py-1 text-sm" />
+          <span className="text-ink-soft">Assign technician</span>
+          <input value={assignee} onChange={(e) => setAssignee(e.target.value)} className="ml-2 rounded-lg border border-border px-2 py-1 text-sm" />
         </label>
         <button
           type="button"
@@ -69,13 +69,13 @@ export function DefectsBulkActionBar({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Internal note"
-          className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+          className="rounded-lg border border-border px-2 py-1.5 text-sm"
         />
         <button
           type="button"
           disabled={hasCritical || !note || bulk.isPending}
           onClick={() => bulk.mutate('add_note')}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium disabled:opacity-50"
         >
           Add note
         </button>
@@ -86,11 +86,11 @@ export function DefectsBulkActionBar({
             const csv = defectsToCsv(selectedRows)
             downloadDefectsCsv(`defects-bulk-${new Date().toISOString().slice(0, 10)}.csv`, csv)
           }}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium"
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium"
         >
           Export selected
         </button>
-        <button type="button" onClick={onClear} className="rounded-lg px-3 py-1.5 text-sm text-slate-600">
+        <button type="button" onClick={onClear} className="rounded-lg px-3 py-1.5 text-sm text-ink-soft">
           Clear
         </button>
       </div>

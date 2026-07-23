@@ -70,7 +70,12 @@ export function getEmptyBaysInZone(bays: Bay[], vehicles: Vehicle[], zone: BayZo
 
 export function getVehiclesInZone(vehicles: Vehicle[], bays: Bay[], zone: BayZone): Vehicle[] {
   const bayIds = new Set(bays.filter(b => b.zone === zone).map(b => b.id));
-  return vehicles.filter(v => bayIds.has(v.bayId));
+  return vehicles.filter(v => {
+    if (!bayIds.has(v.bayId)) return false;
+    // Off-site status must not occupy physical yard zones
+    if (zone !== "Off-site" && v.status === "Off-site") return false;
+    return true;
+  });
 }
 
 export interface AttentionItem {

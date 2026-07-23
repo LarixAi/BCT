@@ -44,6 +44,10 @@ import {
   applySidebarBadges,
   type SidebarBadgeMap,
 } from "@/lib/navigation/build-sidebar-badges";
+import { CommandWordmark } from "@/components/brand/CommandWordmark";
+import { useTheme } from "@/lib/theme-context";
+import { useAuth } from "@/lib/auth-context";
+import { filterNavByModules } from "@/lib/platform/module-routes";
 import { useSidebarNavBadges } from "./useSidebarNavBadges";
 
 export type SidebarItem = {
@@ -152,18 +156,47 @@ const sectionDefs: SidebarSection[] = [
       { label: "Company Settings", href: "/settings/company", icon: Settings },
       { label: "Users and Roles", href: "/settings/users", icon: UserCog },
       { label: "Integrations", href: "/settings/integrations", icon: Plug },
+      { label: "Platform Admin", href: "/platform/companies", icon: SlidersHorizontal },
     ],
   },
 ];
 
-function withLiveBadges(badges: SidebarBadgeMap): SidebarSection[] {
-  return sectionDefs.map((section) => ({
-    ...section,
-    items: applySidebarBadges(section.items, badges),
-  }));
+function withLiveBadges(
+  badges: SidebarBadgeMap,
+  enabledModules: string[] | null | undefined,
+  platformRole: string | null | undefined,
+): SidebarSection[] {
+  return sectionDefs
+    .map((section) => {
+      const items = applySidebarBadges(section.items, badges)
+        .map((item) => {
+          if (
+            item.href === "/platform/companies" &&
+            !["platform_admin", "platform_support", "platform_billing"].includes(
+              String(platformRole ?? ""),
+            )
+          ) {
+            return null;
+          }
+          return item;
+        })
+        .filter(Boolean) as SidebarItem[];
+      const filtered = filterNavByModules(items, enabledModules);
+      if (!filtered.length) return null;
+      return { ...section, items: filtered };
+    })
+    .filter(Boolean) as SidebarSection[];
 }
 
-const badgeClass: Record<NonNullable<SidebarItem["badgeTone"]>, string> = {
+const lightBadgeClass: Record<NonNullable<SidebarItem["badgeTone"]>, string> = {
+  neutral: "bg-surface-muted text-ink-soft",
+  info: "bg-command-50 text-command-700",
+  success: "bg-ready/10 text-ready",
+  warning: "bg-attention/10 text-attention",
+  danger: "bg-critical/10 text-critical",
+};
+
+const darkBadgeClass: Record<NonNullable<SidebarItem["badgeTone"]>, string> = {
   neutral: "bg-white/10 text-white/80",
   info: "bg-command-500/20 text-command-100",
   success: "bg-ready/20 text-ready",
@@ -229,7 +262,14 @@ export function VeyvioSidebar({
   onProfileAction,
 }: VeyvioSidebarProps) {
   const liveBadges = useSidebarNavBadges();
-  const sections = useMemo(() => withLiveBadges(liveBadges), [liveBadges]);
+  const { user } = useAuth();
+  const { resolvedTheme } = useTheme();
+  const isDarkSidebar = resolvedTheme === "dark";
+  const badgeClass = isDarkSidebar ? darkBadgeClass : lightBadgeClass;
+  const sections = useMemo(
+    () => withLiveBadges(liveBadges, user?.enabledModules, user?.platformRole),
+    [liveBadges, user?.enabledModules, user?.platformRole],
+  );
 
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -328,12 +368,12 @@ export function VeyvioSidebar({
   const sidebar = (
     <aside
       className={cx(
-        "relative flex h-full flex-col border-r border-white/10 bg-midnight text-white transition-[width] duration-200",
+        "relative flex h-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-fg transition-[width] duration-200",
         collapsed ? "w-[76px]" : "w-[304px]",
       )}
       aria-label="Primary navigation"
     >
-      <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
+      <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
         <button
           type="button"
           onClick={() => {
@@ -350,12 +390,7 @@ export function VeyvioSidebar({
             V
           </span>
           {!collapsed && (
-            <span className="text-left leading-tight">
-              <span className="block text-sm font-extrabold tracking-tight text-white">VEYVIO</span>
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.28em] text-command-500">
-                Command
-              </span>
-            </span>
+            <CommandWordmark align="left" compact inverted={isDarkSidebar} />
           )}
         </button>
 
@@ -363,7 +398,7 @@ export function VeyvioSidebar({
           <button
             type="button"
             onClick={() => setCollapsed(true)}
-            className="rounded-xl p-2 text-white/55 hover:bg-white/10 hover:text-white"
+            className="rounded-xl p-2 text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg"
             aria-label="Collapse navigation"
           >
             <PanelLeftClose className="h-5 w-5" />
@@ -376,11 +411,11 @@ export function VeyvioSidebar({
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left text-sm text-white/55 hover:border-white/20 hover:bg-white/10 hover:text-white"
+            className="flex w-full items-center gap-3 rounded-xl border border-sidebar-border bg-sidebar-search px-3 py-2.5 text-left text-sm text-sidebar-muted hover:border-command-500/40 hover:bg-sidebar-hover hover:text-sidebar-fg"
           >
             <Search className="h-4 w-4" />
             <span className="flex-1">Search anything...</span>
-            <kbd className="rounded-md border border-white/15 bg-white/5 px-1.5 py-0.5 text-[11px] text-white/50">
+            <kbd className="rounded-md border border-sidebar-border bg-sidebar px-1.5 py-0.5 text-[11px] text-sidebar-muted">
               ⌘K
             </kbd>
           </button>
@@ -401,7 +436,7 @@ export function VeyvioSidebar({
                   onClick={() => toggleSection(key)}
                   className={cx(
                     "mb-1 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors",
-                    sectionActive ? "text-command-500" : "text-white/45 hover:bg-white/5 hover:text-white/75",
+                    sectionActive ? "text-command-500" : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg",
                   )}
                   aria-expanded={sectionOpen}
                 >
@@ -452,15 +487,15 @@ export function VeyvioSidebar({
                             "group flex w-full items-center rounded-xl text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-command-500",
                             collapsed ? "h-11 justify-center" : "min-h-10 gap-3 px-3 py-2",
                             active
-                              ? "bg-command-500 text-white"
-                              : "text-white/70 hover:bg-white/10 hover:text-white",
+                              ? "border-l-[3px] border-l-command-500 bg-sidebar-active pl-[9px] font-semibold text-sidebar-active-fg"
+                              : "border-l-[3px] border-l-transparent pl-3 text-sidebar-fg hover:bg-sidebar-hover",
                           )}
                           aria-expanded={item.children ? groupOpen : undefined}
                         >
                           <ItemIcon
                             className={cx(
                               "h-[18px] w-[18px] shrink-0",
-                              active ? "text-white" : "text-white/45",
+                              active ? "text-command-500" : "text-sidebar-muted",
                             )}
                             strokeWidth={1.9}
                           />
@@ -480,16 +515,16 @@ export function VeyvioSidebar({
                               )}
                               {item.children &&
                                 (groupOpen ? (
-                                  <ChevronDown className="h-4 w-4 text-white/45" />
+                                  <ChevronDown className="h-4 w-4 text-sidebar-muted" />
                                 ) : (
-                                  <ChevronRight className="h-4 w-4 text-white/45" />
+                                  <ChevronRight className="h-4 w-4 text-sidebar-muted" />
                                 ))}
                             </>
                           )}
                         </button>
 
                         {!collapsed && item.children && groupOpen && (
-                          <div className="ml-[21px] mt-1 border-l border-white/10 pl-3">
+                          <div className="ml-[21px] mt-1 border-l border-sidebar-border pl-3">
                             {item.children.map((child) => (
                               <button
                                 type="button"
@@ -498,13 +533,13 @@ export function VeyvioSidebar({
                                 className={cx(
                                   "flex min-h-9 w-full items-center justify-between rounded-lg px-3 py-1.5 text-sm",
                                   isActive(child.href)
-                                    ? "bg-command-500/25 font-medium text-white"
-                                    : "text-white/55 hover:bg-white/5 hover:text-white",
+                                    ? "border-l-[3px] border-l-command-500 bg-sidebar-active pl-[9px] font-medium text-sidebar-active-fg"
+                                    : "border-l-[3px] border-l-transparent pl-3 text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg",
                                 )}
                               >
                                 <span>{child.label}</span>
                                 {child.badge !== undefined && (
-                                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/60">
+                                  <span className="rounded-full bg-sidebar-hover px-2 py-0.5 text-xs font-medium text-sidebar-fg">
                                     {child.badge}
                                   </span>
                                 )}
@@ -522,17 +557,17 @@ export function VeyvioSidebar({
         })}
       </nav>
 
-      <div className="border-t border-white/10 p-3">
+      <div className="border-t border-sidebar-border bg-sidebar-search/80 p-3">
         <button
           type="button"
           title={collapsed ? "Help" : undefined}
           onClick={() => navigate("/announcements")}
           className={cx(
-            "mb-1 flex w-full items-center rounded-xl text-sm text-white/70 hover:bg-white/10 hover:text-white",
+            "mb-1 flex w-full items-center rounded-xl text-sm text-sidebar-fg hover:bg-sidebar-hover",
             collapsed ? "h-11 justify-center" : "gap-3 px-3 py-2.5",
           )}
         >
-          <CircleHelp className="h-[18px] w-[18px] text-white/45" />
+          <CircleHelp className="h-[18px] w-[18px] text-sidebar-muted" />
           {!collapsed && <span>Help</span>}
         </button>
 
@@ -541,21 +576,21 @@ export function VeyvioSidebar({
             type="button"
             onClick={() => setProfileOpen((current) => !current)}
             className={cx(
-              "flex w-full items-center rounded-xl hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-command-500",
+              "flex w-full items-center rounded-xl hover:bg-sidebar-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-command-500",
               collapsed ? "h-12 justify-center" : "gap-3 px-2 py-2",
             )}
             aria-expanded={profileOpen}
           >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-command-500 text-sm font-semibold text-white">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-midnight text-sm font-semibold text-white">
               {initials}
             </span>
             {!collapsed && (
               <>
                 <span className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm font-semibold text-white">{userName}</span>
-                  <span className="block truncate text-xs text-white/50">{userRole}</span>
+                  <span className="block truncate text-sm font-semibold text-sidebar-fg">{userName}</span>
+                  <span className="block truncate text-xs text-sidebar-muted">{userRole}</span>
                 </span>
-                <ChevronDown className="h-4 w-4 text-white/45" />
+                <ChevronDown className="h-4 w-4 text-sidebar-muted" />
               </>
             )}
           </button>
@@ -563,7 +598,7 @@ export function VeyvioSidebar({
           {profileOpen && (
             <div
               className={cx(
-                "absolute bottom-14 z-50 w-64 rounded-2xl border border-border bg-white p-2 text-ink shadow-xl shadow-midnight/20",
+                "absolute bottom-14 z-50 w-64 rounded-2xl border border-border bg-surface p-2 text-ink shadow-xl shadow-midnight/20",
                 collapsed ? "left-14" : "left-0",
               )}
             >
@@ -617,7 +652,7 @@ export function VeyvioSidebar({
           <button
             type="button"
             onClick={() => setCollapsed(false)}
-            className="mt-2 flex h-10 w-full items-center justify-center rounded-xl text-white/55 hover:bg-white/10 hover:text-white"
+            className="mt-2 flex h-10 w-full items-center justify-center rounded-xl text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg"
             aria-label="Expand navigation"
           >
             <PanelLeftOpen className="h-5 w-5" />
@@ -632,7 +667,7 @@ export function VeyvioSidebar({
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
-        className="fixed left-4 top-4 z-40 rounded-xl border border-border bg-midnight p-2.5 text-white shadow-sm lg:hidden"
+        className="fixed left-4 top-4 z-40 rounded-xl border border-sidebar-border bg-sidebar p-2.5 text-sidebar-fg shadow-sm lg:hidden"
         aria-label="Open navigation"
       >
         <Menu className="h-5 w-5" />
@@ -653,7 +688,7 @@ export function VeyvioSidebar({
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="absolute right-3 top-3 rounded-lg p-2 text-white/60 hover:bg-white/10 hover:text-white"
+              className="absolute right-3 top-3 rounded-lg p-2 text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg"
               aria-label="Close navigation"
             >
               <X className="h-5 w-5" />
@@ -670,7 +705,7 @@ export function VeyvioSidebar({
             aria-label="Close search"
             onClick={() => setSearchOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-white shadow-2xl shadow-midnight/20">
+          <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl shadow-midnight/20">
             <div className="flex items-center gap-3 border-b border-border px-4 py-3">
               <Search className="h-5 w-5 text-muted" />
               <input

@@ -12,7 +12,7 @@ export function DefectsRulesTab({ hub }: { hub: DefectsHubData }) {
       <SectionCard title="Service-level targets" description="Configurable response rules per company">
         <table className="w-full text-left text-sm" data-testid="defect-sla-table">
           <thead>
-            <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+            <tr className="border-b border-border text-xs uppercase text-muted">
               <th className="pb-2 pr-4 font-medium">Severity</th>
               <th className="pb-2 pr-4 font-medium">Triage target</th>
               <th className="pb-2 font-medium">Repair action</th>
@@ -20,7 +20,7 @@ export function DefectsRulesTab({ hub }: { hub: DefectsHubData }) {
           </thead>
           <tbody>
             {(['dangerous', 'major', 'minor', 'advisory'] as const).map((sev) => (
-              <tr key={sev} className="border-b border-slate-50">
+              <tr key={sev} className="border-b border-border/60">
                 <td className="py-2 pr-4 capitalize">{sev === 'dangerous' ? 'Critical' : sev}</td>
                 <td className="py-2 pr-4">{formatSlaRemaining(slaSettings.triageMinutes[sev])}</td>
                 <td className="py-2">{formatSlaRemaining(slaSettings.repairMinutes[sev])}</td>
@@ -30,35 +30,35 @@ export function DefectsRulesTab({ hub }: { hub: DefectsHubData }) {
         </table>
         <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-slate-500">Block dispatch on critical</dt>
+            <dt className="text-muted">Block dispatch on critical</dt>
             <dd className="font-medium">{slaSettings.blockDispatchOnCritical ? 'Yes' : 'No'}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Block dispatch pending assessment</dt>
+            <dt className="text-muted">Block dispatch pending assessment</dt>
             <dd className="font-medium">{slaSettings.blockDispatchOnPendingAssessment ? 'Yes' : 'No'}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Recurring threshold</dt>
+            <dt className="text-muted">Recurring threshold</dt>
             <dd className="font-medium">{slaSettings.recurringComponentThreshold} failures in {slaSettings.recurringWindowDays} days</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Notify roles</dt>
+            <dt className="text-muted">Notify roles</dt>
             <dd className="font-medium">{formatRoleList(slaSettings?.notifyRoles)}</dd>
           </div>
         </dl>
       </SectionCard>
 
       <SectionCard title="Automation rules" description="Safety and operational rules applied when defects are reported">
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-border">
           {automationRules.map((rule) => (
             <li key={rule.id} className="py-3 first:pt-0">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="font-medium text-slate-900">{rule.name}</p>
-                  <p className="mt-1 text-sm text-slate-600">{rule.description}</p>
-                  <p className="mt-1 text-xs text-slate-500">{formatAutomationActions(rule.actions)}</p>
+                  <p className="font-medium text-ink">{rule.name}</p>
+                  <p className="mt-1 text-sm text-ink-soft">{rule.description}</p>
+                  <p className="mt-1 text-xs text-muted">{formatAutomationActions(rule.actions)}</p>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${rule.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${rule.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-muted text-ink-soft'}`}>
                   {rule.enabled ? 'Active' : 'Disabled'}
                 </span>
               </div>

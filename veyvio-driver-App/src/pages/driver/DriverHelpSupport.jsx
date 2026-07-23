@@ -166,7 +166,7 @@ export default function DriverHelpSupport() {
               description="Licences and compliance uploads"
             />
             <LinkRow
-              to="/threads"
+              to="/messages"
               icon={MessageSquare}
               label="Conversations"
               description="Message threads with admin"

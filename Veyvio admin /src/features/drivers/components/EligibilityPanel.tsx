@@ -28,23 +28,28 @@ export function EligibilityPanel({
 
   return (
     <div className={`rounded-xl border p-4 ${style}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Can go online?</p>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Driver eligibility</p>
       <p className="mt-1 text-lg font-semibold">
-        {canGoOnline ? 'Yes — eligible for work' : 'No — app / dispatch blocked'}
+        {canGoOnline
+          ? eligibility.operationalEligibility === 'restricted' ||
+            eligibility.operationalEligibility === 'eligible_with_warning'
+            ? 'Eligible with restrictions'
+            : 'Eligible for duty'
+          : 'Not eligible for duty'}
       </p>
       <p className="mt-1 text-sm opacity-90">
         {ELIGIBILITY_LABELS[eligibility.operationalEligibility]} · {eligibility.summary}
       </p>
 
       {onboardingPhase && (documentsPendingReview ?? 0) > 0 ? (
-        <p className="mt-2 rounded-lg bg-white/60 px-2 py-1.5 text-xs leading-relaxed">
+        <p className="mt-2 rounded-lg bg-surface/60 px-2 py-1.5 text-xs leading-relaxed">
           Documents are waiting on Compliance. Approve or decline them there — that is what unlocks the next step in
           the Driver app. Assign courses separately under Training.
         </p>
       ) : null}
 
       {onboardingPhase && (documentsPendingReview ?? 0) === 0 ? (
-        <p className="mt-2 rounded-lg bg-white/60 px-2 py-1.5 text-xs leading-relaxed">
+        <p className="mt-2 rounded-lg bg-surface/60 px-2 py-1.5 text-xs leading-relaxed">
           Training warnings are course records — assign or complete them under Training. Licence, DBS and similar
           files stay on Compliance.
         </p>

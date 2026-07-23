@@ -77,7 +77,7 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
   if (!checklist) {
     return (
       <SectionCard title="Inspection checklist" description="Safety Inspection (PMI) digital checklist">
-        <p className="text-sm text-slate-600">Start the inspection to open the company PMI checklist.</p>
+        <p className="text-sm text-ink-soft">Start the inspection to open the company PMI checklist.</p>
       </SectionCard>
     )
   }
@@ -92,7 +92,7 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
     >
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <label className="text-sm">
-          <span className="mr-2 text-slate-600">Inspector</span>
+          <span className="mr-2 text-ink-soft">Inspector</span>
           <input
             value={inspectorName}
             onChange={(e) => setInspectorName(e.target.value)}
@@ -102,11 +102,11 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
                 inspectorName,
               })
             }
-            className="rounded-lg border border-slate-200 px-2 py-1"
+            className="rounded-lg border border-border px-2 py-1"
           />
         </label>
         <StatusPill status={complete ? 'compliant' : 'warning'} />
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-muted">
           {progress.failed} fail · {progress.advisory} advisory
         </span>
       </div>
@@ -115,7 +115,7 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
         <ul className="max-h-80 space-y-1 overflow-y-auto text-sm">
           {sections.map(([section, items]) => (
             <li key={section}>
-              <p className="mb-1 text-xs font-semibold uppercase text-slate-500">{section}</p>
+              <p className="mb-1 text-xs font-semibold uppercase text-muted">{section}</p>
               <ul className="mb-2 space-y-0.5">
                 {items.map((item) => {
                   const result = checklist.items.find((i) => i.templateItemId === item.id)?.result
@@ -125,10 +125,10 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
                         type="button"
                         onClick={() => setActiveId(item.id)}
                         className={`w-full rounded px-2 py-1 text-left ${
-                          activeId === item.id ? 'bg-command-50 text-command-800' : 'hover:bg-slate-50'
+                          activeId === item.id ? 'bg-command-50 text-command-800' : 'hover:bg-surface-muted'
                         }`}
                       >
-                        <span className="mr-1 text-[10px] uppercase text-slate-400">{result ?? '—'}</span>
+                        <span className="mr-1 text-[10px] uppercase text-muted">{result ?? '—'}</span>
                         {item.label}
                       </button>
                     </li>
@@ -140,9 +140,9 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
         </ul>
 
         {activeTemplate && activeResult && (
-          <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-            <h3 className="font-medium text-slate-900">{activeTemplate.label}</h3>
-            {activeTemplate.helpText && <p className="text-xs text-slate-500">{activeTemplate.helpText}</p>}
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <h3 className="font-medium text-ink">{activeTemplate.label}</h3>
+            {activeTemplate.helpText && <p className="text-xs text-muted">{activeTemplate.helpText}</p>}
             <div className="flex flex-wrap gap-2">
               {RESULT_OPTIONS.map((opt) => (
                 <button
@@ -158,7 +158,7 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
                   className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
                     activeResult.result === opt.id
                       ? 'border-command-500 bg-command-50 text-command-800'
-                      : 'border-slate-200 text-slate-700'
+                      : 'border-border text-ink-soft'
                   }`}
                 >
                   {opt.label}
@@ -166,7 +166,7 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
               ))}
             </div>
             <label className="block text-sm">
-              <span className="mb-1 block text-slate-600">Notes</span>
+              <span className="mb-1 block text-ink-soft">Notes</span>
               <textarea
                 defaultValue={activeResult.notes ?? ''}
                 key={`${activeTemplate.id}-notes`}
@@ -178,12 +178,12 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
                   })
                 }
                 rows={2}
-                className="w-full rounded-lg border border-slate-200 px-2 py-1"
+                className="w-full rounded-lg border border-border px-2 py-1"
               />
             </label>
             {activeTemplate.requiresBrakeEvidence && (
               <label className="block text-sm">
-                <span className="mb-1 block text-slate-600">Evidence</span>
+                <span className="mb-1 block text-ink-soft">Evidence</span>
                 <select
                   value={activeResult.evidence.kind}
                   onChange={(e) =>
@@ -197,7 +197,7 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
                       inspectorName,
                     })
                   }
-                  className="w-full rounded-lg border border-slate-200 px-2 py-1"
+                  className="w-full rounded-lg border border-border px-2 py-1"
                 >
                   {EVIDENCE_OPTIONS.map((opt) => (
                     <option key={opt.id} value={opt.id}>

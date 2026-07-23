@@ -82,8 +82,8 @@ export function useDriverMatchedTrip({ driver, userId, enabled = true }) {
         },
         (payload) => {
           const row = payload.new;
-          if (row?.notification_type !== "phv_trip_assigned" || !row.entity_id) return;
-          void tryShowJob(row.entity_id, row.id);
+          if (row?.notification_type !== "phv_trip_assigned" || !row.source_entity_id) return;
+          void tryShowJob(row.source_entity_id, row.id);
         },
       )
       .on(

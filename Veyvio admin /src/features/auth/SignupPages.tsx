@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AuthLayout } from '@/components/brand/AuthLayout'
+import { AuthLayout, authLinkClass, authPrimaryButtonClass } from '@/components/brand/AuthLayout'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 
@@ -47,12 +47,12 @@ export function SignupPage() {
         </p>
         <Link
           to={`/verify-email?token=${encodeURIComponent(devToken)}`}
-          className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700"
+          className={`mt-4 inline-flex items-center justify-center ${authPrimaryButtonClass}`}
         >
           Verify email and continue
         </Link>
-        <p className="mt-4 text-center text-xs text-slate-500">
-          <Link to="/login" className="text-command-600 hover:underline">Back to sign in</Link>
+        <p className="mt-4 text-center text-xs text-muted">
+          <Link to="/login" className={authLinkClass}>Back to sign in</Link>
         </p>
       </AuthCard>
     )
@@ -71,19 +71,19 @@ export function SignupPage() {
         <Field label="Country" value={form.country} onChange={(v) => setForm({ ...form, country: v })} required />
         <Field label="Phone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
         <Field label="Password (min 12 characters)" value={form.password} onChange={(v) => setForm({ ...form, password: v })} type="password" required />
-        <label className="flex items-start gap-2 text-sm text-slate-600">
+        <label className="flex items-start gap-2 text-sm text-ink-soft">
           <input type="checkbox" checked={form.termsAccepted} onChange={(e) => setForm({ ...form, termsAccepted: e.target.checked })} className="mt-1" />
           I accept the Veyvio terms of service
         </label>
-        <label className="flex items-start gap-2 text-sm text-slate-600">
+        <label className="flex items-start gap-2 text-sm text-ink-soft">
           <input type="checkbox" checked={form.privacyAccepted} onChange={(e) => setForm({ ...form, privacyAccepted: e.target.checked })} className="mt-1" />
           I accept the privacy notice
         </label>
-        <button type="submit" disabled={loading} className="w-full rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700 disabled:opacity-60">
+        <button type="submit" disabled={loading} className={authPrimaryButtonClass}>
           {loading ? 'Starting registration…' : 'Continue'}
         </button>
       </form>
-      <p className="mt-4 text-center text-xs text-slate-500">
+      <p className="mt-4 text-center text-xs text-muted">
         Already registered? <Link to="/login" className="text-command-600 hover:underline">Sign in</Link>
       </p>
     </AuthCard>
@@ -119,7 +119,7 @@ export function VerifyEmailPage() {
         <button
           type="button"
           onClick={() => navigate('/login')}
-          className="w-full rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700"
+          className={authPrimaryButtonClass}
         >
           Continue to sign in
         </button>
@@ -132,7 +132,7 @@ export function VerifyEmailPage() {
       <form onSubmit={handleSubmit} className="space-y-3">
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
         <Field label="Verification token" value={token} onChange={setToken} required />
-        <button type="submit" disabled={loading} className="w-full rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700 disabled:opacity-60">
+        <button type="submit" disabled={loading} className={authPrimaryButtonClass}>
           {loading ? 'Verifying…' : 'Verify email'}
         </button>
       </form>
@@ -189,7 +189,7 @@ export function CompanyVerificationPage() {
           <Field label="Estimated fleet size" value={form.estimatedFleetSize} onChange={(v) => setForm({ ...form, estimatedFleetSize: v })} />
           <Field label="Estimated users" value={form.estimatedUserCount} onChange={(v) => setForm({ ...form, estimatedUserCount: v })} />
         </div>
-        <button type="submit" disabled={loading} className="w-full rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700 disabled:opacity-60">
+        <button type="submit" disabled={loading} className={authPrimaryButtonClass}>
           {loading ? 'Saving…' : 'Continue to contracts'}
         </button>
       </form>
@@ -227,17 +227,17 @@ export function AcceptContractsPage() {
     <AuthCard title="Company agreements" subtitle="Accept the subscription agreement, DPA, privacy notice and acceptable-use policy.">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
-        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-ink-soft">
           <li>Subscription agreement v2026-07-1</li>
           <li>Data Processing Agreement v2026-07-1</li>
           <li>Privacy notice v2026-07-1</li>
           <li>Acceptable-use policy v2026-07-1</li>
         </ul>
-        <label className="flex items-start gap-2 text-sm text-slate-600">
+        <label className="flex items-start gap-2 text-sm text-ink-soft">
           <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="mt-1" />
           I am authorised to accept these agreements for this company
         </label>
-        <button type="submit" disabled={loading} className="w-full rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700 disabled:opacity-60">
+        <button type="submit" disabled={loading} className={authPrimaryButtonClass}>
           {loading ? 'Recording…' : 'Accept and continue'}
         </button>
       </form>
@@ -278,7 +278,7 @@ export function CompanySetupPage() {
         <Field label="Timezone" value={form.timezone} onChange={(v) => setForm({ ...form, timezone: v })} required />
         <Field label="Primary depot name" value={form.depotName} onChange={(v) => setForm({ ...form, depotName: v })} required />
         <Field label="Depot code" value={form.depotCode} onChange={(v) => setForm({ ...form, depotCode: v })} required />
-        <button type="submit" disabled={loading} className="w-full rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700 disabled:opacity-60">
+        <button type="submit" disabled={loading} className={authPrimaryButtonClass}>
           {loading ? 'Activating…' : 'Activate company'}
         </button>
       </form>
@@ -324,7 +324,7 @@ function Field({
   const id = useMemo(() => label.toLowerCase().replace(/\s+/g, '-'), [label])
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      <label htmlFor={id} className="mb-1 block text-sm font-medium text-ink-soft">{label}</label>
       <input
         id={id}
         type={type}

@@ -47,23 +47,23 @@ export function DriverScheduleTab({ driver }: { driver: DriverProfile }) {
       <SectionCard title="Schedule and availability">
         <dl className="mb-4 grid gap-3 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-slate-500">Availability</dt>
-            <dd className="font-medium text-slate-900">{driver.availabilityStatus.replace(/_/g, ' ')}</dd>
+            <dt className="text-muted">Availability</dt>
+            <dd className="font-medium text-ink">{driver.availabilityStatus.replace(/_/g, ' ')}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Duty status</dt>
-            <dd className="font-medium text-slate-900">{driver.dutyStatus.replace(/_/g, ' ')}</dd>
+            <dt className="text-muted">Duty status</dt>
+            <dd className="font-medium text-ink">{driver.dutyStatus.replace(/_/g, ' ')}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Next duty</dt>
-            <dd className="font-medium text-slate-900">
+            <dt className="text-muted">Next duty</dt>
+            <dd className="font-medium text-ink">
               {driver.nextDutyReference
                 ? `${driver.nextDutyReference}${driver.nextDutyTime ? ` · ${driver.nextDutyTime}` : ''}`
                 : '—'}
             </dd>
           </div>
         </dl>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted">
           Availability does not mean eligible for assignment. Check the Eligibility tab before dispatch.
         </p>
       </SectionCard>
@@ -75,21 +75,21 @@ export function DriverScheduleTab({ driver }: { driver: DriverProfile }) {
             <button
               type="button"
               onClick={() => shiftWeek(-1)}
-              className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-2 py-1 text-xs font-medium hover:bg-surface-muted"
             >
               Previous
             </button>
             <button
               type="button"
               onClick={() => setAnchor(operationalDateIso)}
-              className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-2 py-1 text-xs font-medium hover:bg-surface-muted"
             >
               Today
             </button>
             <button
               type="button"
               onClick={() => shiftWeek(1)}
-              className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-2 py-1 text-xs font-medium hover:bg-surface-muted"
             >
               Next
             </button>
@@ -100,7 +100,7 @@ export function DriverScheduleTab({ driver }: { driver: DriverProfile }) {
         }
       >
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading duties…</p>
+          <p className="text-sm text-muted">Loading duties…</p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-7">
             {days.map((day) => {
@@ -110,16 +110,16 @@ export function DriverScheduleTab({ driver }: { driver: DriverProfile }) {
                 <div
                   key={day}
                   className={`min-h-[5.5rem] rounded-lg border px-2 py-2 ${
-                    isToday ? 'border-command-300 bg-command-50/40' : 'border-slate-200 bg-white'
+                    isToday ? 'border-command-300 bg-command-50/40' : 'border-border bg-surface'
                   }`}
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
                     {new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short' })}
                   </p>
-                  <p className="text-xs font-medium text-slate-800">{formatDate(day)}</p>
+                  <p className="text-xs font-medium text-ink">{formatDate(day)}</p>
                   <ul className="mt-2 space-y-1">
                     {dayDuties.length === 0 ? (
-                      <li className="text-[11px] text-slate-400">—</li>
+                      <li className="text-[11px] text-muted">—</li>
                     ) : (
                       dayDuties.map((d) => (
                         <li key={d.id}>
@@ -139,7 +139,7 @@ export function DriverScheduleTab({ driver }: { driver: DriverProfile }) {
           </div>
         )}
         {!isLoading && mine.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">No duties assigned to this driver in this week.</p>
+          <p className="mt-3 text-sm text-muted">No duties assigned to this driver in this week.</p>
         ) : null}
       </SectionCard>
     </div>

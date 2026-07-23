@@ -28,12 +28,12 @@ export function StaffGovernancePanel({ staff }: { staff: StaffProfile }) {
       )}
       {staff.lifecycleWorkflow.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-medium uppercase text-slate-500">Lifecycle workflow</p>
+          <p className="mb-2 text-xs font-medium uppercase text-muted">Lifecycle workflow</p>
           <ol className="space-y-1 text-sm">
             {staff.lifecycleWorkflow.map((step) => (
-              <li key={step.key} className="flex items-center justify-between gap-2 rounded border border-slate-100 px-2 py-1.5">
+              <li key={step.key} className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1.5">
                 <span>{step.label}</span>
-                <span className="text-xs capitalize text-slate-500">{step.status.replace(/_/g, ' ')}</span>
+                <span className="text-xs capitalize text-muted">{step.status.replace(/_/g, ' ')}</span>
               </li>
             ))}
           </ol>

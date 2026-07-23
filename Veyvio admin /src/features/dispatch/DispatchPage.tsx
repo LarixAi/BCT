@@ -233,8 +233,8 @@ export function DispatchPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Dispatch</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Dispatch</h1>
+          <p className="text-sm text-ink-soft">
             Plan and assign duties — dragging between columns opens the transfer workflow when an operational trip exists
           </p>
         </div>
@@ -243,11 +243,11 @@ export function DispatchPage() {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <Link
             to="/live-operations"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Live Operations
           </Link>
@@ -265,8 +265,8 @@ export function DispatchPage() {
 
       <div className="grid gap-3 sm:grid-cols-4">
         {COLUMNS.map((col) => (
-          <div key={col.key} className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{col.label}</p>
+          <div key={col.key} className="rounded-xl border border-border bg-surface p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">{col.label}</p>
             <p className="mt-1 text-2xl font-bold tabular-nums">{dutiesForColumn(duties, col.key).length}</p>
           </div>
         ))}
@@ -305,14 +305,14 @@ export function DispatchPage() {
       </SectionCard>
 
       {isLoading ? (
-        <p className="text-sm text-slate-500">Loading dispatch board…</p>
+        <p className="text-sm text-muted">Loading dispatch board…</p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-4">
           {COLUMNS.map((col) => (
             <div
               key={col.key}
               className={`rounded-lg border p-3 transition-colors ${
-                dropTarget === col.key ? 'border-command-500 bg-command-50' : 'border-slate-200 bg-slate-50'
+                dropTarget === col.key ? 'border-command-500 bg-command-50' : 'border-border bg-surface-muted'
               }`}
               onDragOver={(e) => {
                 e.preventDefault()
@@ -327,9 +327,9 @@ export function DispatchPage() {
                 setDraggingId(null)
               }}
             >
-              <h2 className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-700">
+              <h2 className="mb-3 flex items-center justify-between text-sm font-semibold text-ink-soft">
                 <span>{col.label}</span>
-                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium tabular-nums text-slate-500">
+                <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium tabular-nums text-muted">
                   {dutiesForColumn(duties, col.key).length}
                 </span>
               </h2>
@@ -348,16 +348,16 @@ export function DispatchPage() {
                         setDraggingId(duty.id)
                       }}
                       onDragEnd={() => setDraggingId(null)}
-                      className={`cursor-grab rounded-lg border bg-white p-2.5 shadow-sm transition active:cursor-grabbing ${
+                      className={`cursor-grab rounded-lg border bg-surface p-2.5 shadow-sm transition active:cursor-grabbing ${
                         hasBlock
                           ? 'border-red-400 ring-1 ring-red-100'
                           : cardAlerts.length
                             ? 'border-amber-400 ring-1 ring-amber-100'
-                            : 'border-slate-200'
-                      } ${draggingId === duty.id ? 'opacity-50' : 'hover:border-slate-300'}`}
+                            : 'border-border'
+                      } ${draggingId === duty.id ? 'opacity-50' : 'hover:border-border-strong'}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium text-slate-900">
+                        <p className="text-sm font-medium text-ink">
                           {duty.route?.name ?? duty.reference}
                         </p>
                         {(() => {
@@ -371,8 +371,8 @@ export function DispatchPage() {
                           )
                         })()}
                       </div>
-                      <p className="mt-1 text-xs tabular-nums text-slate-500">{duty.startTime ?? '—'}</p>
-                      <p className="mt-1 text-xs text-slate-600">
+                      <p className="mt-1 text-xs tabular-nums text-muted">{duty.startTime ?? '—'}</p>
+                      <p className="mt-1 text-xs text-ink-soft">
                         {duty.driver ? `${duty.driver.firstName} ${duty.driver.lastName}` : 'No driver'}
                         {' · '}
                         {duty.vehicle?.registrationNumber ?? 'No vehicle'}
@@ -425,8 +425,8 @@ export function DispatchPage() {
                   )
                 })}
                 {!dutiesForColumn(duties, col.key).length && (
-                  <div className="flex min-h-[80px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white/60">
-                    <p className="text-xs text-slate-400">Drop duties here</p>
+                  <div className="flex min-h-[80px] items-center justify-center rounded-lg border border-dashed border-border bg-surface/60">
+                    <p className="text-xs text-muted">Drop duties here</p>
                   </div>
                 )}
               </div>
@@ -520,18 +520,18 @@ function AssignModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-xl bg-surface p-6 shadow-xl">
         <h2 className="text-lg font-semibold">Assign duty</h2>
         <div className="mt-4 space-y-3">
           <div>
-            <label htmlFor="assign-driver" className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="assign-driver" className="mb-1 block text-sm font-medium text-ink-soft">
               Driver
             </label>
             <select
               id="assign-driver"
               value={selectedDriver}
               onChange={(e) => onDriverChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm"
             >
               <option value="">Unassigned</option>
               {drivers.map((d) => (
@@ -542,14 +542,14 @@ function AssignModal({
             </select>
           </div>
           <div>
-            <label htmlFor="assign-vehicle" className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="assign-vehicle" className="mb-1 block text-sm font-medium text-ink-soft">
               Vehicle
             </label>
             <select
               id="assign-vehicle"
               value={selectedVehicle}
               onChange={(e) => onVehicleChange(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm"
             >
               <option value="">Unassigned</option>
               {vehicles.map((v) => (
@@ -578,7 +578,7 @@ function AssignModal({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Cancel
           </button>
@@ -607,19 +607,19 @@ function OverrideModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-xl bg-surface p-6 shadow-xl">
         <h2 className="text-lg font-semibold text-amber-800">Override required</h2>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-ink-soft">
           {conflicts.map((c) => (
             <li key={c}>{c}</li>
           ))}
         </ul>
-        <p className="mt-3 text-sm text-slate-600">You have override permission. Proceed anyway?</p>
+        <p className="mt-3 text-sm text-ink-soft">You have override permission. Proceed anyway?</p>
         <div className="mt-4 flex gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft"
           >
             Cancel
           </button>

@@ -7,5 +7,5 @@ export function getYardApi(): YardApi {
   return isMockApi() ? mockYardApi : liveYardApi;
 }
 
-export { isMockApi, getApiBaseUrl } from "./config";
+export { isMockApi, getApiBaseUrl, usesCommandYardApi } from "./config";
 export type { YardApi, PushMutationResult } from "./yard-api";

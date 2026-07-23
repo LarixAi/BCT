@@ -14,21 +14,21 @@ export function IncidentQuickDrawer({
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/30" data-testid="incident-quick-drawer" onClick={onClose}>
       <div
-        className="h-full w-full max-w-md overflow-y-auto bg-white shadow-xl"
+        className="h-full w-full max-w-md overflow-y-auto bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-b border-slate-200 p-4">
+        <div className="border-b border-border p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="font-mono text-xs text-slate-500">{row.incidentRef}</p>
-              <h2 className="text-lg font-semibold text-slate-900">{row.title}</h2>
-              <p className="mt-1 text-sm text-slate-600">{row.shortDescription}</p>
+              <p className="font-mono text-xs text-muted">{row.incidentRef}</p>
+              <h2 className="text-lg font-semibold text-ink">{row.title}</h2>
+              <p className="mt-1 text-sm text-ink-soft">{row.shortDescription}</p>
             </div>
-            <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-800">✕</button>
+            <button type="button" onClick={onClose} className="text-muted hover:text-ink">✕</button>
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium">{SEVERITY_DISPLAY[row.severity]}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5">{STATUS_LABELS[row.status]}</span>
+            <span className="rounded-full bg-surface-muted px-2 py-0.5 font-medium">{SEVERITY_DISPLAY[row.severity]}</span>
+            <span className="rounded-full bg-surface-muted px-2 py-0.5">{STATUS_LABELS[row.status]}</span>
             {row.isSafeguarding && <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-800">Safeguarding</span>}
           </div>
         </div>
@@ -42,7 +42,7 @@ export function IncidentQuickDrawer({
             <DrawerRow label="Next deadline" value={row.nextDeadlineLabel ?? new Date(row.nextDeadline).toLocaleString('en-GB')} />
           )}
         </dl>
-        <div className="border-t border-slate-200 p-4">
+        <div className="border-t border-border p-4">
           <Link
             to={`/incidents/${row.id}`}
             className="block w-full rounded-lg bg-command-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-command-700"
@@ -59,8 +59,8 @@ export function IncidentQuickDrawer({
 function DrawerRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

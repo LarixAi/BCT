@@ -5,7 +5,9 @@ import { yardCopy } from "@/copy/yard-messages";
 import { useYard } from "@/store/yard";
 import { RegPlate, StatusChip } from "@/components/yard/primitives";
 import { QrScannerPanel } from "@/components/scan/QrScannerPanel";
-import { isBarcodeDetectorSupported, resolveScanTarget } from "@/domain/scan/scan-ref";
+import { isCameraScanSupported, resolveScanTarget } from "@/domain/scan/scan-ref";
+import { listScannableEquipment } from "@/domain/equipment/equipment-lookup";
+import { buildEquipmentQrPayload } from "@/domain/equipment/equipment-qr";
 import { openTasksForVehicle } from "@/domain/tasks/task-automation";
 import { ScanLine, Search, ListTodo, Camera } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -26,14 +28,15 @@ function ScanPage() {
   const vehicles = useYard(s => s.vehicles);
   const bays = useYard(s => s.bays);
   const defects = useYard(s => s.defects);
+  const equipment = useYard(s => s.equipment);
   const tasks = useYard(s => s.tasks) ?? [];
   const [q, setQ] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
-  const cameraSupported = useMemo(() => isBarcodeDetectorSupported(), []);
+  const cameraSupported = useMemo(() => isCameraScanSupported(), []);
 
   const scanContext = useMemo(
-    () => ({ vehicles, bays, defects, tasks }),
-    [vehicles, bays, defects, tasks],
+    () => ({ vehicles, bays, defects, tasks, equipment }),
+    [vehicles, bays, defects, tasks, equipment],
   );
 
   const navigateScan = useCallback((value: string) => {
@@ -43,6 +46,13 @@ function ScanPage() {
       return;
     }
     setCameraOpen(false);
+    if (target.action?.type === "transfer-equipment") {
+      useYard.getState().openSheet({
+        kind: "transfer-equipment",
+        vehicleId: target.action.vehicleId,
+        itemId: target.action.itemId,
+      });
+    }
     void navigate({ to: target.to, params: target.params });
   }, [navigate, scanContext]);
 
@@ -55,6 +65,11 @@ function ScanPage() {
     [vehicles, q],
   );
 
+  const equipmentMatches = useMemo(
+    () => listScannableEquipment(equipment, vehicles, q),
+    [equipment, vehicles, q],
+  );
+
   return (
     <div className="space-y-4 animate-in-up pb-4">
       <div className="bg-white border border-border rounded-xs p-6 text-center">
@@ -63,7 +78,7 @@ function ScanPage() {
         </div>
         <h1 className="mt-4 font-display text-lg font-extrabold tracking-tight">Scan QR code</h1>
         <p className="mt-1 text-sm text-muted">
-          Vehicle · Defect · Task · Bay reference
+          Vehicle · Equipment asset · Defect · Task · Bay reference
         </p>
         {cameraOpen ? (
           <div className="mt-4 text-left">
@@ -77,7 +92,7 @@ function ScanPage() {
             className="mt-4 w-full bg-primary hover:bg-primary/90 text-white uppercase tracking-widest font-bold text-xs"
           >
             <Camera className="size-4 mr-2" />
-            {cameraSupported ? "Open camera scanner" : "Camera QR not supported"}
+            {cameraSupported ? "Open camera scanner" : "Camera not available on this device"}
           </Button>
         )}
       </div>
@@ -92,7 +107,7 @@ function ScanPage() {
             onKeyDown={e => {
               if (e.key === "Enter" && q.trim()) navigateScan(q);
             }}
-            placeholder="Reg, bay, defect:df3, task:task_1…"
+            placeholder="Reg, bay, EQ-HV-A3F2, veyvio:equipment:…"
             className="pl-9"
           />
         </div>
@@ -106,6 +121,31 @@ function ScanPage() {
             Go to match
           </Button>
         )}
+        {equipmentMatches.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-muted px-1">Equipment assets</div>
+            <div className="bg-white border border-border rounded-xs overflow-hidden divide-y divide-border">
+              {equipmentMatches.map(row => (
+                <button
+                  key={`${row.vehicleId}-${row.item.id}`}
+                  type="button"
+                  onClick={() => navigateScan(buildEquipmentQrPayload(row.scanValue))}
+                  className="w-full text-left p-3 hover:bg-secondary/50 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold uppercase tracking-wider">{row.item.label}</div>
+                    <div className="text-[10px] text-muted font-mono mt-0.5">{row.scanValue}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <RegPlate reg={row.vehicleReg} className="text-[10px]" />
+                    <div className="text-[10px] text-muted font-mono mt-0.5">{row.bayId}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="text-[10px] font-bold uppercase tracking-widest text-muted px-1">Vehicles</div>
         <div className="bg-white border border-border rounded-xs overflow-hidden divide-y divide-border">
           {filtered.map(v => {
             const linked = openTasksForVehicle(tasks, v.id);

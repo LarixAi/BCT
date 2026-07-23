@@ -34,21 +34,21 @@ export function DriverAssignmentsTab({ driver }: { driver: DriverProfile }) {
     <div className="space-y-4">
       <SectionCard title="Today's assignments">
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading assignments…</p>
+          <p className="text-sm text-muted">Loading assignments…</p>
         ) : today.length === 0 ? (
-          <p className="text-sm text-slate-500">No duties assigned today.</p>
+          <p className="text-sm text-muted">No duties assigned today.</p>
         ) : (
           <ul className="space-y-2">
             {today.map((d) => (
               <li
                 key={d.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
               >
                 <div>
                   <Link to={`/runs/${d.id}`} className="font-medium text-command-600 hover:underline">
                     {d.reference}
                   </Link>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted">
                     {d.startTime ?? '—'} · {d.route?.name ?? 'No route'} ·{' '}
                     {d.vehicle?.registrationNumber ?? 'No vehicle'}
                   </p>
@@ -62,13 +62,13 @@ export function DriverAssignmentsTab({ driver }: { driver: DriverProfile }) {
 
       <SectionCard title="Upcoming (next 14 days)">
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : upcoming.length === 0 ? (
-          <p className="text-sm text-slate-500">No upcoming duties in the next two weeks.</p>
+          <p className="text-sm text-muted">No upcoming duties in the next two weeks.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-2">Date</th>
                 <th className="pb-2 pr-2">Duty</th>
                 <th className="pb-2 pr-2">Route / vehicle</th>
@@ -77,8 +77,8 @@ export function DriverAssignmentsTab({ driver }: { driver: DriverProfile }) {
             </thead>
             <tbody>
               {upcoming.map((d) => (
-                <tr key={d.id} className="border-b border-slate-50">
-                  <td className="py-2 pr-2 text-slate-600">
+                <tr key={d.id} className="border-b border-border/60">
+                  <td className="py-2 pr-2 text-ink-soft">
                     {formatDate(d.dutyDate)}
                     {d.startTime ? ` · ${d.startTime}` : ''}
                   </td>
@@ -87,7 +87,7 @@ export function DriverAssignmentsTab({ driver }: { driver: DriverProfile }) {
                       {d.reference}
                     </Link>
                   </td>
-                  <td className="py-2 pr-2 text-slate-600">
+                  <td className="py-2 pr-2 text-ink-soft">
                     {d.route?.name ?? '—'} · {d.vehicle?.registrationNumber ?? '—'}
                   </td>
                   <td className="py-2">

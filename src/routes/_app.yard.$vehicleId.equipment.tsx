@@ -1,11 +1,25 @@
-import { useMemo } from "react";
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { useEffect, useMemo } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useVehicleReadiness, useYard } from "@/store/yard";
+import { useCan } from "@/platform/permissions/use-can";
 import { RegPlate, StatusChip } from "@/components/yard/primitives";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ScanLine, Plus, PackagePlus, TriangleAlert, ChevronRight, ShieldAlert, Fuel, Clock, Wrench } from "lucide-react";
+import {
+  ArrowLeft,
+  ScanLine,
+  Plus,
+  PackagePlus,
+  TriangleAlert,
+  ChevronRight,
+  ShieldAlert,
+  Fuel,
+  Clock,
+  Wrench,
+  UserCheck,
+} from "lucide-react";
 import { READINESS_TONE } from "@/lib/readiness";
-import type { AssignedItem, EqStatus, FixedItem } from "@/types/equipment";
+import type { AssignedItem, EqStatus, EquipmentCheckRecord, FixedItem } from "@/types/equipment";
+import type { EquipmentCheckKind } from "@/domain/equipment/equipment-mutations";
 
 export const Route = createFileRoute("/_app/yard/$vehicleId/equipment")({
   head: ({ params }) => ({
@@ -20,8 +34,10 @@ export const Route = createFileRoute("/_app/yard/$vehicleId/equipment")({
 
 function EquipmentPage() {
   const { vehicleId } = Route.useParams();
+  const navigate = useNavigate();
   const vehicle = useYard(s => s.vehicles.find(v => v.id === vehicleId));
   const eq = useYard(s => s.equipment[vehicleId]);
+  const ensureVehicleEquipment = useYard(s => s.ensureVehicleEquipment);
   const readiness = useVehicleReadiness(vehicleId);
   const equipmentAudit = useYard(s => s.equipmentAudit);
   const audit = useMemo(
@@ -30,7 +46,17 @@ function EquipmentPage() {
   );
   const openSheet = useYard(s => s.openSheet);
 
-  if (!vehicle || !eq) throw notFound();
+  useEffect(() => {
+    if (vehicle) ensureVehicleEquipment(vehicleId);
+  }, [vehicle, vehicleId, ensureVehicleEquipment]);
+
+  if (!vehicle) {
+    return <p className="p-8 text-center text-muted text-sm">Loading vehicle…</p>;
+  }
+  if (!eq?.fixed || !eq.assigned || !eq.consumables || !eq.documents) {
+    return <p className="p-8 text-center text-muted text-sm">Loading equipment checklist…</p>;
+  }
+
   const tone = READINESS_TONE[readiness.state];
 
   return (
@@ -89,9 +115,13 @@ function EquipmentPage() {
         )}
       </div>
 
+      <p className="px-1 text-[11px] text-muted">
+        Toggle each item to confirm it is on the vehicle or mark it missing. Your check time is recorded.
+      </p>
+
       {/* ACTION BAR */}
       <div className="grid grid-cols-4 gap-2 sticky top-[86px] z-30 bg-background py-1">
-        <ActionBtn label="Scan" icon={<ScanLine className="size-4" />} onClick={() => openSheet({ kind: "scan-equipment", vehicleId })} tone="accent" />
+        <ActionBtn label="Scan" icon={<ScanLine className="size-4" />} onClick={() => void navigate({ to: "/scan" })} tone="accent" />
         <ActionBtn label="Assign" icon={<Plus className="size-4" />} onClick={() => openSheet({ kind: "assign-equipment", vehicleId })} tone="primary" />
         <ActionBtn label="Restock" icon={<PackagePlus className="size-4" />} onClick={() => openSheet({ kind: "restock-consumable", vehicleId })} tone="ok" />
         <ActionBtn label="Report" icon={<TriangleAlert className="size-4" />} onClick={() => openSheet({ kind: "report-equipment-issue", vehicleId })} tone="vor" />
@@ -134,13 +164,16 @@ function EquipmentPage() {
       {/* DOCUMENTS */}
       <Section title="Documents & Controlled Items">
         {eq.documents.map(d => (
-          <div key={d.id} className="p-3 border-b border-border last:border-b-0 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs font-bold uppercase tracking-wider">{d.label}</div>
-              {d.detail && <div className="text-[11px] text-muted mt-0.5">{d.detail}</div>}
-            </div>
-            <StatusPill status={d.status} />
-          </div>
+          <EquipmentCheckRow
+            key={d.id}
+            vehicleId={vehicleId}
+            kind="document"
+            itemId={d.id}
+            label={d.label}
+            sublabel={d.detail}
+            status={d.status}
+            lastCheck={d.lastCheck}
+          />
         ))}
       </Section>
 
@@ -174,20 +207,84 @@ function Section({ title, sub, children }: { title: string; sub?: string; childr
   );
 }
 
+function EquipmentCheckRow({
+  vehicleId,
+  kind,
+  itemId,
+  label,
+  sublabel,
+  status,
+  lastCheck,
+  bad,
+  children,
+}: {
+  vehicleId: string;
+  kind: EquipmentCheckKind;
+  itemId: string;
+  label: string;
+  sublabel?: string;
+  status: EqStatus;
+  lastCheck?: EquipmentCheckRecord;
+  bad?: boolean;
+  children?: React.ReactNode;
+}) {
+  const recordCheck = useYard(s => s.recordEquipmentPresence);
+  const present = lastCheck?.present ?? isPresentStatus(status);
+
+  return (
+    <div className={`p-3 border-b border-border last:border-b-0 ${bad ? "bg-vor/5" : ""}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-bold uppercase tracking-wider">{label}</div>
+            <StatusPill status={status} />
+          </div>
+          {sublabel && <div className="text-[10px] text-muted font-mono mt-0.5">{sublabel}</div>}
+        </div>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          {lastCheck && (
+            <div
+              className="inline-flex items-center gap-1 rounded-xs border border-border bg-secondary/60 px-1.5 py-0.5 text-[10px] text-muted"
+              title={`Checked by ${lastCheck.checkedBy}`}
+            >
+              <UserCheck className={`size-3 ${lastCheck.present ? "text-ok" : "text-vor"}`} />
+              <Clock className="size-3" />
+              <span className="font-mono">{formatTime(lastCheck.checkedAt)}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <span className={`text-[9px] font-bold uppercase tracking-widest ${present ? "text-ok" : "text-vor"}`}>
+              {present ? "On board" : "Missing"}
+            </span>
+            <PresenceToggle
+              checked={present}
+              onCheckedChange={checked => recordCheck(vehicleId, kind, itemId, checked)}
+              label={label}
+            />
+          </div>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function FixedRow({ vehicleId, item }: { vehicleId: string; item: FixedItem }) {
   const openSheet = useYard(s => s.openSheet);
   const clear = useYard(s => s.clearEquipmentIssue);
   const bad = item.status === "missing" || item.status === "damaged" || item.status === "expired" || item.status === "incomplete";
   return (
-    <div className={`p-3 border-b border-border last:border-b-0 ${bad ? "bg-vor/5" : ""}`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-xs font-bold uppercase tracking-wider">{item.label}</div>
-          <div className="text-[10px] text-muted font-mono">{item.id}</div>
-        </div>
-        <StatusPill status={item.status} />
-      </div>
-      <div className="mt-1 text-[11px] text-muted flex flex-wrap gap-x-3 gap-y-0.5">
+    <EquipmentCheckRow
+      vehicleId={vehicleId}
+      kind="fixed"
+      itemId={item.id}
+      label={item.label}
+      sublabel={item.id}
+      status={item.status}
+      lastCheck={item.lastCheck}
+      bad={bad}
+    >
+      <div className="mt-2 text-[11px] text-muted flex flex-wrap gap-x-3 gap-y-0.5">
         {item.count && <span>{item.count.present}/{item.count.required} present</span>}
         {item.expiryDate && <span>Expires {formatDate(item.expiryDate)}</span>}
         {item.inspectionDueDate && <span>Inspection {formatDate(item.inspectionDueDate)}</span>}
@@ -195,26 +292,28 @@ function FixedRow({ vehicleId, item }: { vehicleId: string; item: FixedItem }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
         <MiniBtn onClick={() => openSheet({ kind: "report-equipment-issue", vehicleId, itemId: item.id, itemKind: "fixed" })}>Report issue</MiniBtn>
-        <MiniBtn onClick={() => openSheet({ kind: "report-equipment-issue", vehicleId, itemId: item.id, itemKind: "fixed" })}>Send for inspection</MiniBtn>
         {bad && <MiniBtn tone="ok" onClick={() => clear(vehicleId, "fixed", item.id, "Replaced / resolved")}>Mark replaced</MiniBtn>}
       </div>
-    </div>
+    </EquipmentCheckRow>
   );
 }
 
 function AssignedRow({ vehicleId, item }: { vehicleId: string; item: AssignedItem }) {
   const openSheet = useYard(s => s.openSheet);
+  const canTransfer = useCan("equipment.transfer");
   const isKit = !!item.components;
   const bad = item.status === "missing" || item.status === "damaged" || item.status === "incomplete";
   return (
-    <div className={`p-3 border-b border-border last:border-b-0 ${bad ? "bg-vor/5" : ""}`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-xs font-bold uppercase tracking-wider">{item.label}</div>
-          <div className="text-[10px] text-muted font-mono">{item.id}</div>
-        </div>
-        <StatusPill status={item.status} />
-      </div>
+    <EquipmentCheckRow
+      vehicleId={vehicleId}
+      kind="assigned"
+      itemId={item.id}
+      label={item.label}
+      sublabel={item.qrCode ? `${item.qrCode} · ${item.id}` : item.id}
+      status={item.status}
+      lastCheck={item.lastCheck}
+      bad={bad}
+    >
       {isKit && item.components && (
         <ul className="mt-2 grid grid-cols-2 gap-1">
           {item.components.map(c => (
@@ -225,11 +324,48 @@ function AssignedRow({ vehicleId, item }: { vehicleId: string; item: AssignedIte
         </ul>
       )}
       <div className="mt-2 flex flex-wrap gap-1">
-        <MiniBtn onClick={() => openSheet({ kind: "unassign-equipment", vehicleId, itemId: item.id })}>Unassign</MiniBtn>
+        {canTransfer && (
+          <MiniBtn onClick={() => openSheet({ kind: "transfer-equipment", vehicleId, itemId: item.id })}>Transfer</MiniBtn>
+        )}
+        <MiniBtn onClick={() => openSheet({ kind: "equipment-label", vehicleId, itemId: item.id })}>Print label</MiniBtn>
+        <MiniBtn onClick={() => openSheet({ kind: "unassign-equipment", vehicleId, itemId: item.id })}>Return to store</MiniBtn>
         <MiniBtn onClick={() => openSheet({ kind: "report-equipment-issue", vehicleId, itemId: item.id, itemKind: "assigned" })}>Report issue</MiniBtn>
       </div>
-    </div>
+    </EquipmentCheckRow>
   );
+}
+
+function PresenceToggle({
+  checked,
+  onCheckedChange,
+  label,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={`${label} on vehicle`}
+      onClick={() => onCheckedChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+        checked ? "bg-primary" : "bg-input"
+      }`}
+    >
+      <span
+        className={`pointer-events-none block size-4 rounded-full bg-background shadow-lg transition-transform ${
+          checked ? "translate-x-4" : "translate-x-0"
+        }`}
+      />
+    </button>
+  );
+}
+
+function isPresentStatus(status: EqStatus): boolean {
+  return status === "present" || status === "complete" || status === "expiring" || status === "inspection-due" || status === "low";
 }
 
 function StatusPill({ status }: { status: EqStatus }) {

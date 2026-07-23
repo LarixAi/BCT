@@ -172,7 +172,7 @@ export function StaffDetailPage() {
     onSuccess: invalidate,
   })
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading…</p>
   if (isError || !staff) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Staff member not found'}</p>
   }
@@ -190,7 +190,7 @@ export function StaffDetailPage() {
         actions={
           <>
             {canEditStaff(permissions) && (
-              <Link to={`/staff/${staff.id}/edit`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+              <Link to={`/staff/${staff.id}/edit`} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
                 Edit
               </Link>
             )}
@@ -201,10 +201,10 @@ export function StaffDetailPage() {
             )}
             {canManageStaffAccess(permissions) && staff.account.accountStatus === 'active' && (
               <>
-                <button type="button" onClick={() => passwordReset.mutate()} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+                <button type="button" onClick={() => passwordReset.mutate()} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
                   Password reset
                 </button>
-                <button type="button" onClick={() => revokeSessions.mutate()} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+                <button type="button" onClick={() => revokeSessions.mutate()} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
                   Revoke sessions
                 </button>
               </>
@@ -228,18 +228,18 @@ export function StaffDetailPage() {
           value={suspendReason}
           onChange={(e) => setSuspendReason(e.target.value)}
           placeholder="Reason required to suspend access"
-          className="w-full max-w-md rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          className="w-full max-w-md rounded-lg border border-border px-3 py-1.5 text-sm"
         />
       )}
 
-      <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 pb-px">
+      <nav className="flex gap-1 overflow-x-auto border-b border-border pb-px">
         {TABS.map((label) => (
           <button
             key={label}
             type="button"
             onClick={() => setTab(label)}
             className={`shrink-0 rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === label ? 'border border-b-0 border-slate-200 bg-white text-command-700' : 'text-slate-600 hover:text-slate-900'
+              tab === label ? 'border border-b-0 border-border bg-surface text-command-700' : 'text-ink-soft hover:text-ink'
             }`}
           >
             {label}
@@ -264,7 +264,7 @@ export function StaffDetailPage() {
           <SectionCard title="Application access">
             <div className="flex flex-wrap gap-2">
               {staff.applications.filter((a) => a.enabled).map((a) => (
-                <span key={a.application} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                <span key={a.application} className="rounded-full bg-surface-muted px-2 py-1 text-xs text-ink-soft">
                   {APPLICATION_LABELS[a.application]} · {a.status}
                 </span>
               ))}
@@ -287,7 +287,7 @@ export function StaffDetailPage() {
           )}
           {staff.responsibilities.length > 0 && (
             <SectionCard title="Current responsibilities" className="lg:col-span-2">
-              <ul className="list-inside list-disc text-sm text-slate-700">
+              <ul className="list-inside list-disc text-sm text-ink-soft">
                 {staff.responsibilities.map((r) => <li key={r}>{r}</li>)}
               </ul>
             </SectionCard>
@@ -313,9 +313,9 @@ export function StaffDetailPage() {
             <SectionCard title="Joiner / mover / leaver workflow" description="Automated lifecycle checkpoints">
               <ol className="space-y-2 text-sm">
                 {staff.lifecycleWorkflow.map((step) => (
-                  <li key={step.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                  <li key={step.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
                     <span className="font-medium">{step.label}</span>
-                    <span className="text-xs capitalize text-slate-500">{step.status.replace(/_/g, ' ')}</span>
+                    <span className="text-xs capitalize text-muted">{step.status.replace(/_/g, ' ')}</span>
                   </li>
                 ))}
               </ol>
@@ -334,13 +334,21 @@ export function StaffDetailPage() {
             <Row label="MFA" value={staff.account.mfaEnabled ? 'Enabled' : 'Not configured'} />
             <Row label="Active sessions" value={String(staff.account.activeSessionCount)} />
           </dl>
+          {staff.account.devInvitationToken ? (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Email delivery is not connected yet.{' '}
+              <Link className="font-medium underline" to={`/accept-invitation?token=${encodeURIComponent(staff.account.devInvitationToken)}`}>
+                Open accept invitation link
+              </Link>
+            </p>
+          ) : null}
           <div className="mt-4">
-            <h3 className="mb-2 text-sm font-medium text-slate-700">Role assignments</h3>
+            <h3 className="mb-2 text-sm font-medium text-ink-soft">Role assignments</h3>
             <ul className="space-y-2 text-sm">
               {staff.roleAssignments.map((r) => (
-                <li key={r.roleKey} className="rounded-lg border border-slate-200 px-3 py-2">
+                <li key={r.roleKey} className="rounded-lg border border-border px-3 py-2">
                   <p className="font-medium">{r.roleLabel}{r.elevated && ' (elevated)'}</p>
-                  <p className="text-slate-600">Scope: {r.scopeLabel}</p>
+                  <p className="text-ink-soft">Scope: {r.scopeLabel}</p>
                 </li>
               ))}
             </ul>
@@ -390,7 +398,7 @@ export function StaffDetailPage() {
               type="button"
               onClick={() => extendContractor.mutate()}
               disabled={extendContractor.isPending}
-              className="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="mt-2 rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Extend contractor access (90 days)
             </button>
@@ -409,7 +417,7 @@ export function StaffDetailPage() {
           )}
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3 font-medium">Depot</th>
                 <th className="pb-2 pr-3 font-medium">Assignment</th>
                 <th className="pb-2 pr-3 font-medium">Role</th>
@@ -418,7 +426,7 @@ export function StaffDetailPage() {
             </thead>
             <tbody>
               {staff.depotAssignments.map((d) => (
-                <tr key={`${d.depotId}-${d.assignmentType}`} className="border-b border-slate-50">
+                <tr key={`${d.depotId}-${d.assignmentType}`} className="border-b border-border/60">
                   <td className="py-2 pr-3">{d.depotName}</td>
                   <td className="py-2 pr-3 capitalize">{d.assignmentType}</td>
                   <td className="py-2 pr-3">{d.roleAtDepot}</td>
@@ -437,18 +445,18 @@ export function StaffDetailPage() {
           <StaffDutyPanel staff={staff} actorName={actorName} permissions={permissions} />
           {staff.workingPattern && (
             <SectionCard title="Normal working pattern">
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-ink-soft">
                 {staff.workingPattern.label}: {staff.workingPattern.days.join(', ')} · {staff.workingPattern.startTime} – {staff.workingPattern.endTime}
               </p>
             </SectionCard>
           )}
           <SectionCard title="Shift assignments">
             {staff.shifts.length === 0 ? (
-              <p className="text-sm text-slate-500">No shifts recorded.</p>
+              <p className="text-sm text-muted">No shifts recorded.</p>
             ) : (
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+                  <tr className="border-b border-border text-xs uppercase text-muted">
                     <th className="pb-2 pr-3 font-medium">Date</th>
                     <th className="pb-2 pr-3 font-medium">Depot</th>
                     <th className="pb-2 pr-3 font-medium">Time</th>
@@ -457,7 +465,7 @@ export function StaffDetailPage() {
                 </thead>
                 <tbody>
                   {staff.shifts.map((s) => (
-                    <tr key={s.id} className="border-b border-slate-50">
+                    <tr key={s.id} className="border-b border-border/60">
                       <td className="py-2 pr-3">{new Date(s.date).toLocaleDateString('en-GB')}</td>
                       <td className="py-2 pr-3">{s.depotName}</td>
                       <td className="py-2 pr-3">{s.startTime} – {s.endTime}</td>
@@ -472,9 +480,9 @@ export function StaffDetailPage() {
             <SectionCard title="Duty session history">
               <ul className="space-y-2 text-sm">
                 {staff.dutySessions.map((s) => (
-                  <li key={s.id} className="flex justify-between rounded border border-slate-200 px-3 py-2">
+                  <li key={s.id} className="flex justify-between rounded border border-border px-3 py-2">
                     <span>{s.depotName} · {s.role}</span>
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-muted">
                       {new Date(s.startedAt).toLocaleString('en-GB')}
                       {s.endedAt ? ` – ${new Date(s.endedAt).toLocaleString('en-GB')}` : ' (active)'}
                     </span>
@@ -486,13 +494,13 @@ export function StaffDetailPage() {
           {canManageStaffDuty(permissions) && staff.dutyStatus === 'on_duty' && staff.responsibilities.length > 0 && (
             <SectionCard title="End shift handover" description="Transfer unresolved exceptions before ending duty">
               <div className="space-y-2 text-sm">
-                <select value={handoverTo} onChange={(e) => setHandoverTo(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-1.5">
+                <select value={handoverTo} onChange={(e) => setHandoverTo(e.target.value)} className="w-full rounded-lg border border-border px-3 py-1.5">
                   <option value="">Hand over to…</option>
                   {allStaff.filter((s) => s.id !== staff.id && s.employmentStatus === 'active').map((s) => (
                     <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>
                   ))}
                 </select>
-                <input value={handoverNotes} onChange={(e) => setHandoverNotes(e.target.value)} placeholder="Handover notes" className="w-full rounded-lg border border-slate-200 px-3 py-1.5" />
+                <input value={handoverNotes} onChange={(e) => setHandoverNotes(e.target.value)} placeholder="Handover notes" className="w-full rounded-lg border border-border px-3 py-1.5" />
                 <button type="button" onClick={() => createHandover.mutate()} disabled={!handoverTo || createHandover.isPending} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
                   Initiate handover
                 </button>
@@ -505,12 +513,12 @@ export function StaffDetailPage() {
       {tab === 'Training' && (
         <div className="space-y-4">
           <SectionCard title="Required training" description={`Overall compliance: ${TRAINING_STATUS_LABELS[staff.trainingStatus]}`}>
-            <p className="mb-3 text-xs text-slate-500">
+            <p className="mb-3 text-xs text-muted">
               Requirements are generated from role, department, application access and depot assignments.
             </p>
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+                <tr className="border-b border-border text-xs uppercase text-muted">
                   <th className="pb-2 pr-4">Training</th>
                   <th className="pb-2 pr-4">Required for</th>
                   <th className="pb-2 pr-4">Status</th>
@@ -521,25 +529,25 @@ export function StaffDetailPage() {
               <tbody>
                 {staff.trainingRequirements.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-4 text-slate-500">
+                    <td colSpan={5} className="py-4 text-muted">
                       No training requirements for this profile.
                     </td>
                   </tr>
                 ) : (
                   staff.trainingRequirements.map((r) => (
-                    <tr key={r.id} className="border-b border-slate-50">
+                    <tr key={r.id} className="border-b border-border/60">
                       <td className="py-2.5 pr-4 font-medium">
                         {r.label}
                         {r.blocksAccess && r.status !== 'valid' && (
                           <span className="ml-2 text-xs text-red-700">· restricts access</span>
                         )}
                       </td>
-                      <td className="py-2.5 pr-4 text-slate-600">{r.requiredFor}</td>
+                      <td className="py-2.5 pr-4 text-ink-soft">{r.requiredFor}</td>
                       <td className="py-2.5 pr-4">
                         <StatusPill status={r.status} />
                       </td>
-                      <td className="py-2.5 pr-4 text-slate-600">{formatDate(r.completedDate)}</td>
-                      <td className="py-2.5 text-slate-600">{formatDate(r.expiryDate)}</td>
+                      <td className="py-2.5 pr-4 text-ink-soft">{formatDate(r.completedDate)}</td>
+                      <td className="py-2.5 text-ink-soft">{formatDate(r.expiryDate)}</td>
                     </tr>
                   ))
                 )}
@@ -549,23 +557,23 @@ export function StaffDetailPage() {
 
           <SectionCard title="Qualification records" description="Certificates and verification workflow">
             {staff.qualifications.length === 0 ? (
-              <p className="text-sm text-slate-500">No qualifications recorded.</p>
+              <p className="text-sm text-muted">No qualifications recorded.</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {staff.qualifications.map((q) => (
-                  <li key={q.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                  <li key={q.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-border px-3 py-2">
                     <div>
                       <p className="font-medium">{q.trainingType}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted">
                         {q.provider ?? '—'}
                         {q.certificateNumber ? ` · ${q.certificateNumber}` : ''}
                         {q.evidenceFileName ? ` · ${q.evidenceFileName}` : ''}
                       </p>
-                      {q.verifiedBy && <p className="text-xs text-slate-500">Verified by {q.verifiedBy}</p>}
+                      {q.verifiedBy && <p className="text-xs text-muted">Verified by {q.verifiedBy}</p>}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <StatusPill status={q.status} />
-                      {q.expiryDate && <p className="text-xs text-slate-500">Expires {formatDate(q.expiryDate)}</p>}
+                      {q.expiryDate && <p className="text-xs text-muted">Expires {formatDate(q.expiryDate)}</p>}
                       {canVerifyStaffTraining(permissions) && q.status === 'awaiting_verification' && (
                         <button
                           type="button"
@@ -586,7 +594,7 @@ export function StaffDetailPage() {
                 type="button"
                 onClick={() => addQualification.mutate({ trainingType: 'Manual upload', fileName: 'certificate.pdf' })}
                 disabled={addQualification.isPending}
-                className="mt-3 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+                className="mt-3 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
               >
                 Upload qualification
               </button>
@@ -607,14 +615,14 @@ export function StaffDetailPage() {
       {tab === 'Tasks' && (
         <SectionCard title="Tasks and responsibilities" description={`${staff.openTaskCount} open · ${staff.overdueTaskCount} overdue`}>
           {staff.tasks.length === 0 ? (
-            <p className="text-sm text-slate-500">No open tasks.</p>
+            <p className="text-sm text-muted">No open tasks.</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {staff.tasks.map((t) => (
-                <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
                   <div>
                     <p className="font-medium">{t.title}</p>
-                    <p className="text-xs text-slate-500 capitalize">{t.category}{t.assignedBy ? ` · ${t.assignedBy}` : ''}</p>
+                    <p className="text-xs text-muted capitalize">{t.category}{t.assignedBy ? ` · ${t.assignedBy}` : ''}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <StatusPill status={t.status} />
@@ -635,9 +643,9 @@ export function StaffDetailPage() {
         <SectionCard title="Activity and audit">
           <ul className="space-y-2 text-sm">
             {staff.auditEvents.map((e) => (
-              <li key={e.id} className="rounded-lg border border-slate-200 px-3 py-2">
+              <li key={e.id} className="rounded-lg border border-border px-3 py-2">
                 <p className="font-medium">{e.action}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted">
                   {e.actorName} · {new Date(e.occurredAt).toLocaleString('en-GB')}
                   {e.detail ? ` · ${e.detail}` : ''}
                 </p>
@@ -653,8 +661,8 @@ export function StaffDetailPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-900">{value}</dd>
+      <dt className="text-muted">{label}</dt>
+      <dd className="font-medium text-ink">{value}</dd>
     </div>
   )
 }

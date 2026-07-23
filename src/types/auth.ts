@@ -8,6 +8,12 @@ export interface UserProfile {
   mobile?: string;
 }
 
+export interface PendingMembership {
+  tenantId: string;
+  tenantName: string;
+  role: string;
+}
+
 export interface SessionState {
   status: SessionStatus;
   accessToken: string | null;
@@ -22,6 +28,15 @@ export interface SessionState {
   bootstrapComplete: boolean;
   /** Session-only flag — not persisted */
   biometricUnlockedThisSession: boolean;
+  /** Live Command MFA challenge (not persisted long-term; cleared after verify) */
+  mfaChallengeId: string | null;
+  pendingCompanyId: string | null;
+  pendingMemberships: PendingMembership[];
+  requiresTenantSelection: boolean;
+  /** Dev-only MFA hint from Command when present */
+  devMfaCode: string | null;
+  /** Plan modules from Command /auth/me — empty means soft-open until loaded */
+  enabledModules: string[];
 }
 
 export interface SignInCredentials {
@@ -29,3 +44,11 @@ export interface SignInCredentials {
   password: string;
   rememberDevice?: boolean;
 }
+
+export type SignInResult =
+  | { next: "mfa" }
+  | { next: "company-select" }
+  | {
+      next: "depot-select";
+      activeTenant?: { id: string; name: string; role: string | null } | null;
+    };

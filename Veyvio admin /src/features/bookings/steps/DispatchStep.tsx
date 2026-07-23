@@ -104,7 +104,7 @@ export function DispatchStep({
             <label
               key={opt.id}
               className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${
-                dispatch.mode === opt.id ? 'border-command-500 bg-command-50' : 'border-slate-200'
+                dispatch.mode === opt.id ? 'border-command-500 bg-command-50' : 'border-border'
               }`}
             >
               <input
@@ -115,8 +115,8 @@ export function DispatchStep({
                 className="mt-1"
               />
               <div>
-                <p className="font-medium text-slate-900">{opt.label}</p>
-                <p className="text-sm text-slate-600">{opt.description}</p>
+                <p className="font-medium text-ink">{opt.label}</p>
+                <p className="text-sm text-ink-soft">{opt.description}</p>
               </div>
             </label>
           ))}
@@ -153,9 +153,9 @@ export function DispatchStep({
           </div>
 
           {selectedVehicle && (
-            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+            <div className="mt-4 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-ink">
               <p className="font-medium">Readiness (shared projection)</p>
-              <p className="mt-1 text-xs text-slate-600">
+              <p className="mt-1 text-xs text-ink-soft">
                 {selectedVehicle.readiness.assignmentEligible
                   ? 'Eligible for assignment under current release rules.'
                   : 'Not eligible — maintenance, defects or release state block dispatch.'}
@@ -262,7 +262,7 @@ function AutoPlanPanel({
   if (isLoading) {
     return (
       <SectionCard title="Auto-plan proposal">
-        <p className="text-sm text-slate-600">Generating proposal…</p>
+        <p className="text-sm text-ink-soft">Generating proposal…</p>
       </SectionCard>
     )
   }
@@ -270,13 +270,13 @@ function AutoPlanPanel({
   if (!proposal) {
     return (
       <SectionCard title="Auto-plan proposal">
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-ink-soft">
           No eligible driver found for this booking — check compliance, restrictions and job requirements.
         </p>
         <button
           type="button"
           onClick={() => refetch()}
-          className="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+          className="mt-2 rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
         >
           Retry
         </button>
@@ -289,26 +289,26 @@ function AutoPlanPanel({
       <div className="space-y-3 text-sm">
         <div className="grid gap-2 sm:grid-cols-2">
           <p>
-            <span className="text-slate-600">Driver:</span>{' '}
+            <span className="text-ink-soft">Driver:</span>{' '}
             <span className="font-medium">{proposal.driverName}</span>
           </p>
           <p>
-            <span className="text-slate-600">Vehicle:</span>{' '}
+            <span className="text-ink-soft">Vehicle:</span>{' '}
             <span className="font-medium">{proposal.vehicleRegistration}</span>
           </p>
           <p>
-            <span className="text-slate-600">Run:</span>{' '}
+            <span className="text-ink-soft">Run:</span>{' '}
             <span className="font-medium">{proposal.runReference}</span>
           </p>
           <p>
-            <span className="text-slate-600">Punctuality score:</span>{' '}
+            <span className="text-ink-soft">Punctuality score:</span>{' '}
             <span className="font-medium">{proposal.punctualityScore}%</span>
           </p>
         </div>
         {proposal.pickupSequence.length > 0 && (
           <div>
-            <p className="text-slate-600">Pickup sequence</p>
-            <ol className="mt-1 list-inside list-decimal text-slate-800">
+            <p className="text-ink-soft">Pickup sequence</p>
+            <ol className="mt-1 list-inside list-decimal text-ink">
               {proposal.pickupSequence.map((stop) => (
                 <li key={stop}>{stop}</li>
               ))}
@@ -331,7 +331,7 @@ function AutoPlanPanel({
             type="button"
             onClick={() => refetch()}
             disabled={isFetching}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-50"
           >
             Regenerate
           </button>
@@ -354,11 +354,11 @@ function SelectField({
 }) {
   return (
     <label className="text-sm">
-      <span className="text-slate-600">{label}</span>
+      <span className="text-ink-soft">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5"
+        className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
       >
         <option value="">Select…</option>
         {options.map((o) => (

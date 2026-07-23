@@ -13,12 +13,12 @@ export function FleetIntelligencePage() {
     <div className="space-y-6">
       <div>
         <Link to="/vehicles" className="text-sm font-medium text-command-600 hover:underline">← Back to vehicles</Link>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Fleet intelligence</h1>
-        <p className="text-sm text-slate-600">Downtime, maintenance cost, reliability and replacement planning</p>
+        <h1 className="mt-2 text-2xl font-semibold text-ink">Fleet intelligence</h1>
+        <p className="text-sm text-ink-soft">Downtime, maintenance cost, reliability and replacement planning</p>
       </div>
 
       {isLoading || !summary ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-sm text-muted">Loading…</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard label="Fleet size" value={String(summary.totalVehicles)} />
@@ -34,7 +34,7 @@ export function FleetIntelligencePage() {
       )}
 
       <SectionCard title="Insights" description="Phase 6 analytics — expands with live maintenance and telematics data">
-        <ul className="list-inside list-disc text-sm text-slate-600">
+        <ul className="list-inside list-disc text-sm text-ink-soft">
           <li>Recurring defect patterns surface from defect register history</li>
           <li>High-mileage vehicles flagged for replacement planning</li>
           <li>Maintenance spend tracked per vehicle via work orders</li>
@@ -46,9 +46,9 @@ export function FleetIntelligencePage() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-2xl font-bold tabular-nums text-slate-900">{value}</p>
-      <p className="text-sm text-slate-600">{label}</p>
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <p className="text-2xl font-bold tabular-nums text-ink">{value}</p>
+      <p className="text-sm text-ink-soft">{label}</p>
     </div>
   )
 }

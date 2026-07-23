@@ -12,17 +12,17 @@ export function RecurringTransportPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Recurring Transport</h1>
-        <p className="text-sm text-slate-600">Standing patterns that generate runs on a schedule</p>
+        <h1 className="text-2xl font-semibold text-ink">Recurring Transport</h1>
+        <p className="text-sm text-ink-soft">Standing patterns that generate runs on a schedule</p>
       </div>
 
       <SectionCard title="Recurring patterns" description={`${items.length} active patterns`}>
         {isLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : (
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                 <th className="pb-2 pr-4 font-medium">Name</th>
                 <th className="pb-2 pr-4 font-medium">Route</th>
                 <th className="pb-2 pr-4 font-medium">Customer</th>
@@ -32,11 +32,11 @@ export function RecurringTransportPage() {
             </thead>
             <tbody>
               {items.map((r) => (
-                <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                  <td className="py-2.5 pr-4 font-medium text-slate-900">{r.name}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{r.routeName}</td>
-                  <td className="py-2.5 pr-4 text-slate-600">{r.customerName}</td>
-                  <td className="py-2.5 pr-4 uppercase text-slate-600">{r.daysOfWeek.join(', ')}</td>
+                <tr key={r.id} className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
+                  <td className="py-2.5 pr-4 font-medium text-ink">{r.name}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{r.routeName}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{r.customerName}</td>
+                  <td className="py-2.5 pr-4 uppercase text-ink-soft">{r.daysOfWeek.join(', ')}</td>
                   <td className="py-2.5">
                     <StatusPill status={r.status} />
                   </td>

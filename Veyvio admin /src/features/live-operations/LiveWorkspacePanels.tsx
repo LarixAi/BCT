@@ -56,8 +56,8 @@ export function LiveControlBar({
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Live Operations</h1>
-          <p className="mt-0.5 text-sm text-slate-700">
+          <h1 className="text-2xl font-semibold text-ink">Live Operations</h1>
+          <p className="mt-0.5 text-sm text-ink-soft">
             {dateLabel} · Current time {currentTime} · Last live update {lastUpdatedLabel}
           </p>
           <p
@@ -83,7 +83,7 @@ export function LiveControlBar({
           <button
             type="button"
             onClick={onRefresh}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
           >
             Refresh
           </button>
@@ -94,7 +94,7 @@ export function LiveControlBar({
               'rounded-lg border px-3 py-1.5 text-sm font-medium',
               paused
                 ? 'border-amber-300 bg-amber-50 text-amber-900'
-                : 'border-slate-200 hover:bg-slate-50',
+                : 'border-border hover:bg-surface-muted',
             )}
           >
             {paused ? 'Resume live updates' : 'Pause live updates'}
@@ -103,7 +103,7 @@ export function LiveControlBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+        <div className="flex gap-1 rounded-lg bg-surface-muted p-1">
           {(['active', 'completed'] as const).map((tab) => (
             <button
               key={tab}
@@ -111,7 +111,7 @@ export function LiveControlBar({
               onClick={() => onListTab(tab)}
               className={cn(
                 'rounded-md px-3 py-1 text-xs font-medium capitalize',
-                listTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600',
+                listTab === tab ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft',
               )}
             >
               {tab}
@@ -123,7 +123,7 @@ export function LiveControlBar({
           value={search}
           onChange={(e) => onSearch(e.target.value)}
           placeholder="Search driver, vehicle, run…"
-          className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+          className="w-full max-w-xs rounded-lg border border-border px-3 py-1.5 text-sm"
         />
         <div className="flex flex-wrap gap-1">
           {SAVED_VIEWS.map((v) => (
@@ -135,7 +135,7 @@ export function LiveControlBar({
                 'rounded-full px-2.5 py-1 text-[11px] font-medium',
                 savedView === v.id
                   ? 'bg-command-600 text-white'
-                  : 'bg-white text-slate-600 ring-1 ring-slate-200',
+                  : 'bg-surface text-ink-soft ring-1 ring-border',
               )}
             >
               {v.label}
@@ -201,22 +201,22 @@ export function LiveSummaryStrip({
           type="button"
           onClick={() => onFilter(c.id)}
           className={cn(
-            'rounded-xl border bg-white p-3 text-left transition hover:border-command-400',
-            filter === c.id ? 'border-command-500 ring-1 ring-command-500' : 'border-slate-200',
+            'rounded-xl border bg-surface p-3 text-left transition hover:border-command-400',
+            filter === c.id ? 'border-command-500 ring-1 ring-command-500' : 'border-border',
             c.tone === 'danger' && filter !== c.id && 'border-red-200',
             c.tone === 'warning' && filter !== c.id && 'border-amber-200',
           )}
         >
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{c.title}</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{c.title}</p>
           <p
             className={cn(
               'mt-1 text-2xl font-bold tabular-nums',
-              c.tone === 'danger' ? 'text-red-800' : c.tone === 'warning' ? 'text-amber-800' : 'text-slate-900',
+              c.tone === 'danger' ? 'text-red-800' : c.tone === 'warning' ? 'text-amber-800' : 'text-ink',
             )}
           >
             {c.value}
           </p>
-          <p className="mt-1 text-[11px] text-slate-600">{c.sub}</p>
+          <p className="mt-1 text-[11px] text-ink-soft">{c.sub}</p>
         </button>
       ))}
     </div>
@@ -227,7 +227,7 @@ function healthClass(health: string) {
   if (health === 'late' || health === 'severely_late' || health === 'blocked') return 'text-red-700'
   if (health === 'at_risk') return 'text-amber-700'
   if (health === 'on_time' || health === 'completed') return 'text-emerald-700'
-  return 'text-slate-700'
+  return 'text-ink-soft'
 }
 
 export function LiveOperationsBoard({
@@ -247,7 +247,7 @@ export function LiveOperationsBoard({
 }) {
   return (
     <SectionCard title="Operations board" className="flex min-h-0 flex-col overflow-hidden" flush>
-      <div className="flex gap-1 border-b border-slate-200 bg-slate-50 p-2">
+      <div className="flex gap-1 border-b border-border bg-surface-muted p-2">
         {(['runs', 'trips', 'drivers', 'vehicles', 'exceptions'] as LiveBoardTab[]).map((t) => (
           <button
             key={t}
@@ -255,7 +255,7 @@ export function LiveOperationsBoard({
             onClick={() => onTab(t)}
             className={cn(
               'rounded-md px-2.5 py-1 text-xs font-medium capitalize',
-              tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600',
+              tab === t ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft',
             )}
           >
             {t}
@@ -266,8 +266,8 @@ export function LiveOperationsBoard({
       <div className="min-h-0 flex-1 overflow-auto">
         {(tab === 'runs' || tab === 'drivers' || tab === 'vehicles') && (
           <table className="min-w-full text-left text-sm">
-            <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-wide text-slate-500">
-              <tr className="border-b border-slate-200">
+            <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wide text-muted">
+              <tr className="border-b border-border">
                 <th className="px-3 py-2 font-medium">Run</th>
                 <th className="px-3 py-2 font-medium">Driver</th>
                 <th className="px-3 py-2 font-medium">Vehicle</th>
@@ -280,7 +280,7 @@ export function LiveOperationsBoard({
             <tbody>
               {runs.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted">
                     No active operations match this filter.
                   </td>
                 </tr>
@@ -289,17 +289,17 @@ export function LiveOperationsBoard({
                 <tr
                   key={r.id}
                   className={cn(
-                    'cursor-pointer border-b border-slate-100 hover:bg-slate-50',
+                    'cursor-pointer border-b border-border hover:bg-surface-muted',
                     selectedId === r.id && 'bg-command-50',
                   )}
                   onClick={() => onSelect(r.id)}
                 >
-                  <td className="px-3 py-2.5 font-semibold text-slate-900">{r.runReference}</td>
-                  <td className="px-3 py-2.5 text-slate-700">{r.driverName}</td>
+                  <td className="px-3 py-2.5 font-semibold text-ink">{r.runReference}</td>
+                  <td className="px-3 py-2.5 text-ink-soft">{r.driverName}</td>
                   <td className="px-3 py-2.5 font-medium tabular-nums">{r.vehicleRegistration}</td>
-                  <td className="px-3 py-2.5 text-slate-600">{r.progressLabel}</td>
+                  <td className="px-3 py-2.5 text-ink-soft">{r.progressLabel}</td>
                   <td className={cn('px-3 py-2.5 font-medium', healthClass(r.health))}>{r.healthLabel}</td>
-                  <td className="px-3 py-2.5 tabular-nums text-slate-700">
+                  <td className="px-3 py-2.5 tabular-nums text-ink-soft">
                     {r.delayMinutes > 0 ? `${r.delayMinutes} min` : '—'}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-command-700">{r.nextAction}</td>
@@ -311,8 +311,8 @@ export function LiveOperationsBoard({
 
         {tab === 'trips' && (
           <table className="min-w-full text-left text-sm">
-            <thead className="sticky top-0 bg-white text-[11px] uppercase tracking-wide text-slate-500">
-              <tr className="border-b border-slate-200">
+            <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wide text-muted">
+              <tr className="border-b border-border">
                 <th className="px-3 py-2 font-medium">Trip</th>
                 <th className="px-3 py-2 font-medium">Passenger stage</th>
                 <th className="px-3 py-2 font-medium">Driver</th>
@@ -323,14 +323,14 @@ export function LiveOperationsBoard({
             </thead>
             <tbody>
               {trips.map((t) => (
-                <tr key={t.id} className="border-b border-slate-100">
+                <tr key={t.id} className="border-b border-border">
                   <td className="px-3 py-2.5">
                     <Link to={t.href} className="font-semibold text-command-700 hover:underline">
                       {t.tripReference}
                     </Link>
-                    <p className="text-xs text-slate-500">{t.runReference}</p>
+                    <p className="text-xs text-muted">{t.runReference}</p>
                   </td>
-                  <td className="px-3 py-2.5 text-slate-700">{t.passengerStage}</td>
+                  <td className="px-3 py-2.5 text-ink-soft">{t.passengerStage}</td>
                   <td className="px-3 py-2.5">{t.driverName}</td>
                   <td className="px-3 py-2.5 tabular-nums font-medium">{t.vehicleRegistration}</td>
                   <td className={cn('px-3 py-2.5 font-medium', healthClass(t.health))}>{t.healthLabel}</td>
@@ -344,7 +344,7 @@ export function LiveOperationsBoard({
         )}
 
         {tab === 'exceptions' && (
-          <p className="p-4 text-sm text-slate-500">Open exceptions are listed in the queue below the map.</p>
+          <p className="p-4 text-sm text-muted">Open exceptions are listed in the queue below the map.</p>
         )}
       </div>
     </SectionCard>
@@ -360,7 +360,7 @@ export function LiveExceptionQueue({
     <SectionCard title="Exception queue" description="Critical first — decide and act" className="min-h-0 overflow-hidden" flush>
       <div className="max-h-64 space-y-2 overflow-y-auto p-3">
         {exceptions.length === 0 && (
-          <p className="text-sm text-slate-500">No open live exceptions.</p>
+          <p className="text-sm text-muted">No open live exceptions.</p>
         )}
         {exceptions.map((e) => (
           <Link
@@ -372,16 +372,16 @@ export function LiveExceptionQueue({
                 ? 'border-red-300 bg-red-50'
                 : e.severity === 'urgent'
                   ? 'border-amber-300 bg-amber-50'
-                  : 'border-slate-200 bg-white',
+                  : 'border-border bg-surface',
             )}
           >
             <div className="flex items-start justify-between gap-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{e.severity}</p>
-              <span className="text-[10px] text-slate-500">{e.detectedAtLabel}</span>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{e.severity}</p>
+              <span className="text-[10px] text-muted">{e.detectedAtLabel}</span>
             </div>
-            <p className="font-medium text-slate-900">{e.title}</p>
-            <p className="mt-1 text-xs text-slate-700">{e.detail}</p>
-            <p className="mt-1 text-xs text-slate-600">Next: {e.recommendedAction}</p>
+            <p className="font-medium text-ink">{e.title}</p>
+            <p className="mt-1 text-xs text-ink-soft">{e.detail}</p>
+            <p className="mt-1 text-xs text-ink-soft">Next: {e.recommendedAction}</p>
           </Link>
         ))}
       </div>
@@ -393,20 +393,20 @@ export function LiveActivityFeed({ items }: { items: LiveActivityItem[] }) {
   return (
     <SectionCard title="Live activity" description="Operational event stream" className="min-h-0 overflow-hidden" flush>
       <ul className="max-h-64 space-y-2 overflow-y-auto p-3">
-        {items.length === 0 && <li className="text-sm text-slate-500">No recent live events.</li>}
+        {items.length === 0 && <li className="text-sm text-muted">No recent live events.</li>}
         {items.map((item) => (
-          <li key={item.id} className="border-b border-slate-100 pb-2 text-sm last:border-0">
-            <p className="text-[11px] tabular-nums text-slate-500">
+          <li key={item.id} className="border-b border-border pb-2 text-sm last:border-0">
+            <p className="text-[11px] tabular-nums text-muted">
               {item.timeLabel} · {item.category}
             </p>
             {item.href ? (
-              <Link to={item.href} className="font-medium text-slate-900 hover:text-command-700">
+              <Link to={item.href} className="font-medium text-ink hover:text-command-700">
                 {item.description}
               </Link>
             ) : (
-              <p className="font-medium text-slate-900">{item.description}</p>
+              <p className="font-medium text-ink">{item.description}</p>
             )}
-            <p className="text-xs text-slate-500">{item.actor}</p>
+            <p className="text-xs text-muted">{item.actor}</p>
           </li>
         ))}
       </ul>

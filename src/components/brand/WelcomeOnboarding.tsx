@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
+import { YardAuthBrandHero } from "@/components/auth/YardAuthWordmark";
 import { yardCopy } from "@/copy/yard-messages";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +26,7 @@ export function WelcomeProgress({ step, total = 3, className }: WelcomeProgressP
           key={i}
           className={cn(
             "h-1 w-8 rounded-xs transition-colors",
-            step === i ? "bg-primary" : "bg-border",
+            step === i ? "bg-[#12A89D]" : "bg-[#e5e7eb]",
           )}
         />
       ))}
@@ -54,21 +54,26 @@ type WelcomeOnboardingProps = {
 /** Phone brand layout for the three-step welcome carousel. */
 export function WelcomeOnboarding({ step, title, message, children }: WelcomeOnboardingProps) {
   return (
-    <div className="flex min-h-[calc(100dvh-5.5rem)] flex-col justify-between animate-in-up pb-safe sm:min-h-[70vh]">
-      <div className="space-y-4 pt-2 sm:pt-4">
-        <WelcomeStepLabel step={step} />
-        <h1
-          className={cn(
-            "text-2xl font-extrabold tracking-tight text-foreground",
-            step === 1 ? "font-marketing" : "font-display",
-          )}
-        >
-          {title}
-        </h1>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{message}</p>
-      </div>
+    <div className="yard-auth-page yard-auth-shell">
+      <div className="yard-auth-inner">
+        <div className="yard-auth-content min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] justify-between">
+          <div className="space-y-4">
+            {step === 1 ? <YardAuthBrandHero /> : null}
+            <WelcomeStepLabel step={step} />
+            <h1
+              className={cn(
+                "yard-auth-title",
+                step === 1 ? "font-marketing" : "font-display",
+              )}
+            >
+              {title}
+            </h1>
+            <p className="max-w-prose text-sm leading-relaxed text-[#6b7280]">{message}</p>
+          </div>
 
-      <div className="space-y-3 pb-2 sm:pb-4">{children}</div>
+          <div className="space-y-3 pb-2">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -85,26 +90,26 @@ export function WelcomeActions({ step, nextHref, prevHref, onComplete }: Welcome
     <>
       <WelcomeProgress step={step} />
 
-      {step < 3 && nextHref && (
-        <Button asChild className="w-full bg-accent text-white uppercase tracking-widest font-bold hover:bg-accent/90">
-          <Link to={nextHref}>{yardCopy.buttons.continue}</Link>
-        </Button>
-      )}
+      {step < 3 && nextHref ? (
+        <Link to={nextHref} className="yard-auth-primary yard-auth-primary--ready no-underline">
+          <span>{yardCopy.buttons.continue}</span>
+        </Link>
+      ) : null}
 
-      {step === 3 && (
+      {step === 3 ? (
         <>
-          <Button
-            className="w-full bg-accent text-white uppercase tracking-widest font-bold hover:bg-accent/90"
+          <Link
+            to="/sign-in"
             onClick={onComplete}
-            asChild
+            className="yard-auth-primary yard-auth-primary--ready no-underline"
           >
-            <Link to="/sign-in">{yardCopy.buttons.signIn}</Link>
-          </Button>
+            <span>{yardCopy.buttons.signIn}</span>
+          </Link>
           <p className="px-2 text-center text-[11px] leading-relaxed text-muted-foreground">
             {yardCopy.welcome.authorisedNote}
           </p>
         </>
-      )}
+      ) : null}
 
       {prevHref && (
         <Link

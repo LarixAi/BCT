@@ -61,7 +61,7 @@ export function YardOperationsPage() {
     queryClient.invalidateQueries({ queryKey: ['yard-hub'] })
   }
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading yard operations…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading yard operations…</p>
   if (isError || !hub) {
     return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load yard operations'}</p>
   }
@@ -81,17 +81,17 @@ export function YardOperationsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Yard Operations</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-ink">Yard Operations</h1>
+          <p className="text-sm text-ink-soft">
             {safeHub.depotName} · {safeHub.operationalDate} · {safeHub.shiftLabel}
           </p>
-          <p className="text-xs text-slate-500">Live vehicle movements, readiness and depot activity</p>
+          <p className="text-xs text-muted">Live vehicle movements, readiness and depot activity</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={selectedDepot}
             onChange={(e) => setDepot(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm"
             aria-label="Depot"
           >
             {safeHub.depots.map((d) => (
@@ -100,7 +100,7 @@ export function YardOperationsPage() {
               </option>
             ))}
           </select>
-          <button type="button" onClick={refresh} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+          <button type="button" onClick={refresh} className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted">
             Refresh
           </button>
           {canTask && (
@@ -110,7 +110,7 @@ export function YardOperationsPage() {
                 setShowTask((v) => !v)
                 setShowMovement(false)
               }}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
             >
               Create task
             </button>
@@ -162,24 +162,24 @@ export function YardOperationsPage() {
                 setTab('live')
               }}
               className={`rounded-xl border p-3 text-left transition ${
-                filter === card.filterKey ? 'border-command-500 bg-command-50 ring-1 ring-command-500' : 'border-slate-200 bg-white hover:border-slate-300'
+                filter === card.filterKey ? 'border-command-500 bg-command-50 ring-1 ring-command-500' : 'border-border bg-surface hover:border-border-strong'
               }`}
             >
-              <p className="text-xl font-bold tabular-nums text-slate-900">{safeHub.summary[card.id]}</p>
-              <p className="text-xs text-slate-600">{card.label}</p>
+              <p className="text-xl font-bold tabular-nums text-ink">{safeHub.summary[card.id]}</p>
+              <p className="text-xs text-ink-soft">{card.label}</p>
             </button>
           ))}
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
         {YARD_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === t.id ? 'bg-white text-command-700 ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900'
+              tab === t.id ? 'bg-surface text-command-700 ring-1 ring-border' : 'text-ink-soft hover:text-ink'
             }`}
           >
             {t.label}
@@ -212,7 +212,7 @@ export function YardOperationsPage() {
             placeholder="Search registration, fleet number, bay…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full max-w-md rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="w-full max-w-md rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <YardLiveTab hub={safeHub} filter={filter} search={search} selectedId={selected?.vehicleId ?? null} onSelect={setSelected} />
         </>

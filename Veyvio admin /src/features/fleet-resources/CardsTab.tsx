@@ -6,15 +6,15 @@ export function CardsTab({ hub }: { hub: FleetResourcesHubData }) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Fuel cards</h2>
-        <p className="text-sm text-slate-600">
+        <h2 className="text-lg font-semibold text-ink">Fuel cards</h2>
+        <p className="text-sm text-ink-soft">
           Light register for Phase 1 — assignment and status only. Provider feeds come later.
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-3 py-2">Provider</th>
               <th className="px-3 py-2">Number</th>
@@ -27,13 +27,13 @@ export function CardsTab({ hub }: { hub: FleetResourcesHubData }) {
           <tbody>
             {hub.cards.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-slate-500">
+                <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted">
                   No fuel cards on the register yet. Cards assigned to vehicles will show here.
                 </td>
               </tr>
             ) : (
               hub.cards.map((c) => (
-                <tr key={c.id} className="border-t border-slate-100">
+                <tr key={c.id} className="border-t border-border">
                   <td className="px-3 py-2 font-medium">{c.provider}</td>
                   <td className="px-3 py-2 tabular-nums">{c.maskedNumber}</td>
                   <td className="px-3 py-2">{FUEL_CARD_STATUS_LABEL[c.status]}</td>
@@ -48,14 +48,14 @@ export function CardsTab({ hub }: { hub: FleetResourcesHubData }) {
                     ) : c.assignedDriverName ? (
                       c.assignedDriverName
                     ) : (
-                      <span className="text-slate-500">Unassigned</span>
+                      <span className="text-muted">Unassigned</span>
                     )}
-                    <div className="text-xs capitalize text-slate-400">{c.assignmentModel}</div>
+                    <div className="text-xs capitalize text-muted">{c.assignmentModel}</div>
                   </td>
                   <td className="px-3 py-2 tabular-nums">
                     {c.dailyLimit != null ? `£${c.dailyLimit}` : '—'}
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-ink-soft">
                     {c.lastTransactionAt ? new Date(c.lastTransactionAt).toLocaleString() : '—'}
                   </td>
                 </tr>

@@ -76,7 +76,9 @@ export async function enforceRemoteDeviceSecurity(driverId) {
   const token = await accessToken();
   if (!token) return { revoked: false, requirePassword: false };
 
-  const status = await commandGetDriverDeviceStatus(token, getOrCreateDeviceKey());
+  const deviceKey = getOrCreateDeviceKey();
+  const status = await commandGetDriverDeviceStatus(token, deviceKey);
+  console.log("[BIOMETRIC_DEBUG] deviceKey=" + deviceKey + " status=" + JSON.stringify(status));
   if (!status.ok) return { revoked: false, requirePassword: false };
 
   if (status.securityStatus === "revoked") {

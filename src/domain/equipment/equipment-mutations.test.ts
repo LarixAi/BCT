@@ -5,6 +5,7 @@ import {
   applyClearEquipmentIssue,
   applyReportEquipmentIssue,
   applyRestockConsumable,
+  applyTransferEquipment,
   applyUnassignEquipment,
 } from "@/domain/equipment/equipment-mutations";
 
@@ -28,6 +29,17 @@ describe("equipment-mutations", () => {
     }, meta);
     expect(result?.equipment.assigned[0]?.id).toBe("WCS-999");
     expect(result?.audit.kind).toBe("assigned");
+  });
+
+  it("transfers equipment between vehicles", () => {
+    const assigned = eq.assigned[0];
+    if (!assigned) throw new Error("no assigned item");
+    const target = initialVehicleEquipment.v2;
+    if (!target) throw new Error("fixture missing v2 equipment");
+    const result = applyTransferEquipment(eq, target, assigned.id, "SK23 FGH", meta);
+    expect(result?.sourceEquipment.assigned.some(i => i.id === assigned.id)).toBe(false);
+    expect(result?.targetEquipment.assigned.some(i => i.id === assigned.id)).toBe(true);
+    expect(result?.audit.kind).toBe("transferred");
   });
 
   it("unassigns equipment", () => {

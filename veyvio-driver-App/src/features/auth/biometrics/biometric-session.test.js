@@ -88,3 +88,33 @@ describe("shouldRequireBiometricLock", () => {
     ).toBe(false);
   });
 });
+
+describe("shouldRebindBiometricCredential", () => {
+  // Regression test for a real bug: Supabase rotates the refresh token on every
+  // use, including routine background TOKEN_REFRESHED while the app just sits
+  // open. The fix only ever excluded TOKEN_REFRESHED from rebinding (to dodge a
+  // Samsung boot crash), so the Keychain/Keystore copy went stale on every
+  // routine refresh — fingerprint sign-in would then fail and silently disable
+  // itself, forcing the driver back to password + "set up fingerprint again".
+  it("always rebinds on an explicit sign-in, booted or not", async () => {
+    const { shouldRebindBiometricCredential } = await import("./biometric-session.js");
+    expect(shouldRebindBiometricCredential("SIGNED_IN", false)).toBe(true);
+    expect(shouldRebindBiometricCredential("SIGNED_IN", true)).toBe(true);
+  });
+
+  it("skips the first TOKEN_REFRESHED right after cold launch", async () => {
+    const { shouldRebindBiometricCredential } = await import("./biometric-session.js");
+    expect(shouldRebindBiometricCredential("TOKEN_REFRESHED", false)).toBe(false);
+  });
+
+  it("rebinds later TOKEN_REFRESHED events once the app has finished booting", async () => {
+    const { shouldRebindBiometricCredential } = await import("./biometric-session.js");
+    expect(shouldRebindBiometricCredential("TOKEN_REFRESHED", true)).toBe(true);
+  });
+
+  it("ignores unrelated auth events", async () => {
+    const { shouldRebindBiometricCredential } = await import("./biometric-session.js");
+    expect(shouldRebindBiometricCredential("USER_UPDATED", true)).toBe(false);
+    expect(shouldRebindBiometricCredential("SIGNED_OUT", true)).toBe(false);
+  });
+});

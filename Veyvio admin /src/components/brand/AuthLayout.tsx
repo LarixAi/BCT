@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CommandWordmark } from '@/components/brand/CommandWordmark'
+import { CommandAuthHero } from '@/components/brand/CommandWordmark'
 import { isMockApi } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
@@ -18,51 +18,39 @@ export function AuthLayout({
   footer?: ReactNode
 }) {
   return (
-    <div className="flex min-h-screen bg-page">
-      <aside className="relative hidden w-[42%] shrink-0 flex-col justify-between bg-midnight px-10 py-12 text-white lg:flex">
-        <CommandWordmark inverted />
-        <div className="max-w-sm">
-          <p className="text-2xl font-semibold tracking-tight text-white">
-            Operational confidence for every shift
-          </p>
-          <p className="mt-3 text-sm leading-relaxed text-white/65">
-            Plan, dispatch, and monitor transport operations from one Command centre — clear status, one primary action, trustworthy records.
-          </p>
-        </div>
-        <p className="text-xs text-white/40">Veyvio Command · Connected transport operations</p>
-      </aside>
+    <div
+      data-theme="light"
+      className="flex min-h-screen flex-col items-center justify-center bg-white px-4 py-10 text-ink sm:px-6"
+    >
+      <div className={cn('w-full', wide ? 'max-w-lg' : 'max-w-md')}>
+        <CommandAuthHero className="mb-8" />
 
-      <main className="flex flex-1 items-center justify-center px-4 py-10 sm:px-8">
-        <div className={cn('w-full', wide ? 'max-w-lg' : 'max-w-md')}>
-          <div className="mb-8 lg:hidden">
-            <CommandWordmark />
-          </div>
-          <div className="rounded-2xl border border-border bg-white p-8">
-            <div className="mb-6">
-              <h1 className="text-xl font-semibold text-ink">{title}</h1>
-              {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
-              {isMockApi && (
-                <p className="mt-3 rounded-lg bg-ready/10 px-3 py-2 text-xs text-ready">
-                  Demo mode — no live backend required.
-                </p>
-              )}
-            </div>
-            {children}
-          </div>
-          {footer}
-          {!isMockApi && (
-            <p className="mt-4 text-center text-[11px] text-muted/80">
-              Connected to Command API
+        <div className="mb-6">
+          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
+          {subtitle ? <p className="mt-1.5 text-sm text-muted">{subtitle}</p> : null}
+          {isMockApi ? (
+            <p className="mt-3 rounded-xl bg-ready/10 px-3 py-2 text-xs text-ready">
+              Demo mode — no live backend required.
             </p>
-          )}
+          ) : null}
         </div>
-      </main>
+
+        {children}
+
+        {footer}
+
+        {!isMockApi ? (
+          <p className="mt-6 text-center text-[11px] text-muted/80">Connected to Command API</p>
+        ) : null}
+      </div>
     </div>
   )
 }
 
 export const authInputClass =
-  'w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-ink shadow-none placeholder:text-muted focus:border-command-500 focus:outline-none focus:ring-2 focus:ring-command-500/20'
+  'h-11 w-full rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-3.5 text-sm text-ink shadow-none placeholder:text-[#9CA3AF] focus:border-command-500 focus:bg-white focus:outline-none focus:ring-[3px] focus:ring-command-500/15'
 
 export const authPrimaryButtonClass =
-  'w-full rounded-lg bg-midnight px-4 py-2.5 text-sm font-semibold text-white hover:bg-command-700 disabled:opacity-60'
+  'h-12 w-full rounded-xl border border-transparent bg-command-600 px-4 text-sm font-semibold text-white shadow-[0_8px_18px_rgb(47_107_255/0.22)] transition hover:bg-command-700 disabled:cursor-not-allowed disabled:border-transparent disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF] disabled:shadow-none'
+
+export const authLinkClass = 'font-medium text-command-600 hover:text-command-700 hover:underline'

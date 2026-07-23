@@ -20,7 +20,7 @@ export function DefectsExportButton({ rows, label = 'Export' }: { rows: DefectRe
     <button
       type="button"
       onClick={handleExport}
-      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+      className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
       data-testid="defects-export-button"
     >
       {label}

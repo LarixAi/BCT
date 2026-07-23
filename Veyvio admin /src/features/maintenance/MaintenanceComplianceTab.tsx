@@ -24,20 +24,20 @@ export function MaintenanceComplianceTab({
       <SectionCard title="Interval policy" description="Defined here for operators; Compliance Rules will own formal config later">
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-xs text-slate-500">Company default PMI</dt>
-            <dd className="font-medium text-slate-900">Every {COMPANY_DEFAULT_PMI_WEEKS} weeks</dd>
+            <dt className="text-xs text-muted">Company default PMI</dt>
+            <dd className="font-medium text-ink">Every {COMPANY_DEFAULT_PMI_WEEKS} weeks</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Vehicles 12+ years</dt>
-            <dd className="font-medium text-slate-900">Maximum {OLD_VEHICLE_MAX_PMI_WEEKS} weeks (DVSA guidance)</dd>
+            <dt className="text-xs text-muted">Vehicles 12+ years</dt>
+            <dd className="font-medium text-ink">Maximum {OLD_VEHICLE_MAX_PMI_WEEKS} weeks (DVSA guidance)</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Record retention</dt>
-            <dd className="font-medium text-slate-900">At least 15 months (company may retain longer)</dd>
+            <dt className="text-xs text-muted">Record retention</dt>
+            <dd className="font-medium text-ink">At least 15 months (company may retain longer)</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Release rule</dt>
-            <dd className="font-medium text-slate-900">
+            <dt className="text-xs text-muted">Release rule</dt>
+            <dd className="font-medium text-ink">
               Available only when PMI not overdue, no safety-critical defects, no VOR, maintenance release approved, yard
               return complete
             </dd>
@@ -61,17 +61,17 @@ export function MaintenanceComplianceTab({
 
       <SectionCard title="Missing evidence queue" description="Items that block a complete maintenance record">
         {evidenceQueue.length === 0 ? (
-          <p className="text-sm text-slate-500">No open evidence gaps on the current fleet snapshot.</p>
+          <p className="text-sm text-muted">No open evidence gaps on the current fleet snapshot.</p>
         ) : (
-          <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+          <ul className="divide-y divide-border rounded-lg border border-border">
             {evidenceQueue.map((item) => (
               <li key={item.id} className="flex flex-wrap items-start justify-between gap-2 px-3 py-2.5 text-sm">
                 <div>
                   <Link to={item.href} className="font-medium text-command-600 hover:underline">
                     {item.registrationNumber}
                   </Link>
-                  <p className="text-slate-800">{item.title}</p>
-                  <p className="text-xs text-slate-500">{item.detail}</p>
+                  <p className="text-ink">{item.title}</p>
+                  <p className="text-xs text-muted">{item.detail}</p>
                   {item.kind === 'missing_brake_evidence' && (
                     <p className="mt-0.5 text-xs font-medium text-red-800">Brake evidence required</p>
                   )}
@@ -90,7 +90,7 @@ export function MaintenanceComplianceTab({
         description="Safety Inspection / PMI items that need brake performance print or document"
       >
         {evidenceQueue.filter((i) => i.kind === 'missing_brake_evidence').length === 0 ? (
-          <p className="text-sm text-slate-500">No open brake evidence gaps.</p>
+          <p className="text-sm text-muted">No open brake evidence gaps.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {evidenceQueue
@@ -108,7 +108,7 @@ export function MaintenanceComplianceTab({
       </SectionCard>
 
       <SectionCard title="Yard presentation / return" description="Physical loop — Yard owns location; Maintenance owns technical release">
-        <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-soft">
           <li>Maintenance books workshop window</li>
           <li>Yard prepares vehicle, captures mileage, hands over keys</li>
           <li>Workshop completes inspection / repair with evidence</li>
@@ -119,17 +119,17 @@ export function MaintenanceComplianceTab({
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
             to="/yard?task=prepare_for_service&tab=tasks"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Prepare for workshop →
           </Link>
           <Link
             to="/yard?task=return_inspection&tab=tasks"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Return from workshop →
           </Link>
-          <Link to="/yard" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-command-600 hover:bg-slate-50">
+          <Link to="/yard" className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-command-600 hover:bg-surface-muted">
             Open Yard Operations →
           </Link>
         </div>
@@ -152,8 +152,8 @@ export function MaintenanceComplianceTab({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="font-semibold tabular-nums text-slate-900">{value}</dd>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-semibold tabular-nums text-ink">{value}</dd>
     </div>
   )
 }

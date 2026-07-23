@@ -30,11 +30,11 @@ export function EvidenceUploadPanel({ defect }: { defect: DefectDetailRecord }) 
   if (!canUpload) return null
 
   return (
-    <div className="mt-4 border-t border-slate-100 pt-4" data-testid="evidence-upload">
-      <p className="text-sm font-medium text-slate-900">Upload evidence</p>
-      <p className="text-xs text-slate-500">Original files are retained and never overwritten</p>
+    <div className="mt-4 border-t border-border pt-4" data-testid="evidence-upload">
+      <p className="text-sm font-medium text-ink">Upload evidence</p>
+      <p className="text-xs text-muted">Original files are retained and never overwritten</p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
+        <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="rounded-lg border border-border px-2 py-1.5 text-sm">
           <option value="photo">Photograph</option>
           <option value="video">Video</option>
           <option value="document">Document</option>
@@ -43,7 +43,7 @@ export function EvidenceUploadPanel({ defect }: { defect: DefectDetailRecord }) 
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           placeholder="Description"
-          className="min-w-[180px] flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+          className="min-w-[180px] flex-1 rounded-lg border border-border px-2 py-1.5 text-sm"
         />
         <button
           type="button"

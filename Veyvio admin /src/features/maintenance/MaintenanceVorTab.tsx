@@ -63,32 +63,32 @@ export function MaintenanceVorTab({
           {LANES.map((lane) => {
             const cards = board.filter((v) => lane.match(v, openWo(v)))
             return (
-              <div key={lane.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{lane.label}</p>
-                <p className="mb-2 text-lg font-bold tabular-nums text-slate-900">{cards.length}</p>
+              <div key={lane.id} className="rounded-xl border border-border bg-surface-muted/50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">{lane.label}</p>
+                <p className="mb-2 text-lg font-bold tabular-nums text-ink">{cards.length}</p>
                 <ul className="space-y-2">
                   {cards.map((v) => {
                     const wo = openWo(v)
                     const vor = v.vorRecords.find((r) => !r.resolvedAt)
                     return (
-                      <li key={v.id} className="rounded-lg border border-red-100 bg-white p-2 text-sm">
+                      <li key={v.id} className="rounded-lg border border-red-100 bg-surface p-2 text-sm">
                         <Link to={`/vehicles/${v.id}?tab=Maintenance`} className="font-semibold text-command-600 hover:underline">
                           {v.registrationNumber}
                         </Link>
-                        <p className="text-xs text-slate-500">{v.currentDepotName}</p>
+                        <p className="text-xs text-muted">{v.currentDepotName}</p>
                         <p className="mt-1 text-xs text-red-800">{vor?.reason ?? v.release.summary}</p>
                         {wo && (
-                          <p className="mt-1 text-xs text-slate-600">
+                          <p className="mt-1 text-xs text-ink-soft">
                             WO: {wo.title} · <StatusPill status={wo.status} />
                           </p>
                         )}
                         {(vor?.totalCost != null || vor?.downtimeHours != null) && (
-                          <p className="mt-1 text-[11px] text-slate-600">
+                          <p className="mt-1 text-[11px] text-ink-soft">
                             {vor.totalCost != null ? `Cost £${vor.totalCost.toLocaleString('en-GB')}` : 'Cost —'}
                             {vor.downtimeHours != null ? ` · ${vor.downtimeHours}h down` : ''}
                           </p>
                         )}
-                        <p className="mt-1 text-[11px] text-slate-500">
+                        <p className="mt-1 text-[11px] text-muted">
                           Release: {RELEASE_DECISION_LABELS[v.releaseDecision]}
                         </p>
                         <Link
@@ -100,7 +100,7 @@ export function MaintenanceVorTab({
                       </li>
                     )
                   })}
-                  {cards.length === 0 && <li className="text-xs text-slate-400">None</li>}
+                  {cards.length === 0 && <li className="text-xs text-muted">None</li>}
                 </ul>
               </div>
             )
@@ -108,7 +108,7 @@ export function MaintenanceVorTab({
         </div>
       </SectionCard>
 
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-ink-soft">
         Also available under Vehicles:{' '}
         <Link to="/vehicles/vor" className="font-medium text-command-600 hover:underline">
           /vehicles/vor

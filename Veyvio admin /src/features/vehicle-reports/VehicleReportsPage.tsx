@@ -31,7 +31,7 @@ export function VehicleReportsPage() {
     return list
   }, [hub, typeFilter, severityFilter])
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading vehicle reports…</p>
+  if (isLoading) return <p className="text-sm text-muted">Loading vehicle reports…</p>
   if (error || !hub) {
     return (
       <p className="text-sm text-red-800">
@@ -43,19 +43,19 @@ export function VehicleReportsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Vehicle Reports</h1>
-        <p className="text-sm text-slate-600">
+        <h1 className="text-2xl font-semibold text-ink">Vehicle Reports</h1>
+        <p className="text-sm text-ink-soft">
           Shared operational record for damage, defects, equipment and cleanliness — review once, follow through to
           resolution.
         </p>
-        <p className="text-xs text-slate-500">{hub.operationalDate}</p>
+        <p className="text-xs text-muted">{hub.operationalDate}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SUMMARY_CARDS.map((card) => (
-          <div key={card.id} className="rounded-xl border border-slate-200 bg-white p-3">
-            <p className="text-xl font-bold tabular-nums text-slate-900">{hub.summary[card.id]}</p>
-            <p className="text-xs text-slate-600">{card.label}</p>
+          <div key={card.id} className="rounded-xl border border-border bg-surface p-3">
+            <p className="text-xl font-bold tabular-nums text-ink">{hub.summary[card.id]}</p>
+            <p className="text-xs text-ink-soft">{card.label}</p>
           </div>
         ))}
       </div>
@@ -65,7 +65,7 @@ export function VehicleReportsPage() {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm"
           >
             <option value="all">All types</option>
             <option value="damage">Damage</option>
@@ -78,7 +78,7 @@ export function VehicleReportsPage() {
           <select
             value={severityFilter}
             onChange={(e) => setSeverityFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm"
           >
             <option value="all">All severities</option>
             <option value="critical">Critical</option>
@@ -90,12 +90,12 @@ export function VehicleReportsPage() {
         </div>
 
         {rows.length === 0 ? (
-          <p className="text-sm text-slate-500">No reports match these filters.</p>
+          <p className="text-sm text-muted">No reports match these filters.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+                <tr className="border-b border-border text-xs uppercase text-muted">
                   <th className="pb-2 pr-3 font-medium">Reference</th>
                   <th className="pb-2 pr-3 font-medium">Vehicle</th>
                   <th className="pb-2 pr-3 font-medium">Type</th>
@@ -108,7 +108,7 @@ export function VehicleReportsPage() {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-50">
+                  <tr key={row.id} className="border-b border-border/60">
                     <td className="py-2.5 pr-3">
                       <Link to={`/vehicle-reports/${row.id}`} className="font-medium text-command-700 hover:underline">
                         {row.reference}
@@ -118,7 +118,7 @@ export function VehicleReportsPage() {
                       <Link to={`/vehicles/${row.vehicleId}`} className="hover:underline">
                         {row.registrationNumber}
                       </Link>
-                      <span className="block text-xs text-slate-500">{row.depotName ?? '—'}</span>
+                      <span className="block text-xs text-muted">{row.depotName ?? '—'}</span>
                     </td>
                     <td className="py-2.5 pr-3 capitalize">{row.reportType.replace(/_/g, ' ')}</td>
                     <td className="py-2.5 pr-3 max-w-xs truncate">{row.title}</td>
@@ -127,7 +127,7 @@ export function VehicleReportsPage() {
                     </td>
                     <td className="py-2.5 pr-3 capitalize">{row.stage.replace(/_/g, ' ')}</td>
                     <td className="py-2.5 pr-3">{row.assignedOwner ?? '—'}</td>
-                    <td className="py-2.5 text-slate-600">{row.nextAction}</td>
+                    <td className="py-2.5 text-ink-soft">{row.nextAction}</td>
                   </tr>
                 ))}
               </tbody>

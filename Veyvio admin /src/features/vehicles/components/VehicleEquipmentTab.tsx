@@ -73,7 +73,7 @@ export function VehicleEquipmentTab({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-xs uppercase text-slate-500">
+              <tr className="border-b border-border text-xs uppercase text-muted">
                 <th className="pb-2 pr-3 font-medium">Item</th>
                 <th className="pb-2 pr-3 font-medium">QR / asset</th>
                 <th className="pb-2 pr-3 font-medium">Type</th>
@@ -85,19 +85,19 @@ export function VehicleEquipmentTab({
             </thead>
             <tbody>
               {vehicle.equipment.map((e) => (
-                <tr key={e.id} className="border-b border-slate-50">
+                <tr key={e.id} className="border-b border-border/60">
                   <td className="py-2.5 pr-3 font-medium">
                     {e.name}
                     {e.replacementValue != null && (
-                      <span className="block text-xs text-slate-400">
+                      <span className="block text-xs text-muted">
                         Replacement £{e.replacementValue}
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 pr-3 font-mono text-xs text-slate-600">
+                  <td className="py-2.5 pr-3 font-mono text-xs text-ink-soft">
                     {e.qrCode ?? e.assetNumber ?? '—'}
                   </td>
-                  <td className="py-2.5 pr-3 capitalize text-slate-600">{e.category}</td>
+                  <td className="py-2.5 pr-3 capitalize text-ink-soft">{e.category}</td>
                   <td className="py-2.5 pr-3">
                     {editable ? (
                       <label className="inline-flex items-center gap-2">
@@ -113,10 +113,10 @@ export function VehicleEquipmentTab({
                       e.assigned ? 'Yes' : 'No'
                     )}
                   </td>
-                  <td className="py-2.5 pr-3 tabular-nums text-slate-600">
+                  <td className="py-2.5 pr-3 tabular-nums text-ink-soft">
                     {e.expiryDate ? new Date(e.expiryDate).toLocaleDateString('en-GB') : '—'}
                   </td>
-                  <td className="py-2.5 pr-3 text-slate-600">
+                  <td className="py-2.5 pr-3 text-ink-soft">
                     {e.lastCheckedAt ? new Date(e.lastCheckedAt).toLocaleString('en-GB') : '—'}
                   </td>
                   <td className="py-2.5">
@@ -142,7 +142,7 @@ export function VehicleEquipmentTab({
         description="Serialized kit currently issued to this vehicle"
       >
         {fleetEquipment.length === 0 ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted">
             No Fleet Resources equipment assets linked to this vehicle.
           </p>
         ) : (
@@ -150,11 +150,11 @@ export function VehicleEquipmentTab({
             {fleetEquipment.map((item) => (
               <li
                 key={item.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
               >
                 <div>
                   <p className="font-medium">{item.name}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted">
                     QR {item.qrCode} · {item.category.replace(/_/g, ' ')}
                     {item.expiryDate ? ` · expires ${new Date(item.expiryDate).toLocaleDateString('en-GB')}` : ''}
                     {item.lastCheckedAt

@@ -9,6 +9,7 @@ export type PlatformEventName =
   | "defect.reported"
   | "resource.transaction.recorded"
   | "vehicle.held"
+  | "vehicle.vor.marked"
   | "journey.started"
   | "stop.arrived"
   | "passenger.outcome_recorded"
@@ -22,7 +23,8 @@ export type PlatformEventName =
   | "journey.completed"
   | "vehicle.returned"
   | "duty.completed"
-  | "safeguarding.case_opened";
+  | "safeguarding.case_opened"
+  | "plan.published";
 
 export type PlatformEventConsumer = "dispatch" | "live_ops" | "yard" | "vehicles" | "defects" | "maintenance" | "audit" | "incidents" | "trips" | "drivers" | "exceptions" | "fleet_resources";
 
@@ -49,6 +51,8 @@ const EVENT_CONSUMERS: Record<PlatformEventName, PlatformEventConsumer[]> = {
   "defect.reported": ["defects", "maintenance", "vehicles", "audit"],
   "resource.transaction.recorded": ["fleet_resources", "yard", "vehicles", "audit"],
   "vehicle.held": ["live_ops", "yard", "dispatch", "audit"],
+  /** Yard marks VOR — Dispatch must block allocation until cleared. */
+  "vehicle.vor.marked": ["dispatch", "live_ops", "yard", "vehicles", "audit"],
   "journey.started": ["live_ops", "trips", "yard", "audit"],
   "stop.arrived": ["live_ops", "trips"],
   "passenger.outcome_recorded": ["trips", "live_ops", "audit"],
@@ -63,6 +67,7 @@ const EVENT_CONSUMERS: Record<PlatformEventName, PlatformEventConsumer[]> = {
   "vehicle.returned": ["yard", "vehicles", "audit"],
   "duty.completed": ["drivers", "audit"],
   "safeguarding.case_opened": ["incidents", "audit"],
+  "plan.published": ["yard", "dispatch", "drivers", "audit"],
 };
 
 export function createPlatformEvent(input: {

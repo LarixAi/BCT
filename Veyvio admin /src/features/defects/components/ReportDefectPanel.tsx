@@ -69,16 +69,16 @@ export function ReportDefectPanel({ hub, onClose }: { hub: DefectsHubData; onClo
     <SectionCard title="Report defect" description="Structured defect report — submits for triage and safety review">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="text-slate-600">Vehicle</span>
-          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+          <span className="text-ink-soft">Vehicle</span>
+          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
             {vehicleOptions.map((v) => (
               <option key={v.id} value={v.id}>{v.label}</option>
             ))}
           </select>
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Severity</span>
-          <select value={severity} onChange={(e) => setSeverity(e.target.value as DefectSeverity)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+          <span className="text-ink-soft">Severity</span>
+          <select value={severity} onChange={(e) => setSeverity(e.target.value as DefectSeverity)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
             <option value="advisory">Advisory</option>
             <option value="minor">Minor</option>
             <option value="major">Major</option>
@@ -86,33 +86,33 @@ export function ReportDefectPanel({ hub, onClose }: { hub: DefectsHubData; onClo
           </select>
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Category</span>
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5">
+          <span className="text-ink-soft">Category</span>
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5">
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Component</span>
-          <input value={component} onChange={(e) => setComponent(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" placeholder="e.g. Nearside mirror" />
+          <span className="text-ink-soft">Component</span>
+          <input value={component} onChange={(e) => setComponent(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" placeholder="e.g. Nearside mirror" />
         </label>
         <label className="block text-sm sm:col-span-2">
-          <span className="text-slate-600">Description</span>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" placeholder="What is wrong?" />
+          <span className="text-ink-soft">Description</span>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" placeholder="What is wrong?" />
         </label>
         <label className="block text-sm sm:col-span-2">
-          <span className="text-slate-600">Symptoms</span>
-          <input value={symptoms} onChange={(e) => setSymptoms(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" placeholder="What did the driver or reporter observe?" />
+          <span className="text-ink-soft">Symptoms</span>
+          <input value={symptoms} onChange={(e) => setSymptoms(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" placeholder="What did the driver or reporter observe?" />
         </label>
         <label className="block text-sm sm:col-span-2">
-          <span className="text-slate-600">Location</span>
-          <input value={location} onChange={(e) => setLocation(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5" placeholder="Depot or roadside location" />
+          <span className="text-ink-soft">Location</span>
+          <input value={location} onChange={(e) => setLocation(e.target.value)} className="mt-1 w-full rounded-lg border border-border px-3 py-1.5" placeholder="Depot or roadside location" />
         </label>
       </div>
 
-      <fieldset className="mt-4 rounded-lg border border-slate-100 p-3">
-        <legend className="px-1 text-sm font-medium text-slate-700">Safety assessment</legend>
+      <fieldset className="mt-4 rounded-lg border border-border p-3">
+        <legend className="px-1 text-sm font-medium text-ink-soft">Safety assessment</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={passengersOnboard} onChange={(e) => setPassengersOnboard(e.target.checked)} />
@@ -158,7 +158,7 @@ export function ReportDefectPanel({ hub, onClose }: { hub: DefectsHubData; onClo
         >
           Submit and mark VOR
         </button>
-        <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-600">
+        <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-ink-soft">
           Cancel
         </button>
       </div>

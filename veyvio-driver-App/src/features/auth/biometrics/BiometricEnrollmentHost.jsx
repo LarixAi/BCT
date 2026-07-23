@@ -14,6 +14,7 @@ export default function BiometricEnrollmentHost({ driverId, ready = true, delayM
       label={enrollment.label}
       busy={enrollment.busy}
       error={enrollment.error}
+      successLabel={enrollment.successLabel}
       onEnable={enrollment.onEnable}
       onRemindNextWeek={enrollment.onRemindNextWeek}
       onDontAskAgain={enrollment.onDontAskAgain}
