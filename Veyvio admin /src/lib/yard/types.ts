@@ -1,4 +1,4 @@
-/** Yard Operations domain — physical depot state separate from vehicle identity and legal availability. */
+import type { YardHubLayoutSnapshot } from '@veyvio/yard'
 
 export type YardTab = 'live' | 'map' | 'tasks' | 'movements' | 'handover' | 'exceptions' | 'messages' | 'bodywork' | 'checks'
 
@@ -279,6 +279,9 @@ export interface YardMapVehicleMarker {
 export interface YardHubData {
   depotId: string
   depotName: string
+  depotCode?: string | null
+  yardMapEnabled?: boolean
+  yardLayout?: YardHubLayoutSnapshot | null
   shiftLabel: string
   operationalDate: string
   summary: YardSummary

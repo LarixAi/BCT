@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
 import type { BookingRecord, CancelScope } from '@/lib/bookings/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function CancelBookingDialog({
   booking,
@@ -35,8 +37,8 @@ export function CancelBookingDialog({
         replacementNeeded,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['booking', booking.id] })
-      queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['booking', booking.id]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['bookings']) })
       onClose()
     },
   })

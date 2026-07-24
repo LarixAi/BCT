@@ -16,7 +16,7 @@ test.describe('Yard operations', () => {
 
   test('depot selector filters vehicles', async ({ page }) => {
     await page.goto('/yard?depot=depot-croydon')
-    await expect(page.getByText(/Croydon Depot · Sunday 12 July/)).toBeVisible()
+    await expect(page.getByText(/Croydon Depot ·/)).toBeVisible()
     await expect(page.getByText('KL78 MNO')).toBeVisible()
     await expect(page.getByText('CD34 EFG')).not.toBeVisible()
   })

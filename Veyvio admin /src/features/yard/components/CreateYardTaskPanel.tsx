@@ -4,7 +4,9 @@ import { SectionCard } from '@/components/ui'
 import { YARD_TASK_PRIORITY_LABELS, YARD_TASK_TYPE_LABELS } from '@/lib/yard/constants'
 import type { CreateYardTaskInput, YardHubData, YardTaskPriority, YardTaskType } from '@/lib/yard/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const TASK_TYPES = Object.keys(YARD_TASK_TYPE_LABELS) as YardTaskType[]
 const PRIORITIES = Object.keys(YARD_TASK_PRIORITY_LABELS) as YardTaskPriority[]
@@ -35,7 +37,7 @@ export function CreateYardTaskPanel({
   const create = useMutation({
     mutationFn: (input: CreateYardTaskInput) => api.createYardTask(input, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['yard-hub', hub.depotId] })
+      queryClient.invalidateQueries({ queryKey: tKey(['yard-hub', hub.depotId]) })
       onClose()
     },
   })

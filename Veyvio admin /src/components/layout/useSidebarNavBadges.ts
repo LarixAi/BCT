@@ -5,6 +5,7 @@ import {
   buildExceptionsInbox,
 } from '@/lib/exceptions/build-exceptions-inbox'
 import { isOpenException } from '@/lib/exceptions/exception-filters'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
 import {
   buildSidebarBadges,
   countUnreadMessages,
@@ -17,77 +18,77 @@ export function useSidebarNavBadges(): SidebarBadgeMap {
   const results = useQueries({
     queries: [
       {
-        queryKey: ['notifications-unread-count'],
+        queryKey: tKey(['notifications-unread-count']),
         queryFn: () => api.getNotificationUnreadCount(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['dashboard'],
+        queryKey: tKey(['dashboard']),
         queryFn: () => api.getDashboard(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['defects', 'open'],
+        queryKey: tKey(['defects', 'open']),
         queryFn: () => api.getDefects({ status: 'open' }),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['incidents', 'open'],
+        queryKey: tKey(['incidents', 'open']),
         queryFn: () => api.getIncidents({ status: 'open' }),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['driver-eligibility-exceptions'],
+        queryKey: tKey(['driver-eligibility-exceptions']),
         queryFn: () => api.getDriverEligibilityExceptions(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['vehicle-release-exceptions'],
+        queryKey: tKey(['vehicle-release-exceptions']),
         queryFn: () => api.getVehicleReleaseExceptions(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['bookings', 'sidebar'],
+        queryKey: tKey(['bookings', 'sidebar']),
         queryFn: () => api.getBookings(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['duties', 'today'],
+        queryKey: tKey(['duties', 'today']),
         queryFn: () => api.getDuties(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['operational-trips'],
+        queryKey: tKey(['operational-trips']),
         queryFn: () => api.getOperationalTrips(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['driver-directory-summary'],
+        queryKey: tKey(['driver-directory-summary']),
         queryFn: () => api.getDriverDirectorySummary(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['vehicle-directory-summary'],
+        queryKey: tKey(['vehicle-directory-summary']),
         queryFn: () => api.getVehicleDirectorySummary(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['depots'],
+        queryKey: tKey(['depots']),
         queryFn: () => api.getDepots(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['maintenance-hub'],
+        queryKey: tKey(['maintenance-hub']),
         queryFn: () => api.getMaintenanceHub(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['messages', 'inbox'],
+        queryKey: tKey(['messages', 'inbox']),
         queryFn: () => api.getMessages({ folder: 'inbox' }),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['attendance-hub', 'sidebar'],
+        queryKey: tKey(['attendance-hub', 'sidebar']),
         queryFn: () => api.getAttendanceHub(),
         refetchInterval: REFETCH_MS,
         // Never let a bad attendance payload take down the whole Command shell.

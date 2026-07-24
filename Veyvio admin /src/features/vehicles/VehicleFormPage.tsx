@@ -6,7 +6,9 @@ import { FUEL_TYPE_LABELS, OWNERSHIP_TYPE_LABELS, VEHICLE_CATEGORY_LABELS } from
 import type { CreateVehicleInput, FuelType, OwnershipType, UpdateVehicleInput, VehicleCategory } from '@/lib/vehicles/types'
 import { VehicleBackLink } from './components/VehicleProfileHeader'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleFormPage() {
   const { id } = useParams<{ id: string }>()
@@ -22,7 +24,7 @@ export function VehicleFormPage() {
   }, [isEdit, navigate])
 
   const { data: existing, isLoading } = useQuery({
-    queryKey: ['vehicle-profile', id],
+    queryKey: tKey(['vehicle-profile', id]),
     queryFn: () => api.getVehicleProfile(id!),
     enabled: isEdit,
   })
@@ -91,8 +93,8 @@ export function VehicleFormPage() {
       return api.createVehicle(input, actorName)
     },
     onSuccess: (vehicle) => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-directory-summary'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-directory-summary']) })
       navigate(`/vehicles/${vehicle.id}`)
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'Could not save vehicle'),

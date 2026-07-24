@@ -13,6 +13,8 @@ import {
 import type { VehicleProfile, WorkOrderStatus } from '@/lib/vehicles/types'
 import { VehicleVorEpisodeCard } from './VehicleVorEpisodeCard'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const SCHEDULE_STATUS: Record<string, string> = {
   ok: 'compliant',
@@ -36,9 +38,9 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
   const defectsAwaiting = vehicle.defects.filter((d) => d.status !== 'closed')
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profile', vehicle.id] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['maintenance-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', vehicle.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['maintenance-hub']) })
   }
 
   const create = useMutation({

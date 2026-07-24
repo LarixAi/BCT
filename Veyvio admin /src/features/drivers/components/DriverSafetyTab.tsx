@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { CATEGORY_LABELS, SEVERITY_DISPLAY, STATUS_LABELS } from '@/lib/incidents/constants'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DriverSafetyTab({ driverId }: { driverId: string }) {
   const { data: incidents = [], isLoading } = useQuery({
-    queryKey: ['driver-incidents', driverId],
+    queryKey: tKey(['driver-incidents', driverId]),
     queryFn: () => api.getDriverIncidents(driverId),
   })
 

@@ -1,44 +1,94 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
+import { TripOperationalDetailPage } from '@/features/trips/TripOperationalDetailPage'
 import { api } from '@/lib/api/client'
 import type { RouteStopRecord } from '@/lib/api/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function TripDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const runId = searchParams.get('run')
+  const tab = searchParams.get('tab')
 
-  const { data: track, isLoading } = useQuery({
-    queryKey: ['duty-track', runId],
-    queryFn: () => api.getDutyTrack(runId!),
-    enabled: !!runId,
+  const {
+    data: trip,
+    isLoading: tripLoading,
+    isError: tripError,
+  } = useQuery({
+    queryKey: tKey(['operational-trip', id]),
+    queryFn: () => api.getOperationalTrip(id!),
+    enabled: Boolean(id),
+    retry: false,
   })
 
-  const stop: RouteStopRecord | undefined = track?.duty.route?.stops?.find((s) => s.id === id)
-  const checkpoint = track?.checkpoints.find((c) => c.routeStopId === id)
-  const duty = track?.duty
+  if (tripLoading) {
+    return <p className="text-sm text-muted">Loading trip…</p>
+  }
 
-  if (!runId) {
+  if (trip) {
+    const validTabs = [
+      'overview',
+      'stops',
+      'jobs',
+      'route',
+      'assignments',
+      'messages',
+      'exceptions',
+      'timeline',
+    ] as const
+    const initialTab = validTabs.includes(tab as (typeof validTabs)[number])
+      ? (tab as (typeof validTabs)[number])
+      : undefined
+
     return (
-      <p className="text-sm text-muted">
-        Open a trip from a{' '}
-        <Link to="/runs" className="text-command-600 hover:underline">
-          run detail
-        </Link>{' '}
-        page.
-      </p>
+      <TripOperationalDetailPage
+        trip={trip}
+        tab={initialTab}
+        onTabChange={(next) => {
+          const nextParams = new URLSearchParams(searchParams)
+          if (next === 'overview') nextParams.delete('tab')
+          else nextParams.set('tab', next)
+          setSearchParams(nextParams, { replace: true })
+        }}
+      />
     )
   }
 
+  if (runId) {
+    return <RouteStopDetail stopId={id!} runId={runId} />
+  }
+
+  return (
+    <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800">
+      {tripError ? 'Trip not found.' : 'Trip not found.'}
+      <Link to="/trips" className="ml-2 font-medium underline">
+        Back to trips
+      </Link>
+    </div>
+  )
+}
+
+function RouteStopDetail({ stopId, runId }: { stopId: string; runId: string }) {
+  const { data: track, isLoading } = useQuery({
+    queryKey: tKey(['duty-track', runId]),
+    queryFn: () => api.getDutyTrack(runId),
+  })
+
+  const stop: RouteStopRecord | undefined = track?.duty.route?.stops?.find((s) => s.id === stopId)
+  const checkpoint = track?.checkpoints.find((c) => c.routeStopId === stopId)
+  const duty = track?.duty
+
   if (isLoading) {
-    return <p className="text-sm text-muted">Loading trip…</p>
+    return <p className="text-sm text-muted">Loading stop…</p>
   }
 
   if (!stop || !duty) {
     return (
       <div className="rounded-lg bg-red-50 p-4 text-sm text-red-800">
-        Trip not found.
+        Stop not found.
         <Link to={`/runs/${runId}`} className="ml-2 font-medium underline">
           Back to run
         </Link>
@@ -91,9 +141,7 @@ export function TripDetailPage() {
           <Row label="Run" value={duty.reference} />
           <Row
             label="Driver"
-            value={
-              duty.driver ? `${duty.driver.firstName} ${duty.driver.lastName}` : 'Unassigned'
-            }
+            value={duty.driver ? `${duty.driver.firstName} ${duty.driver.lastName}` : 'Unassigned'}
           />
           <Row label="Vehicle" value={duty.vehicle?.registrationNumber ?? 'Unassigned'} />
           <Row label="Run status" value={duty.status.replace(/_/g, ' ')} />

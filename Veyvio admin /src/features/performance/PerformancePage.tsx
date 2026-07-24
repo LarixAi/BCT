@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function monthStartIso() {
   const d = new Date()
@@ -17,7 +19,7 @@ export function PerformancePage() {
   const [to, setTo] = useState(todayIso())
 
   const { data: metrics, isLoading, isError, error } = useQuery({
-    queryKey: ['performance', from, to],
+    queryKey: tKey(['performance', from, to]),
     queryFn: () => api.getPerformanceMetrics({ from, to }),
   })
 

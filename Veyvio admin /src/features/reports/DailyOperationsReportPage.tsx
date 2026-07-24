@@ -6,6 +6,8 @@ import { api } from '@/lib/api/client'
 import { useOperationalContext } from '@/lib/context'
 import { buildDailyOperationsSummary } from '@/lib/reports/build-daily-operations'
 import { ReportFiltersBar } from './ReportFiltersBar'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -20,27 +22,27 @@ export function DailyOperationsReportPage() {
 
   const results = useQueries({
     queries: [
-      { queryKey: ['dashboard'], queryFn: () => api.getDashboard() },
+      { queryKey: tKey(['dashboard']), queryFn: () => api.getDashboard() },
       {
-        queryKey: ['duties', 'report', from, to],
+        queryKey: tKey(['duties', 'report', from, to]),
         queryFn: () => api.getDuties({ from, to }),
       },
       {
-        queryKey: ['live-dispatch', 'active'],
+        queryKey: tKey(['live-dispatch', 'active']),
         queryFn: () => api.getLiveDispatch(undefined, 'active'),
       },
-      { queryKey: ['checks-hub'], queryFn: () => api.getChecksHub() },
-      { queryKey: ['defects-hub'], queryFn: () => api.getDefectsHub() },
+      { queryKey: tKey(['checks-hub']), queryFn: () => api.getChecksHub() },
+      { queryKey: tKey(['defects-hub']), queryFn: () => api.getDefectsHub() },
       {
-        queryKey: ['driver-directory-summary'],
+        queryKey: tKey(['driver-directory-summary']),
         queryFn: () => api.getDriverDirectorySummary(),
       },
       {
-        queryKey: ['vehicle-directory-summary'],
+        queryKey: tKey(['vehicle-directory-summary']),
         queryFn: () => api.getVehicleDirectorySummary(),
       },
       {
-        queryKey: ['yard-hub', yardDepot ?? 'default'],
+        queryKey: tKey(['yard-hub', yardDepot ?? 'default']),
         queryFn: () => api.getYardHub(yardDepot),
       },
     ],

@@ -3,7 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { canUploadDefectEvidence } from '@/lib/defects/permissions'
 import type { DefectDetailRecord } from '@/lib/defects/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function EvidenceUploadPanel({ defect }: { defect: DefectDetailRecord }) {
   const { user } = useAuth()
@@ -21,8 +23,8 @@ export function EvidenceUploadPanel({ defect }: { defect: DefectDetailRecord }) 
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['defect-detail', defect.id] })
-      queryClient.invalidateQueries({ queryKey: ['defects-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['defect-detail', defect.id]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['defects-hub']) })
       setLabel('')
     },
   })

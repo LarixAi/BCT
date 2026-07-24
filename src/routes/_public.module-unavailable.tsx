@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSessionStore } from "@/platform/auth/session-store";
+import { useTenancyStore } from "@/platform/tenancy/context-store";
 
 export const Route = createFileRoute("/_public/module-unavailable")({
   component: ModuleUnavailablePage,
@@ -7,6 +8,12 @@ export const Route = createFileRoute("/_public/module-unavailable")({
 
 function ModuleUnavailablePage() {
   const signOut = useSessionStore(s => s.signOut);
+  const clearContext = useTenancyStore(s => s.clearContext);
+
+  function handleSignOut() {
+    clearContext();
+    signOut();
+  }
 
   return (
     <main className="grid min-h-dvh place-items-center bg-[#0B1526] px-6 text-white">
@@ -26,7 +33,7 @@ function ModuleUnavailablePage() {
           </Link>
           <button
             type="button"
-            onClick={() => signOut()}
+            onClick={handleSignOut}
             className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white"
           >
             Sign out

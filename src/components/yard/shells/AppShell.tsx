@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ClipboardCheck, Home, Map, MoreHorizontal, ScanLine, Truck } from "lucide-react";
+import { ClipboardCheck, CalendarClock, CarFront, Home, Map, MoreHorizontal, ScanLine, Truck } from "lucide-react";
 import type { ReactNode } from "react";
 import { BrandWordmark } from "@/components/brand/BrandWordmark";
 import { useTenancyStore } from "@/platform/tenancy/context-store";
@@ -12,6 +12,7 @@ import { useSyncLifecycle } from "@/features/sync/use-sync-lifecycle";
 import {
   isChecksNavActive,
   isMoreNavActive,
+  isVehicleBodyworkNavActive,
   isVehiclesNavActive,
   isYardNavActive,
 } from "@/domain/yard/nav-routes";
@@ -90,6 +91,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             active={isVehiclesNavActive(pathname)}
           />
           <DesktopNavItem
+            to="/vehicle-bodywork"
+            label="Vehicle Bodywork"
+            icon={<CarFront />}
+            active={isVehicleBodyworkNavActive(pathname)}
+          />
+          <DesktopNavItem
+            to="/upcoming"
+            label="Upcoming"
+            icon={<CalendarClock />}
+            active={pathname.startsWith("/upcoming")}
+          />
+          <DesktopNavItem
             to="/yard/map"
             label="Yard"
             icon={<Map />}
@@ -141,7 +154,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-type DesktopShellRoute = "/" | "/checks" | "/yard" | "/yard/map" | "/more";
+type DesktopShellRoute = "/" | "/checks" | "/yard" | "/upcoming" | "/yard/map" | "/more";
 
 function DesktopNavItem({
   to,

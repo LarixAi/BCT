@@ -11,6 +11,8 @@ import {
 import type { DocumentRequirement, DriverOnboardingForm } from '../driver-onboarding.types'
 import { onboardingValidators } from '../driver-onboarding.validation'
 import { syncDriverRestrictions } from '../lib/sync-driver-restrictions'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function useDriverOnboardingActions({
   driverId,
@@ -40,7 +42,7 @@ export function useDriverOnboardingActions({
       return profile
     },
     onSuccess: (profile) => {
-      queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
       navigate(`/drivers/${profile.id}/onboarding?step=employment`)
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Could not save draft'),
@@ -99,7 +101,7 @@ export function useDriverOnboardingActions({
   const activate = useMutation({
     mutationFn: () => api.activateDriver(driverId!, {}, actorName),
     onSuccess: (profile) => {
-      queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
       navigate(`/drivers/${profile.id}`)
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Activation blocked'),

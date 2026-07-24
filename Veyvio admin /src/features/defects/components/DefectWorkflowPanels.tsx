@@ -12,13 +12,15 @@ import {
 } from '@/lib/defects/permissions'
 import type { DefectDetailRecord, DefectClosureReason } from '@/lib/defects/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function invalidate(queryClient: ReturnType<typeof useQueryClient>, defectId: string) {
-  queryClient.invalidateQueries({ queryKey: ['defects-hub'] })
-  queryClient.invalidateQueries({ queryKey: ['defect-detail', defectId] })
-  queryClient.invalidateQueries({ queryKey: ['maintenance-hub'] })
-  queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
+  queryClient.invalidateQueries({ queryKey: tKey(['defects-hub']) })
+  queryClient.invalidateQueries({ queryKey: tKey(['defect-detail', defectId]) })
+  queryClient.invalidateQueries({ queryKey: tKey(['maintenance-hub']) })
+  queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
 }
 
 export function RepairWorkflowPanel({ defect }: { defect: DefectDetailRecord }) {

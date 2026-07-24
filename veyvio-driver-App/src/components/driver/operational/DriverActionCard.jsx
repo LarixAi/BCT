@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { op } from "@/lib/driver-operational-theme";
+import { prefetchDriverRoute } from "@/lib/prefetch-routes";
 
 export default function DriverActionCard({
   to,
@@ -47,5 +48,14 @@ export default function DriverActionCard({
     );
   }
   if (disabled || !to) return inner;
-  return <Link to={to}>{inner}</Link>;
+  return (
+    <Link
+      to={to}
+      onMouseEnter={() => prefetchDriverRoute(to)}
+      onFocus={() => prefetchDriverRoute(to)}
+      onTouchStart={() => prefetchDriverRoute(to)}
+    >
+      {inner}
+    </Link>
+  );
 }

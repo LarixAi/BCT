@@ -524,7 +524,10 @@ function statusFromEvidence(
       doc.verificationStatus === 'expired')
 
   const hasCompleteRecord =
-    recordStatus === 'complete' || recordStatus === 'valid' || Boolean(record?.completedAt && !['missing', 'failed'].includes(recordStatus))
+    recordStatus === 'complete' ||
+    recordStatus === 'completed' ||
+    recordStatus === 'valid' ||
+    Boolean(record?.completedAt && !['missing', 'failed'].includes(recordStatus))
 
   if (!hasCompleteRecord && !verifiedDoc) {
     return { status: 'missing', completedAt: null, expiresAt: null, trainer: null }

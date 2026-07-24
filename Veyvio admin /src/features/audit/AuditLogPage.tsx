@@ -2,12 +2,14 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function AuditLogPage() {
   const [search, setSearch] = useState('')
 
   const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['audit'],
+    queryKey: tKey(['audit']),
     queryFn: () => api.getAuditLogs(),
   })
 

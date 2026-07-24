@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import type { RecoveryWorkflow } from '@/lib/transfers/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const WORKFLOWS: { id: RecoveryWorkflow; label: string; description: string }[] = [
   {
@@ -54,12 +56,12 @@ export function HandoverWorkflowDialog({
   const [error, setError] = useState('')
 
   const { data: position } = useQuery({
-    queryKey: ['operational-position', tripId],
+    queryKey: tKey(['operational-position', tripId]),
     queryFn: () => api.getOperationalPosition(tripId),
   })
 
   const { data: candidates = [] } = useQuery({
-    queryKey: ['transfer-candidates', tripId],
+    queryKey: tKey(['transfer-candidates', tripId]),
     queryFn: () => api.getTransferCandidates(tripId),
   })
 
@@ -83,8 +85,8 @@ export function HandoverWorkflowDialog({
         `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim(),
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['operational-trip', tripId] })
-      queryClient.invalidateQueries({ queryKey: ['assignment-history', tripId] })
+      queryClient.invalidateQueries({ queryKey: tKey(['operational-trip', tripId]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['assignment-history', tripId]) })
       onComplete?.()
       onClose()
     },

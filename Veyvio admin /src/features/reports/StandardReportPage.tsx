@@ -23,6 +23,8 @@ import {
 } from '@/lib/reports/build-standard-reports'
 import type { ReportSummaryView, StandardReportId } from '@/lib/reports/types'
 import { ReportPageShell } from './ReportPageShell'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -68,97 +70,97 @@ function StandardReportBody({ reportId }: { reportId: StandardReportId }) {
   const results = useQueries({
     queries: [
       {
-        queryKey: ['dashboard'],
+        queryKey: tKey(['dashboard']),
         queryFn: () => api.getDashboard(),
         enabled: ['exceptions', 'driver-compliance'].includes(reportId),
       },
       {
-        queryKey: ['duties', 'report', from, to],
+        queryKey: tKey(['duties', 'report', from, to]),
         queryFn: () => api.getDuties({ from, to }),
         enabled: ['on-time', 'trip-completion', 'working-time', 'contract-performance'].includes(reportId),
       },
       {
-        queryKey: ['performance', from, to],
+        queryKey: tKey(['performance', from, to]),
         queryFn: () => api.getPerformanceMetrics({ from, to }),
         enabled: ['on-time', 'contract-performance'].includes(reportId),
       },
       {
-        queryKey: ['driver-directory-summary'],
+        queryKey: tKey(['driver-directory-summary']),
         queryFn: () => api.getDriverDirectorySummary(),
         enabled: ['driver-compliance', 'working-time'].includes(reportId),
       },
       {
-        queryKey: ['driver-eligibility-exceptions'],
+        queryKey: tKey(['driver-eligibility-exceptions']),
         queryFn: () => api.getDriverEligibilityExceptions(),
         enabled: ['exceptions', 'driver-compliance'].includes(reportId),
       },
       {
-        queryKey: ['vehicle-release-exceptions'],
+        queryKey: tKey(['vehicle-release-exceptions']),
         queryFn: () => api.getVehicleReleaseExceptions(),
         enabled: reportId === 'exceptions',
       },
       {
-        queryKey: ['compliance-expiring'],
+        queryKey: tKey(['compliance-expiring']),
         queryFn: () => api.getComplianceExpiring(30),
         enabled: reportId === 'driver-compliance',
       },
       {
-        queryKey: ['vehicle-directory-summary'],
+        queryKey: tKey(['vehicle-directory-summary']),
         queryFn: () => api.getVehicleDirectorySummary(),
         enabled: ['fleet-availability', 'vor-downtime'].includes(reportId),
       },
       {
-        queryKey: ['maintenance-hub'],
+        queryKey: tKey(['maintenance-hub']),
         queryFn: () => api.getMaintenanceHub(),
         enabled: ['fleet-availability', 'vor-downtime', 'maintenance-due'].includes(reportId),
       },
       {
-        queryKey: ['checks-hub'],
+        queryKey: tKey(['checks-hub']),
         queryFn: () => api.getChecksHub(),
         enabled: reportId === 'checks-defects',
       },
       {
-        queryKey: ['defects-hub'],
+        queryKey: tKey(['defects-hub']),
         queryFn: () => api.getDefectsHub(),
         enabled: ['checks-defects', 'vor-downtime'].includes(reportId),
       },
       {
-        queryKey: ['incidents-hub'],
+        queryKey: tKey(['incidents-hub']),
         queryFn: () => api.getIncidentsHub(),
         enabled: reportId === 'incidents',
       },
       {
-        queryKey: ['contracts'],
+        queryKey: tKey(['contracts']),
         queryFn: () => api.getContracts(),
         enabled: reportId === 'contract-performance',
       },
       {
-        queryKey: ['yard-hub', yardDepot ?? 'default'],
+        queryKey: tKey(['yard-hub', yardDepot ?? 'default']),
         queryFn: () => api.getYardHub(yardDepot),
         enabled: reportId === 'yard-operations',
       },
       {
-        queryKey: ['messages', 'inbox'],
+        queryKey: tKey(['messages', 'inbox']),
         queryFn: () => api.getMessages({ folder: 'inbox' }),
         enabled: reportId === 'communications',
       },
       {
-        queryKey: ['messages', 'sent'],
+        queryKey: tKey(['messages', 'sent']),
         queryFn: () => api.getMessages({ folder: 'sent' }),
         enabled: reportId === 'communications',
       },
       {
-        queryKey: ['announcements'],
+        queryKey: tKey(['announcements']),
         queryFn: () => api.getAnnouncements(),
         enabled: reportId === 'communications',
       },
       {
-        queryKey: ['notifications'],
+        queryKey: tKey(['notifications']),
         queryFn: () => api.getNotifications(),
         enabled: reportId === 'communications',
       },
       {
-        queryKey: ['audit-logs'],
+        queryKey: tKey(['audit-logs']),
         queryFn: () => api.getAuditLogs(),
         enabled: reportId === 'audit-activity',
       },

@@ -1,22 +1,43 @@
 import { SectionCard } from '@/components/ui'
 import { ValidationList } from '@/features/bookings/components/BookingWizardUi'
+import { DispatchStep } from '@/features/bookings/steps/DispatchStep'
+import { buildJobPreview, countJobsToGenerate, FUNDING_TYPE_OPTIONS } from '@/lib/bookings/booking-journey-utils'
 import type { BookingDraft, BookingValidationItem } from '@/lib/bookings/types'
 
 export function ReviewStep({
   draft,
   validation,
+  onChange,
 }: {
   draft: BookingDraft
   validation: BookingValidationItem[]
+  onChange: (patch: Partial<BookingDraft>) => void
 }) {
   const trip = draft.trips[0]
   const pickup = trip?.stops.find((s) => s.type === 'pickup')
   const dropoff = trip?.stops.find((s) => s.type === 'dropoff')
+  const jobs = buildJobPreview(draft)
+  const fundingLabel =
+    FUNDING_TYPE_OPTIONS.find((f) => f.id === draft.fundingType)?.label ?? draft.fundingType
 
   return (
     <div className="space-y-4">
+      <SectionCard title="Jobs to generate" description={`${countJobsToGenerate(draft)} job(s) will be created on confirmation`}>
+        <ul className="space-y-2">
+          {jobs.map((job) => (
+            <li key={job.id} className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm">
+              <p className="font-semibold text-ink">{job.label}</p>
+              <p className="text-ink-soft">{job.passenger}</p>
+              <p className="text-ink-soft">{job.route}</p>
+              <p className="text-ink-soft">{job.time}</p>
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
+
       <SectionCard title="Review before confirmation">
         <dl className="space-y-3 text-sm">
+          <Row label="Funding" value={fundingLabel} />
           <Row label="Customer" value={draft.customerName ?? '—'} />
           <Row
             label="Passenger(s)"
@@ -47,18 +68,10 @@ export function ReviewStep({
                 : `£${draft.pricing.totalPrice.toFixed(2)}`
             }
           />
-          <Row
-            label="Dispatch"
-            value={
-              draft.dispatch.mode === 'send_to_dispatch'
-                ? 'Send to Dispatch'
-                : draft.dispatch.mode === 'assign_now'
-                  ? 'Assign now'
-                  : 'Auto-plan'
-            }
-          />
         </dl>
       </SectionCard>
+
+      <DispatchStep draft={draft} onChange={onChange} />
 
       <SectionCard title="Validation">
         <ValidationList items={validation} />

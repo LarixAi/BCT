@@ -16,7 +16,9 @@ import { ChecksTemplatesTab, ChecksIntelligenceTab } from './ChecksTemplatesTab'
 import { StartAdminCheckPanel } from './components/StartAdminCheckPanel'
 import { api } from '@/lib/api/client'
 import { safeChecksHub } from '@/lib/api/safe-hubs'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleChecksPage() {
   const { user } = useAuth()
@@ -35,7 +37,7 @@ export function VehicleChecksPage() {
   const canStart = canStartAdminCheck(permissions)
 
   const { data: hub, isLoading, error, isError } = useQuery({
-    queryKey: ['checks-hub'],
+    queryKey: tKey(['checks-hub']),
     queryFn: () => api.getChecksHub(),
   })
 
@@ -46,7 +48,7 @@ export function VehicleChecksPage() {
   }
 
   function refresh() {
-    queryClient.invalidateQueries({ queryKey: ['checks-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['checks-hub']) })
   }
 
   if (isLoading) return <p className="text-sm text-muted">Loading vehicle checks…</p>

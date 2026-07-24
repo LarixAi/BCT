@@ -27,7 +27,8 @@ import WalkaroundAdvisorySheet from "@/components/driver/walkaround/WalkaroundAd
 import WalkaroundResultScreen from "@/components/driver/walkaround/WalkaroundResultScreen";
 import WalkaroundReviewScreen from "@/components/driver/walkaround/WalkaroundReviewScreen";
 import WalkaroundVehicleConfirm from "@/components/driver/walkaround/WalkaroundVehicleConfirm";
-import { op } from "@/lib/driver-operational-theme";
+import { submitConditionAcknowledgement } from "@/services/condition-acknowledgement.service";
+import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { DRIVER_SAFE_BOTTOM } from "@/lib/driverSafeArea";
 import { useDriverChrome } from "@/lib/driverChromeContext";
 import { compressImageToDataUrl } from "@/lib/walkaround-image";
@@ -96,15 +97,18 @@ export default function DriverWalkaroundFlow({ driver }) {
   const [signatureDataUrl, setSignatureDataUrl] = useState(null);
   const [syncHint, setSyncHint] = useState(null);
   const [pendingSync, setPendingSync] = useState(0);
+  const [conditionAcknowledged, setConditionAcknowledged] = useState(false);
 
   const flowInProgressRef = useRef(false);
   const submittedRef = useRef(false);
   const suppressAutoReviewRef = useRef(false);
 
+  const workspace = resolveDriverWorkspaceScope(driver, authSession);
+
   useEffect(() => {
     void flushPendingWalkaroundSubmissions(driver);
-    setPendingSync(getPendingSyncCount(driver.id));
-  }, [driver]);
+    setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
+  }, [driver, authSession, workspace.companyId, workspace.membershipId]);
 
   useEffect(() => {
     setHideBottomNav(true);
@@ -303,6 +307,10 @@ export default function DriverWalkaroundFlow({ driver }) {
   const beginChecklist = async () => {
     if (!vehicleConfirmed) {
       setError("Confirm this is your vehicle.");
+      return;
+    }
+    if (!conditionAcknowledged) {
+      setError("Acknowledge the vehicle condition before starting the walkaround.");
       return;
     }
     if (!odometer || Number(odometer) <= 0) {
@@ -597,6 +605,10 @@ export default function DriverWalkaroundFlow({ driver }) {
             setError("Confirm this is your vehicle.");
             return;
           }
+          if (!conditionAcknowledged) {
+            setError("Acknowledge the vehicle condition before continuing.");
+            return;
+          }
           if (!odometer || Number(odometer) <= 0) {
             setError("Enter the current odometer reading.");
             return;
@@ -611,6 +623,28 @@ export default function DriverWalkaroundFlow({ driver }) {
         }}
         onStart={() => void beginChecklist()}
         onBack={() => navigate("/")}
+        conditionSummary={{
+          enabled: true,
+          lastInspectionAt: session?.vehicle?.lastBodyInspectionAt ?? null,
+          openDamageCount: session?.vehicle?.openBodyDamageCount ?? 0,
+          restrictions: session?.vehicle?.bodyRestrictions ?? [],
+        }}
+        conditionAcknowledged={conditionAcknowledged}
+        onConditionAcknowledge={async ({ acknowledgementType, statement }) => {
+          const result = await submitConditionAcknowledgement({
+            vehicleId: session?.vehicle?.id,
+            driverId: driver?.id,
+            acknowledgementType,
+            statement,
+          });
+          if (!result.ok) {
+            setError(result.message ?? "Could not record acknowledgement.");
+            return;
+          }
+          setConditionAcknowledged(true);
+          setSyncHint("Condition acknowledgement recorded");
+          setError("");
+        }}
       />
       </div>
     );

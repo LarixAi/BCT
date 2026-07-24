@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const SUMMARY_CARDS = [
   { id: 'openReports', label: 'Open reports' },
@@ -20,7 +22,7 @@ export function VehicleReportsPage() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [severityFilter, setSeverityFilter] = useState('all')
   const { data: hub, isLoading, error } = useQuery({
-    queryKey: ['vehicle-reports-hub'],
+    queryKey: tKey(['vehicle-reports-hub']),
     queryFn: () => api.getVehicleReportsHub(),
   })
 

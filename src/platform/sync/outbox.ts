@@ -107,7 +107,7 @@ export const useSyncStore = create<OutboxStore>((set, get) => ({
   markSyncing: async (localOperationId) => {
     const mutations = await listOutboxMutations();
     const m = mutations.find(x => x.localOperationId === localOperationId);
-    if (!m || m.status !== "pending") return;
+    if (!m || (m.status !== "pending" && m.status !== "syncing")) return;
     await updateOutboxMutation({ ...m, status: "syncing" });
     const next = await listOutboxMutations();
     set(recomputeCounts(next));

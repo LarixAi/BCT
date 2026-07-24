@@ -19,6 +19,9 @@ import FloatingBubbleLayer from "@/components/driver/navigation/FloatingBubbleLa
 import BiometricLockLayer from "@/features/auth/biometrics/BiometricLockLayer";
 import { useDriverWebPresence } from "@/hooks/useDriverWebPresence";
 import { op } from "@/lib/driver-operational-theme";
+import DriverSupabaseHome from "./DriverSupabaseHome";
+import DriverJobsHub from "./DriverJobsHub";
+import DriverMorePage from "./DriverMorePage";
 
 function DriverBootLoader({ onRetry, onSignOut }) {
   const [showEscape, setShowEscape] = useState(false);
@@ -63,12 +66,10 @@ const DriverAuthRoutes = lazy(() => import("./DriverAuthRoutes"));
 const DriverOnboardingRouter = lazy(() => import("./onboarding/DriverOnboardingRouter"));
 const DriverPendingApprovalScreen = lazy(() => import("./onboarding/DriverPendingApprovalScreen"));
 const DriverRestrictedScreen = lazy(() => import("./onboarding/DriverRestrictedScreen"));
-const DriverSupabaseHome = lazy(() => import("./DriverSupabaseHome"));
 const DriverWalkaroundFlow = lazy(() => import("./DriverWalkaroundFlow"));
 const DriverChangeVehicle = lazy(() => import("./DriverChangeVehicle"));
 const DriverCheckHistory = lazy(() => import("./DriverCheckHistory"));
 const DriverCheckDetail = lazy(() => import("./DriverCheckDetail"));
-const DriverJobsHub = lazy(() => import("./DriverJobsHub"));
 const DriverDutyCloseout = lazy(() => import("./DriverDutyCloseout"));
 const DriverSupabaseJobView = lazy(() => import("./DriverSupabaseJobView"));
 const DriverIncomingOffer = lazy(() => import("./DriverIncomingOffer"));
@@ -94,7 +95,6 @@ const DriverHelpSupport = lazy(() => import("./DriverHelpSupport"));
 const DriverReportFoundItem = lazy(() => import("./lost-property/DriverReportFoundItem"));
 const DriverMyFoundItems = lazy(() => import("./lost-property/DriverMyFoundItems"));
 const DriverCompleteDbsPage = lazy(() => import("./DriverCompleteDbsPage"));
-const DriverMorePage = lazy(() => import("./DriverMorePage"));
 const DriverReadiness = lazy(() => import("./DriverReadiness"));
 const DriverVehicleHub = lazy(() => import("./DriverVehicleHub"));
 const DriverVehicleEquipment = lazy(() => import("./DriverVehicleEquipment"));
@@ -112,7 +112,7 @@ const DriverSyncCentre = lazy(() => import("./DriverSyncCentre"));
 const DriverSafetyHub = lazy(() => import("./DriverSafetyHub"));
 
 function DriverSupabaseRouter() {
-  const { session, driver, screen, loading, login, loginWithBiometrics, logout, refresh } =
+  const { session, driver, screen, loading, login, loginWithBiometrics, logout, refresh, pendingCompanySelection } =
     useDriverSupabaseAuth();
   const location = useLocation();
   const pathname = location.pathname;
@@ -186,7 +186,12 @@ function DriverSupabaseRouter() {
   if (screen === "login" || !session || onAuthCallbackRoute) {
     return (
       <Suspense fallback={<DriverPageLoader />}>
-        <DriverAuthRoutes login={login} loginWithBiometrics={loginWithBiometrics} refresh={refresh} />
+        <DriverAuthRoutes
+          login={login}
+          loginWithBiometrics={loginWithBiometrics}
+          refresh={refresh}
+          pendingCompanySelection={pendingCompanySelection}
+        />
       </Suspense>
     );
   }
@@ -312,7 +317,6 @@ function DriverSupabaseRouter() {
         <ExternalNavReturnLayer />
         <FloatingBubbleLayer />
         <DriverMatchedTripLayer />
-        <Suspense fallback={<DriverPageLoader />}>
         <Routes>
         <Route element={<DriverOperationalShell />}>
           <Route path="/" element={<DriverSupabaseHome driver={driver} />} />
@@ -556,7 +560,6 @@ function DriverSupabaseRouter() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
-      </Suspense>
       </NotificationProvider>
       </DriverComplianceReadinessProvider>
     </DriverSafeAreaRoot>

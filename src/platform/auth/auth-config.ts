@@ -15,6 +15,16 @@ export function getSupabaseAnonKey(): string | null {
   return key && String(key).length > 0 ? String(key) : null;
 }
 
+/** Supabase project URL for Realtime (derived from VITE_API_URL when needed). */
+export function resolveSupabaseProjectUrl(): string | null {
+  const direct = import.meta.env.VITE_SUPABASE_URL ?? null;
+  if (direct && String(direct).length > 0) return String(direct).replace(/\/$/, "");
+  const api = getCommandApiUrl();
+  if (!api) return null;
+  const match = api.match(/^(https:\/\/[^/]+\.supabase\.co)/);
+  return match?.[1] ?? null;
+}
+
 /** True when Yard should use local mock sign-in (no Command backend). */
 export function isMockAuth(): boolean {
   if (import.meta.env.VITE_USE_MOCK_AUTH === "true") return true;

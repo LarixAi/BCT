@@ -3,7 +3,9 @@ import { SectionCard } from '@/components/ui'
 import { canUploadIncidentEvidence } from '@/lib/incidents/permissions'
 import type { IncidentDetailRecord } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function IncidentCctvPanel({ incident }: { incident: IncidentDetailRecord }) {
   const { user } = useAuth()
@@ -15,7 +17,7 @@ export function IncidentCctvPanel({ incident }: { incident: IncidentDetailRecord
     mutationFn: (assetId: string) =>
       api.requestCctvPreservationHub({ incidentId: incident.id, assetId, retentionHours: 72 }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
     },
   })
 

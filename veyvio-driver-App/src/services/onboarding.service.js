@@ -793,52 +793,53 @@ export async function updateDbsDetails(driverId, organisationId, payload) {
 
 /** Active drivers missing DBS expiry can self-serve without reopening full onboarding. */
 export async function updateDbsDetailsForComplianceGap(driverId, organisationId, payload) {
-  const supabase = getSupabaseClient();
-  const dbsExpiry = payload.dbsExpiry?.trim();
+  const dbsExpiry = normalizeDateInput(payload.dbsExpiry?.trim());
   if (!dbsExpiry) {
     throw new Error("Please enter your DBS certificate expiry date.");
   }
 
-  const { data: driver, error: driverError } = await supabase
-    .from("drivers")
-    .select("status, dbs_expiry_date")
-    .eq("id", driverId)
-    .eq("company_id", organisationId)
-    .maybeSingle();
-  if (driverError) throw new Error(friendlyOnboardingError(driverError, "save"));
-  if (!driver) throw new Error("Driver profile not found.");
-  if (driver.dbs_expiry_date) throw new Error("DBS expiry is already on file — pull to refresh if the app still shows a blocker.");
+  // Prefer Command API — drivers has no client UPDATE policy, and the old
+  // driver_backfill_dbs_expiry RPC was never deployed.
+  const token = await requireDriverAccessToken();
 
-  const requirements = await getDriverOnboardingRequirements(driverId);
-  if (!requirements.requiresDbs) {
-    throw new Error("DBS is not required for your role.");
+  if (!payload.skipDocumentCheck) {
+    const docs = await loadDriverDocuments(driverId).catch(() => []);
+    const hasDbsDoc = (docs ?? []).some(
+      (doc) =>
+        ["dbs", "dbs_safeguarding", "safeguarding"].includes(String(doc.documentType ?? doc.document_type ?? "")) &&
+        ON_FILE_DOC_STATUSES.has(String(doc.status ?? "")),
+    );
+    if (!hasDbsDoc) {
+      throw new Error("Please upload your DBS certificate.");
+    }
   }
 
-  const { data: existingDocs } = await supabase
-    .from("documents")
-    .select("id, document_type, status")
-    .eq("driver_id", driverId)
-    .in("document_type", ["dbs", "dbs_safeguarding", "safeguarding"]);
-
-  const hasDbsDoc = (existingDocs ?? []).some((doc) => ON_FILE_DOC_STATUSES.has(doc.status));
-  if (!hasDbsDoc && !payload.skipDocumentCheck) {
-    throw new Error("Please upload your DBS certificate.");
-  }
-
-  // drivers has no client-writable UPDATE policy — a driver can only change their
-  // own dbs_expiry_date through this SECURITY DEFINER RPC, not a direct update.
-  const { error } = await supabase.rpc("driver_backfill_dbs_expiry", {
-    p_expiry: dbsExpiry,
+  const result = await commandUpdateDriverOnboardingStep(token, {
+    stepKey: "dbs_safeguarding",
+    dbsExpiry,
   });
-  if (error) throw new Error(friendlyOnboardingError(error, "save"));
+  assertCommandOk(result, "Your DBS details could not be saved.");
 
-  await supabase
-    .from("documents")
-    .update({ expires_on: dbsExpiry })
-    .eq("driver_id", driverId)
-    .in("document_type", ["dbs", "dbs_safeguarding", "safeguarding"]);
+  // Soft-complete the onboarding step marker; compliance unlock is driven by dbs_expiry_date.
+  await finishOnboardingStep(driverId, "dbs_safeguarding", organisationId);
+}
 
-  await completeOnboardingStep(driverId, "dbs_safeguarding", organisationId, { requirements });
+function normalizeDateInput(value) {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  // Locale display like 23/10/2028 → 2028-10-23
+  const uk = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (uk) {
+    const day = uk[1].padStart(2, "0");
+    const month = uk[2].padStart(2, "0");
+    return `${uk[3]}-${month}-${day}`;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return raw;
 }
 
 export async function upsertEmergencyContact(driverId, organisationId, payload) {

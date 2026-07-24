@@ -12,6 +12,8 @@ import { formatSyncError } from "@/domain/sync/format-sync-error";
 import { isUntrustedServerId } from "@/domain/sync/is-trusted-server-id";
 import { useSyncStore } from "./outbox";
 
+let outboxRun: Promise<{ processed: number; failed: number }> | null = null;
+
 export interface BootstrapSyncResult {
   ok: boolean;
   error?: string;
@@ -46,8 +48,17 @@ export async function runBootstrapSync(
   }
 }
 
-/** Upload pending outbox mutations to API when online. */
-export async function processOutbox(): Promise<{ processed: number; failed: number }> {
+/** Upload pending outbox mutations to API when online. Serialized — only one run at a time. */
+export function processOutbox(): Promise<{ processed: number; failed: number }> {
+  if (!outboxRun) {
+    outboxRun = processOutboxInner().finally(() => {
+      outboxRun = null;
+    });
+  }
+  return outboxRun;
+}
+
+async function processOutboxInner(): Promise<{ processed: number; failed: number }> {
   const sync = useSyncStore.getState();
   if (!isMockApi() && !isOnline()) {
     sync.setStatus("offline");

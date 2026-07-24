@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
 import {
   applyExceptionOverlays,
@@ -21,6 +21,8 @@ import { ExceptionBulkBar } from './ExceptionBulkBar'
 import { ExceptionInvestigationPanel } from './ExceptionInvestigationPanel'
 import { ExceptionQueue } from './ExceptionQueue'
 import { ExceptionControlBar, ExceptionSummaryStrip } from './ExceptionWorkspacePanels'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function severityFromParam(value: string | null): ExceptionSmartFilter | null {
   if (value === 'critical' || value === 'high') return 'critical'
@@ -55,17 +57,17 @@ export function ExceptionsPage() {
   const [createTitle, setCreateTitle] = useState('')
 
   const { data: dashboard, isLoading: dashboardLoading, isFetching: dashboardFetching } = useQuery({
-    queryKey: ['dashboard'],
+    queryKey: tKey(['dashboard']),
     queryFn: () => api.getDashboard(),
   })
 
   const { data: defects = [], isLoading: defectsLoading, isFetching: defectsFetching } = useQuery({
-    queryKey: ['defects', 'open'],
+    queryKey: tKey(['defects', 'open']),
     queryFn: () => api.getDefects({ status: 'open' }),
   })
 
   const { data: incidents = [], isLoading: incidentsLoading, isFetching: incidentsFetching } = useQuery({
-    queryKey: ['incidents', 'open'],
+    queryKey: tKey(['incidents', 'open']),
     queryFn: () => api.getIncidents({ status: 'open' }),
   })
 
@@ -74,7 +76,7 @@ export function ExceptionsPage() {
     isLoading: driverExceptionsLoading,
     isFetching: driverExceptionsFetching,
   } = useQuery({
-    queryKey: ['driver-eligibility-exceptions'],
+    queryKey: tKey(['driver-eligibility-exceptions']),
     queryFn: () => api.getDriverEligibilityExceptions(),
   })
 
@@ -83,13 +85,13 @@ export function ExceptionsPage() {
     isLoading: vehicleExceptionsLoading,
     isFetching: vehicleExceptionsFetching,
   } = useQuery({
-    queryKey: ['vehicle-release-exceptions'],
+    queryKey: tKey(['vehicle-release-exceptions']),
     queryFn: () => api.getVehicleReleaseExceptions(),
   })
 
   const yardDepot = depotId === 'all' ? 'depot-wembley' : depotId
   const { data: yardHub, isLoading: yardLoading, isFetching: yardFetching } = useQuery({
-    queryKey: ['yard-hub', yardDepot],
+    queryKey: tKey(['yard-hub', yardDepot]),
     queryFn: () => api.getYardHub(yardDepot),
   })
 
@@ -248,12 +250,12 @@ export function ExceptionsPage() {
   }
 
   function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-    void queryClient.invalidateQueries({ queryKey: ['defects'] })
-    void queryClient.invalidateQueries({ queryKey: ['incidents'] })
-    void queryClient.invalidateQueries({ queryKey: ['driver-eligibility-exceptions'] })
-    void queryClient.invalidateQueries({ queryKey: ['vehicle-release-exceptions'] })
-    void queryClient.invalidateQueries({ queryKey: ['yard-hub'] })
+    void queryClient.invalidateQueries({ queryKey: tKey(['dashboard']) })
+    void queryClient.invalidateQueries({ queryKey: tKey(['defects']) })
+    void queryClient.invalidateQueries({ queryKey: tKey(['incidents']) })
+    void queryClient.invalidateQueries({ queryKey: tKey(['driver-eligibility-exceptions']) })
+    void queryClient.invalidateQueries({ queryKey: tKey(['vehicle-release-exceptions']) })
+    void queryClient.invalidateQueries({ queryKey: tKey(['yard-hub']) })
   }
 
   if (isLoading && withOverlays.length === 0) {

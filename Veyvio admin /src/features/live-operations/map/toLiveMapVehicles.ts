@@ -27,7 +27,9 @@ export function toLiveMapVehicles(
   runs: LiveRunRow[],
   options?: { staleOnly?: boolean },
 ): LiveVehicle[] {
-  const healthByDuty = new Map(runs.map((run) => [run.id, run.health]))
+  const healthByDuty = new Map(
+    runs.map((run) => [run.id, { health: run.health, stageLabel: run.stageLabel }]),
+  )
 
   return vehicles
     .filter((vehicle) => {
@@ -37,14 +39,16 @@ export function toLiveMapVehicles(
     })
     .map((vehicle) => {
       const registration = vehicle.vehicleRegistration ?? vehicle.reference
+      const runMeta = healthByDuty.get(vehicle.dutyId)
       return {
         id: vehicle.dutyId,
         registration,
         driverName: vehicle.driverName ?? undefined,
         runReference: vehicle.reference,
+        statusLabel: runMeta?.stageLabel ?? 'On duty',
         latitude: vehicle.lastLatitude!,
         longitude: vehicle.lastLongitude!,
-        status: healthToMapStatus(healthByDuty.get(vehicle.dutyId), vehicle.isStale),
+        status: healthToMapStatus(runMeta?.health, vehicle.isStale),
         lastUpdatedAt: vehicle.lastPositionAt ?? new Date().toISOString(),
       }
     })

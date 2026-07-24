@@ -44,6 +44,22 @@ export async function assertCompanyScopedDepot(id: string, companyId: string) {
   return assertCompanyScopedRow('depots', id, companyId)
 }
 
+export async function assertCompanyScopedRun(id: string, companyId: string) {
+  return assertCompanyScopedRow('runs', id, companyId)
+}
+
+export async function assertCompanyScopedTrip(id: string, companyId: string) {
+  return assertCompanyScopedRow('trips', id, companyId)
+}
+
+export async function assertCompanyScopedBooking(id: string, companyId: string) {
+  return assertCompanyScopedRow('bookings', id, companyId)
+}
+
+export async function assertCompanyScopedPassenger(id: string, companyId: string) {
+  return assertCompanyScopedRow('passengers', id, companyId)
+}
+
 export function requireModule(context: ModuleContext, moduleKey: string): void {
   const snapshot = context.entitlements
   if (!snapshot) return

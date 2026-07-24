@@ -5,7 +5,9 @@ import { linkedEntitiesSummary } from '@/lib/incidents/linking'
 import { canInvestigateIncident } from '@/lib/incidents/permissions'
 import type { IncidentDetailRecord } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function IncidentLinkedEntitiesPanel({ incident }: { incident: IncidentDetailRecord }) {
   const { user } = useAuth()
@@ -14,9 +16,9 @@ export function IncidentLinkedEntitiesPanel({ incident }: { incident: IncidentDe
   const canEdit = canInvestigateIncident(user?.permissions ?? [])
   const links = incident.linkedEntities
 
-  const { data: schools = [] } = useQuery({ queryKey: ['schools'], queryFn: () => api.getSchools(), enabled: canEdit })
-  const { data: contracts = [] } = useQuery({ queryKey: ['contracts'], queryFn: () => api.getContracts(), enabled: canEdit })
-  const { data: passengers = [] } = useQuery({ queryKey: ['passengers'], queryFn: () => api.getPassengers(), enabled: canEdit })
+  const { data: schools = [] } = useQuery({ queryKey: tKey(['schools']), queryFn: () => api.getSchools(), enabled: canEdit })
+  const { data: contracts = [] } = useQuery({ queryKey: tKey(['contracts']), queryFn: () => api.getContracts(), enabled: canEdit })
+  const { data: passengers = [] } = useQuery({ queryKey: tKey(['passengers']), queryFn: () => api.getPassengers(), enabled: canEdit })
 
   const [schoolId, setSchoolId] = useState(links.schoolId ?? '')
   const [contractId, setContractId] = useState(links.contractId ?? '')
@@ -40,8 +42,8 @@ export function IncidentLinkedEntitiesPanel({ incident }: { incident: IncidentDe
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
     },
   })
 

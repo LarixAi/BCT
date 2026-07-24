@@ -19,6 +19,8 @@ import { IntegrationsTab } from './IntegrationsTab'
 import { FinanceTab } from './FinanceTab'
 import { SettingsTab } from './SettingsTab'
 import { RecordTransactionPanel } from './RecordTransactionPanel'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function resolveTab(raw: string | null): FleetResourcesTab {
   if (raw && FLEET_RESOURCES_TABS.some((t) => t.id === raw)) return raw as FleetResourcesTab
@@ -33,7 +35,7 @@ export function FleetResourcesPage() {
   const [showRecord, setShowRecord] = useState(false)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['fleet-resources-hub'],
+    queryKey: tKey(['fleet-resources-hub']),
     queryFn: () =>
       resolveFleetResourcesHub({
         fetchLiveHub: () => api.getFleetResourcesHub(),

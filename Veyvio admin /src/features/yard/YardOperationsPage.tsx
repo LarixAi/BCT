@@ -8,6 +8,7 @@ import { YardLiveTab } from './YardLiveTab'
 import { YardMovementsTab } from './YardMovementsTab'
 import { YardTasksTab } from './YardTasksTab'
 import { YardMapTab } from './YardMapTab'
+import { YardSpatialMapTab } from './YardSpatialMapTab'
 import { YardHandoverTab } from './YardHandoverTab'
 import { YardExceptionsTab } from './YardExceptionsTab'
 import { YardDriverMessagesTab } from './YardDriverMessagesTab'
@@ -18,7 +19,9 @@ import { CreateYardTaskPanel } from './components/CreateYardTaskPanel'
 import { VehicleOperationsDrawer } from './components/VehicleOperationsDrawer'
 import { api } from '@/lib/api/client'
 import { safeYardHub } from '@/lib/api/safe-hubs'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function YardOperationsPage() {
   const { user } = useAuth()
@@ -40,7 +43,7 @@ export function YardOperationsPage() {
   const canTask = canCreateYardTask(permissions)
 
   const { data: hub, isLoading, error, isError } = useQuery({
-    queryKey: ['yard-hub', depotId || 'default'],
+    queryKey: tKey(['yard-hub', depotId || 'default']),
     queryFn: () => api.getYardHub(depotId || undefined),
   })
 
@@ -58,7 +61,7 @@ export function YardOperationsPage() {
   }
 
   function refresh() {
-    queryClient.invalidateQueries({ queryKey: ['yard-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['yard-hub']) })
   }
 
   if (isLoading) return <p className="text-sm text-muted">Loading yard operations…</p>
@@ -220,7 +223,7 @@ export function YardOperationsPage() {
 
       {tab === 'movements' && <YardMovementsTab hub={safeHub} />}
       {tab === 'tasks' && <YardTasksTab hub={safeHub} />}
-      {tab === 'map' && <YardMapTab hub={safeHub} />}
+      {tab === 'map' && (safeHub.yardMapEnabled || safeHub.yardLayout ? <YardSpatialMapTab hub={safeHub} /> : <YardMapTab hub={safeHub} />)}
       {tab === 'handover' && <YardHandoverTab hub={safeHub} />}
       {tab === 'exceptions' && (
         <div className="grid gap-4 xl:grid-cols-[1fr_360px]">

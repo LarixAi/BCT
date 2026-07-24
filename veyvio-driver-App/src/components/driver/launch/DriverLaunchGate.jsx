@@ -13,7 +13,9 @@ function shouldSkipLaunchInitially() {
 }
 
 export default function DriverLaunchGate({ children }) {
-  const showLaunch = shouldShowLaunchExperience(APP_DELIVERY);
+  // Install splash/welcome only on the native shell — not desktop browser / mobile emulation.
+  const showLaunch =
+    Capacitor.isNativePlatform() && shouldShowLaunchExperience(APP_DELIVERY);
   const [skipLaunch, setSkipLaunch] = useState(shouldSkipLaunchInitially);
   const [phase, setPhase] = useState(showLaunch && !skipLaunch ? "splash" : "done");
 

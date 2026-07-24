@@ -7,6 +7,8 @@ import { api } from '@/lib/api/client'
 import type { DriverProfile } from '@/lib/drivers/types'
 import { weekDates } from '@/lib/ops/runs-trips-schedule'
 import { useOperationalContext } from '@/lib/context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DriverScheduleTab({ driver }: { driver: DriverProfile }) {
   const { operationalDateIso } = useOperationalContext()
@@ -16,7 +18,7 @@ export function DriverScheduleTab({ driver }: { driver: DriverProfile }) {
   const to = days[6]!
 
   const { data: duties = [], isLoading } = useQuery({
-    queryKey: ['driver-schedule', driver.id, from, to],
+    queryKey: tKey(['driver-schedule', driver.id, from, to]),
     queryFn: () => api.getDuties({ from, to }),
   })
 

@@ -29,10 +29,10 @@ test.describe('Vehicle management', () => {
   test('can create a new vehicle via wizard identity step', async ({ page }) => {
     await page.goto('/vehicles/new')
     await expect(page.getByRole('heading', { name: 'Add vehicle' })).toBeVisible()
-    await expect(page.getByText('Step 1')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Step 1 Identity' })).toBeVisible()
     await page.getByLabel('Registration').fill('XX99 YYY')
     await page.getByLabel('Make').fill('Test')
-    await page.getByLabel('Model').fill('Van')
+    await page.getByRole('textbox', { name: 'Model *' }).fill('Van')
     await page.getByRole('button', { name: 'Create and continue' }).click()
     await expect(page).toHaveURL(/\/vehicles\/veh-.*\/onboarding\?step=ownership/)
     await expect(page.getByRole('heading', { name: /Onboard XX99 YYY/ })).toBeVisible()
@@ -42,7 +42,7 @@ test.describe('Vehicle management', () => {
   test('resume onboarding opens wizard for awaiting vehicle', async ({ page }) => {
     await page.goto('/vehicles/veh-6/onboarding')
     await expect(page.getByRole('heading', { name: /Onboard/ })).toBeVisible()
-    await expect(page.getByText('Step 1')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Step 1 Identity' })).toBeVisible()
     await expect(page.getByText('Identity')).toBeVisible()
   })
 
@@ -65,7 +65,7 @@ test.describe('Vehicle management', () => {
 
   test('filter cards narrow the directory', async ({ page }) => {
     await page.goto('/vehicles')
-    await page.getByRole('button', { name: /^VOR/ }).click()
+    await page.getByRole('button', { name: /VOR/ }).click()
     await expect(page.getByText('CD34 EFG')).toBeVisible()
     await expect(page.getByText('AB12 CDE')).not.toBeVisible()
   })
@@ -73,6 +73,6 @@ test.describe('Vehicle management', () => {
   test('exceptions include vehicle release blocks', async ({ page }) => {
     await page.goto('/exceptions')
     await expect(page.getByText(/Vehicle release blocked/i).first()).toBeVisible()
-    await expect(page.getByText('VYV-008')).toBeVisible()
+    await expect(page.getByText('Vehicle release blocked — CD34 EFG')).toBeVisible()
   })
 })

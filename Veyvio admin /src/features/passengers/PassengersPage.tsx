@@ -4,12 +4,14 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function PassengersPage() {
   const [search, setSearch] = useState('')
 
   const { data: passengers = [], isLoading } = useQuery({
-    queryKey: ['passengers'],
+    queryKey: tKey(['passengers']),
     queryFn: () => api.getPassengers(),
   })
 

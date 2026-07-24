@@ -427,7 +427,7 @@ function tokenTag(token) {
   return "len=" + token.length + " prefix=" + token.slice(0, 6);
 }
 
-async function applyCommandTokens(supabase, accessToken, refreshToken) {
+export async function applyCommandTokens(supabase, accessToken, refreshToken) {
   console.log("[BIOMETRIC_DEBUG] applyCommandTokens setSession refresh " + tokenTag(refreshToken));
   const { error } = await supabase.auth.setSession({
     access_token: accessToken,
@@ -435,6 +435,70 @@ async function applyCommandTokens(supabase, accessToken, refreshToken) {
   });
   if (error) return { ok: false, message: formatAuthError(error.message) };
   return { ok: true };
+}
+
+export async function completeDriverSignIn() {
+  const context = await getDriverSessionContext();
+  if (context?.routeTarget === "session_error") {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut().catch(() => undefined);
+    return {
+      ok: false,
+      message: context.linkError ?? "Could not finish signing in. Check your connection and try again.",
+    };
+  }
+  if (context?.routeTarget === "not_driver") {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut();
+    return {
+      ok: false,
+      message: context.linkError ?? "This account is not registered as a driver.",
+    };
+  }
+  if (!context?.driver) {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut().catch(() => undefined);
+    return {
+      ok: false,
+      message:
+        context?.linkError ??
+        "No Driver account is linked to this login. Ask your transport manager to invite this email in Veyvio Command.",
+    };
+  }
+  return { ok: true, context };
+}
+
+async function selectDriverCompany(accessToken, refreshToken, memberships) {
+  const driverMemberships = [];
+  for (const membership of memberships) {
+    const companyId = membership.companyId ?? membership.tenantId;
+    if (!companyId) continue;
+    const selected = await commandSelectTenant(accessToken, refreshToken, companyId);
+    if (!selected.ok || !selected.accessToken) continue;
+    const probe = await commandDriverSession(selected.accessToken);
+    if (probe.ok) {
+      driverMemberships.push({ membership, selected });
+    }
+  }
+  if (driverMemberships.length === 0) {
+    return { ok: false, message: "No Driver account is linked to any of your companies." };
+  }
+  if (driverMemberships.length === 1) {
+    const { selected } = driverMemberships[0];
+    return {
+      ok: true,
+      accessToken: selected.accessToken,
+      refreshToken: selected.refreshToken ?? refreshToken,
+      requiresCompanySelection: false,
+    };
+  }
+  return {
+    ok: true,
+    requiresCompanySelection: true,
+    memberships: driverMemberships.map((row) => row.membership),
+    accessToken,
+    refreshToken,
+  };
 }
 
 export async function signInDriver(email, password) {
@@ -465,65 +529,27 @@ export async function signInDriver(email, password) {
   }
 
   if (login.requiresTenantSelection && Array.isArray(login.memberships) && login.memberships.length) {
-    let linked = null;
-    for (const membership of login.memberships) {
-      const companyId = membership.companyId ?? membership.tenantId;
-      if (!companyId) continue;
-      const selected = await commandSelectTenant(accessToken, refreshToken, companyId);
-      if (!selected.ok || !selected.accessToken) continue;
-      const probe = await commandDriverSession(selected.accessToken);
-      if (probe.ok) {
-        linked = selected;
-        break;
-      }
-      // Keep tokens for next attempt
-      accessToken = selected.accessToken;
-      refreshToken = selected.refreshToken ?? refreshToken;
+    const companyPick = await selectDriverCompany(accessToken, refreshToken, login.memberships);
+    if (!companyPick.ok) {
+      return { ok: false, message: companyPick.message };
     }
-    if (!linked) {
-      // Fall back to first company so JWT has company context
-      const first = login.memberships[0];
-      const companyId = first.companyId ?? first.tenantId;
-      const selected = await commandSelectTenant(accessToken, refreshToken, companyId);
-      if (selected.ok && selected.accessToken) {
-        accessToken = selected.accessToken;
-        refreshToken = selected.refreshToken ?? refreshToken;
-      }
-    } else {
-      accessToken = linked.accessToken;
-      refreshToken = linked.refreshToken ?? refreshToken;
+    if (companyPick.requiresCompanySelection) {
+      return {
+        ok: false,
+        requiresCompanySelection: true,
+        memberships: companyPick.memberships,
+        accessToken: companyPick.accessToken,
+        refreshToken: companyPick.refreshToken,
+      };
     }
+    accessToken = companyPick.accessToken;
+    refreshToken = companyPick.refreshToken;
   }
 
   const applied = await applyCommandTokens(supabase, accessToken, refreshToken);
   if (!applied.ok) return applied;
 
-  const context = await getDriverSessionContext();
-  if (context?.routeTarget === "session_error") {
-    await supabase.auth.signOut().catch(() => undefined);
-    return {
-      ok: false,
-      message: context.linkError ?? "Could not finish signing in. Check your connection and try again.",
-    };
-  }
-  if (context?.routeTarget === "not_driver") {
-    await supabase.auth.signOut();
-    return {
-      ok: false,
-      message: context.linkError ?? "This account is not registered as a driver.",
-    };
-  }
-  if (!context?.driver) {
-    await supabase.auth.signOut().catch(() => undefined);
-    return {
-      ok: false,
-      message:
-        context?.linkError ??
-        "No Driver account is linked to this login. Ask your transport manager to invite this email in Veyvio Command.",
-    };
-  }
-
-  return { ok: true, context };
+  return completeDriverSignIn();
 }
 
 /**

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useSessionStore } from "@/platform/auth/session-store";
 import { useTenancyStore } from "@/platform/tenancy/context-store";
@@ -9,6 +9,7 @@ import {
   YardAuthPrimaryButton,
   YardAuthTextField,
   YardAuthTrustLine,
+  yardAuthLinkClass,
   YardMobileAuthLayout,
 } from "@/components/auth/YardMobileAuthLayout";
 import { yardCopy } from "@/copy/yard-messages";
@@ -21,6 +22,17 @@ export const Route = createFileRoute("/_public/sign-in")({
 function looksLikeEmail(value: string) {
   const trimmed = value.trim().toLowerCase();
   return trimmed.includes("@") && trimmed.includes(".") && /[a-zA-Z]/.test(trimmed);
+}
+
+function mapSignInError(err: unknown): string {
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    if (msg.includes("incorrect") || msg.includes("invalid_credentials")) {
+      return yardCopy.auth.invalidCredentialsHint;
+    }
+    return err.message;
+  }
+  return yardCopy.auth.signInFailed;
 }
 
 function SignInPage() {
@@ -73,7 +85,7 @@ function SignInPage() {
         navigate({ to: "/depot-select" });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : yardCopy.auth.signInFailed);
+      setError(mapSignInError(err));
     } finally {
       setLoading(false);
     }
@@ -130,6 +142,14 @@ function SignInPage() {
           >
             {loading ? yardCopy.auth.signingIn : yardCopy.buttons.signIn}
           </YardAuthPrimaryButton>
+
+          <Link
+            to="/forgot-password"
+            search={{ email: trimmedEmail }}
+            className={`${yardAuthLinkClass} text-sm`}
+          >
+            {yardCopy.auth.forgotPasswordLink}
+          </Link>
 
           <button
             type="button"

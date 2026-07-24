@@ -4,6 +4,8 @@ import { SectionCard } from '@/components/ui'
 import { MOVEMENT_REASONS } from '@/lib/yard/constants'
 import type { RecordYardMovementInput, YardHubData } from '@/lib/yard/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function RecordMovementPanel({
   hub,
@@ -22,8 +24,8 @@ export function RecordMovementPanel({
   const record = useMutation({
     mutationFn: (input: RecordYardMovementInput) => api.recordYardMovement(input, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['yard-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profile'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['yard-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile']) })
       onClose()
     },
   })

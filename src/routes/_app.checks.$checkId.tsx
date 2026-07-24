@@ -81,11 +81,43 @@ function CheckDetail() {
         </section>
       )}
 
+      {check.evidence && check.evidence.length > 0 ? (
+        <section className="bg-white border border-border rounded-xs">
+          <h2 className="p-3 border-b border-border text-xs font-extrabold uppercase tracking-widest font-display">
+            Evidence · {check.evidence.length}
+          </h2>
+          <div className="grid gap-4 p-3 sm:grid-cols-2">
+            {check.evidence.map(item => (
+              <figure key={item.id} className="space-y-2">
+                <figcaption className="text-[10px] font-bold uppercase tracking-widest text-muted">
+                  {item.label}
+                </figcaption>
+                <img
+                  src={item.imageDataUrl}
+                  alt={item.label}
+                  className={`w-full rounded-xs border border-border bg-white object-contain ${
+                    item.kind === "signature" ? "max-h-32" : "max-h-56"
+                  }`}
+                />
+                {item.capturedAt ? (
+                  <p className="text-[10px] text-muted">Captured {formatDt(item.capturedAt)}</p>
+                ) : null}
+              </figure>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="bg-white border border-border rounded-xs">
         <h2 className="p-3 border-b border-border text-xs font-extrabold uppercase tracking-widest font-display">
           Sections · {check.sections.length}
         </h2>
         <div className="divide-y divide-border">
+          {check.sections.length === 0 ? (
+            <p className="p-4 text-sm text-muted">
+              Section detail was not included in this sync. Open the check in Command or re-sync after the latest Yard update.
+            </p>
+          ) : null}
           {check.sections.map(section => {
             const def = getSectionDef(section.sectionId);
             const tone =

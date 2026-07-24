@@ -69,18 +69,41 @@ export async function checkBiometricAvailability(opts = {}) {
 }
 
 /**
+ * Give the native Activity a beat to finish layout before BiometricPrompt / AuthActivity.
+ * Without this, Samsung and some Android WebViews show the prompt behind the lock overlay
+ * or never surface it — the lock screen then feels frozen.
+ */
+export async function waitForNativeBiometricReady() {
+  if (!Capacitor.isNativePlatform()) return;
+  await new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+    } else {
+      resolve();
+    }
+  });
+  const delayMs = Capacitor.getPlatform() === "android" ? 450 : 150;
+  await new Promise((resolve) => {
+    globalThis.setTimeout(resolve, delayMs);
+  });
+}
+
+/**
  * Ask the OS to confirm the current device user.
  * Veyvio only receives success/failure — never biometric templates.
- * @param {{ useFallback?: boolean }} [opts]
+ * @param {{ useFallback?: boolean, timeoutMs?: number, skipReadyDelay?: boolean }} [opts]
  * @returns {Promise<boolean>}
  */
 export async function verifyDriverIdentity(opts = {}) {
   if (!Capacitor.isNativePlatform()) return false;
 
   const useFallback = opts.useFallback !== false;
-  const timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : 45000;
+  const timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : 15000;
 
   try {
+    if (!opts.skipReadyDelay) {
+      await waitForNativeBiometricReady();
+    }
     await Promise.race([
       NativeBiometric.verifyIdentity({
         reason: "Unlock Veyvio Driver",

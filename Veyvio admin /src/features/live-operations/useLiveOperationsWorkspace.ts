@@ -4,6 +4,8 @@ import { api } from '@/lib/api/client'
 import type { DutyRecord, LiveDispatchResponse, LiveDispatchVehicle } from '@/lib/api/types'
 import { buildLiveOperations } from '@/lib/live/build-live-operations'
 import type { LiveOperationsModel } from '@/lib/live/live-operations'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 /** When live dispatch has no rows, still list duties — without inventing map coordinates. */
 function dutiesAsLiveVehicles(duties: DutyRecord[], dateIso: string): LiveDispatchResponse {
@@ -64,39 +66,39 @@ export function useLiveOperationsWorkspace(opts: {
   const results = useQueries({
     queries: [
       {
-        queryKey: ['live-dispatch', opts.dateIso, opts.listTab],
+        queryKey: tKey(['live-dispatch', opts.dateIso, opts.listTab]),
         queryFn: () => api.getLiveDispatch(opts.dateIso, opts.listTab),
         refetchInterval,
         retry: 1,
       },
       {
-        queryKey: ['live-dispatch', opts.dateIso, 'completed'],
+        queryKey: tKey(['live-dispatch', opts.dateIso, 'completed']),
         queryFn: () => api.getLiveDispatch(opts.dateIso, 'completed'),
         refetchInterval: opts.paused ? false : 60_000,
         retry: 1,
       },
       {
-        queryKey: ['duties', 'today-live', opts.dateIso],
+        queryKey: tKey(['duties', 'today-live', opts.dateIso]),
         queryFn: () => api.getDuties({ date: opts.dateIso }),
         refetchInterval: opts.paused ? false : 45_000,
       },
       {
-        queryKey: ['duties', 'all-fallback'],
+        queryKey: tKey(['duties', 'all-fallback']),
         queryFn: () => api.getDuties(),
         refetchInterval: opts.paused ? false : 60_000,
       },
       {
-        queryKey: ['dashboard'],
+        queryKey: tKey(['dashboard']),
         queryFn: () => api.getDashboard(),
         refetchInterval: opts.paused ? false : 45_000,
       },
       {
-        queryKey: ['driver-eligibility-exceptions'],
+        queryKey: tKey(['driver-eligibility-exceptions']),
         queryFn: () => api.getDriverEligibilityExceptions(),
         refetchInterval: opts.paused ? false : 45_000,
       },
       {
-        queryKey: ['vehicle-release-exceptions'],
+        queryKey: tKey(['vehicle-release-exceptions']),
         queryFn: () => api.getVehicleReleaseExceptions(),
         refetchInterval: opts.paused ? false : 45_000,
       },

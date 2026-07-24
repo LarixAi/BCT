@@ -14,6 +14,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@veyvio/incidents': path.resolve(__dirname, '../shared/veyvio-incidents'),
       '@veyvio/ops': path.resolve(__dirname, '../shared/veyvio-ops'),
+      '@veyvio/yard': path.resolve(__dirname, '../shared/veyvio-yard'),
     },
   },
   // Vitest picks this up when run via `vitest` / `npm test`.

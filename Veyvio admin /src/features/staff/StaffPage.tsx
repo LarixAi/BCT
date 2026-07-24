@@ -12,7 +12,9 @@ import { StaffTrainingTab } from './StaffTrainingTab'
 import { StaffAvailabilityTab } from './StaffAvailabilityTab'
 import { StaffFormerTab } from './StaffFormerTab'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function StaffPage() {
   const { user } = useAuth()
@@ -22,7 +24,7 @@ export function StaffPage() {
   const [search, setSearch] = useState('')
 
   const { data: hub, isLoading, error, isError } = useQuery({
-    queryKey: ['staff-hub'],
+    queryKey: tKey(['staff-hub']),
     queryFn: () => api.getStaffHub(),
   })
 

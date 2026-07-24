@@ -4,7 +4,9 @@ import { SectionCard } from '@/components/ui'
 import type { DefectsHubData } from '@/lib/defects/types'
 import type { DefectSeverity } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const CATEGORIES = [
   'brakes', 'steering', 'suspension', 'tyres', 'lights', 'engine', 'bodywork',
@@ -17,7 +19,7 @@ export function ReportDefectPanel({ hub, onClose }: { hub: DefectsHubData; onClo
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: vehicleProfiles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
@@ -60,7 +62,7 @@ export function ReportDefectPanel({ hub, onClose }: { hub: DefectsHubData; onClo
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['defects-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['defects-hub']) })
       onClose()
     },
   })

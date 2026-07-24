@@ -62,7 +62,7 @@
 :root {
   --radius: 0.375rem;
   /* Aligned with Admin Command light theme (Veyvio admin /src/index.css) */
-  --background: #f2f5f9;
+  --background: #f2f4f7;
   --foreground: #101828;
   --surface: #ffffff;
   --ink: #101828;

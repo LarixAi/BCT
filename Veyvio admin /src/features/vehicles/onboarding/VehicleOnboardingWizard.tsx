@@ -5,7 +5,7 @@ import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import {
   FUEL_TYPE_LABELS,
   OWNERSHIP_TYPE_LABELS,
@@ -29,6 +29,8 @@ import type {
 } from '@/lib/vehicles/types'
 import { VehicleBackLink } from '../components/VehicleProfileHeader'
 import { VehicleStatusStrip } from '../components/VehicleStatusStrip'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const OWNERSHIP_DOCS: Record<OwnershipType, string[]> = {
   owned: ['Proof of ownership / V5C'],
@@ -57,13 +59,13 @@ export function VehicleOnboardingWizard() {
   const [ackWarnings, setAckWarnings] = useState(false)
 
   const { data: vehicle, isLoading } = useQuery({
-    queryKey: ['vehicle-profile', id],
+    queryKey: tKey(['vehicle-profile', id]),
     queryFn: () => api.getVehicleProfile(id!),
     enabled: Boolean(id),
   })
 
   const { data: depots = [] } = useQuery({
-    queryKey: ['depots'],
+    queryKey: tKey(['depots']),
     queryFn: () => api.getDepots(),
   })
 
@@ -205,8 +207,8 @@ export function VehicleOnboardingWizard() {
       return api.createVehicle(input, actorName)
     },
     onSuccess: (created) => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-directory-summary'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-directory-summary']) })
       goStep('ownership', created.id)
       setError('')
     },
@@ -256,7 +258,7 @@ export function VehicleOnboardingWizard() {
     },
     onSuccess: ({ profile, next }) => {
       queryClient.setQueryData(['vehicle-profile', id], profile)
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
       goStep(next, profile.id)
       setError('')
     },
@@ -267,8 +269,8 @@ export function VehicleOnboardingWizard() {
     mutationFn: (mode: 'submit_for_approval' | 'activate' | 'keep_blocked') =>
       api.activateVehicleFromWizard(id!, { mode, acknowledgeWarnings: ackWarnings }, actorName),
     onSuccess: (profile) => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-directory-summary'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-directory-summary']) })
       navigate(`/vehicles/${profile.id}`)
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Activation blocked'),

@@ -6,19 +6,21 @@ import { api } from '@/lib/api/client'
 import { DEPOT_STATUS_LABELS } from '@/lib/depots/constants'
 import type { DepotOpsSnapshot, DepotProfile } from '@/lib/depots/types'
 import { useOperationalContext } from '@/lib/context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DepotsPage() {
   const { operationalDateIso } = useOperationalContext()
   const [search, setSearch] = useState('')
 
   const { data: profiles = [], isLoading } = useQuery({
-    queryKey: ['depot-profiles'],
+    queryKey: tKey(['depot-profiles']),
     queryFn: () => api.getDepotProfiles(),
   })
 
   const snapshotQueries = useQueries({
     queries: profiles.map((p) => ({
-      queryKey: ['depot-ops-snapshot', p.id, operationalDateIso],
+      queryKey: tKey(['depot-ops-snapshot', p.id, operationalDateIso]),
       queryFn: () => api.getDepotOpsSnapshot(p.id, operationalDateIso),
       enabled: profiles.length > 0,
     })),

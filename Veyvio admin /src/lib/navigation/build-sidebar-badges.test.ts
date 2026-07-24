@@ -111,11 +111,9 @@ describe('buildSidebarBadges', () => {
     expect(badges['/notifications']).toEqual({ count: 3, tone: 'success' })
     expect(badges['/bookings']).toEqual({ count: 1, tone: 'warning' })
     expect(badges['/dispatch']).toEqual({ count: 1, tone: 'warning' })
-    expect(badges['/runs']).toEqual({ count: 1, tone: 'info' })
-    expect(badges.Trips?.count).toBe(3)
-    expect(badges['/trips?status=active']?.count).toBe(1)
-    expect(badges['/trips?status=completed']?.count).toBe(1)
-    expect(badges['/trips?status=cancelled']?.count).toBe(1)
+    expect(badges['/runs']).toBeUndefined()
+    expect(badges.Trips).toBeUndefined()
+    expect(badges['/trips']).toBeUndefined()
     expect(badges['/drivers']).toEqual({ count: 3, tone: 'warning' })
     expect(badges['/vehicles']).toEqual({ count: 5, tone: 'warning' })
     expect(badges['/depots']).toEqual({ count: 2 })
@@ -128,26 +126,17 @@ describe('buildSidebarBadges', () => {
     const items = applySidebarBadges(
       [
         { label: 'Exceptions', href: '/exceptions', icon: () => null },
-        {
-          label: 'Trips',
-          icon: () => null,
-          children: [
-            { label: 'Active', href: '/trips?status=active' },
-            { label: 'All trips', href: '/trips' },
-          ],
-        },
+        { label: 'Jobs', href: '/jobs', icon: () => null },
       ],
       {
         '/exceptions': { count: 4, tone: 'danger' },
-        Trips: { count: 12 },
-        '/trips?status=active': { count: 7, tone: 'info' },
+        '/jobs': { count: 3, tone: 'warning' },
       },
     )
 
     expect(items[0].badge).toBe(4)
     expect(items[0].badgeTone).toBe('danger')
-    expect(items[1].badge).toBe(12)
-    expect(items[1].children?.[0].badge).toBe(7)
-    expect(items[1].children?.[1].badge).toBeUndefined()
+    expect(items[1].badge).toBe(3)
+    expect(items[1].badgeTone).toBe('warning')
   })
 })

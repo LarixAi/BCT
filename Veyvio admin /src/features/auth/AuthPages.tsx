@@ -1,6 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
 import { AuthLayout, authInputClass, authLinkClass, authPrimaryButtonClass } from '@/components/brand/AuthLayout'
 import { api, isMockApi } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
@@ -179,11 +178,66 @@ export function LoginPage() {
 
 export function SelectCompanyPage() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const { selectTenant } = useAuth()
-  const memberships = api.getPendingMemberships()
+  const { selectTenant, switching } = useAuth()
+  const [memberships, setMemberships] = useState(() => api.getPendingMemberships())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(!isMockApi)
+  const [sessionReady, setSessionReady] = useState(isMockApi)
+
+  useEffect(() => {
+    if (isMockApi) {
+      const pending = api.getPendingMemberships()
+      if (pending.length) setMemberships(pending)
+      setSessionReady(true)
+      setRefreshing(false)
+      return
+    }
+
+    if (!api.hasAuthSession()) {
+      setRefreshing(false)
+      setSessionReady(false)
+      if (!api.getPendingMemberships().length) {
+        navigate('/login', { replace: true })
+      } else {
+        setError('Your session ended. Sign in again to select a company.')
+      }
+      return
+    }
+
+    async function refreshMemberships() {
+      try {
+        const fresh = await api.listMemberships()
+        if (fresh.length) {
+          api.setPendingMemberships(fresh)
+          setMemberships(fresh)
+        }
+        setSessionReady(true)
+        setError('')
+      } catch (err) {
+        const message = err instanceof Error ? err.message.toLowerCase() : ''
+        if (message.includes('session') && (message.includes('expired') || message.includes('invalid'))) {
+          setSessionReady(false)
+          navigate('/login', { replace: true })
+          return
+        }
+        setSessionReady(true)
+        setError(err instanceof Error ? err.message : 'Could not load companies')
+      } finally {
+        setRefreshing(false)
+      }
+    }
+
+    void refreshMemberships()
+  }, [navigate])
+
+  if (refreshing) {
+    return (
+      <AuthLayout title="Loading companies" subtitle="Checking which operators your account can access.">
+        <p className="text-sm text-muted">One moment…</p>
+      </AuthLayout>
+    )
+  }
 
   if (memberships.length === 0) {
     return (
@@ -196,13 +250,22 @@ export function SelectCompanyPage() {
   }
 
   async function handleSelect(tenantId: string) {
+    if (!sessionReady) {
+      navigate('/login', { replace: true })
+      return
+    }
+
     setError('')
     setLoading(tenantId)
     try {
       await selectTenant(tenantId)
-      queryClient.clear()
       navigate('/')
     } catch (err) {
+      const message = err instanceof Error ? err.message.toLowerCase() : ''
+      if (message.includes('session') && (message.includes('expired') || message.includes('invalid'))) {
+        navigate('/login', { replace: true })
+        return
+      }
       setError(err instanceof Error ? err.message : 'Could not select company')
     } finally {
       setLoading(null)
@@ -210,15 +273,28 @@ export function SelectCompanyPage() {
   }
 
   return (
-    <AuthLayout title="Select company" subtitle="Choose which transport company to manage">
-      {error && <p className="mb-4 rounded-lg bg-critical/10 px-3 py-2 text-sm text-critical">{error}</p>}
+    <AuthLayout
+      title="Select company"
+      subtitle="Only companies you belong to are listed here — not every operator on Veyvio."
+    >
+      {switching ? (
+        <p className="mb-4 rounded-lg bg-command-50 px-3 py-2 text-sm text-command-800">
+          Switching securely to your selected company…
+        </p>
+      ) : null}
+      {error ? <p className="mb-4 rounded-lg bg-critical/10 px-3 py-2 text-sm text-critical">{error}</p> : null}
+      {!sessionReady ? (
+        <Link to="/login" className={`mb-4 inline-flex items-center justify-center ${authPrimaryButtonClass}`}>
+          Back to sign in
+        </Link>
+      ) : null}
       <ul className="space-y-2">
         {memberships.map((m) => (
           <li key={m.tenantId}>
             <button
               type="button"
-              onClick={() => handleSelect(m.tenantId)}
-              disabled={loading != null}
+              onClick={() => void handleSelect(m.tenantId)}
+              disabled={loading != null || !sessionReady}
               className="flex w-full items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3 text-left transition hover:border-command-500 hover:bg-command-50 disabled:opacity-60"
             >
               <div>

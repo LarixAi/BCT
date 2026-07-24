@@ -2,10 +2,12 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function FleetIntelligencePage() {
   const { data: summary, isLoading } = useQuery({
-    queryKey: ['fleet-intelligence'],
+    queryKey: tKey(['fleet-intelligence']),
     queryFn: () => api.getFleetIntelligence(),
   })
 

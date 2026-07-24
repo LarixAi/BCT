@@ -7,7 +7,13 @@ import { PermissionGate } from "@/components/yard/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatTaskDue } from "@/domain/tasks/task-stats";
-import { canAcceptTask, canAssignTask, canCompleteTask } from "@/domain/tasks/task-workflow";
+import {
+  canAcceptTask,
+  canAssignTask,
+  canCompleteTask,
+  getUserDisplayName,
+} from "@/domain/tasks/task-workflow";
+import { TaskProgressSteps } from "@/features/tasks/TaskProgressSteps";
 import { ArrowLeft, CheckCircle2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { yardCopy } from "@/copy/yard-messages";
@@ -33,7 +39,9 @@ function TaskDetailPage() {
   const acceptTask = useYard(s => s.acceptTask);
   const completeTask = useYard(s => s.completeTask);
   const assignTask = useYard(s => s.assignTask);
-  const userId = useSessionStore(s => s.user?.id);
+  const user = useSessionStore(s => s.user);
+  const userId = user?.id;
+  const userName = getUserDisplayName(user);
   const [note, setNote] = useState("");
 
   if (!task) throw notFound();
@@ -41,8 +49,8 @@ function TaskDetailPage() {
   const vehicle = task.vehicleId ? vehicles.find(v => v.id === task.vehicleId) : undefined;
   const trip = task.tripId ? trips.find(t => t.id === task.tripId) : undefined;
 
-  const showAccept = canAcceptTask(task, userId);
-  const showComplete = canCompleteTask(task, userId);
+  const showAccept = canAcceptTask(task, userId, userName);
+  const showComplete = canCompleteTask(task, userId, userName);
   const showAssign = canAssignTask(task);
 
   function handleComplete() {
@@ -72,6 +80,11 @@ function TaskDetailPage() {
           <span className="text-primary">{task.status.replace("_", " ")}</span>
         </div>
       </header>
+
+      <section className="bg-white border border-border rounded-xs p-4">
+        <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted mb-3">Progress</h2>
+        <TaskProgressSteps status={task.status} assigneeName={task.assigneeName} />
+      </section>
 
       {(vehicle || trip) && (
         <section className="bg-white border border-border rounded-xs p-4 space-y-2">

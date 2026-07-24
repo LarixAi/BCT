@@ -2,10 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function ContractsPage() {
   const { data: contracts = [], isLoading } = useQuery({
-    queryKey: ['contracts'],
+    queryKey: tKey(['contracts']),
     queryFn: () => api.getContracts(),
   })
 

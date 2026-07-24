@@ -4,13 +4,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill, formatDate } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
 import { DEPOT_STATUS_LABELS, DEPOT_WORKSPACE_TABS, type DepotWorkspaceTab } from '@/lib/depots/constants'
 import type { UpdateDepotInput } from '@/lib/depots/types'
 import { DEPOT_ZONES } from '@/lib/yard/constants'
 import { VEHICLE_CATEGORY_LABELS } from '@/lib/vehicles/constants'
 import { DepotBackLink, DepotProfileHeader } from './components/DepotProfileHeader'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const TAB_QUERY: Record<string, DepotWorkspaceTab> = {
   overview: 'Overview',
@@ -51,24 +53,24 @@ export function DepotDetailPage() {
   }
 
   const { data: depot, isLoading, isError, error } = useQuery({
-    queryKey: ['depot-profile', id],
+    queryKey: tKey(['depot-profile', id]),
     queryFn: () => api.getDepotProfile(id!),
     enabled: Boolean(id),
   })
 
   const { data: snapshot } = useQuery({
-    queryKey: ['depot-ops-snapshot', id, operationalDateIso],
+    queryKey: tKey(['depot-ops-snapshot', id, operationalDateIso]),
     queryFn: () => api.getDepotOpsSnapshot(id!, operationalDateIso),
     enabled: Boolean(id),
   })
 
   const { data: vehicles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
   const { data: drivers = [] } = useQuery({
-    queryKey: ['driver-profiles'],
+    queryKey: tKey(['driver-profiles']),
     queryFn: () => api.getDriverProfiles(),
   })
 
@@ -383,9 +385,9 @@ export function DepotDetailPage() {
           depot={depot}
           actorName={actorName}
           onSaved={() => {
-            queryClient.invalidateQueries({ queryKey: ['depot-profile', id] })
-            queryClient.invalidateQueries({ queryKey: ['depot-profiles'] })
-            queryClient.invalidateQueries({ queryKey: ['depots'] })
+            queryClient.invalidateQueries({ queryKey: tKey(['depot-profile', id]) })
+            queryClient.invalidateQueries({ queryKey: tKey(['depot-profiles']) })
+            queryClient.invalidateQueries({ queryKey: tKey(['depots']) })
           }}
         />
       )}

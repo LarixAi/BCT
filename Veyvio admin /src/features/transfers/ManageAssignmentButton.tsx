@@ -5,6 +5,8 @@ import { api } from '@/lib/api/client'
 import type { DutyRecord } from '@/lib/api/types'
 import { synthesizeOperationalTripFromDuty } from '@/lib/transfers/operational-trip'
 import type { OperationalTrip } from '@/lib/transfers/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function ManageAssignmentButton({
   dutyId,
@@ -17,7 +19,7 @@ export function ManageAssignmentButton({
 }) {
   const [open, setOpen] = useState(false)
   const { data: apiTrip, isLoading } = useQuery({
-    queryKey: ['operational-trip-by-duty', dutyId],
+    queryKey: tKey(['operational-trip-by-duty', dutyId]),
     queryFn: () => api.getOperationalTripByDuty(dutyId),
     retry: false,
   })

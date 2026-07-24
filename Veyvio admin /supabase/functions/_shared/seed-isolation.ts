@@ -35,20 +35,44 @@ const ORGS: IsolationOrg[] = [
 ]
 
 async function ensureAuthUser(email: string, firstName: string, lastName: string) {
-  const { data: listed } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
-  const existing = listed?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())
-  if (existing) {
-    await admin.auth.admin.updateUserById(existing.id, { password: ISOLATION_PASSWORD })
-    return existing.id
+  const normalised = email.toLowerCase()
+
+  const { data: profile } = await admin.from('users').select('id').ilike('email', normalised).maybeSingle()
+  if (profile?.id) {
+    await admin.auth.admin.updateUserById(String(profile.id), {
+      password: ISOLATION_PASSWORD,
+      email_confirm: true,
+    })
+    return String(profile.id)
   }
+
+  for (let page = 1; page <= 10; page += 1) {
+    const { data: listed } = await admin.auth.admin.listUsers({ page, perPage: 200 })
+    const existing = listed?.users?.find((u) => u.email?.toLowerCase() === normalised)
+    if (existing) {
+      await admin.auth.admin.updateUserById(existing.id, { password: ISOLATION_PASSWORD })
+      return existing.id
+    }
+    if (!listed?.users?.length || listed.users.length < 200) break
+  }
+
   const { data: created, error } = await admin.auth.admin.createUser({
     email,
     password: ISOLATION_PASSWORD,
     email_confirm: true,
     user_metadata: { first_name: firstName, last_name: lastName },
   })
-  if (error || !created.user) throw new Error(error?.message ?? `Could not create ${email}`)
-  return created.user.id
+  if (!error && created.user) return created.user.id
+
+  if (error?.message?.toLowerCase().includes('already been registered')) {
+    const { data: retryProfile } = await admin.from('users').select('id').ilike('email', normalised).maybeSingle()
+    if (retryProfile?.id) {
+      await admin.auth.admin.updateUserById(String(retryProfile.id), { password: ISOLATION_PASSWORD })
+      return String(retryProfile.id)
+    }
+  }
+
+  throw new Error(error?.message ?? `Could not create ${email}`)
 }
 
 async function seedOne(org: IsolationOrg) {

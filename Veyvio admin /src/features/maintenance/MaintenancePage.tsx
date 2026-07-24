@@ -19,8 +19,10 @@ import { MaintenanceTechnicianTab } from './MaintenanceTechnicianTab'
 import { CreateWorkOrderPanel, type CreateWorkOrderPrefill } from './CreateWorkOrderPanel'
 import { api } from '@/lib/api/client'
 import { safeMaintenanceHub } from '@/lib/api/safe-hubs'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function resolveTab(raw: string | null): MaintenanceTab {
   if (!raw) return 'overview'
@@ -53,17 +55,17 @@ export function MaintenancePage() {
   }, [vehicleFilter])
 
   const { data: hub, isLoading, error, isError } = useQuery({
-    queryKey: ['maintenance-hub'],
+    queryKey: tKey(['maintenance-hub']),
     queryFn: () => api.getMaintenanceHub(),
   })
 
   const { data: vehicles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
   const { data: duties = [] } = useQuery({
-    queryKey: ['duties', operationalDateIso],
+    queryKey: tKey(['duties', operationalDateIso]),
     queryFn: () => api.getDuties({ date: operationalDateIso }),
   })
 

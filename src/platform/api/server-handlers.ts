@@ -17,5 +17,13 @@ export function handleBootstrapRequest(request: Request): Response {
 
 export async function handleMutationsRequest(request: Request): Promise<Response> {
   const mutation = await request.json() as OutboxMutation;
+  const supported = [
+    "inspection.start", "inspection.media", "inspection.complete", "inspection.approve",
+    "damage.report", "damage.review", "repair.request", "vehicle.mark_vor",
+    "vehicle.move", "check.complete", "task.update",
+  ];
+  if (supported.includes(mutation.type)) {
+    return Response.json({ ok: true, serverId: `srv_${mutation.localOperationId}` });
+  }
   return Response.json({ serverId: `srv_${mutation.localOperationId}` });
 }

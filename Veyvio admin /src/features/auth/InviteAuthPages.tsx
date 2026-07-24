@@ -5,7 +5,9 @@ import { AuthLayout, authInputClass, authLinkClass, authPrimaryButtonClass } fro
 import { SectionCard } from '@/components/ui'
 import { AuthenticatorQr } from '@/features/auth/AuthenticatorQr'
 import { api, isMockApi } from '@/lib/api'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const COMMAND_ROLES = [
   { value: 'dispatcher', label: 'Dispatcher' },
@@ -32,12 +34,12 @@ export function InviteUsersPage() {
   const [error, setError] = useState('')
 
   const { data: invitations = [], isLoading } = useQuery({
-    queryKey: ['invitations'],
+    queryKey: tKey(['invitations']),
     queryFn: () => api.listInvitations(),
   })
 
   const { data: depots = [] } = useQuery({
-    queryKey: ['depots'],
+    queryKey: tKey(['depots']),
     queryFn: () => api.getDepots(),
     enabled: appType === 'YARD',
   })
@@ -56,7 +58,7 @@ export function InviteUsersPage() {
       setEmail('')
       setDepotIds([])
       setDevToken(result.devInvitationToken ?? null)
-      queryClient.invalidateQueries({ queryKey: ['invitations'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['invitations']) })
     },
     onError: (err: Error) => setError(err.message),
   })
@@ -234,7 +236,7 @@ export function AcceptInvitationPage() {
   const [done, setDone] = useState<{ email: string; appType?: string } | null>(null)
 
   const preview = useQuery({
-    queryKey: ['invitation-preview', token],
+    queryKey: tKey(['invitation-preview', token]),
     queryFn: () => api.previewInvitation(token),
     enabled: Boolean(token),
     retry: false,

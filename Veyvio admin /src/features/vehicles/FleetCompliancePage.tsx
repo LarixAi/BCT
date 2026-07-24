@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { expiryTone, formatDate } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function FleetCompliancePage() {
   const { data: vehicles = [], isLoading } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 

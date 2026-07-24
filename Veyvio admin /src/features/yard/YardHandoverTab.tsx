@@ -3,7 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import type { YardHubData } from '@/lib/yard/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Draft',
@@ -23,7 +25,7 @@ export function YardHandoverTab({ hub }: { hub: YardHubData }) {
 
   const submit = useMutation({
     mutationFn: () => api.submitYardHandover(hub.depotId, notes, actorName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['yard-hub', hub.depotId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['yard-hub', hub.depotId]) }),
   })
 
   const accept = useMutation({
@@ -33,7 +35,7 @@ export function YardHandoverTab({ hub }: { hub: YardHubData }) {
         incomingSupervisor: incomingName || actorName,
         notes,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['yard-hub', hub.depotId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['yard-hub', hub.depotId]) }),
   })
 
   if (!handover) {

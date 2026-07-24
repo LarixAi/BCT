@@ -3,8 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import type { ReviewVehicleReportInput } from '@/lib/vehicle-reports/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const ACTIONS: Array<{ action: ReviewVehicleReportInput['action']; label: string }> = [
   { action: 'accept', label: 'Accept report' },
@@ -24,7 +26,7 @@ export function VehicleReportDetailPage() {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: report, isLoading, error } = useQuery({
-    queryKey: ['vehicle-report', id],
+    queryKey: tKey(['vehicle-report', id]),
     queryFn: () => api.getVehicleReport(id!),
     enabled: !!id,
   })
@@ -32,9 +34,9 @@ export function VehicleReportDetailPage() {
   const review = useMutation({
     mutationFn: (input: ReviewVehicleReportInput) => api.reviewVehicleReport(id!, input, actorName),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-report', id] })
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reports-hub'] })
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-profile', report?.vehicleId] })
+      void queryClient.invalidateQueries({ queryKey: tKey(['vehicle-report', id]) })
+      void queryClient.invalidateQueries({ queryKey: tKey(['vehicle-reports-hub']) })
+      void queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', report?.vehicleId]) })
     },
   })
 

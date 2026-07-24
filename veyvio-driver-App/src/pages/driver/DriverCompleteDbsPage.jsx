@@ -43,6 +43,7 @@ export default function DriverCompleteDbsPage({ driver, organisationId, onComple
       const doc = await uploadDriverDocumentRaw(driver, {
         file,
         documentType: "dbs",
+        expiryDate: dbsExpiry.trim() || undefined,
       });
       setUploadDoc(doc);
       setUploadStatus("success");
@@ -76,6 +77,7 @@ export default function DriverCompleteDbsPage({ driver, organisationId, onComple
       await onComplete?.();
       navigate("/", { replace: true });
     } catch (err) {
+      console.error("[complete-dbs] save failed", err);
       setError(err instanceof Error ? err.message : "Could not save DBS details");
     } finally {
       setPending(false);

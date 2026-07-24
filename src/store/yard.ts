@@ -40,10 +40,12 @@ import {
   applyAutoTaskCompletions,
   applyReadyTripTaskCompletions,
 } from "@/domain/tasks/task-completion";
-import { canAcceptTask, canAssignTask, canCompleteTask } from "@/domain/tasks/task-workflow";
+import { canAcceptTask, canAssignTask, canCompleteTask, getUserDisplayName } from "@/domain/tasks/task-workflow";
 import { computeReadiness } from "@/lib/readiness";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
 import { getTenancySnapshot } from "@/platform/tenancy/context-store";
+import { hydrateYardFromApi } from "@/platform/yard/hydrate-yard-store";
+import type { YardRole } from "@/types/permissions";
 import { getActorName } from "@/platform/yard/get-actor-name";
 import { enqueueYardMutation } from "@/platform/yard/enqueue-yard-mutation";
 import { publishVehicleVorMarked } from "@/platform/ops/publish-vor-marked";
@@ -260,6 +262,16 @@ function enqueueCompletedTasks(tasks: YardTask[]) {
       auto: true,
     });
   }
+}
+
+function refreshHubTasksAfterMutation() {
+  const tenancy = getTenancySnapshot();
+  if (!tenancy.companyId || !tenancy.depotId) return;
+  void hydrateYardFromApi({
+    companyId: tenancy.companyId,
+    depotId: tenancy.depotId,
+    role: (tenancy.role as YardRole) ?? "yard_manager",
+  });
 }
 
 function equipmentMeta(vehicleId: string, actor: string) {
@@ -1009,8 +1021,9 @@ export const useYard = create<State>((set, get) => ({
     const st = get();
     const user = getSessionSnapshot().user;
     if (!user) return;
+    const userName = getUserDisplayName(user);
     const task = st.tasks.find(t => t.id === taskId);
-    if (!task || !canAcceptTask(task, user.id)) return;
+    if (!task || !canAcceptTask(task, user.id, userName)) return;
     const actor = getActorName();
     const updated: YardTask = {
       ...task,
@@ -1020,15 +1033,22 @@ export const useYard = create<State>((set, get) => ({
       acceptedAt: nowIso(),
     };
     set({ tasks: st.tasks.map(t => t.id === taskId ? updated : t) });
-    void enqueueYardMutation("task.update", { taskId, action: "accept", assigneeId: user.id });
+    void enqueueYardMutation("task.update", {
+      taskId,
+      action: "accept",
+      assigneeId: user.id,
+      assigneeName: actor,
+    });
+    void refreshHubTasksAfterMutation();
   },
 
   completeTask: (taskId, note) => {
     const st = get();
     const user = getSessionSnapshot().user;
     if (!user) return;
+    const userName = getUserDisplayName(user);
     const task = st.tasks.find(t => t.id === taskId);
-    if (!task || !canCompleteTask(task, user.id)) return;
+    if (!task || !canCompleteTask(task, user.id, userName)) return;
     const actor = getActorName();
     const updated: YardTask = {
       ...task,
@@ -1039,6 +1059,7 @@ export const useYard = create<State>((set, get) => ({
     };
     set({ tasks: st.tasks.map(t => t.id === taskId ? updated : t) });
     void enqueueYardMutation("task.update", { taskId, action: "complete", note });
+    void refreshHubTasksAfterMutation();
   },
 
   assignTask: (taskId, assigneeId, assigneeName) => {
@@ -1069,7 +1090,14 @@ export const useYard = create<State>((set, get) => ({
       inspections: [inspection, ...st.inspections],
       conditionProfiles: profiles,
     });
-    void enqueueYardMutation("inspection.start", { inspectionId: inspection.id, vehicleId, inspectionType });
+    void enqueueYardMutation("inspection.start", {
+      inspectionId: inspection.id,
+      vehicleId,
+      inspectionType,
+      startedAt: inspection.startedAt,
+      mileage: inspection.mileage,
+      location: inspection.location,
+    });
     return inspection;
   },
 
@@ -1077,7 +1105,11 @@ export const useYard = create<State>((set, get) => ({
     const st = get();
     const item: InspectionMedia = { ...media, id: uid("med"), inspectionId };
     set({ inspectionMedia: [item, ...st.inspectionMedia] });
-    void enqueueYardMutation("inspection.media", { inspectionId, mediaId: item.id });
+    void enqueueYardMutation("inspection.media", {
+      inspectionId,
+      mediaId: item.id,
+      media: item,
+    });
     return item;
   },
 

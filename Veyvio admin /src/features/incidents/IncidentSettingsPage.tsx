@@ -5,9 +5,11 @@ import { formatIncidentAutomationActions } from '@/lib/incidents/automation'
 import { canManageIncidentSettings } from '@/lib/incidents/permissions'
 import type { IncidentSettings } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { formatRoleList } from '@/lib/format'
 import { IncidentIntegrationsPanel } from './components/IncidentIntegrationsPanel'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function IncidentSettingsPage() {
   const { user } = useAuth()
@@ -15,18 +17,18 @@ export function IncidentSettingsPage() {
   const canManage = canManageIncidentSettings(user?.permissions ?? [])
 
   const { data: settings, isLoading } = useQuery({
-    queryKey: ['incident-settings'],
+    queryKey: tKey(['incident-settings']),
     queryFn: () => api.getIncidentSettings(),
   })
 
   const { data: hub } = useQuery({
-    queryKey: ['incidents-hub'],
+    queryKey: tKey(['incidents-hub']),
     queryFn: () => api.getIncidentsHub(),
   })
 
   const save = useMutation({
     mutationFn: (patch: Partial<IncidentSettings>) => api.updateIncidentSettings(patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['incident-settings'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['incident-settings']) }),
   })
 
   if (isLoading || !settings) {

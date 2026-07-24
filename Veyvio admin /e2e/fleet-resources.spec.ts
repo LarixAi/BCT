@@ -68,12 +68,12 @@ test.describe('Fleet Resources', () => {
   test('vehicle overview shows fuel & costs panel', async ({ page }) => {
     await page.goto('/vehicles/veh-1')
     await expect(page.getByRole('heading', { name: 'Fuel & costs' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Open fleet resources →' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Open fuel ledger →' })).toBeVisible()
   })
 
   test('vehicle wheels tab links to tyre register', async ({ page }) => {
     await page.goto('/vehicles/veh-1?tab=wheels')
     await expect(page.getByText('Fleet Resources tyre assets')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Open fleet resources tyres →' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Open tyre register' }).first()).toBeVisible()
   })
 })

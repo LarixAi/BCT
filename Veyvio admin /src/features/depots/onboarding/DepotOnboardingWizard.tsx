@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import {
   DEFAULT_DEPOT_CAPACITY,
   DEFAULT_DEPOT_FACILITIES,
@@ -15,6 +15,8 @@ import {
 import type { CreateDepotInput, DepotStatus, DepotWizardStepId, UpdateDepotInput } from '@/lib/depots/types'
 import { nextDepotWizardStep, prevDepotWizardStep, validateDepotCapacity } from '@/lib/depots/wizard-steps'
 import { DepotBackLink } from '../components/DepotProfileHeader'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DepotOnboardingWizard() {
   const { id } = useParams<{ id: string }>()
@@ -34,18 +36,18 @@ export function DepotOnboardingWizard() {
   const [selectedDriverIds, setSelectedDriverIds] = useState<string[]>([])
 
   const { data: depot, isLoading } = useQuery({
-    queryKey: ['depot-profile', id],
+    queryKey: tKey(['depot-profile', id]),
     queryFn: () => api.getDepotProfile(id!),
     enabled: Boolean(id),
   })
 
   const { data: vehicles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
   const { data: drivers = [] } = useQuery({
-    queryKey: ['driver-profiles'],
+    queryKey: tKey(['driver-profiles']),
     queryFn: () => api.getDriverProfiles(),
   })
 
@@ -185,8 +187,8 @@ export function DepotOnboardingWizard() {
       return api.createDepot(input, actorName)
     },
     onSuccess: (created) => {
-      queryClient.invalidateQueries({ queryKey: ['depot-profiles'] })
-      queryClient.invalidateQueries({ queryKey: ['depots'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['depot-profiles']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['depots']) })
       goStep('operations', created.id)
       setError('')
     },
@@ -218,9 +220,9 @@ export function DepotOnboardingWizard() {
     },
     onSuccess: ({ profile, next }) => {
       queryClient.setQueryData(['depot-profile', id], profile)
-      queryClient.invalidateQueries({ queryKey: ['depot-profiles'] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-      queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['depot-profiles']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
       goStep(next, profile.id)
       setError('')
     },
@@ -245,8 +247,8 @@ export function DepotOnboardingWizard() {
       )
     },
     onSuccess: (profile) => {
-      queryClient.invalidateQueries({ queryKey: ['depot-profiles'] })
-      queryClient.invalidateQueries({ queryKey: ['depots'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['depot-profiles']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['depots']) })
       navigate(`/depots/${profile.id}`)
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Could not finish'),

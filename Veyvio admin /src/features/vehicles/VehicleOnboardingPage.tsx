@@ -8,7 +8,9 @@ import { VehicleBackLink, VehicleProfileHeader } from './components/VehicleProfi
 import { VehicleChecksTab } from './components/VehicleChecksTab'
 import { VehicleEquipmentTab } from './components/VehicleEquipmentTab'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const STAGE_HINTS: Partial<Record<OnboardingStageId, { text: string; href?: string }>> = {
   documents_complete: { text: 'Upload and verify MOT, insurance and tax certificates.', href: 'documents' },
@@ -25,22 +27,22 @@ export function VehicleOnboardingPage() {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: vehicle, isLoading, error, isError } = useQuery({
-    queryKey: ['vehicle-profile', id],
+    queryKey: tKey(['vehicle-profile', id]),
     queryFn: () => api.getVehicleProfile(id!),
     enabled: !!id,
   })
 
   const { data: fleet = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
   const advance = useMutation({
     mutationFn: (stageId: OnboardingStageId) => api.advanceVehicleOnboarding(id!, stageId, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profile', id] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-directory-summary'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', id]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-directory-summary']) })
     },
   })
 

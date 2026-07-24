@@ -24,6 +24,8 @@ import {
 } from '@/lib/drivers/activation-requirements'
 import type { DriverDocument, DriverProfile } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function sourceLabel(sourceApp: string | undefined) {
   if (sourceApp === 'DRIVER') return 'Driver app'
@@ -210,7 +212,7 @@ export function DriverComplianceTab({
   const [requestFeedback, setRequestFeedback] = useState<string | null>(null)
 
   const { data: persistedReqs } = useQuery({
-    queryKey: ['driver-requirements', driver.id],
+    queryKey: tKey(['driver-requirements', driver.id]),
     queryFn: () => api.listDriverRequirements(driver.id),
   })
 
@@ -268,11 +270,11 @@ export function DriverComplianceTab({
   const supplementaryPendingReviewCount = supplementaryDocuments.filter(isAwaitingReview).length
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['driver-profile', driver.id] })
-    queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['driver-directory-summary'] })
-    queryClient.invalidateQueries({ queryKey: ['drivers'] })
-    queryClient.invalidateQueries({ queryKey: ['driver-requirements', driver.id] })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', driver.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-directory-summary']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['drivers']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-requirements', driver.id]) })
   }
 
   const requestMissing = useMutation({
@@ -337,7 +339,11 @@ export function DriverComplianceTab({
 
   const verify = useMutation({
     mutationFn: (documentId: string) => api.verifyDriverDocument(driver.id, documentId, actorName),
-    onSuccess: invalidate,
+    onSuccess: (profile) => {
+      queryClient.setQueryData(['driver-profile', driver.id], profile)
+      setRequestFeedback('Document approved — driver compliance updated.')
+      invalidate()
+    },
   })
 
   const reject = useMutation({
@@ -349,11 +355,13 @@ export function DriverComplianceTab({
         actorName,
         { requestResubmit: requestResubmitOnReject },
       ),
-    onSuccess: () => {
+    onSuccess: (profile) => {
+      queryClient.setQueryData(['driver-profile', driver.id], profile)
       invalidate()
       setRejectDocId(null)
       setRejectReason('')
       setRequestResubmitOnReject(true)
+      setRequestFeedback('Document declined — driver can upload again from the app.')
     },
   })
 
@@ -390,10 +398,20 @@ export function DriverComplianceTab({
   })
 
   async function openDocument(documentId: string) {
+    // Open synchronously on click — async fetch then window.open() is blocked by most browsers.
+    const tab = window.open('about:blank', '_blank', 'noopener,noreferrer')
+    if (!tab) {
+      window.alert('Allow pop-ups for Command to open driver documents, or try again.')
+      return
+    }
     try {
+      tab.document.title = 'Opening document…'
+      tab.document.body.innerHTML =
+        '<p style="font-family:system-ui,sans-serif;padding:1.25rem;color:#334155">Opening document…</p>'
       const payload = await api.getDriverDocumentDownloadUrl(driver.id, documentId)
-      window.open(payload.url, '_blank', 'noopener,noreferrer')
+      tab.location.replace(payload.url)
     } catch (err) {
+      tab.close()
       window.alert(err instanceof Error ? err.message : 'Could not open document file.')
     }
   }

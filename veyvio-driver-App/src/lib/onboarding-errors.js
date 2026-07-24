@@ -7,6 +7,9 @@ export function friendlyOnboardingError(error, context = "save") {
     return "Your file was uploaded, but we couldn't save it to your onboarding record. Please try again or contact your transport manager.";
   }
 
+  if (/function .* does not exist|PGRST202|42883/i.test(raw)) {
+    return "This save path is out of date. Pull to refresh the app, then try again.";
+  }
   if (/row-level security|RLS|violates|permission denied|42501/i.test(raw)) {
     if (context === "upload" || context === "upload-metadata") {
       return context === "upload-metadata"

@@ -3,13 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { INSPECTION_TYPE_LABELS } from '@/lib/inspections/constants'
 import type { InspectionType } from '@/lib/inspections/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const TYPES = Object.keys(INSPECTION_TYPE_LABELS) as InspectionType[]
 
 export function ScheduleInspectionPanel({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
   const { data: vehicles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
   const [vehicleId, setVehicleId] = useState('')
@@ -29,8 +31,8 @@ export function ScheduleInspectionPanel({ onClose }: { onClose: () => void }) {
         driverInstruction: driverInstruction || null,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inspections-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['inspections'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['inspections-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['inspections']) })
       onClose()
     },
   })

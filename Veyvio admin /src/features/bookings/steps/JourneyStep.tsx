@@ -9,16 +9,6 @@ export function JourneyStep({
   draft: BookingDraft
   onChange: (patch: Partial<BookingDraft>) => void
 }) {
-  function updateTrip(index: number, patch: Partial<BookingDraft['trips'][0]>) {
-    const trips = draft.trips.map((t, i) => {
-      if (i !== index) return t
-      const merged = { ...t, ...patch }
-      const times = calculateTripTimes(merged)
-      return { ...merged, ...times }
-    })
-    onChange({ trips })
-  }
-
   function updateStop(tripIndex: number, stopIndex: number, address: string, name?: string) {
     const trips = [...draft.trips]
     const trip = { ...trips[tripIndex]! }
@@ -32,65 +22,13 @@ export function JourneyStep({
   return (
     <div className="space-y-4">
       {draft.trips.map((trip, tripIndex) => (
-        <SectionCard key={trip.id} title={trip.label} description="Booking → Trip → Stops">
-          <div className="mb-4 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">
-              <span className="text-ink-soft">Pickup date</span>
-              <input
-                type="date"
-                value={trip.pickupDate}
-                onChange={(e) => updateTrip(tripIndex, { pickupDate: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
-              />
-            </label>
-            <label className="text-sm">
-              <span className="text-ink-soft">Scheduling</span>
-              <select
-                value={trip.schedulingMode}
-                onChange={(e) =>
-                  updateTrip(tripIndex, {
-                    schedulingMode: e.target.value as 'pickup_led' | 'arrival_led',
-                  })
-                }
-                className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
-              >
-                <option value="pickup_led">Pickup-led — customer specifies departure</option>
-                <option value="arrival_led">Arrival-led — must arrive by time (schools, healthcare)</option>
-              </select>
-            </label>
-            {trip.schedulingMode === 'pickup_led' ? (
-              <label className="text-sm">
-                <span className="text-ink-soft">Requested pickup time</span>
-                <input
-                  type="time"
-                  value={trip.requestedPickupTime ?? ''}
-                  onChange={(e) => updateTrip(tripIndex, { requestedPickupTime: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
-                />
-              </label>
-            ) : (
-              <label className="text-sm">
-                <span className="text-ink-soft">Required arrival time</span>
-                <input
-                  type="time"
-                  value={trip.requiredArrivalTime ?? ''}
-                  onChange={(e) => updateTrip(tripIndex, { requiredArrivalTime: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-1.5"
-                />
-              </label>
-            )}
-            {trip.calculatedArrivalTime && (
-              <p className="text-sm text-ink-soft sm:col-span-2">
-                Calculated: pickup {trip.calculatedPickupTime} → arrive {trip.calculatedArrivalTime}
-                <span className="text-muted"> (includes journey, boarding & traffic allowance)</span>
-              </p>
-            )}
-          </div>
-
+        <SectionCard key={trip.id} title={trip.label} description="Step 4 — pickup, stops and drop-off">
           <div className="space-y-3">
             {trip.stops.map((stop, stopIndex) => (
               <label key={stop.id} className="block text-sm">
-                <span className="capitalize text-ink-soft">{stop.type} — {stop.name}</span>
+                <span className="capitalize text-ink-soft">
+                  {stop.type} — {stop.name}
+                </span>
                 <input
                   type="text"
                   value={stop.address}
@@ -104,10 +42,10 @@ export function JourneyStep({
         </SectionCard>
       ))}
 
-      <SectionCard title="Instructions">
+      <SectionCard title="Location contacts and instructions">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Journey purpose" value={draft.journeyPurpose} onChange={(v) => onChange({ journeyPurpose: v })} />
           <Field label="Pickup contact" value={draft.pickupContact} onChange={(v) => onChange({ pickupContact: v })} />
+          <Field label="Drop-off contact" value={draft.dropoffContact} onChange={(v) => onChange({ dropoffContact: v })} />
           <Field label="Pickup instructions" value={draft.pickupInstructions} onChange={(v) => onChange({ pickupInstructions: v })} multiline />
           <Field label="Drop-off instructions" value={draft.dropoffInstructions} onChange={(v) => onChange({ dropoffInstructions: v })} multiline />
         </div>

@@ -276,6 +276,9 @@ function buildProjectedTrainingRequirements(
   if (!byKey.has('health_safety') && byKey.has('manual_handling')) {
     byKey.set('health_safety', byKey.get('manual_handling')!)
   }
+  if (!byKey.has('driver_app') && byKey.has('using_veyvio_driver')) {
+    byKey.set('driver_app', byKey.get('using_veyvio_driver')!)
+  }
 
   return DRIVER_TRAINING_CATALOG.filter((def) => catalogApplies(def, enabled)).map((def) => {
     const record = byKey.get(def.key)
@@ -296,19 +299,13 @@ function buildProjectedTrainingRequirements(
       ['verified', 'expiring_soon', 'expired'].includes(String(doc.verificationStatus ?? doc.verification_status ?? ''))
     const hasCompleteRecord =
       recordStatus === 'complete' ||
+      recordStatus === 'completed' ||
       recordStatus === 'valid' ||
       Boolean(record?.completed_at && !['missing', 'failed'].includes(recordStatus))
 
     let status = 'missing'
     if (recordStatus === 'failed') status = 'failed'
-    else if (recordStatus === 'assigned' || recordStatus === 'training_assigned') status = 'assigned'
-    else if (
-      recordStatus === 'in_progress' ||
-      recordStatus === 'assessment_required' ||
-      recordStatus === 'started'
-    ) {
-      status = 'in_progress'
-    } else if (hasCompleteRecord || verifiedDoc) {
+    else if (hasCompleteRecord || verifiedDoc) {
       if (expiresAt) {
         const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
         if (days < 0) status = 'expired'
@@ -319,6 +316,14 @@ function buildProjectedTrainingRequirements(
       }
       if (String(doc?.verificationStatus ?? doc?.verification_status) === 'expired') status = 'expired'
       if (String(doc?.verificationStatus ?? doc?.verification_status) === 'expiring_soon') status = 'due_soon'
+    } else if (recordStatus === 'assigned' || recordStatus === 'training_assigned') {
+      status = 'assigned'
+    } else if (
+      recordStatus === 'in_progress' ||
+      recordStatus === 'assessment_required' ||
+      recordStatus === 'started'
+    ) {
+      status = 'in_progress'
     }
 
     return {
@@ -1206,6 +1211,301 @@ export async function projectBookingList(companyId: string) {
       owner: null,
     }
   })
+}
+
+function mapBookingTypeToUi(raw: unknown): string {
+  const value = String(raw ?? 'single')
+  switch (value) {
+    case 'single':
+      return 'one_way'
+    case 'school_route':
+      return 'school'
+    case 'urgent':
+      return 'replacement'
+    default:
+      return value
+  }
+}
+
+function mapTripStatusToUi(raw: unknown): string {
+  const value = String(raw ?? 'planned')
+  if (value === 'planned') return 'unassigned'
+  return value
+}
+
+function defaultBookingPricing(): Row {
+  return {
+    baseFare: 0,
+    distanceCharge: 0,
+    supplements: 0,
+    totalPrice: 0,
+    estimatedCost: 0,
+    margin: 0,
+    marginPct: 0,
+    contractRef: null,
+    billingNote: null,
+    poRequired: false,
+    poNumber: null,
+    priceOverride: null,
+    overrideReason: null,
+  }
+}
+
+function defaultBookingRequirements(): Row {
+  return {
+    vehicleType: 'minibus',
+    wheelchairAccessible: false,
+    wheelchairPositions: 0,
+    passengerAssistant: false,
+    childSeat: false,
+    boosterSeat: false,
+    lowFloor: false,
+    luggageCapacity: 'standard',
+    staffingNotes: '',
+  }
+}
+
+function defaultBookingRecurrence(): Row {
+  return {
+    enabled: false,
+    startDate: '',
+    endDate: '',
+    daysOfWeek: [],
+    termTimeOnly: false,
+    morningPickupTime: '07:45',
+    morningArrivalTime: '08:30',
+    afternoonPickupTime: '15:15',
+    afternoonDropoffTime: '16:00',
+  }
+}
+
+function legToBookingTrip(leg: Row, index: number, serviceDate: string): Row {
+  const pickup = (leg.pickup_location as Row | null) ?? {}
+  const destination = (leg.destination_location as Row | null) ?? {}
+  const pickupTime = isoTimeLabel(leg.requested_pickup_time)
+  const arrivalTime = isoTimeLabel(leg.requested_arrival_time)
+  return {
+    id: String(leg.id),
+    label: index === 0 ? 'Outbound' : `Leg ${index + 1}`,
+    direction: index === 0 ? 'outbound' : index === 1 ? 'return' : undefined,
+    pickupDate: serviceDate,
+    schedulingMode: arrivalTime && !pickupTime ? 'arrival_led' : 'pickup_led',
+    requestedPickupTime: pickupTime,
+    requiredArrivalTime: arrivalTime,
+    calculatedPickupTime: pickupTime,
+    calculatedArrivalTime: arrivalTime,
+    stops: [
+      {
+        id: `${leg.id}-pickup`,
+        sequence: 1,
+        type: 'pickup',
+        name: locationField(pickup, ['name', 'label']) ?? 'Pickup',
+        address: locationField(pickup, ['address', 'formattedAddress', 'name']) ?? 'Address to be confirmed',
+        scheduledTime: pickupTime,
+      },
+      {
+        id: `${leg.id}-dropoff`,
+        sequence: 2,
+        type: 'dropoff',
+        name: locationField(destination, ['name', 'label']) ?? 'Drop-off',
+        address: locationField(destination, ['address', 'formattedAddress', 'name']) ?? 'Address to be confirmed',
+        scheduledTime: arrivalTime,
+      },
+    ],
+    status: mapTripStatusToUi(leg.status),
+  }
+}
+
+function dbTripToBookingTrip(trip: Row, index: number): Row {
+  const pickup = (trip.pickup_location as Row | null) ?? {}
+  const destination = (trip.destination_location as Row | null) ?? {}
+  const pickupTime = isoTimeLabel(trip.planned_pickup_at)
+  const arrivalTime = isoTimeLabel(trip.planned_arrival_at)
+  const serviceDate = trip.service_date ? String(trip.service_date).slice(0, 10) : new Date().toISOString().slice(0, 10)
+  return {
+    id: String(trip.id),
+    label: trip.trip_reference ? String(trip.trip_reference) : index === 0 ? 'Outbound' : `Trip ${index + 1}`,
+    direction: index === 0 ? 'outbound' : undefined,
+    pickupDate: serviceDate,
+    schedulingMode: arrivalTime && !pickupTime ? 'arrival_led' : 'pickup_led',
+    requestedPickupTime: pickupTime,
+    requiredArrivalTime: arrivalTime,
+    calculatedPickupTime: pickupTime,
+    calculatedArrivalTime: arrivalTime,
+    stops: [
+      {
+        id: `${trip.id}-pickup`,
+        sequence: 1,
+        type: 'pickup',
+        name: locationField(pickup, ['name', 'label']) ?? 'Pickup',
+        address: locationField(pickup, ['address', 'formattedAddress', 'name']) ?? 'Address to be confirmed',
+        scheduledTime: pickupTime,
+      },
+      {
+        id: `${trip.id}-dropoff`,
+        sequence: 2,
+        type: 'dropoff',
+        name: locationField(destination, ['name', 'label']) ?? 'Drop-off',
+        address: locationField(destination, ['address', 'formattedAddress', 'name']) ?? 'Address to be confirmed',
+        scheduledTime: arrivalTime,
+      },
+    ],
+    status: mapTripStatusToUi(trip.status),
+  }
+}
+
+export async function projectBookingDetail(companyId: string, bookingId: string) {
+  const { data: booking, error } = await admin
+    .from('bookings')
+    .select('*, customers(trading_name, legal_name), depots(name), contracts(contract_number, name)')
+    .eq('company_id', companyId)
+    .eq('id', bookingId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!booking) return null
+
+  const serviceDate = booking.requested_date
+    ? String(booking.requested_date).slice(0, 10)
+    : iso(booking.created_at).slice(0, 10)
+
+  const [{ data: legs }, { data: trips }] = await Promise.all([
+    admin
+      .from('booking_legs')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('booking_id', bookingId)
+      .order('sequence', { ascending: true }),
+    admin
+      .from('trips')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('booking_id', bookingId)
+      .order('service_date', { ascending: true }),
+  ])
+
+  const passengerIds = (booking.passenger_ids as string[] | null) ?? []
+  let passengerRows: Row[] = []
+  if (passengerIds.length) {
+    const { data } = await admin
+      .from('passengers')
+      .select('id, first_name, last_name, safeguarding_flag, mobility_requirements')
+      .eq('company_id', companyId)
+      .in('id', passengerIds)
+    passengerRows = (data ?? []) as Row[]
+  }
+
+  const customer = (booking.customers as Row | null) ?? {}
+  const depot = (booking.depots as Row | null) ?? {}
+  const contract = (booking.contracts as Row | null) ?? {}
+  const contractRef = contract.contract_number ? String(contract.contract_number) : null
+
+  let bookingTrips: Row[] = []
+  if (legs?.length) {
+    bookingTrips = legs.map((leg, index) => legToBookingTrip(leg as Row, index, serviceDate))
+  } else if (trips?.length) {
+    bookingTrips = trips.map((trip, index) => dbTripToBookingTrip(trip as Row, index))
+  } else {
+    bookingTrips = [
+      {
+        id: `trip-${booking.id}`,
+        label: 'Outbound',
+        direction: 'outbound',
+        pickupDate: serviceDate,
+        schedulingMode: 'pickup_led',
+        requestedPickupTime: null,
+        requiredArrivalTime: null,
+        calculatedPickupTime: null,
+        calculatedArrivalTime: null,
+        stops: [
+          {
+            id: `trip-${booking.id}-pickup`,
+            sequence: 1,
+            type: 'pickup',
+            name: 'Pickup',
+            address: 'Address to be confirmed',
+            scheduledTime: null,
+          },
+          {
+            id: `trip-${booking.id}-dropoff`,
+            sequence: 2,
+            type: 'dropoff',
+            name: 'Drop-off',
+            address: 'Address to be confirmed',
+            scheduledTime: null,
+          },
+        ],
+        status: 'unassigned',
+      },
+    ]
+  }
+
+  const passengers = passengerRows.map((p) => ({
+    passengerId: String(p.id),
+    firstName: String(p.first_name ?? 'Passenger'),
+    lastName: String(p.last_name ?? ''),
+    requirements: Array.isArray(p.mobility_requirements)
+      ? (p.mobility_requirements as unknown[]).map(String)
+      : [],
+    safeguardingFlag: Boolean(p.safeguarding_flag),
+  }))
+
+  const vehicleRequirements = ((legs?.[0] as Row | undefined)?.vehicle_requirements as Row | null) ?? {}
+  const escortRequirements = ((legs?.[0] as Row | undefined)?.escort_requirements as Row | null) ?? {}
+
+  const requirements = {
+    ...defaultBookingRequirements(),
+    wheelchairAccessible: Boolean(vehicleRequirements.wheelchairAccessible ?? vehicleRequirements.wheelchair_accessible),
+    wheelchairPositions: Number(vehicleRequirements.wheelchairPositions ?? vehicleRequirements.wheelchair_positions ?? 0),
+    passengerAssistant: Boolean(escortRequirements.passengerAssistant ?? escortRequirements.passenger_assistant),
+    vehicleType: String(vehicleRequirements.vehicleType ?? vehicleRequirements.vehicle_type ?? 'minibus'),
+  }
+
+  const pricing = {
+    ...defaultBookingPricing(),
+    contractRef,
+    poRequired: Boolean(booking.purchase_order_number),
+    poNumber: booking.purchase_order_number ? String(booking.purchase_order_number) : null,
+    billingNote: booking.notes ? String(booking.notes) : null,
+  }
+
+  const schedulingStatus = ['assigned', 'in_progress', 'completed', 'partially_assigned'].includes(String(booking.status))
+    ? 'scheduled'
+    : 'unscheduled'
+
+  return {
+    id: booking.id,
+    reference: booking.booking_reference,
+    bookingType: mapBookingTypeToUi(booking.booking_type),
+    status: booking.status,
+    customerId: booking.customer_id ? String(booking.customer_id) : null,
+    customerName: customer.trading_name ?? customer.legal_name ?? null,
+    passengers,
+    trips: bookingTrips,
+    requirements,
+    recurrence: defaultBookingRecurrence(),
+    pricing,
+    dispatch: {
+      mode: 'send_to_dispatch',
+      depotId: booking.depot_id ? String(booking.depot_id) : null,
+      driverId: null,
+      vehicleId: null,
+      assistantId: null,
+    },
+    journeyPurpose: '',
+    pickupInstructions: '',
+    dropoffInstructions: '',
+    pickupContact: '',
+    dropoffContact: '',
+    currentStep: 8,
+    ownerName: null,
+    priority: booking.priority === 'urgent' ? 'urgent' : 'normal',
+    schedulingStatus,
+    billingStatus: contractRef ? 'contract' : 'not_billed',
+    depotName: depot.name ?? null,
+    warningCount: 0,
+    createdAt: iso(booking.created_at),
+    updatedAt: iso(booking.updated_at),
+  }
 }
 
 function isoTimeLabel(value: unknown): string | null {

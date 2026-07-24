@@ -6,13 +6,15 @@ import { SectionCard } from '@/components/ui'
 import { vehicleToMapMarker } from '@/lib/vehicles/telematics-map'
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleTelematicsPanel({ vehicle }: { vehicle: VehicleProfile }) {
   const t = vehicle.telematics
   const mapVehicle = useMemo(() => vehicleToMapMarker(vehicle), [vehicle])
 
   const { data: track } = useQuery({
-    queryKey: ['duty-track', vehicle.currentRunId],
+    queryKey: tKey(['duty-track', vehicle.currentRunId]),
     queryFn: () => api.getDutyTrack(vehicle.currentRunId!),
     enabled: Boolean(vehicle.currentRunId),
     refetchInterval: 30_000,

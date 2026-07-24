@@ -101,6 +101,7 @@ export function createDefaultDraft(bookingType: BookingType = 'one_way'): Bookin
   return {
     bookingType,
     status: 'draft',
+    fundingType: 'customer_account',
     customerId: null,
     customerName: null,
     passengers: [],

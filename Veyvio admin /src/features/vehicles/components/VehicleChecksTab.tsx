@@ -5,6 +5,8 @@ import { VehicleInspectionsPanel } from '@/features/inspections/VehicleInspectio
 import { CHECK_TEMPLATE_AREAS, CHECK_TYPE_LABELS } from '@/lib/vehicles/checks'
 import type { VehicleCheckType, VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleChecksTab({
   vehicle,
@@ -25,7 +27,7 @@ export function VehicleChecksTab({
         actorName ?? 'System',
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profile', vehicle.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', vehicle.id]) })
     },
   })
 

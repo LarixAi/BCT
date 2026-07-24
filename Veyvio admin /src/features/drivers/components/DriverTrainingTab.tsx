@@ -14,6 +14,8 @@ import { evaluateTrainingEligibility } from '@/lib/drivers/training-eligibility'
 import { hydrateRequirementStore, getRequirementRequestMeta, markRequirementLocalStatus } from '@/lib/drivers/activation-requirements'
 import type { DriverProfile } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function defaultAssignDeadline(): string {
   const d = new Date()
@@ -253,7 +255,7 @@ export function DriverTrainingTab({
 }) {
   const queryClient = useQueryClient()
   const { data: persisted } = useQuery({
-    queryKey: ['driver-requirements', driver.id],
+    queryKey: tKey(['driver-requirements', driver.id]),
     queryFn: () => api.listDriverRequirements(driver.id),
   })
 
@@ -302,10 +304,10 @@ export function DriverTrainingTab({
   const [focusOutstanding, setFocusOutstanding] = useState(false)
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['driver-profile', driver.id] })
-    queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['driver-directory-summary'] })
-    queryClient.invalidateQueries({ queryKey: ['driver-requirements', driver.id] })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', driver.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-directory-summary']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-requirements', driver.id]) })
   }
 
   const [assignMessage, setAssignMessage] = useState<string | null>(null)

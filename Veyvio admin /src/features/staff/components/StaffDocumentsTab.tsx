@@ -5,6 +5,8 @@ import { StatusPill, formatDate } from '@/components/ui/status'
 import { STAFF_DOCUMENT_TYPES } from '@/lib/staff/documents'
 import type { StaffProfile } from '@/lib/staff/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function StaffDocumentsTab({
   staff,
@@ -24,8 +26,8 @@ export function StaffDocumentsTab({
   const [referenceNumber, setReferenceNumber] = useState('')
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['staff-profile', staff.id] })
-    queryClient.invalidateQueries({ queryKey: ['staff-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['staff-profile', staff.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['staff-hub']) })
   }
 
   const upload = useMutation({

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { FleetResourcesHubData, FleetResourcesSettings } from '@/lib/fleet-resources/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function SettingsTab({ hub }: { hub: FleetResourcesHubData }) {
   const queryClient = useQueryClient()
@@ -9,7 +11,7 @@ export function SettingsTab({ hub }: { hub: FleetResourcesHubData }) {
 
   const save = useMutation({
     mutationFn: () => api.updateFleetResourcesSettings(form),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['fleet-resources-hub'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['fleet-resources-hub']) }),
   })
 
   function set<K extends keyof FleetResourcesSettings>(key: K, value: FleetResourcesSettings[K]) {

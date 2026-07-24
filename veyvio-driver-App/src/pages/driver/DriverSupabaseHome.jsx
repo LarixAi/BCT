@@ -30,6 +30,7 @@ import DriverSyncBanner from "@/components/driver/operational/DriverSyncBanner";
 import DriverStatusBanner from "@/components/driver/operational/DriverStatusBanner";
 import WalkaroundSafetyBanner from "@/components/driver/walkaround/WalkaroundSafetyBanner";
 import { greetingForHour, op } from "@/lib/driver-operational-theme";
+import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { getDriverOnboardingState } from "@/services/onboarding.service";
 import { getPrimaryComplianceFix, loadDriverComplianceReadiness } from "@/services/driver-compliance.service";
 import { loadDriverTrainingCentre, formatTrainingDue, eligibilityRestrictionCopy } from "@/services/training.service";
@@ -99,6 +100,11 @@ export default function DriverSupabaseHome({ driver }) {
   const sessionRef = useRef({ session, sessionBootstrap, sessionHomeSummary });
   sessionRef.current = { session, sessionBootstrap, sessionHomeSummary };
 
+  const workspace = useMemo(
+    () => resolveDriverWorkspaceScope(driver, session),
+    [driver, session],
+  );
+
   const reloadHomeData = useCallback(async ({ force = false } = {}) => {
     const gen = ++reloadGenRef.current;
     const {
@@ -111,7 +117,7 @@ export default function DriverSupabaseHome({ driver }) {
       Boolean(fallbackBootstrap) || Boolean(walkaroundSafetyFromHomeSummary(fallbackSummary));
     if (!hadCommandPaint) setSafetyLoading(true);
     setBootstrapError("");
-    setPendingSync(getPendingSyncCount(driver.id));
+    setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
 
     const depotId = currentSession?.activeDepotId ?? currentSession?.depots?.[0]?.id ?? null;
     const boot = await loadDriverBootstrap({ depotId, force }).catch(() => null);
@@ -172,9 +178,9 @@ export default function DriverSupabaseHome({ driver }) {
     setDutyState(mergeDutyState(fromBootstrapDuty, duty));
     setNextLeave(leave);
     setRemovedTransfers(Array.isArray(removed) ? removed : []);
-    setPendingSync(getPendingSyncCount(driver.id));
+    setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
     setTrainingHome(training?.ok ? training : null);
-  }, [driver]);
+  }, [driver, workspace.companyId, workspace.membershipId]);
 
   useEffect(() => {
     setHomeSummary(sessionHomeSummary);

@@ -7,6 +7,8 @@ import { INSPECTION_OUTCOME_LABELS, INSPECTION_TYPE_LABELS } from '@/lib/inspect
 import { daysRemainingLabel } from '@/lib/inspections/due'
 import { resolveInspectionsHub } from '@/lib/inspections/resolve-hub'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleInspectionsPanel({
   vehicleId,
@@ -16,7 +18,7 @@ export function VehicleInspectionsPanel({
   registrationNumber: string
 }) {
   const { data } = useQuery({
-    queryKey: ['inspections-hub'],
+    queryKey: tKey(['inspections-hub']),
     queryFn: () =>
       resolveInspectionsHub({
         fetchLiveHub: () => api.getInspectionsHub(),

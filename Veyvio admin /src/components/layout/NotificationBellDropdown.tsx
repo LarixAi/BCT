@@ -6,6 +6,8 @@ import { api } from '@/lib/api/client'
 import { cn } from '@/lib/cn'
 import { buildNotificationsInbox } from '@/lib/notifications/build-notifications'
 import type { NotificationItem } from '@/lib/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const PREVIEW_LIMIT = 6
 
@@ -16,13 +18,13 @@ export function NotificationBellDropdown() {
   const queryClient = useQueryClient()
 
   const { data: unread } = useQuery({
-    queryKey: ['notifications-unread-count'],
+    queryKey: tKey(['notifications-unread-count']),
     queryFn: () => api.getNotificationUnreadCount(),
     refetchInterval: 60_000,
   })
 
   const { data: notifications = [], isLoading } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: tKey(['notifications']),
     queryFn: () => api.getNotifications(),
     enabled: open,
     refetchInterval: open ? 60_000 : false,
@@ -35,16 +37,16 @@ export function NotificationBellDropdown() {
   const markRead = useMutation({
     mutationFn: (id: string) => api.markNotificationRead(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['notifications']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['notifications-unread-count']) })
     },
   })
 
   const markAllRead = useMutation({
     mutationFn: () => api.markAllNotificationsRead(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['notifications']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['notifications-unread-count']) })
     },
   })
 

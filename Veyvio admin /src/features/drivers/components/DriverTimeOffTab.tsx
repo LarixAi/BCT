@@ -2,18 +2,16 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
+import { LeaveApprovalWizard } from '@/features/attendance/LeaveApprovalWizard'
 import { LEAVE_STATUS_LABEL, LEAVE_TYPE_LABEL } from '@/lib/attendance/constants'
-import {
-  approveLeaveRequest,
-  rejectLeaveRequest,
-  suggestLeaveDates,
-} from '@/lib/attendance/leave-workflow'
 import type { LeaveRequestRecord } from '@/lib/attendance/types'
 import type { DriverProfile } from '@/lib/drivers/types'
 import type { HolidayCalculationMethod } from '@/lib/holiday/types'
-import { formatApproximateDays, suggestAlternativeDates } from '@/lib/holiday/engine'
+import { formatApproximateDays } from '@/lib/holiday/engine'
 import { api } from '@/lib/api/client'
 import { formatDate } from '@/components/ui/status'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const WEEKDAY_OPTIONS = [
   { id: 1, label: 'Mon' },
@@ -51,17 +49,16 @@ export function DriverTimeOffTab({
   const [adjustDays, setAdjustDays] = useState('')
   const [adjustReason, setAdjustReason] = useState('')
   const [accrualHours, setAccrualHours] = useState('')
-  const [rejectId, setRejectId] = useState<string | null>(null)
-  const [rejectReason, setRejectReason] = useState('')
+  const [wizardRequest, setWizardRequest] = useState<LeaveRequestRecord | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['driver-holiday', driver.id],
+    queryKey: tKey(['driver-holiday', driver.id]),
     queryFn: () => api.getDriverHoliday(driver.id),
   })
 
   const { data: leaveRows } = useQuery({
-    queryKey: ['leave-requests'],
+    queryKey: tKey(['leave-requests']),
     queryFn: () => api.getLeaveRequests(),
   })
 
@@ -70,9 +67,9 @@ export function DriverTimeOffTab({
   )
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['driver-holiday', driver.id] })
-    queryClient.invalidateQueries({ queryKey: ['leave-requests'] })
-    queryClient.invalidateQueries({ queryKey: ['attendance-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-holiday', driver.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['leave-requests']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['attendance-hub']) })
   }
 
   useEffect(() => {
@@ -156,16 +153,6 @@ export function DriverTimeOffTab({
     },
     onError: (err) => {
       setMessage(err instanceof Error ? err.message : 'Accrual failed.')
-    },
-  })
-
-  const mutateLeave = useMutation({
-    mutationFn: (next: LeaveRequestRecord) => api.updateLeaveRequest(next),
-    onSuccess: () => {
-      setRejectId(null)
-      setRejectReason('')
-      setMessage('Leave decision saved — balance updated.')
-      invalidate()
     },
   })
 
@@ -449,11 +436,6 @@ export function DriverTimeOffTab({
         ) : (
           <ul className="space-y-3">
             {driverLeave.map((row) => {
-              const suggestion = suggestAlternativeDates({
-                startDate: row.startDate,
-                endDate: row.endDate,
-                workingWeekdays,
-              })
               return (
                 <li key={row.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -468,76 +450,35 @@ export function DriverTimeOffTab({
                       </p>
                       {row.reason ? <p className="mt-1 text-ink-soft">{row.reason}</p> : null}
                     </div>
-                    {canManage && row.status === 'pending' ? (
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="text-xs font-medium text-emerald-700 hover:underline"
-                          onClick={() => mutateLeave.mutate(approveLeaveRequest(row, actorName))}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs font-medium text-red-700 hover:underline"
-                          onClick={() => {
-                            setRejectId(row.id)
-                            setRejectReason('')
-                          }}
-                        >
-                          Decline
-                        </button>
-                        {suggestion ? (
-                          <button
-                            type="button"
-                            className="text-xs font-medium text-command-700 hover:underline"
-                            onClick={() =>
-                              mutateLeave.mutate(
-                                suggestLeaveDates(row, actorName, suggestion, 'Suggested clear dates'),
-                              )
-                            }
-                          >
-                            Suggest {suggestion.startDate} → {suggestion.endDate}
-                          </button>
-                        ) : null}
-                      </div>
+                    {canManage && (row.status === 'pending' || row.status === 'moved') ? (
+                      <button
+                        type="button"
+                        className="rounded-lg bg-command-600 px-3 py-1 text-xs font-medium text-white hover:bg-command-700"
+                        onClick={() => setWizardRequest(row)}
+                      >
+                        Review request
+                      </button>
                     ) : null}
                   </div>
-                  {rejectId === row.id ? (
-                    <div className="mt-2 space-y-2">
-                      <textarea
-                        value={rejectReason}
-                        onChange={(e) => setRejectReason(e.target.value)}
-                        rows={2}
-                        className="w-full rounded-lg border border-red-200 px-3 py-1.5 text-sm"
-                        placeholder="Reason shown to the driver"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="rounded-lg bg-red-700 px-3 py-1 text-xs font-medium text-white"
-                          onClick={() =>
-                            mutateLeave.mutate(rejectLeaveRequest(row, actorName, rejectReason))
-                          }
-                        >
-                          Confirm decline
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs text-ink-soft"
-                          onClick={() => setRejectId(null)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
                 </li>
               )
             })}
           </ul>
         )}
       </SectionCard>
+
+      {wizardRequest && (
+        <LeaveApprovalWizard
+          request={wizardRequest}
+          actorName={actorName}
+          onClose={() => setWizardRequest(null)}
+          onComplete={() => {
+            setWizardRequest(null)
+            setMessage('Leave decision saved — balance updated.')
+            invalidate()
+          }}
+        />
+      )}
     </div>
   )
 }

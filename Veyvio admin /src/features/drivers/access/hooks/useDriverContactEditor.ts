@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api/client'
 import type { DriverProfile } from '@/lib/drivers/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function useDriverContactEditor({
   driver,
@@ -26,9 +28,9 @@ export function useDriverContactEditor({
   }, [driver.email, driver.phone, editing])
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['driver-profile', driver.id] })
-    queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['driver-directory-summary'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', driver.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-directory-summary']) })
   }
 
   const updateContact = useMutation({

@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function AssignmentHistoryPanel({ tripId }: { tripId: string }) {
   const { data: history = [], isLoading } = useQuery({
-    queryKey: ['assignment-history', tripId],
+    queryKey: tKey(['assignment-history', tripId]),
     queryFn: () => api.getAssignmentHistory(tripId),
   })
 

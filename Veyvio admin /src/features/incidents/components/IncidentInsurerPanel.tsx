@@ -3,7 +3,9 @@ import { SectionCard } from '@/components/ui'
 import { canAssessRegulatory } from '@/lib/incidents/permissions'
 import type { IncidentDetailRecord } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function IncidentInsurerPanel({ incident }: { incident: IncidentDetailRecord }) {
   const { user } = useAuth()
@@ -11,7 +13,7 @@ export function IncidentInsurerPanel({ incident }: { incident: IncidentDetailRec
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
   const canSubmit = canAssessRegulatory(user?.permissions ?? [])
 
-  const { data: hub } = useQuery({ queryKey: ['incidents-hub'], queryFn: () => api.getIncidentsHub() })
+  const { data: hub } = useQuery({ queryKey: tKey(['incidents-hub']), queryFn: () => api.getIncidentsHub() })
   const submission = incident.insurerSubmission
   const connectors = hub?.insurerConnectors ?? []
 
@@ -19,8 +21,8 @@ export function IncidentInsurerPanel({ incident }: { incident: IncidentDetailRec
     mutationFn: (connectorId: string) =>
       api.submitIncidentToInsurerHub({ incidentId: incident.id, connectorId }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
     },
   })
 

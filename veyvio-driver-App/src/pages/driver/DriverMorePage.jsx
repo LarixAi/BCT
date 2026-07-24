@@ -24,11 +24,15 @@ import DriverIdBadge from "@/components/driver/DriverIdBadge";
 import CommandBackendNotice from "@/components/driver/operational/CommandBackendNotice";
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { op } from "@/lib/driver-operational-theme";
+import { prefetchDriverRoute } from "@/lib/prefetch-routes";
 
 function Row({ to, icon: Icon, label, description }) {
   return (
     <Link
       to={to}
+      onMouseEnter={() => prefetchDriverRoute(to)}
+      onFocus={() => prefetchDriverRoute(to)}
+      onTouchStart={() => prefetchDriverRoute(to)}
       className="flex min-h-[58px] items-center gap-3 border-b border-border bg-card px-4 py-3 last:border-b-0 active:bg-muted/60"
     >
       <div className={op.iconWrap}>

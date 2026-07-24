@@ -20,6 +20,8 @@ import type {
 import { AppInvitePanel } from './AppInvitePanel'
 import { api } from '@/lib/api/client'
 import { cn } from '@/lib/cn'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const STATUS_TONE: Partial<Record<RequirementStatus, string>> = {
   missing: 'bg-surface-muted text-ink-soft',
@@ -69,7 +71,7 @@ export function ActivationResolutionCentre({
   const [tick, setTick] = useState(0)
 
   const { data: persisted } = useQuery({
-    queryKey: ['driver-requirements', driver.id],
+    queryKey: tKey(['driver-requirements', driver.id]),
     queryFn: () => api.listDriverRequirements(driver.id),
   })
 
@@ -123,8 +125,8 @@ export function ActivationResolutionCentre({
   }
 
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['driver-profile', driver.id] })
-    queryClient.invalidateQueries({ queryKey: ['driver-requirements', driver.id] })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', driver.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-requirements', driver.id]) })
     setTick((n) => n + 1)
   }
 

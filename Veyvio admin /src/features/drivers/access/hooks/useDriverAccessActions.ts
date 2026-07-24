@@ -9,6 +9,8 @@ import type { DriverProfile, SuspendDriverInput } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
 import { useDriverAccessPermissions } from './useDriverAccessPermissions'
 import { useDriverContactEditor } from './useDriverContactEditor'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export type DriverAccessSecurityTabProps = {
   driver: DriverProfile
@@ -40,9 +42,9 @@ export function useDriverAccessActions({
   const [deviceReason, setDeviceReason] = useState<Record<string, string>>({})
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['driver-profile', driver.id] })
-    queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['driver-directory-summary'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', driver.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-directory-summary']) })
   }
 
   const invite = useMutation({

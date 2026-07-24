@@ -5,6 +5,8 @@ import { SectionCard } from '@/components/ui'
 import { mockJourneySequenceApi } from '@/lib/journey-sequence/mock-hub'
 import type { MoveJourneyAction } from '@/lib/journey-sequence/types'
 import { cn } from '@/lib/cn'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const ACTIONS: { id: MoveJourneyAction; label: string; description: string }[] = [
   { id: 'move_to_run', label: 'Move to another run', description: 'Transfer selected legs onto an existing run' },
@@ -29,7 +31,7 @@ export function MoveJourneyPanel({
   const [destinationTripId, setDestinationTripId] = useState<string>('')
 
   const { data: destinations = [] } = useQuery({
-    queryKey: ['journey-destinations', tripId],
+    queryKey: tKey(['journey-destinations', tripId]),
     queryFn: () => mockJourneySequenceApi.listDestinationRuns(tripId),
   })
 
@@ -57,10 +59,10 @@ export function MoveJourneyPanel({
         reason: 'Operational transfer',
       }),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['journey-sequence'] })
-      queryClient.invalidateQueries({ queryKey: ['operational-trip'] })
-      queryClient.invalidateQueries({ queryKey: ['operational-trips'] })
-      queryClient.invalidateQueries({ queryKey: ['assignment-history'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['journey-sequence']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['operational-trip']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['operational-trips']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['assignment-history']) })
       onDone(result.message)
     },
   })

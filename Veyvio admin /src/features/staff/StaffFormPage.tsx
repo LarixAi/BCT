@@ -5,7 +5,9 @@ import { SectionCard } from '@/components/ui'
 import { DEPARTMENTS, STAFF_ROLES } from '@/lib/staff/constants'
 import type { CreateStaffInput, StaffApplication } from '@/lib/staff/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const STEPS = ['Identity', 'Employment', 'Assignment', 'Access', 'Review'] as const
 
@@ -15,8 +17,8 @@ export function StaffFormPage() {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
   const [step, setStep] = useState(0)
 
-  const { data: depots = [] } = useQuery({ queryKey: ['depots'], queryFn: () => api.getDepots() })
-  const { data: managers = [] } = useQuery({ queryKey: ['staff-profiles'], queryFn: () => api.getStaffProfiles() })
+  const { data: depots = [] } = useQuery({ queryKey: tKey(['depots']), queryFn: () => api.getDepots() })
+  const { data: managers = [] } = useQuery({ queryKey: tKey(['staff-profiles']), queryFn: () => api.getStaffProfiles() })
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')

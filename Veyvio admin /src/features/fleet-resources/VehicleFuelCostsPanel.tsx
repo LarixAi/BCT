@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { resolveFleetResourcesHub } from '@/lib/fleet-resources/resolve-hub'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleFuelCostsPanel({
   vehicleId,
@@ -13,7 +15,7 @@ export function VehicleFuelCostsPanel({
   fuelLevelPercent: number | null
 }) {
   const { data } = useQuery({
-    queryKey: ['fleet-resources-hub'],
+    queryKey: tKey(['fleet-resources-hub']),
     queryFn: () =>
       resolveFleetResourcesHub({
         fetchLiveHub: () => api.getFleetResourcesHub(),

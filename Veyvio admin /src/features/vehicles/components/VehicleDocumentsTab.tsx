@@ -7,6 +7,8 @@ import { DOCUMENT_FOLDERS, groupDocumentsByFolder } from '@/lib/vehicles/documen
 import type { DocumentFolderId } from '@/lib/vehicles/document-folders'
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleDocumentsTab({
   vehicle,
@@ -29,10 +31,10 @@ export function VehicleDocumentsTab({
   const rows = grouped[folder]
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profile', vehicle.id] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-directory-summary'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', vehicle.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-directory-summary']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicles']) })
   }
 
   const upload = useMutation({

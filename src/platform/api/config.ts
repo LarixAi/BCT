@@ -1,19 +1,13 @@
 /**
- * API mode is mock-first so the app runs fully offline / without a backend.
- *
- * Live mode when:
- * - Command auth is configured (VITE_API_URL + VITE_SUPABASE_ANON_KEY), or
- * - Explicit VITE_USE_MOCK_API=false + VITE_API_BASE_URL (legacy yard stub)
+ * Live API is the default. Mock is opt-in for isolated tests only (VITE_USE_MOCK_API=true).
  */
 import { getCommandApiUrl, getSupabaseAnonKey, isMockAuth } from "@/platform/auth/auth-config";
 
 export function isMockApi(): boolean {
   if (import.meta.env.VITE_USE_MOCK_API === "true") return true;
+  if (import.meta.env.VITE_USE_MOCK_API === "false") return false;
   if (!isMockAuth() && getCommandApiUrl() && getSupabaseAnonKey()) return false;
-  if (import.meta.env.VITE_USE_MOCK_API === "false" && import.meta.env.VITE_API_BASE_URL) {
-    return false;
-  }
-  return true;
+  return false;
 }
 
 /** Legacy yard stub base (`/v1/yard/...`). Prefer Command URL when live. */

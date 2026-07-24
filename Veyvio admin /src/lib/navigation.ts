@@ -28,10 +28,8 @@ export const COMMAND_NAV: NavEntry[] = [
     label: 'Operations',
     children: [
       { label: 'Bookings', href: '/bookings' },
-      { label: 'Dispatch', href: '/dispatch' },
-      { label: 'Runs', href: '/runs' },
-      { label: 'Trips', href: '/trips' },
       { label: 'Schedule', href: '/schedule' },
+      { label: 'Dispatch', href: '/dispatch' },
       { label: 'Recurring Transport', href: '/recurring-transport' },
     ],
   },

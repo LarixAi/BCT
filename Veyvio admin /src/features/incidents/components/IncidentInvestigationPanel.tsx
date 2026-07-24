@@ -9,7 +9,9 @@ import {
 import { canInvestigateIncident } from '@/lib/incidents/permissions'
 import type { IncidentDetailRecord } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function CauseChecklist({
   label,
@@ -76,8 +78,8 @@ export function IncidentInvestigationPanel({ incident }: { incident: IncidentDet
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
     },
   })
 

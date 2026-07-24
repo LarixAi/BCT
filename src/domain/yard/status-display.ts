@@ -54,3 +54,19 @@ export const STATUS_DISPLAY: Record<VehicleStatus, StatusDisplay> = {
 export function statusLabel(status: VehicleStatus): string {
   return STATUS_DISPLAY[status].label;
 }
+
+export function statusPillTone(
+  status: VehicleStatus,
+): "neutral" | "progress" | "ok" | "warn" | "review" {
+  switch (status) {
+    case "Available":
+    case "On Departure Line":
+      return "ok";
+    case "Awaiting Check":
+      return "progress";
+    case "VOR":
+      return "warn";
+    default:
+      return "neutral";
+  }
+}

@@ -4,7 +4,9 @@ import { canBulkDefectAction } from '@/lib/defects/permissions'
 import { defectsToCsv, downloadDefectsCsv } from '@/lib/defects/export'
 import type { DefectRegisterRow } from '@/lib/defects/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DefectsBulkActionBar({
   selected,
@@ -38,7 +40,7 @@ export function DefectsBulkActionBar({
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['defects-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['defects-hub']) })
       onClear()
       setNote('')
     },

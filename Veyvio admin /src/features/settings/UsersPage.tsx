@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function UsersPage() {
   const { data: users = [], isLoading, isError, error } = useQuery({
-    queryKey: ['users'],
+    queryKey: tKey(['users']),
     queryFn: () => api.getUsers(),
   })
 

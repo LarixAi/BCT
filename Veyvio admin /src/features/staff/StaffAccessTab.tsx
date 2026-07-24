@@ -6,7 +6,9 @@ import { APPLICATION_LABELS } from '@/lib/staff/constants'
 import { canReviewStaffAccess } from '@/lib/staff/permissions'
 import type { StaffHubData } from '@/lib/staff/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function StaffAccessTab({ hub }: { hub: StaffHubData }) {
   const { user } = useAuth()
@@ -17,7 +19,7 @@ export function StaffAccessTab({ hub }: { hub: StaffHubData }) {
 
   const completeReview = useMutation({
     mutationFn: (staffId: string) => api.completeStaffAccessReview(staffId, { confirmRolesStillRequired: true }, actorName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff-hub'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['staff-hub']) }),
   })
 
   const { governanceSummary, ssoPolicy } = hub

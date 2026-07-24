@@ -81,7 +81,22 @@ export function formatDutyClock(value: string | null | undefined): string {
   return value
 }
 
+export function normalizeDutyDate(value: string | null | undefined): string | null {
+  if (!value) return null
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/)
+  return match ? match[1]! : null
+}
+
 const DELAY_THRESHOLD_MINUTES = 8
+
+function formatConflictDate(iso: string) {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
 
 export function isRunDelayed(duty: DutyRecord, now: Date = new Date()) {
   if (duty.vehicle?.status === 'off_road' && isRunActive(duty.status)) return true
@@ -240,7 +255,7 @@ export function detectScheduleConflicts(duties: DutyRecord[]): ScheduleConflict[
         id: `driver-clash-${dayList[0].driver!.id}-${date}`,
         severity: 'warning',
         title: 'Driver double booked',
-        detail: `${runDriverName(dayList[0])} has ${dayList.length} runs on ${date}`,
+        detail: `${runDriverName(dayList[0])} has ${dayList.length} runs on ${formatConflictDate(date)}`,
         dutyIds: dayList.map((d) => d.id),
       })
     }
@@ -260,7 +275,7 @@ export function detectScheduleConflicts(duties: DutyRecord[]): ScheduleConflict[
         id: `vehicle-clash-${dayList[0].vehicle!.id}-${date}`,
         severity: 'warning',
         title: 'Vehicle double booked',
-        detail: `${dayList[0].vehicle!.registrationNumber} has ${dayList.length} runs on ${date}`,
+        detail: `${dayList[0].vehicle!.registrationNumber} has ${dayList.length} runs on ${formatConflictDate(date)}`,
         dutyIds: dayList.map((d) => d.id),
       })
     }

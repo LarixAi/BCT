@@ -1,23 +1,33 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BOOKING_TYPE_OPTIONS } from '@/lib/bookings/constants'
 import type { BookingDraft, BookingType } from '@/lib/bookings/types'
 import { hasBlockingErrors } from '@/lib/bookings/validation'
 import { api } from '@/lib/api/client'
 import { BookingStepper, BookingSummaryPanel } from './components/BookingWizardUi'
+import { JourneyStructureStep } from './steps/JourneyStructureStep'
 import { CustomerStep } from './steps/CustomerStep'
 import { PassengersStep } from './steps/PassengersStep'
 import { JourneyStep } from './steps/JourneyStep'
-import { RequirementsStep } from './steps/RequirementsStep'
 import { ScheduleStep } from './steps/ScheduleStep'
+import { RequirementsStep } from './steps/RequirementsStep'
 import { PricingStep } from './steps/PricingStep'
-import { DispatchStep } from './steps/DispatchStep'
 import { ReviewStep } from './steps/ReviewStep'
+import { draftSaveStatusLabel, useBookingDraftAutosave } from './useBookingDraftAutosave'
+import { inferBookingCustomer } from '@/lib/bookings/resolve-booking-customer'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
+
+function stepContinueError(step: number, draft: BookingDraft): string | null {
+  if (step === 2 && !draft.customerId) return 'Select a customer before continuing.'
+  if (step === 3 && draft.passengers.length === 0) return 'Add at least one passenger before continuing.'
+  return null
+}
 
 export function CreateBookingPage() {
   const [searchParams] = useSearchParams()
-  const typeParam = searchParams.get('type') as BookingType | null
+  const journeyParam = searchParams.get('journey') as BookingType | null
+  const typeParam = (searchParams.get('type') as BookingType | null) ?? journeyParam ?? 'one_way'
   const draftIdParam = searchParams.get('draft')
   const customerParam = searchParams.get('customer')
   const passengerParam = searchParams.get('passenger')
@@ -30,16 +40,15 @@ export function CreateBookingPage() {
   const hasEntryParam =
     !!draftIdParam || !!customerParam || !!passengerParam || !!duplicateParam || !!returnFromParam
 
-  const [selectedType, setSelectedType] = useState<BookingType | null>(typeParam)
   const [draft, setDraft] = useState<BookingDraft | null>(null)
+  const draftRef = useRef<BookingDraft | null>(null)
   const [error, setError] = useState('')
-  const [initializing, setInitializing] = useState(hasEntryParam || !!typeParam)
+  const [initializing, setInitializing] = useState(true)
 
   const initDraft = useMutation({
     mutationFn: (type: BookingType) => api.createBookingDraft(type),
     onSuccess: (d) => {
       setDraft(d)
-      setSelectedType(d.bookingType)
       setInitializing(false)
     },
     onError: (e) => {
@@ -58,19 +67,16 @@ export function CreateBookingPage() {
         if (duplicateParam) {
           const d = await api.duplicateBooking(duplicateParam)
           setDraft(d)
-          setSelectedType(d.bookingType)
           return
         }
         if (returnFromParam) {
           const d = await api.createReturnBooking(returnFromParam, tripParam ?? '')
           setDraft(d)
-          setSelectedType(d.bookingType)
           return
         }
         if (draftIdParam) {
           const d = await api.getBookingDraft(draftIdParam)
           setDraft(d)
-          setSelectedType(d.bookingType)
           return
         }
         if (customerParam || passengerParam) {
@@ -79,46 +85,78 @@ export function CreateBookingPage() {
             passengerId: passengerParam ?? undefined,
           })
           setDraft(d)
-          setSelectedType(d.bookingType)
           return
         }
-        if (typeParam) {
-          initDraft.mutate(typeParam)
-          return
-        }
+        initDraft.mutate(typeParam ?? 'one_way')
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not load booking draft')
+        setInitializing(false)
       } finally {
-        if (!typeParam || customerParam || passengerParam || duplicateParam || returnFromParam || draftIdParam) {
+        if (duplicateParam || returnFromParam || draftIdParam || customerParam || passengerParam) {
           setInitializing(false)
         }
       }
     }
 
-    if (hasEntryParam || typeParam) {
-      loadDraft()
-    }
-  }, [draftIdParam, typeParam, customerParam, passengerParam, duplicateParam, returnFromParam, tripParam, draft, hasEntryParam])
+    loadDraft()
+  }, [
+    draftIdParam,
+    typeParam,
+    customerParam,
+    passengerParam,
+    duplicateParam,
+    returnFromParam,
+    tripParam,
+    draft,
+    hasEntryParam,
+    typeParam,
+  ])
 
   const { data: validation = [] } = useQuery({
-    queryKey: ['booking-validation', draft],
+    queryKey: tKey(['booking-validation', draft]),
     queryFn: () => api.validateBookingDraft(draft!),
     enabled: !!draft,
   })
+
+  const { data: passengerCatalog = [] } = useQuery({
+    queryKey: tKey(['passengers']),
+    queryFn: () => api.getPassengers(),
+    enabled: !!draft,
+  })
+
+  const { data: customerCatalog = [] } = useQuery({
+    queryKey: tKey(['customers']),
+    queryFn: () => api.getCustomers(),
+    enabled: !!draft,
+  })
+
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
+
+  useEffect(() => {
+    if (!draft || draft.customerId || draft.passengers.length === 0) return
+    const inferred = inferBookingCustomer(draft, passengerCatalog, customerCatalog)
+    if (!inferred) return
+    setDraft((current) => (current ? { ...current, ...inferred } : current))
+  }, [draft, passengerCatalog, customerCatalog])
 
   const saveDraft = useMutation({
     mutationFn: (d: BookingDraft) => api.saveBookingDraft(d),
     onSuccess: (d) => {
       setDraft(d)
-      queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['bookings']) })
     },
   })
+
+  const persistDraft = useCallback((d: BookingDraft) => saveDraft.mutateAsync(d), [saveDraft])
+  const autosaveStatus = useBookingDraftAutosave(draft, persistDraft)
 
   const confirm = useMutation({
     mutationFn: (opts: { asQuotation?: boolean }) => api.confirmBookingDraft(draft!, opts),
     onSuccess: (record) => {
-      queryClient.invalidateQueries({ queryKey: ['bookings'] })
-      queryClient.invalidateQueries({ queryKey: ['duties'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['bookings']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['duties']) })
       navigate(`/bookings/${record.id}`)
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Could not confirm booking'),
@@ -131,18 +169,21 @@ export function CreateBookingPage() {
       return returnDraft
     },
     onSuccess: (returnDraft) => {
-      queryClient.invalidateQueries({ queryKey: ['bookings'] })
-      queryClient.invalidateQueries({ queryKey: ['duties'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['bookings']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['duties']) })
       setDraft(returnDraft)
-      setSelectedType(returnDraft.bookingType)
       navigate(`/bookings/new?draft=${returnDraft.id}`)
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Could not confirm booking'),
   })
 
   function patch(p: Partial<BookingDraft>) {
-    if (!draft) return
-    setDraft({ ...draft, ...p })
+    setDraft((current) => {
+      if (!current) return current
+      const next = { ...current, ...p }
+      draftRef.current = next
+      return next
+    })
   }
 
   function goStep(step: number) {
@@ -151,16 +192,24 @@ export function CreateBookingPage() {
   }
 
   async function handleNext() {
-    if (!draft) return
+    const current = draftRef.current
+    if (!current) return
     setError('')
-    if (draft.currentStep === 7) {
-      const saved = await saveDraft.mutateAsync({ ...draft, currentStep: 8 })
-      setDraft(saved)
+    const stepError = stepContinueError(current.currentStep, current)
+    if (stepError) {
+      setError(stepError)
       return
     }
-    if (draft.currentStep < 8) {
-      const saved = await saveDraft.mutateAsync({ ...draft, currentStep: draft.currentStep + 1 })
+    if (current.currentStep === 7) {
+      const saved = await saveDraft.mutateAsync({ ...current, currentStep: 8 })
       setDraft(saved)
+      draftRef.current = saved
+      return
+    }
+    if (current.currentStep < 8) {
+      const saved = await saveDraft.mutateAsync({ ...current, currentStep: current.currentStep + 1 })
+      setDraft(saved)
+      draftRef.current = saved
     }
   }
 
@@ -169,16 +218,25 @@ export function CreateBookingPage() {
     setDraft({ ...draft, currentStep: draft.currentStep - 1 })
   }
 
-  if (!selectedType && !hasEntryParam) {
-    return <BookingTypeSelect onSelect={(type) => initDraft.mutate(type)} />
-  }
-
   if (!draft || initializing) {
-    return <p className="p-6 text-sm text-muted">Preparing booking…</p>
+    return (
+      <div className="space-y-3 p-6">
+        <p className="text-sm text-muted">Preparing booking…</p>
+        {error && (
+          <div className="max-w-lg space-y-3">
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+            <Link to="/bookings/new" className="text-sm font-medium text-command-600 hover:underline">
+              ← Back to booking type
+            </Link>
+          </div>
+        )}
+      </div>
+    )
   }
 
   const step = draft.currentStep
   const canConfirm = !hasBlockingErrors(validation)
+  const autosaveLabel = draftSaveStatusLabel(autosaveStatus)
 
   return (
     <div className="space-y-4">
@@ -189,8 +247,9 @@ export function CreateBookingPage() {
           </Link>
           <h1 className="mt-1 text-2xl font-semibold text-ink">Create booking</h1>
           <p className="text-sm text-ink-soft">
-            Booking → Trips → Stops — dispatch decides how to deliver it
+            Journey → Jobs → Trips — dispatch decides how to deliver it
           </p>
+          {autosaveLabel && <p className="mt-1 text-xs text-muted">{autosaveLabel}</p>}
         </div>
         <button
           type="button"
@@ -206,14 +265,14 @@ export function CreateBookingPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
         <div>
-          {step === 1 && <CustomerStep draft={draft} onChange={patch} />}
-          {step === 2 && <PassengersStep draft={draft} onChange={patch} />}
-          {step === 3 && <JourneyStep draft={draft} onChange={patch} />}
-          {step === 4 && <RequirementsStep draft={draft} onChange={patch} />}
+          {step === 1 && <JourneyStructureStep draft={draft} onChange={patch} />}
+          {step === 2 && <CustomerStep draft={draft} onChange={patch} />}
+          {step === 3 && <PassengersStep draft={draft} onChange={patch} />}
+          {step === 4 && <JourneyStep draft={draft} onChange={patch} />}
           {step === 5 && <ScheduleStep draft={draft} onChange={patch} />}
-          {step === 6 && <PricingStep draft={draft} onChange={patch} />}
-          {step === 7 && <DispatchStep draft={draft} onChange={patch} />}
-          {step === 8 && <ReviewStep draft={draft} validation={validation} />}
+          {step === 6 && <RequirementsStep draft={draft} onChange={patch} />}
+          {step === 7 && <PricingStep draft={draft} onChange={patch} />}
+          {step === 8 && <ReviewStep draft={draft} validation={validation} onChange={patch} />}
 
           {error && (
             <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
@@ -268,33 +327,6 @@ export function CreateBookingPage() {
         </div>
 
         <BookingSummaryPanel draft={draft} validation={validation} />
-      </div>
-    </div>
-  )
-}
-
-function BookingTypeSelect({ onSelect }: { onSelect: (type: BookingType) => void }) {
-  return (
-    <div className="space-y-6">
-      <div>
-        <Link to="/bookings" className="text-sm font-medium text-command-600 hover:underline">
-          ← Back to bookings
-        </Link>
-        <h1 className="mt-1 text-2xl font-semibold text-ink">Create booking</h1>
-        <p className="text-sm text-ink-soft">What type of transport are you booking?</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {BOOKING_TYPE_OPTIONS.map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            onClick={() => onSelect(opt.id)}
-            className="rounded-xl border border-border bg-surface p-4 text-left transition hover:border-command-400 hover:shadow-sm"
-          >
-            <p className="font-semibold text-ink">{opt.label}</p>
-            <p className="mt-1 text-sm text-ink-soft">{opt.description}</p>
-          </button>
-        ))}
       </div>
     </div>
   )

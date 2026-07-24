@@ -1,5 +1,8 @@
-import type { DriverRecord, VehicleRecord } from './types'
+import type { DriverRecord, VehicleRecord, DutyDetailRecord } from './types'
 import type { BookingRecord } from '@/lib/bookings/types'
+import type { DialARideMember, DialARideRequest } from '@/lib/dial-a-ride/types'
+import { buildJobsFromDialARideRequest } from '@/lib/dial-a-ride/job-generation'
+import type { GeneratedSchoolJob, SchoolRoute } from '@/lib/school-routes/types'
 import type {
   AssignmentHistoryEntry,
   CreateTransferInput,
@@ -35,6 +38,10 @@ let operationalTrips: OperationalTrip[] = [
     reference: 'TRP-1041',
     dutyId: 'duty-1',
     runReference: 'SCH-AM-104',
+    bookingId: 'bkg-101',
+    bookingReference: 'BK-2026-0101',
+    schoolRouteId: 'sch-route-1',
+    schoolRouteReference: 'SCH-AM-104',
     status: 'in_progress',
     driverId: 'drv-1',
     driverName: 'Jane Smith',
@@ -775,6 +782,185 @@ export const mockTransfersApi = {
     return newTrip
   },
 
+  createFromDialARideRequest(
+    request: DialARideRequest,
+    member: DialARideMember,
+    opts: { mockDuties: DutyDetailRecord[] },
+  ): OperationalTrip {
+    const tripId = `trip-dar-${++tripSeq}`
+    const dutyId = `duty-dar-${request.id}`
+    const generated = buildJobsFromDialARideRequest(request, member)
+
+    const jobs: OperationalJob[] = generated.map((g, i) => {
+      const journeyId = `jny-${tripId}-${g.leg}`
+      journeys.push({
+        id: journeyId,
+        bookingId: request.id,
+        passengerId: g.passengerId,
+        passengerName: g.passengerName,
+        origin: g.pickupAddress,
+        destination: g.dropoffAddress,
+      })
+      return job(tripId, {
+        id: `job-${tripId}-${i + 1}`,
+        sequence: i + 1,
+        journeyId,
+        passengerId: g.passengerId,
+        passengerName: g.passengerName,
+        pickupAddress: g.pickupAddress,
+        dropoffAddress: g.dropoffAddress,
+        plannedPickupTime: g.plannedPickupTime,
+        status: 'unstarted',
+        wheelchairRequired: g.wheelchairRequired,
+        escortRequired: g.escortRequired,
+        safeguardingFlag: g.safeguardingFlag,
+      })
+    })
+
+    opts.mockDuties.push({
+      id: dutyId,
+      reference: request.reference,
+      dutyDate: request.travelDate,
+      startTime: request.preferredPickupTime || request.pickupWindowStart,
+      endTime: request.returnRequired ? request.returnTime : null,
+      status: 'unassigned',
+      route: { id: `route-dar-${request.id}`, name: `Dial-a-Ride — ${request.memberName}` },
+      driver: null,
+      vehicle: null,
+      notes: `From Dial-a-Ride ${request.reference}`,
+    })
+
+    const newTrip: OperationalTrip = {
+      id: tripId,
+      reference: `TRP-${tripSeq}`,
+      dutyId,
+      runReference: request.reference,
+      status: 'planned',
+      driverId: null,
+      driverName: null,
+      vehicleId: null,
+      vehicleRegistration: null,
+      depotId: null,
+      depotName: null,
+      assignmentStatus: 'unassigned',
+      acceptedAt: null,
+      acknowledgedAt: null,
+      manifestVersion: 1,
+      lastAppSync: null,
+      delayMinutes: 0,
+      passengersOnboard: 0,
+      completedJobCount: 0,
+      totalJobCount: jobs.length,
+      activeJobId: null,
+      routeName: `Dial-a-Ride — ${request.memberName}`,
+      gpsLat: null,
+      gpsLng: null,
+      driverOnline: false,
+      jobs,
+      bookingId: request.id,
+    }
+    syncTripCounts(newTrip)
+    operationalTrips = [newTrip, ...operationalTrips]
+    return newTrip
+  },
+
+  createFromSchoolRoutePublish(
+    route: SchoolRoute,
+    generatedJobs: GeneratedSchoolJob[],
+    opts: { mockDuties: DutyDetailRecord[] },
+  ): OperationalTrip[] {
+    const groups = new Map<string, GeneratedSchoolJob[]>()
+    for (const j of generatedJobs) {
+      const key = `${j.serviceDate}|${j.direction}`
+      const list = groups.get(key) ?? []
+      list.push(j)
+      groups.set(key, list)
+    }
+
+    const created: OperationalTrip[] = []
+    for (const [key, groupJobs] of groups) {
+      const [serviceDate, direction] = key.split('|') as [string, 'am' | 'pm']
+      const tripId = `trip-sch-${++tripSeq}`
+      const dutyId = `duty-sch-${route.id}-${key}`
+
+      const jobs: OperationalJob[] = groupJobs.map((g, i) => {
+        const journeyId = `jny-${tripId}-${g.pupilId}`
+        journeys.push({
+          id: journeyId,
+          bookingId: route.id,
+          passengerId: g.pupilId,
+          passengerName: g.pupilName,
+          origin: g.pickupAddress,
+          destination: g.dropoffAddress,
+        })
+        return job(tripId, {
+          id: `job-${tripId}-${i + 1}`,
+          sequence: i + 1,
+          journeyId,
+          passengerId: g.pupilId,
+          passengerName: g.pupilName,
+          pickupAddress: g.pickupAddress,
+          dropoffAddress: g.dropoffAddress,
+          plannedPickupTime: g.plannedPickupTime,
+          status: 'unstarted',
+          wheelchairRequired: g.wheelchairRequired,
+          escortRequired: g.escortRequired,
+          safeguardingFlag: g.safeguardingFlag,
+        })
+      })
+
+      opts.mockDuties.push({
+        id: dutyId,
+        reference: `${route.reference}-${direction.toUpperCase()}`,
+        dutyDate: serviceDate,
+        startTime: groupJobs[0]?.plannedPickupTime ?? '07:30',
+        endTime: null,
+        status: 'unassigned',
+        route: {
+          id: `route-sch-${route.id}-${direction}`,
+          name: `School Route — ${route.schoolName} ${direction.toUpperCase()}`,
+        },
+        driver: null,
+        vehicle: null,
+        notes: `From school route ${route.reference} v${route.version}`,
+      })
+
+      const newTrip: OperationalTrip = {
+        id: tripId,
+        reference: `TRP-${tripSeq}`,
+        dutyId,
+        runReference: route.reference,
+        status: 'planned',
+        driverId: null,
+        driverName: null,
+        vehicleId: null,
+        vehicleRegistration: null,
+        depotId: null,
+        depotName: null,
+        assignmentStatus: 'unassigned',
+        acceptedAt: null,
+        acknowledgedAt: null,
+        manifestVersion: 1,
+        lastAppSync: null,
+        delayMinutes: 0,
+        passengersOnboard: 0,
+        completedJobCount: 0,
+        totalJobCount: jobs.length,
+        activeJobId: null,
+        routeName: `School Route — ${route.schoolName} ${direction.toUpperCase()}`,
+        gpsLat: null,
+        gpsLng: null,
+        driverOnline: false,
+        jobs,
+        bookingId: route.id,
+      }
+      syncTripCounts(newTrip)
+      operationalTrips = [newTrip, ...operationalTrips]
+      created.push(newTrip)
+    }
+    return created
+  },
+
   commitHandover(
     input: HandoverInput,
     actorName: string,
@@ -865,6 +1051,157 @@ export const mockTransfersApi = {
     ]
 
     return record
+  },
+
+  assignTripResources(
+    tripId: string,
+    opts: {
+      driverId?: string | null
+      driverName?: string | null
+      vehicleId?: string | null
+      vehicleRegistration?: string | null
+    },
+  ): OperationalTrip {
+    const idx = operationalTrips.findIndex((t) => t.id === tripId)
+    if (idx < 0) throw new Error('Operational trip not found')
+    const trip = { ...operationalTrips[idx]!, jobs: operationalTrips[idx]!.jobs.map((j) => ({ ...j })) }
+
+    if ('driverId' in opts) {
+      trip.driverId = opts.driverId ?? null
+      trip.driverName = opts.driverName ?? null
+    }
+    if ('vehicleId' in opts) {
+      trip.vehicleId = opts.vehicleId ?? null
+      trip.vehicleRegistration = opts.vehicleRegistration ?? null
+    }
+
+    const hasDriver = Boolean(trip.driverId)
+    const hasVehicle = Boolean(trip.vehicleId)
+    if (hasDriver && hasVehicle) {
+      trip.assignmentStatus = 'assigned'
+      trip.status = trip.status === 'planned' ? 'assigned' : trip.status
+    } else {
+      trip.assignmentStatus = 'unassigned'
+    }
+
+    for (const job of trip.jobs) {
+      if (hasDriver) job.assignedDriverId = trip.driverId
+      if (hasVehicle) job.assignedVehicleId = trip.vehicleId
+    }
+
+    operationalTrips[idx] = trip
+    return mockTransfersApi.getTrip(tripId)
+  },
+
+  moveJobToTrip(jobId: string, targetTripId: string): OperationalTrip {
+    let sourceTripIdx = -1
+    let jobIdx = -1
+    for (let i = 0; i < operationalTrips.length; i++) {
+      const j = operationalTrips[i]!.jobs.findIndex((x) => x.id === jobId)
+      if (j >= 0) {
+        sourceTripIdx = i
+        jobIdx = j
+        break
+      }
+    }
+    if (sourceTripIdx < 0) throw new Error('Job not found')
+
+    const targetIdx = operationalTrips.findIndex((t) => t.id === targetTripId)
+    if (targetIdx < 0) throw new Error('Target trip not found')
+    if (sourceTripIdx === targetIdx) return mockTransfersApi.getTrip(targetTripId)
+
+    const sourceTrip = {
+      ...operationalTrips[sourceTripIdx]!,
+      jobs: [...operationalTrips[sourceTripIdx]!.jobs],
+    }
+    const targetTrip = {
+      ...operationalTrips[targetIdx]!,
+      jobs: [...operationalTrips[targetIdx]!.jobs],
+    }
+
+    const [moved] = sourceTrip.jobs.splice(jobIdx, 1)
+    if (!moved) throw new Error('Job not found')
+    moved.tripId = targetTripId
+    moved.sequence = targetTrip.jobs.length + 1
+    if (targetTrip.driverId) moved.assignedDriverId = targetTrip.driverId
+    if (targetTrip.vehicleId) moved.assignedVehicleId = targetTrip.vehicleId
+    targetTrip.jobs.push(moved)
+
+    sourceTrip.jobs.forEach((j, i) => {
+      j.sequence = i + 1
+    })
+    syncTripCounts(sourceTrip)
+    syncTripCounts(targetTrip)
+    operationalTrips[sourceTripIdx] = sourceTrip
+    operationalTrips[targetIdx] = targetTrip
+    return mockTransfersApi.getTrip(targetTripId)
+  },
+
+  createTripFromJobs(
+    jobIds: string[],
+    opts?: { dutyId?: string | null; runReference?: string | null; routeName?: string | null },
+  ): OperationalTrip {
+    if (jobIds.length === 0) throw new Error('Select at least one job')
+
+    const tripId = `trip-plan-${++tripSeq}`
+    const jobs: OperationalJob[] = []
+    const sourceTripIds = new Set<string>()
+
+    for (const jobId of jobIds) {
+      for (const trip of operationalTrips) {
+        const job = trip.jobs.find((j) => j.id === jobId)
+        if (job) {
+          sourceTripIds.add(trip.id)
+          jobs.push({ ...job, tripId, sequence: jobs.length + 1 })
+          break
+        }
+      }
+    }
+
+    if (jobs.length !== jobIds.length) throw new Error('One or more jobs could not be found')
+
+    for (const sourceId of sourceTripIds) {
+      const idx = operationalTrips.findIndex((t) => t.id === sourceId)
+      if (idx < 0) continue
+      const trip = { ...operationalTrips[idx]!, jobs: operationalTrips[idx]!.jobs.filter((j) => !jobIds.includes(j.id)) }
+      trip.jobs.forEach((j, i) => {
+        j.sequence = i + 1
+      })
+      syncTripCounts(trip)
+      operationalTrips[idx] = trip
+    }
+
+    const newTrip: OperationalTrip = {
+      id: tripId,
+      reference: `TRP-${tripSeq}`,
+      dutyId: opts?.dutyId ?? null,
+      runReference: opts?.runReference ?? opts?.dutyId ?? null,
+      status: 'planned',
+      driverId: null,
+      driverName: null,
+      vehicleId: null,
+      vehicleRegistration: null,
+      depotId: 'depot-wembley',
+      depotName: 'Wembley Depot',
+      assignmentStatus: 'unassigned',
+      acceptedAt: null,
+      acknowledgedAt: null,
+      manifestVersion: 1,
+      lastAppSync: null,
+      delayMinutes: 0,
+      passengersOnboard: 0,
+      completedJobCount: 0,
+      totalJobCount: jobs.length,
+      activeJobId: null,
+      routeName: opts?.routeName ?? `Planned trip (${jobs.length} jobs)`,
+      gpsLat: null,
+      gpsLng: null,
+      driverOnline: false,
+      jobs,
+    }
+    syncTripCounts(newTrip)
+    operationalTrips = [newTrip, ...operationalTrips]
+    return mockTransfersApi.getTrip(tripId)
   },
 
   getTransferReport(periodFrom: string, periodTo: string): TransferReportSummary {

@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
 import type { YardDriverMessage, YardHubData } from '@/lib/yard/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function YardDriverMessagesTab({ hub }: { hub: YardHubData }) {
   const queryClient = useQueryClient()
@@ -26,7 +28,7 @@ export function YardDriverMessagesTab({ hub }: { hub: YardHubData }) {
     onSuccess: async () => {
       setReply('')
       setError('')
-      await queryClient.invalidateQueries({ queryKey: ['yard-hub'] })
+      await queryClient.invalidateQueries({ queryKey: tKey(['yard-hub']) })
     },
     onError: (err: Error) => setError(err.message || 'Reply could not be sent.'),
   })

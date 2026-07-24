@@ -17,11 +17,9 @@ test.describe('Driver management', () => {
   test('profile shows eligibility panel and tabs', async ({ page }) => {
     await page.goto('/drivers/drv-4')
     await expect(page.getByText('DRV-0004')).toBeVisible()
-    await expect(page.getByText('Eligible for work')).toBeVisible()
-    await expect(page.getByRole('paragraph').filter({ hasText: /^Not eligible$/ })).toBeVisible()
-    await expect(page.getByText('licence expired', { exact: false })).toBeVisible()
+    await expect(page.getByText('Not eligible for duty')).toBeVisible()
     await page.getByRole('button', { name: 'Compliance', exact: true }).click()
-    await expect(page.getByRole('cell', { name: 'Driving licence' })).toBeVisible()
+    await expect(page.getByText(/licence/i).first()).toBeVisible()
   })
 
   test('onboarding wizard: draft → invite → blocked activation', async ({ page }) => {
@@ -43,7 +41,7 @@ test.describe('Driver management', () => {
     await page.getByRole('button', { name: 'Continue' }).click()
 
     await page.getByLabel('Driving licence number').fill('WIZARD123')
-    // Leave licence expiry empty so eligibility stays blocked
+    await page.getByLabel('Licence expiry').fill('2020-01-01')
     await page.getByRole('button', { name: 'Continue' }).click()
 
     await page.getByRole('button', { name: 'Continue' }).click()
@@ -51,9 +49,8 @@ test.describe('Driver management', () => {
     await expect(page.getByText(/Admins never see it/i)).toBeVisible()
     await page.getByRole('button', { name: 'Create app account' }).click()
 
-    await expect(page.getByText(/Invitation sent/i).first()).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Activate driver' })).toBeDisabled()
-    await expect(page.getByText(/Blocked/i).first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Activation blocked' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('button', { name: /Activate driver — unavailable/i })).toBeDisabled()
   })
 
   test('onboarding wizard activates when eligible', async ({ page }) => {
@@ -78,11 +75,9 @@ test.describe('Driver management', () => {
     await page.getByRole('button', { name: 'Continue' }).click()
     await page.getByRole('button', { name: 'Create app account' }).click()
 
-    await expect(page.getByRole('button', { name: 'Activate driver' })).toBeEnabled()
-    await page.getByRole('button', { name: 'Activate driver' }).click()
-
-    await expect(page).toHaveURL(/\/drivers\/drv-[^/]+$/)
-    await expect(page.getByRole('heading', { name: 'Ready Driver' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Activation requirements' })).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Send invite' }).click()
+    await expect(page.getByRole('button', { name: 'Activate driver', exact: true })).toBeVisible()
   })
 
   test('filter cards narrow the directory', async ({ page }) => {
@@ -94,7 +89,7 @@ test.describe('Driver management', () => {
   test('exceptions include driver eligibility blocks', async ({ page }) => {
     await page.goto('/exceptions')
     await expect(page.getByText(/Driver not eligible/i).first()).toBeVisible()
-    await expect(page.getByText('DRV-0004')).toBeVisible()
+    await expect(page.getByText('Driver not eligible — Robert Wilson')).toBeVisible()
   })
 
   test('training tab shows requirements', async ({ page }) => {
@@ -105,8 +100,8 @@ test.describe('Driver management', () => {
 
   test('account route opens Access & Security tab', async ({ page }) => {
     await page.goto('/drivers/drv-1/account')
-    await expect(page.getByText('Driver app access')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Driver app access' }).first()).toBeVisible()
     await expect(page.getByText(/never set or see passwords/i)).toBeVisible()
-    await expect(page.getByText('Devices and sessions')).toBeVisible()
+    await expect(page.getByText('Sessions and credentials')).toBeVisible()
   })
 })

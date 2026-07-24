@@ -4,10 +4,12 @@ import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { RELEASE_DECISION_LABELS } from '@/lib/vehicles/constants'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VorBoardPage() {
   const { data: vehicles = [], isLoading } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 

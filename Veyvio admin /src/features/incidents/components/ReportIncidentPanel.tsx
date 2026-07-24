@@ -4,7 +4,9 @@ import { SectionCard } from '@/components/ui'
 import { CATEGORY_LABELS, INCIDENT_CATEGORIES } from '@/lib/incidents/constants'
 import type { IncidentCategory, IncidentSeverity } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const IMMEDIATE_ACTION_OPTIONS = [
   'Emergency services contacted',
@@ -21,11 +23,11 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
-  const { data: vehicles = [] } = useQuery({ queryKey: ['vehicles'], queryFn: () => api.getVehicles() })
-  const { data: drivers = [] } = useQuery({ queryKey: ['drivers'], queryFn: () => api.getDrivers() })
-  const { data: schools = [] } = useQuery({ queryKey: ['schools'], queryFn: () => api.getSchools() })
-  const { data: contracts = [] } = useQuery({ queryKey: ['contracts'], queryFn: () => api.getContracts() })
-  const { data: passengers = [] } = useQuery({ queryKey: ['passengers'], queryFn: () => api.getPassengers() })
+  const { data: vehicles = [] } = useQuery({ queryKey: tKey(['vehicles']), queryFn: () => api.getVehicles() })
+  const { data: drivers = [] } = useQuery({ queryKey: tKey(['drivers']), queryFn: () => api.getDrivers() })
+  const { data: schools = [] } = useQuery({ queryKey: tKey(['schools']), queryFn: () => api.getSchools() })
+  const { data: contracts = [] } = useQuery({ queryKey: tKey(['contracts']), queryFn: () => api.getContracts() })
+  const { data: passengers = [] } = useQuery({ queryKey: tKey(['passengers']), queryFn: () => api.getPassengers() })
 
   const [step, setStep] = useState(1)
   const [immediateDanger, setImmediateDanger] = useState<'yes' | 'emergency_contacted' | 'no' | 'unknown'>('no')
@@ -81,7 +83,7 @@ export function ReportIncidentPanel({ onClose }: { onClose: () => void }) {
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
       onClose()
     },
   })

@@ -7,7 +7,9 @@ import { DUTY_STATUS_LABELS } from '@/lib/staff/constants'
 import { canManageStaffDuty } from '@/lib/staff/permissions'
 import type { StaffHubData } from '@/lib/staff/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
   const { user } = useAuth()
@@ -17,7 +19,7 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
   const [handoverTo, setHandoverTo] = useState('')
 
   const { data: staffList = [] } = useQuery({
-    queryKey: ['staff-profiles'],
+    queryKey: tKey(['staff-profiles']),
     queryFn: () => api.getStaffProfiles(),
   })
 
@@ -25,8 +27,8 @@ export function StaffAvailabilityTab({ hub }: { hub: StaffHubData }) {
     mutationFn: ({ handoverId, toStaffId }: { handoverId: string; toStaffId: string }) =>
       api.completeStaffHandover(handoverId, toStaffId, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['staff-profiles'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['staff-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['staff-profiles']) })
       setHandoverTo('')
     },
   })

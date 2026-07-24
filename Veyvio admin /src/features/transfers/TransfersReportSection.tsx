@@ -2,10 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function TransfersReportSection({ from, to }: { from: string; to: string }) {
   const { data: report, isLoading } = useQuery({
-    queryKey: ['transfer-report', from, to],
+    queryKey: tKey(['transfer-report', from, to]),
     queryFn: () => api.getTransferReport(from, to),
   })
 

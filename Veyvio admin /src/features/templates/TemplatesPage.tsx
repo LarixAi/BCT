@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function TemplatesPage() {
   const { data: templates = [], isLoading } = useQuery({
-    queryKey: ['message-templates'],
+    queryKey: tKey(['message-templates']),
     queryFn: () => api.getMessageTemplates(),
   })
 

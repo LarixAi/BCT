@@ -3,8 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EQUIPMENT_STATUS_LABEL } from '@/lib/fleet-resources/constants'
 import type { FleetResourcesHubData } from '@/lib/fleet-resources/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { useState } from 'react'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function EquipmentTab({ hub }: { hub: FleetResourcesHubData }) {
   const { user } = useAuth()
@@ -14,7 +16,7 @@ export function EquipmentTab({ hub }: { hub: FleetResourcesHubData }) {
   const [vehicleId, setVehicleId] = useState('')
 
   const { data: vehicles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
@@ -26,7 +28,7 @@ export function EquipmentTab({ hub }: { hub: FleetResourcesHubData }) {
         actorName,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fleet-resources-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['fleet-resources-hub']) })
       setAssignId(null)
       setVehicleId('')
     },

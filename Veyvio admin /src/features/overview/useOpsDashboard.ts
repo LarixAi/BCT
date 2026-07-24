@@ -3,6 +3,8 @@ import { useQueries } from '@tanstack/react-query'
 import { api } from '@/lib/api/client'
 import { buildSafeOpsDashboard } from '@/lib/api/safe-ops-dashboard'
 import type { OpsDashboardModel } from '@/lib/ops/ops-dashboard'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const REFETCH_MS = 45_000
 
@@ -12,52 +14,52 @@ export function useOpsDashboard(depotId?: string) {
   const results = useQueries({
     queries: [
       {
-        queryKey: ['dashboard'],
+        queryKey: tKey(['dashboard']),
         queryFn: () => api.getDashboard(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['live-dispatch', 'active'],
+        queryKey: tKey(['live-dispatch', 'active']),
         queryFn: () => api.getLiveDispatch(undefined, 'active'),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['duties', 'today'],
+        queryKey: tKey(['duties', 'today']),
         queryFn: () => api.getDuties(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['yard-hub', yardDepot ?? 'default'],
+        queryKey: tKey(['yard-hub', yardDepot ?? 'default']),
         queryFn: () => api.getYardHub(yardDepot),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['checks-hub'],
+        queryKey: tKey(['checks-hub']),
         queryFn: () => api.getChecksHub(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['defects-hub'],
+        queryKey: tKey(['defects-hub']),
         queryFn: () => api.getDefectsHub(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['driver-directory-summary'],
+        queryKey: tKey(['driver-directory-summary']),
         queryFn: () => api.getDriverDirectorySummary(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['vehicle-directory-summary'],
+        queryKey: tKey(['vehicle-directory-summary']),
         queryFn: () => api.getVehicleDirectorySummary(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['driver-eligibility-exceptions'],
+        queryKey: tKey(['driver-eligibility-exceptions']),
         queryFn: () => api.getDriverEligibilityExceptions(),
         refetchInterval: REFETCH_MS,
       },
       {
-        queryKey: ['vehicle-release-exceptions'],
+        queryKey: tKey(['vehicle-release-exceptions']),
         queryFn: () => api.getVehicleReleaseExceptions(),
         refetchInterval: REFETCH_MS,
       },

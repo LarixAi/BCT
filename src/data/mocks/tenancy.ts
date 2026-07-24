@@ -2,11 +2,25 @@ import type { Company, Depot } from "@/types/tenancy";
 import type { YardRole } from "@/types/permissions";
 
 export const MOCK_COMPANIES: Company[] = [
+  { id: "co_bct", name: "Brent Community Transport", status: "active" },
   { id: "co_northwest", name: "Northwest Passenger Transport", status: "active" },
   { id: "co_metro", name: "Metro Regional Coaches", status: "active" },
 ];
 
 export const MOCK_DEPOTS: Depot[] = [
+  {
+    id: "dep_bct_main",
+    companyId: "co_bct",
+    name: "BCT Main Depot",
+    code: "BCT-MAIN",
+    address: "Wembley, London",
+    timezone: "Europe/London",
+    vehiclesOnSite: 22,
+    vehiclesVor: 2,
+    openDefects: 1,
+    outstandingChecks: 2,
+    activeAlerts: 0,
+  },
   {
     id: "dep_b3",
     companyId: "co_northwest",

@@ -10,7 +10,7 @@ test.describe('Depots headquarters', () => {
     await page.goto('/depots')
     await expect(page.getByRole('heading', { name: 'Depots' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Add depot' })).toBeVisible()
-    await expect(page.getByText('Wembley Depot')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Wembley Depot' })).toBeVisible()
     await page.getByRole('link', { name: 'Open' }).first().click()
     await expect(page).toHaveURL(/\/depots\/depot-/)
     await expect(page.getByRole('button', { name: 'Overview' })).toBeVisible()

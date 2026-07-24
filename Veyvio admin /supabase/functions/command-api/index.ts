@@ -61,6 +61,12 @@ import {
   upsertDriverDevice,
 } from '../_shared/driver-devices.ts'
 import {
+  applyBodyConditionYardMutation,
+  bodyConditionHubRoute,
+  driverConditionAcknowledgementRoute,
+  loadBodyConditionForYardHub,
+} from '../_shared/body-condition.ts'
+import {
   DRIVER_ONBOARDING_NOTIFICATION,
   notifyCompanyAdmins,
 } from '../_shared/notifications.ts'
@@ -400,17 +406,33 @@ async function activateCompany(userId: string, companyId: string, refreshToken?:
   }
 
   const { data: existing } = await admin.auth.admin.getUserById(userId)
-  const appMetadata = { ...(existing.user?.app_metadata ?? {}), active_company_id: companyId, active_tenant_id: companyId }
-  const companyIds = new Set<string>([...(appMetadata.company_ids as string[] | undefined ?? []), companyId])
-  appMetadata.company_ids = [...companyIds]
+  const existingAppMeta = { ...(existing.user?.app_metadata ?? {}) }
+  const alreadyActive =
+    String(existingAppMeta.active_company_id ?? '') === companyId &&
+    String(existingAppMeta.active_tenant_id ?? '') === companyId
 
-  const { error: updateError } = await admin.auth.admin.updateUserById(userId, { app_metadata: appMetadata })
-  if (updateError) return apiError(500, 'Company context could not be selected')
+  if (!alreadyActive) {
+    const appMetadata = {
+      ...existingAppMeta,
+      active_company_id: companyId,
+      active_tenant_id: companyId,
+    }
+    const companyIds = new Set<string>([...(existingAppMeta.company_ids as string[] | undefined ?? []), companyId])
+    appMetadata.company_ids = [...companyIds]
 
-  const { data: refreshed, error: refreshError } = await publicClient().auth.refreshSession({
-    refresh_token: refreshToken,
-  })
-  if (refreshError || !refreshed.session) return apiError(401, 'Sign in again to select this company', 'session_refresh_failed')
+    const { error: updateError } = await admin.auth.admin.updateUserById(userId, { app_metadata: appMetadata })
+    if (updateError) {
+      return apiError(500, `Company context could not be selected: ${updateError.message}`)
+    }
+  }
+
+  let refreshed = await publicClient().auth.refreshSession({ refresh_token: refreshToken })
+  if ((refreshed.error || !refreshed.data.session) && alreadyActive) {
+    refreshed = await publicClient().auth.refreshSession({ refresh_token: refreshToken })
+  }
+  if (refreshed.error || !refreshed.data.session) {
+    return apiError(401, 'Sign in again to select this company', 'session_refresh_failed')
+  }
 
   await createUserSession({
     userId,
@@ -428,10 +450,10 @@ async function activateCompany(userId: string, companyId: string, refreshToken?:
     userAgent: request?.headers.get('user-agent'),
   })
 
-  const user = await authUser(refreshed.user!, companyId)
+  const user = await authUser(refreshed.data.user!, companyId)
   return json({
-    accessToken: refreshed.session.access_token,
-    refreshToken: refreshed.session.refresh_token,
+    accessToken: refreshed.data.session.access_token,
+    refreshToken: refreshed.data.session.refresh_token,
     user,
   })
 }
@@ -3661,6 +3683,8 @@ async function loadYardOpsTasks(companyId: string, depotId?: string | null) {
       blockingRelease: Boolean(row.blocking_release),
       syncStatus: String(row.sync_status ?? 'synced'),
       createdAt: String(row.created_at ?? new Date().toISOString()),
+      updatedAt: row.updated_at ? String(row.updated_at) : null,
+      startedAt: row.started_at ? String(row.started_at) : null,
       completedAt: row.completed_at ? String(row.completed_at) : null,
       createdBy: String(row.created_by ?? 'System'),
     }))
@@ -3878,6 +3902,7 @@ async function yardHubData(context: Awaited<ReturnType<typeof authenticate>>, re
     driverMessages: await loadYardDriverMessagesForHub(context.companyId),
     bodyworkReports: await loadYardBodyworkReportsForHub(context.companyId),
     vehicleChecks: await loadYardVehicleChecksForHub(context.companyId),
+    bodyCondition: await loadBodyConditionForYardHub(context.companyId, activeDepot.id || null),
     platformEvents,
   }
 }
@@ -3944,13 +3969,15 @@ async function startYardTaskRoute(request: Request, taskId: string) {
       .maybeSingle()
     if (loadError || !task) return apiError(404, 'Task not found')
 
+    const now = new Date().toISOString()
     const { error } = await admin
       .from('yard_tasks')
       .update({
         status: 'in_progress',
         assigned_staff_name: input.assignedStaffName ? String(input.assignedStaffName) : actorName,
+        started_at: now,
         source_app: 'yard',
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       })
       .eq('id', taskId)
       .eq('company_id', context.companyId)
@@ -4269,13 +4296,40 @@ async function applyYardMutationRoute(request: Request) {
           new Request(request.url, {
             method: 'POST',
             headers: request.headers,
-            body: JSON.stringify({ actorName, assignedStaffName: payload.assigneeName }),
+            body: JSON.stringify({ actorName, assignedStaffName: payload.assigneeName ?? actorName }),
           }),
           taskId,
         )
       }
+      if (action === 'assign') {
+        const assigneeName = String(payload.assigneeName ?? '')
+        if (!assigneeName) return apiError(400, 'assigneeName is required')
+        const { data: task, error: loadError } = await admin
+          .from('yard_tasks')
+          .select('id, depot_id')
+          .eq('company_id', context.companyId)
+          .eq('id', taskId)
+          .maybeSingle()
+        if (loadError || !task) return apiError(404, 'Task not found')
+        const now = new Date().toISOString()
+        const { error } = await admin
+          .from('yard_tasks')
+          .update({
+            status: 'assigned',
+            assigned_staff_name: assigneeName,
+            source_app: 'yard',
+            updated_at: now,
+          })
+          .eq('id', taskId)
+          .eq('company_id', context.companyId)
+        if (error) return apiError(400, error.message)
+        return json(await yardHubData(context, task.depot_id ? String(task.depot_id) : null))
+      }
       return apiError(400, `Unsupported task action: ${action || 'none'}`, 'unsupported_task_action')
     }
+
+    const bodyConditionResult = await applyBodyConditionYardMutation(type, context, payload, actorName)
+    if (bodyConditionResult) return bodyConditionResult
 
     if (!type) return apiError(400, 'mutation type is required', 'mutation_type_required')
     return apiError(501, `Yard mutation not supported: ${type}`, 'mutation_not_supported')
@@ -7533,6 +7587,12 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'yard/depots' && request.method === 'GET') return yardDepots(request)
   if (path === 'yard/movements' && request.method === 'POST') return recordYardMovementRoute(request)
   if (path === 'yard/mutations' && request.method === 'POST') return applyYardMutationRoute(request)
+  if (path === 'body-condition/hub' && request.method === 'GET') {
+    return bodyConditionHubRoute(request, authenticate)
+  }
+  if (path === 'driver/condition-acknowledgements' && request.method === 'POST') {
+    return driverConditionAcknowledgementRoute(request, authenticate)
+  }
   if (path === 'yard/tasks' && request.method === 'POST') return createYardTaskRoute(request)
   if (segments[0] === 'yard' && segments[1] === 'tasks' && segments[2] && segments[3] === 'complete' && request.method === 'POST') {
     return completeYardTaskRoute(request, segments[2])

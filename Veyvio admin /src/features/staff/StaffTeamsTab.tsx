@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import type { StaffHubData } from '@/lib/staff/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function StaffTeamsTab({ hub }: { hub: StaffHubData }) {
   const { data: profiles = [] } = useQuery({
-    queryKey: ['staff-profiles'],
+    queryKey: tKey(['staff-profiles']),
     queryFn: () => api.getStaffProfiles(),
   })
 

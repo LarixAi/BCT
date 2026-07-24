@@ -19,9 +19,11 @@ import type {
   ManagerClassification,
 } from '@/lib/attendance/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { cn } from '@/lib/cn'
 import { PersonAttendancePanel } from './PersonAttendancePanel'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const FILTERS: { id: AttendanceBoardFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -53,7 +55,7 @@ export function AttendancePage() {
   const [classifyAs, setClassifyAs] = useState<ManagerClassification>('under_review')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['attendance-hub'],
+    queryKey: tKey(['attendance-hub']),
     queryFn: () => api.getAttendanceHub(),
   })
 
@@ -69,8 +71,8 @@ export function AttendancePage() {
         actorName,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendance-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['attendance-profile'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['attendance-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['attendance-profile']) })
       setClassifyNote('')
     },
   })

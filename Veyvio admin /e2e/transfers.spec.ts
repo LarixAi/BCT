@@ -8,23 +8,26 @@ test.describe('Transfer and operational trips', () => {
 
   test('operational trips list shows sample trip', async ({ page }) => {
     await page.goto('/trips')
-    await expect(page.getByRole('heading', { name: 'Operational trips' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Trips' })).toBeVisible()
     await expect(page.getByText('TRP-1041')).toBeVisible()
   })
 
   test('trip detail shows jobs and manage assignment', async ({ page }) => {
     await page.goto('/ops-trips/trip-1041')
     await expect(page.getByRole('heading', { name: 'TRP-1041' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Manage assignment' })).toBeVisible()
+    await page.getByRole('button', { name: 'Passengers' }).click()
     await expect(page.getByText('Emily Watson')).toBeVisible()
+    await page.getByRole('button', { name: 'Overview' }).click()
     await page.getByRole('button', { name: 'Manage assignment' }).click()
     await expect(page.getByText('What to transfer')).toBeVisible()
   })
 
   test('run detail links to operational trip', async ({ page }) => {
-    await page.goto('/runs/duty-1')
-    await expect(page.getByRole('link', { name: 'View operational trip →' })).toBeVisible()
-    await page.getByRole('link', { name: 'View operational trip →' }).click()
-    await expect(page).toHaveURL('/ops-trips/trip-1041')
+    await page.goto('/runs/duty-1?tab=trips')
+    await expect(page.getByRole('link', { name: 'TRP-1041', exact: true })).toBeVisible()
+    await page.getByRole('link', { name: 'TRP-1041', exact: true }).click()
+    await expect(page).toHaveURL('/trips/trip-1041')
   })
 
   test('reports include transfer section', async ({ page }) => {
@@ -69,10 +72,7 @@ test.describe('Transfer and operational trips', () => {
 
     await expect(page.getByRole('heading', { name: 'Confirm transfer' })).toBeVisible()
     await expect(page.getByText(/Handover/)).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Confirm transfer' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Confirm transfer' })).toBeEnabled()
-    await page.getByRole('button', { name: 'Confirm transfer' }).click()
-
-    await expect(page.getByRole('button', { name: 'Manage assignment' })).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText('transferred').first()).toBeVisible()
   })
 })

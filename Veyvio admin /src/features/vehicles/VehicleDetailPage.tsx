@@ -28,7 +28,9 @@ import { VehicleAdBlueTab } from './components/VehicleAdBlueTab'
 import { VehicleCostsTab } from './components/VehicleCostsTab'
 import { VehicleTimelineTab } from './components/VehicleTimelineTab'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const TABS = [
   'Overview',
@@ -82,13 +84,13 @@ export function VehicleDetailPage() {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: vehicle, isLoading, error, isError } = useQuery({
-    queryKey: ['vehicle-profile', id],
+    queryKey: tKey(['vehicle-profile', id]),
     queryFn: () => api.getVehicleProfile(id!),
     enabled: !!id,
   })
 
   const { data: duties = [] } = useQuery({
-    queryKey: ['duties'],
+    queryKey: tKey(['duties']),
     queryFn: () => api.getDuties(),
   })
 
@@ -99,11 +101,11 @@ export function VehicleDetailPage() {
   }, [tabFromQuery])
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profile', id] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-directory-summary'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-release-exceptions'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-directory-summary']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-release-exceptions']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicles']) })
   }
 
   const returnToService = useMutation({
@@ -419,7 +421,7 @@ export function VehicleDetailPage() {
 
 function VehicleReportHistoryTab({ vehicleId }: { vehicleId: string }) {
   const { data: reports = [], isLoading } = useQuery({
-    queryKey: ['vehicle-reports', vehicleId],
+    queryKey: tKey(['vehicle-reports', vehicleId]),
     queryFn: () => api.getVehicleReports({ vehicleId }),
   })
 

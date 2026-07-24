@@ -1,12 +1,15 @@
 import { useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useYard } from "@/store/yard";
-import { SectionHeader, EmptyState } from "@/components/yard/primitives";
+import { EmptyState } from "@/components/yard/primitives";
 import { yardCopy } from "@/copy/yard-messages";
+import { HubOpsPageLayout } from "@/features/hub/HubOpsPageLayout";
+import { DashboardSurface } from "@/features/home/HomeDashboardPrimitives";
+import { HubSectionHeading, hubInsetCardClass } from "@/features/hub/HubContentPrimitives";
+import { HubSecondaryButton } from "@/features/hub/HubPageHeader";
 import { getConditionProfile, pendingDamageReviews, vehicleNeedsBaseline } from "@/domain/condition/condition-helpers";
 import { ordersAwaitingVerification } from "@/domain/condition/repair-workflow";
-import { ClipboardCheck, Camera, ShieldAlert, AlertTriangle, BarChart3, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ClipboardCheck, Camera, AlertTriangle, BarChart3, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/_app/inspections/")({
   head: () => ({
@@ -31,125 +34,124 @@ function InspectionsDashboard() {
   const verifyQueue = useMemo(() => ordersAwaitingVerification(repairOrders), [repairOrders]);
 
   return (
-    <div className="space-y-6 animate-in-up pb-4">
-      <header className="space-y-1">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Condition & evidence</p>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight">Inspections</h1>
-        <p className="text-sm text-muted">Review queues, baselines and depot condition analytics.</p>
-      </header>
-
-      <section className="grid grid-cols-2 gap-2">
-        <StatCard label="Damage review" value={reviewQueue.length} tone="warn" to="/inspections/damage-review" urgent={reviewQueue.length > 0} />
-        <StatCard label="Repair verify" value={verifyQueue.length} tone="primary" to="/inspections/repair-verification" urgent={verifyQueue.length > 0} />
-        <StatCard label="Awaiting check" value={awaitingCheck.length} tone="primary" to="/checks" />
-        <StatCard label="No baseline" value={missingBaseline.length} tone="vor" to="/yard" urgent={missingBaseline.length > 0} />
-      </section>
-
-      {reviewQueue.length === 0 && verifyQueue.length === 0 && missingBaseline.length === 0 && (
-        <EmptyState
-          icon={<ClipboardCheck className="size-8 mx-auto" />}
-          title={yardCopy.empty.noInspectionsPending}
-          hint="No damage reviews, repair verifications or missing baselines in the queue."
-        />
-      )}
-
-      {verifyQueue.length > 0 && (
-        <section className="bg-primary/5 border border-primary/30 rounded-xs p-4">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xs font-extrabold uppercase tracking-widest text-primary flex items-center gap-1">
-              <ClipboardCheck className="size-3.5" /> Post-repair verification due
-            </h2>
-            <Link to="/inspections/repair-verification" className="text-[10px] font-bold uppercase tracking-widest text-primary hover:underline">
-              View all
-            </Link>
-          </div>
-          <ul className="mt-2 space-y-2">
-            {verifyQueue.slice(0, 3).map(o => {
-              const v = vehicles.find(x => x.id === o.vehicleId);
-              return (
-                <li key={o.id} className="text-xs bg-white border border-border rounded-xs p-2">
-                  <span className="font-mono font-bold">{v?.reg}</span>
-                  <span className="text-muted"> · {o.description}</span>
-                </li>
-              );
-            })}
-          </ul>
+    <HubOpsPageLayout title="Inspections" description="Review queues, baselines and depot condition analytics.">
+      <DashboardSurface className="space-y-6">
+        <section className="grid grid-cols-2 gap-3">
+          <StatCard label="Damage review" value={reviewQueue.length} tone="warn" to="/inspections/damage-review" urgent={reviewQueue.length > 0} />
+          <StatCard label="Repair verify" value={verifyQueue.length} tone="primary" to="/inspections/repair-verification" urgent={verifyQueue.length > 0} />
+          <StatCard label="Awaiting check" value={awaitingCheck.length} tone="primary" to="/checks" />
+          <StatCard label="No baseline" value={missingBaseline.length} tone="vor" to="/yard" urgent={missingBaseline.length > 0} />
         </section>
-      )}
 
-      {reviewQueue.length > 0 && (
-        <section className="bg-vor/5 border border-vor/30 rounded-xs p-4">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xs font-extrabold uppercase tracking-widest text-vor flex items-center gap-1">
-              <ShieldAlert className="size-3.5" /> Damage awaiting review
-            </h2>
-            <Link to="/inspections/damage-review" className="text-[10px] font-bold uppercase tracking-widest text-vor hover:underline">
-              View all
-            </Link>
-          </div>
-          <ul className="mt-2 space-y-2">
-            {reviewQueue.slice(0, 3).map(o => {
-              const v = vehicles.find(x => x.id === o.vehicleId);
-              return (
-                <li key={o.id} className="text-xs bg-white border border-border rounded-xs p-2">
-                  <span className="font-mono font-bold">{v?.reg}</span>
-                  <span className="text-muted"> · {o.reportedBy} · {new Date(o.observedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
-                  <p className="text-muted mt-0.5 truncate">{o.description}</p>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+        {reviewQueue.length === 0 && verifyQueue.length === 0 && missingBaseline.length === 0 && (
+          <EmptyState
+            icon={<ClipboardCheck className="size-8 mx-auto" />}
+            title={yardCopy.empty.noInspectionsPending}
+            hint="No damage reviews, repair verifications or missing baselines in the queue."
+          />
+        )}
 
-      <section>
-        <SectionHeader title="Quick actions" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-          <Link to="/inspections/analytics">
-            <Button variant="outline" className="w-full justify-start text-xs uppercase tracking-widest font-bold h-auto py-3">
-              <BarChart3 className="size-4 mr-2" /> Condition analytics
-            </Button>
-          </Link>
-          <Link to="/inspections/repair-verification">
-            <Button variant="outline" className="w-full justify-start text-xs uppercase tracking-widest font-bold h-auto py-3">
-              <ClipboardCheck className="size-4 mr-2" /> Repair verification queue
-            </Button>
-          </Link>
-          <Link to="/inspections/damage-review">
-            <Button variant="outline" className="w-full justify-start text-xs uppercase tracking-widest font-bold h-auto py-3">
-              <AlertTriangle className="size-4 mr-2" /> Damage review queue
-            </Button>
-          </Link>
-          <Link to="/simulate/driver-report">
-            <Button variant="outline" className="w-full justify-start text-xs uppercase tracking-widest font-bold h-auto py-3">
-              <Camera className="size-4 mr-2" /> Simulate driver report
-            </Button>
-          </Link>
-        </div>
-      </section>
+        {verifyQueue.length > 0 && (
+          <section className="rounded-xl border border-[#b2ddff] bg-[#eff8ff] p-4">
+            <HubSectionHeading
+              title="Post-repair verification due"
+              action={
+                <Link to="/inspections/repair-verification" className="text-sm font-semibold text-[#175cd3] hover:underline">
+                  View all
+                </Link>
+              }
+            />
+            <ul className="space-y-2">
+              {verifyQueue.slice(0, 3).map(o => {
+                const v = vehicles.find(x => x.id === o.vehicleId);
+                return (
+                  <li key={o.id} className={hubInsetCardClass}>
+                    <span className="font-mono text-sm font-bold text-ink">{v?.reg}</span>
+                    <span className="text-sm text-[#667085]"> · {o.description}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
-      {missingBaseline.length > 0 && (
+        {reviewQueue.length > 0 && (
+          <section className="rounded-xl border border-[#fecdca] bg-[#fef3f2] p-4">
+            <HubSectionHeading
+              title="Damage awaiting review"
+              action={
+                <Link to="/inspections/damage-review" className="text-sm font-semibold text-[#b42318] hover:underline">
+                  View all
+                </Link>
+              }
+            />
+            <ul className="space-y-2">
+              {reviewQueue.slice(0, 3).map(o => {
+                const v = vehicles.find(x => x.id === o.vehicleId);
+                return (
+                  <li key={o.id} className={hubInsetCardClass}>
+                    <span className="font-mono text-sm font-bold text-ink">{v?.reg}</span>
+                    <span className="text-sm text-[#667085]">
+                      {" "}
+                      · {o.reportedBy} · {new Date(o.observedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <p className="mt-0.5 truncate text-sm text-[#667085]">{o.description}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
         <section>
-          <SectionHeader title={`No approved baseline · ${missingBaseline.length}`} />
-          <div className="space-y-2 mt-2">
-            {missingBaseline.slice(0, 5).map(v => (
-              <Link
-                key={v.id}
-                to="/yard/$vehicleId/condition/inspect"
-                params={{ vehicleId: v.id }}
-                search={{ type: "onboarding-baseline" }}
-                className="flex items-center justify-between bg-white border border-border rounded-xs p-3 hover:border-primary text-xs"
-              >
-                <span className="font-mono font-bold">{v.reg}</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-vor flex items-center gap-1">
-                  <Camera className="size-3" /> Start baseline
-                </span>
-              </Link>
-            ))}
+          <HubSectionHeading title="Quick actions" />
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Link to="/inspections/analytics">
+              <HubSecondaryButton className="h-auto w-full justify-start py-3">
+                <BarChart3 className="size-4" /> Condition analytics
+              </HubSecondaryButton>
+            </Link>
+            <Link to="/inspections/repair-verification">
+              <HubSecondaryButton className="h-auto w-full justify-start py-3">
+                <ClipboardCheck className="size-4" /> Repair verification queue
+              </HubSecondaryButton>
+            </Link>
+            <Link to="/inspections/damage-review">
+              <HubSecondaryButton className="h-auto w-full justify-start py-3">
+                <AlertTriangle className="size-4" /> Damage review queue
+              </HubSecondaryButton>
+            </Link>
+            <Link to="/simulate/driver-report">
+              <HubSecondaryButton className="h-auto w-full justify-start py-3">
+                <Camera className="size-4" /> Simulate driver report
+              </HubSecondaryButton>
+            </Link>
           </div>
         </section>
-      )}
-    </div>
+
+        {missingBaseline.length > 0 && (
+          <section>
+            <HubSectionHeading title={`No approved baseline · ${missingBaseline.length}`} />
+            <div className="mt-2 space-y-2">
+              {missingBaseline.slice(0, 5).map(v => (
+                <Link
+                  key={v.id}
+                  to="/yard/$vehicleId/condition/inspect"
+                  params={{ vehicleId: v.id }}
+                  search={{ type: "onboarding-baseline" }}
+                  className={`flex items-center justify-between ${hubInsetCardClass}`}
+                >
+                  <span className="font-mono text-sm font-bold text-ink">{v.reg}</span>
+                  <span className="flex items-center gap-1 text-xs font-semibold text-[#b42318]">
+                    <Camera className="size-3" /> Start baseline
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+      </DashboardSurface>
+    </HubOpsPageLayout>
   );
 }
 
@@ -166,22 +168,27 @@ function StatCard({
   to: string;
   urgent?: boolean;
 }) {
-  const cls = tone === "vor" ? "border-vor/30"
-    : tone === "warn" ? "border-warn/40"
-    : tone === "primary" ? "border-primary/30"
-    : "border-border";
+  const borderCls =
+    tone === "vor" ? "border-[#fecdca]"
+    : tone === "warn" ? "border-[#fddcab]"
+    : tone === "primary" ? "border-[#b2ddff]"
+    : "border-[#eaecf0]";
+  const valueColor =
+    tone === "vor" ? "text-[#b42318]"
+    : tone === "warn" ? "text-[#c4320a]"
+    : tone === "primary" ? "text-[#175cd3]"
+    : "text-ink";
+
   return (
     <Link
       to={to}
-      className={`flex items-center justify-between gap-2 bg-white border rounded-sm p-3.5 shadow-sm hover:shadow-md active:scale-[0.98] transition-all min-h-[76px] ${cls} ${urgent ? "ring-1 ring-inset ring-current/10" : ""}`}
+      className={`flex min-h-[76px] items-center justify-between gap-2 rounded-xl border bg-[#fcfcfd] p-4 transition-colors hover:bg-white ${borderCls} ${urgent ? "ring-1 ring-inset ring-current/10" : ""}`}
     >
       <div>
-        <div className={`text-2xl font-display font-extrabold tabular-nums ${
-          tone === "vor" ? "text-vor" : tone === "warn" ? "text-warn" : tone === "primary" ? "text-primary" : ""
-        }`}>{value}</div>
-        <div className="text-[10px] font-bold uppercase tracking-widest text-muted mt-0.5">{label}</div>
+        <div className={`font-display text-2xl font-bold tabular-nums ${valueColor}`}>{value}</div>
+        <div className="mt-1 text-sm font-medium text-[#667085]">{label}</div>
       </div>
-      <ChevronRight className="size-4 text-muted shrink-0" />
+      <ChevronRight className="size-4 shrink-0 text-[#98a2b3]" />
     </Link>
   );
 }

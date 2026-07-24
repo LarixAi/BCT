@@ -293,6 +293,9 @@ export function safeYardHub(hub: YardHubData | null | undefined): YardHubData {
   return {
     depotId: hub?.depotId ?? '',
     depotName: hub?.depotName ?? 'Depot',
+    depotCode: hub?.depotCode ?? null,
+    yardMapEnabled: hub?.yardMapEnabled ?? false,
+    yardLayout: hub?.yardLayout ?? null,
     shiftLabel: hub?.shiftLabel ?? 'Day shift',
     operationalDate: hub?.operationalDate ?? new Date().toISOString().slice(0, 10),
     summary: { ...empty, ...(hub?.summary ?? {}) },

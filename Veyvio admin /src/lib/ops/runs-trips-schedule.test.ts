@@ -8,6 +8,7 @@ import {
   isRunDelayed,
   runScheduleDelayMinutes,
   runSummary,
+  normalizeDutyDate,
   weekDates,
 } from './runs-trips-schedule'
 
@@ -61,6 +62,12 @@ describe('runs-trips-schedule helpers', () => {
     ])
     expect(conflicts.some((c) => c.title.includes('double booked'))).toBe(true)
     expect(conflicts.some((c) => c.title.includes('VOR'))).toBe(true)
+  })
+
+  it('normalises duty dates for calendar matching', () => {
+    expect(normalizeDutyDate('2026-07-24')).toBe('2026-07-24')
+    expect(normalizeDutyDate('2026-07-24T00:00:00.000Z')).toBe('2026-07-24')
+    expect(normalizeDutyDate(null)).toBeNull()
   })
 
   it('builds a Monday-start week', () => {

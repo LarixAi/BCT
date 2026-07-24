@@ -5,6 +5,8 @@ import { StatusPill } from '@/components/ui/status'
 import { DEFECT_SEVERITY_LABELS } from '@/lib/vehicles/defects'
 import type { CreateVehicleDefectInput, DefectSeverity, VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleDefectsTab({ vehicle, actorName }: { vehicle: VehicleProfile; actorName: string }) {
   const queryClient = useQueryClient()
@@ -15,10 +17,10 @@ export function VehicleDefectsTab({ vehicle, actorName }: { vehicle: VehicleProf
   const [severity, setSeverity] = useState<DefectSeverity>('minor')
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profile', vehicle.id] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-directory-summary'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-release-exceptions'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', vehicle.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-directory-summary']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-release-exceptions']) })
   }
 
   const report = useMutation({
