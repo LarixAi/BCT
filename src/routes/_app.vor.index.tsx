@@ -1,6 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useYard } from "@/store/yard";
-import { RegPlate, SectionHeader, EmptyState } from "@/components/yard/primitives";
+import { RegPlate, EmptyState } from "@/components/yard/primitives";
+import { DashboardSurface } from "@/features/home/HomeDashboardPrimitives";
+import { HubOpsPageLayout } from "@/features/hub/HubOpsPageLayout";
+import { hubInsetCardClass } from "@/features/hub/HubContentPrimitives";
 import { yardCopy } from "@/copy/yard-messages";
 import type { VorLifecycle } from "@/types/yard";
 
@@ -21,35 +24,42 @@ function VorBoard() {
   const vehicles = useYard(s => s.vehicles);
 
   return (
-    <div className="space-y-4 animate-in-up">
-      <SectionHeader title={`VOR Board · ${cases.length}`} />
-      <p className="text-xs text-muted px-1">{yardCopy.vor.expansion}</p>
-      {cases.length === 0 ? <EmptyState title={yardCopy.empty.noVorCases} /> : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          {COLUMNS.map(col => {
-            const list = cases.filter(c => c.lifecycle === col);
-            return (
-              <div key={col} className="bg-white border border-border rounded-xs">
-                <div className="border-b border-border p-2 flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-widest">{col}</span>
-                  <span className="text-[10px] font-mono text-muted">{list.length}</span>
+    <HubOpsPageLayout title="VOR board" description={yardCopy.vor.expansion}>
+      <DashboardSurface>
+        {cases.length === 0 ? (
+          <EmptyState title={yardCopy.empty.noVorCases} />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
+            {COLUMNS.map(col => {
+              const list = cases.filter(c => c.lifecycle === col);
+              return (
+                <div key={col} className="overflow-hidden rounded-xl border border-[#eaecf0] bg-white">
+                  <div className="flex items-center justify-between border-b border-[#eaecf0] px-3 py-2">
+                    <span className="text-sm font-semibold text-ink">{col}</span>
+                    <span className="font-mono text-xs text-[#667085]">{list.length}</span>
+                  </div>
+                  <div className="min-h-[80px] space-y-2 p-2">
+                    {list.map(c => {
+                      const v = vehicles.find(x => x.id === c.vehicleId);
+                      return (
+                        <Link
+                          key={c.id}
+                          to="/vor/$caseId"
+                          params={{ caseId: c.id }}
+                          className={`block ${hubInsetCardClass} hover:border-[#b42318]`}
+                        >
+                          {v && <RegPlate reg={v.reg} tone="vor" className="text-xs" />}
+                          <p className="mt-1 line-clamp-2 text-xs text-[#667085]">{c.reason}</p>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="p-2 space-y-2 min-h-[80px]">
-                  {list.map(c => {
-                    const v = vehicles.find(x => x.id === c.vehicleId);
-                    return (
-                      <Link key={c.id} to="/vor/$caseId" params={{ caseId: c.id }} className="block border border-border rounded-xs p-2 hover:border-vor">
-                        {v && <RegPlate reg={v.reg} tone="vor" className="text-xs" />}
-                        <p className="text-[11px] text-muted mt-1 line-clamp-2">{c.reason}</p>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+              );
+            })}
+          </div>
+        )}
+      </DashboardSurface>
+    </HubOpsPageLayout>
   );
 }

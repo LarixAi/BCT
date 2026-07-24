@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ResourceCategory, ResourceTransactionType } from '@/lib/fleet-resources/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function RecordTransactionPanel({ onClose }: { onClose: () => void }) {
   const { user } = useAuth()
@@ -10,12 +12,12 @@ export function RecordTransactionPanel({ onClose }: { onClose: () => void }) {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: vehicles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
   const { data: hub } = useQuery({
-    queryKey: ['fleet-resources-hub'],
+    queryKey: tKey(['fleet-resources-hub']),
     queryFn: () => api.getFleetResourcesHub(),
   })
 
@@ -51,7 +53,7 @@ export function RecordTransactionPanel({ onClose }: { onClose: () => void }) {
         actorName,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fleet-resources-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['fleet-resources-hub']) })
       onClose()
     },
   })

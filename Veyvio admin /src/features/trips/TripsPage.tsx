@@ -7,7 +7,11 @@ import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
 import { useOperationalContext } from '@/lib/context'
 import { filterTrips, tripSummary, type TripBoardFilter } from '@/lib/ops/runs-trips-schedule'
+import { tripListRow } from '@/lib/trips/trip-route'
 import type { OperationalTrip } from '@/lib/transfers/types'
+import type { DutyRecord } from '@/lib/api/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const FILTERS: { id: TripBoardFilter; label: string }[] = [
   { id: 'all', label: 'All trips' },
@@ -26,9 +30,20 @@ export function TripsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('trip'))
 
   const { data: trips = [], isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['operational-trips'],
+    queryKey: tKey(['operational-trips']),
     queryFn: () => api.getOperationalTrips(),
   })
+
+  const { data: duties = [] } = useQuery({
+    queryKey: tKey(['duties-trips-board']),
+    queryFn: () => api.getDuties({}),
+  })
+
+  const dutyById = useMemo(() => {
+    const map = new Map<string, DutyRecord>()
+    for (const duty of duties) map.set(duty.id, duty)
+    return map
+  }, [duties])
 
   useEffect(() => {
     const trip = searchParams.get('trip')
@@ -55,6 +70,10 @@ export function TripsPage() {
 
   const summary = useMemo(() => tripSummary(trips), [trips])
   const filtered = useMemo(() => filterTrips(trips, filter, search), [trips, filter, search])
+  const rows = useMemo(
+    () => filtered.map((trip) => tripListRow(trip, trip.dutyId ? dutyById.get(trip.dutyId) : null)),
+    [filtered, dutyById],
+  )
   const selected = trips.find((t) => t.id === selectedId) ?? null
 
   function selectTrip(id: string) {
@@ -174,79 +193,71 @@ export function TripsPage() {
       </div>
 
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_340px]">
-        <SectionCard title="Trip board" description={`${filtered.length} journeys`} className="min-h-0 overflow-hidden" flush>
+        <SectionCard title="Trip register" description={`${rows.length} journeys`} className="min-h-0 overflow-hidden" flush>
           <div className="min-h-0 flex-1 overflow-auto">
             {isLoading ? (
               <p className="p-4 text-sm text-muted">Loading…</p>
-            ) : filtered.length === 0 ? (
+            ) : rows.length === 0 ? (
               <p className="p-8 text-center text-sm text-muted">No trips match this filter.</p>
             ) : (
               <table className="min-w-full text-left text-sm">
                 <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wide text-muted">
                   <tr className="border-b border-border">
                     <th className="px-3 py-2 font-medium">Trip</th>
-                    <th className="px-3 py-2 font-medium">Pickup</th>
-                    <th className="px-3 py-2 font-medium">Passengers</th>
-                    <th className="px-3 py-2 font-medium">Vehicle</th>
+                    <th className="px-3 py-2 font-medium">Date</th>
+                    <th className="px-3 py-2 font-medium">Start</th>
+                    <th className="px-3 py-2 font-medium">End</th>
+                    <th className="px-3 py-2 font-medium">Depot</th>
+                    <th className="px-3 py-2 font-medium">Jobs</th>
+                    <th className="px-3 py-2 font-medium">Stops</th>
                     <th className="px-3 py-2 font-medium">Driver</th>
-                    <th className="px-3 py-2 font-medium">Run</th>
+                    <th className="px-3 py-2 font-medium">Vehicle</th>
                     <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">Route warning</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((trip) => {
-                    const jobs = trip.jobs ?? []
-                    const firstJob = jobs[0]
-                    return (
+                  {rows.map((row) => (
                       <tr
-                        key={trip.id}
-                        onClick={() => selectTrip(trip.id)}
+                        key={row.id}
+                        onClick={() => selectTrip(row.id)}
                         className={cn(
                           'cursor-pointer border-b border-border hover:bg-surface-muted',
-                          selectedId === trip.id && 'bg-command-50',
+                          selectedId === row.id && 'bg-command-50',
                         )}
                       >
                         <td className="px-3 py-2.5">
-                          <p className="font-semibold text-ink">{trip.reference}</p>
-                          <p className="text-xs text-muted">{trip.routeName ?? '—'}</p>
+                          <Link
+                            to={`/trips/${row.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-semibold text-command-700 hover:underline"
+                          >
+                            {row.reference}
+                          </Link>
+                          <p className="text-xs text-muted">{row.routeName ?? '—'}</p>
                         </td>
-                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">
-                          {firstJob?.plannedPickupTime
-                            ? new Date(firstJob.plannedPickupTime).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : '—'}
-                        </td>
-                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">
-                          {trip.passengersOnboard}/{trip.totalJobCount}
-                          {trip.delayMinutes > 0 && (
-                            <span className="ml-1 text-xs font-medium text-amber-800">+{trip.delayMinutes}m</span>
-                          )}
-                        </td>
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.serviceDate}</td>
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.startTime}</td>
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.endTime}</td>
+                        <td className="px-3 py-2.5 text-ink-soft">{row.depotName}</td>
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.jobCount}</td>
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.stopCount}</td>
+                        <td className="px-3 py-2.5 text-ink-soft">{row.driverName ?? 'Unassigned'}</td>
                         <td className="px-3 py-2.5 font-mono text-xs tabular-nums">
-                          {trip.vehicleRegistration ?? '—'}
+                          {row.vehicleRegistration ?? '—'}
                         </td>
-                        <td className="px-3 py-2.5 text-ink-soft">{trip.driverName ?? 'Unassigned'}</td>
                         <td className="px-3 py-2.5">
-                          {trip.dutyId ? (
-                            <Link
-                              to={`/runs/${trip.dutyId}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-command-700 hover:underline"
-                            >
-                              {trip.runReference ?? 'Run'}
-                            </Link>
+                          <StatusPill status={row.status} />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {row.routeWarning ? (
+                            <span className="text-xs font-medium text-amber-900">{row.routeWarning}</span>
                           ) : (
-                            '—'
+                            <span className="text-xs text-ink-soft">—</span>
                           )}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <StatusPill status={trip.status} />
                         </td>
                       </tr>
-                    )
-                  })}
+                  ))}
                 </tbody>
               </table>
             )}
@@ -310,10 +321,10 @@ function TripDetailPanel({ trip }: { trip: OperationalTrip | null }) {
 
         <div className="grid grid-cols-2 gap-2 pt-1">
           <Link
-            to={`/live-operations/trips/${trip.id}?tab=journey`}
+            to={`/trips/${trip.id}?tab=route`}
             className="rounded-lg border border-command-200 bg-command-50 px-2 py-2 text-center text-xs font-medium text-command-800 hover:bg-command-100"
           >
-            Open journey sequence
+            Open trip detail
           </Link>
           {trip.dutyId && (
             <Link

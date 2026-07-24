@@ -1,12 +1,26 @@
 import { useMemo } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import {
+  ArrowLeft,
+  ChevronRight,
+  ClipboardCheck,
+  Clock,
+  Droplets,
+  Fuel,
+  MapPin,
+  MoveRight,
+  Search,
+  ShieldAlert,
+  TriangleAlert,
+} from "lucide-react";
 import { useYard } from "@/store/yard";
-import { VehicleIdentityHeader } from "@/components/yard/VehicleIdentityHeader";
 import { PermissionGate } from "@/components/yard/PermissionGate";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, ClipboardCheck, Droplets, MoveRight, Search, TriangleAlert, MapPin, ShieldAlert, Fuel, Clock } from "lucide-react";
-import { drivers } from "@/data/fixtures";
+import { RegPlate } from "@/components/yard/primitives";
+import { resolveDemoDriverName } from "@/platform/yard/demo-drivers";
+import { formatFuelPct } from "@/lib/format-fuel-pct";
 import { useCan } from "@/platform/permissions/use-can";
+import { DashboardSurface, StatusPill } from "@/features/home/HomeDashboardPrimitives";
+import { statusLabel, statusPillTone } from "@/domain/yard/status-display";
 
 export const Route = createFileRoute("/_app/yard/$vehicleId/")({
   head: ({ params }) => ({
@@ -29,137 +43,213 @@ function VehicleDetail() {
   const defects = useMemo(() => allDefects.filter(d => d.vehicleId === vehicleId && !d.resolved), [allDefects, vehicleId]);
   const movements = useMemo(() => allMovements.filter(m => m.vehicleId === vehicleId), [allMovements, vehicleId]);
   const vorCases = useMemo(() => allVorCases.filter(c => c.vehicleId === vehicleId), [allVorCases, vehicleId]);
+  const dataSource = useYard(s => s.dataSource);
   const trip = useYard(s => s.trips.find(t => t.vehicleId === vehicleId));
   const openSheet = useYard(s => s.openSheet);
   const canSpotAudit = useCan("check.spot_audit");
 
   if (!vehicle) throw notFound();
 
-  const driverName = drivers.find(d => d.id === trip?.driverId)?.name;
+  const driverName = resolveDemoDriverName(trip?.driverId, dataSource);
   const isVor = vehicle.status === "VOR";
 
   return (
-    <div className="space-y-5 animate-in-up">
-      <Link to="/yard" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-foreground">
-        <ArrowLeft className="size-3" /> Vehicles
+    <div className="space-y-4 pb-2 sm:space-y-6 sm:pb-4">
+      <Link
+        to="/yard"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-[#667085] transition-colors hover:text-ink"
+      >
+        <ArrowLeft className="size-4" aria-hidden />
+        Vehicles
       </Link>
 
-      <header className={`bg-white border rounded-xs p-4 ${isVor ? "border-l-4 border-l-vor border-border" : "border-border"}`}>
-        <VehicleIdentityHeader vehicle={vehicle} trip={trip} />
-        {vehicle.notes && <p className="mt-3 text-sm font-medium text-vor">⚠ {vehicle.notes}</p>}
-
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-muted">
-          <span className="inline-flex items-center gap-1"><Fuel className="size-3" />{vehicle.fuelPct}% fuel</span>
-          {vehicle.lastCheckAt && (
-            <span className="inline-flex items-center gap-1"><Clock className="size-3" />Last check {formatTime(vehicle.lastCheckAt)}</span>
-          )}
-        </div>
-
-        <div className={`mt-4 grid gap-2 ${canSpotAudit ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"}`}>
-          <PermissionGate permission="check.complete">
-            <Link to="/yard/$vehicleId/check" params={{ vehicleId: vehicle.id }} className="contents">
-              <Button className="w-full bg-accent hover:bg-accent/90 text-white uppercase tracking-widest font-bold text-xs">
-                <ClipboardCheck className="size-4" /> Check
-              </Button>
-            </Link>
-          </PermissionGate>
-          {canSpotAudit && (
-            <Link to="/yard/$vehicleId/check" params={{ vehicleId: vehicle.id }} search={{ type: "yard-spot" }} className="contents">
-              <Button className="w-full bg-warn hover:bg-warn/90 text-black uppercase tracking-widest font-bold text-xs">
-                <Search className="size-4" /> Audit
-              </Button>
-            </Link>
-          )}
-          <PermissionGate permission="vehicle.move">
-            <Button onClick={() => openSheet({ kind: "move", vehicleId: vehicle.id })} className="bg-primary hover:bg-primary/90 text-white uppercase tracking-widest font-bold text-xs">
-              <MoveRight className="size-4" /> Move
-            </Button>
-          </PermissionGate>
-          <PermissionGate permission="vehicle.move">
-            <Link to="/yard/$vehicleId/adblue/refill" params={{ vehicleId: vehicle.id }} className="contents">
-              <Button variant="outline" className="w-full border-primary/40 text-xs font-bold uppercase tracking-widest text-foreground hover:bg-primary/10">
-                <Droplets className="size-4 text-primary" /> AdBlue
-              </Button>
-            </Link>
-          </PermissionGate>
-          <Button onClick={() => openSheet({ kind: "defect", vehicleId: vehicle.id })} className="bg-vor hover:bg-vor/90 text-white uppercase tracking-widest font-bold text-xs">
-            <TriangleAlert className="size-4" /> Defect
-          </Button>
-        </div>
-      </header>
-
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(360px,1.05fr)] lg:items-start">
-        <div className="space-y-5">
-          {trip && (
-            <section className="rounded-xs border border-border bg-white p-4">
-              <h3 className="mb-2 font-display text-xs font-extrabold uppercase tracking-widest">Assigned Trip</h3>
-              <div className="flex items-center justify-between gap-4 text-xs">
-                <div>
-                  <div className="font-bold">{trip.code} — {trip.service}</div>
-                  <div className="text-muted">Depart {trip.departAt} · Driver {driverName ?? <span className="text-vor">UNASSIGNED</span>}</div>
-                </div>
-                <span className={`text-right text-[10px] font-bold uppercase tracking-widest ${trip.ready ? "text-ok" : "text-vor"}`}>
-                  {trip.ready ? "Ready" : trip.blockers.join(" · ")}
+      <DashboardSurface className={isVor ? "border-[#fecdca] bg-[#fffbfa]" : ""}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <RegPlate reg={vehicle.reg} tone={isVor ? "vor" : "default"} className="text-base" />
+              <StatusPill label={statusLabel(vehicle.status)} tone={statusPillTone(vehicle.status)} />
+            </div>
+            <p className="mt-2 text-sm text-[#667085]">
+              {vehicle.type}
+              <span className="mx-1.5 text-[#d0d5dd]">·</span>
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="size-3.5" aria-hidden />
+                Bay {vehicle.bayId}
+              </span>
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-[#667085]">
+              <span className="inline-flex items-center gap-1.5">
+                <Fuel className="size-3.5" aria-hidden />
+                {formatFuelPct(vehicle.fuelPct)} fuel
+              </span>
+              {vehicle.lastCheckAt ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="size-3.5" aria-hidden />
+                  Last check {formatTime(vehicle.lastCheckAt)}
                 </span>
-              </div>
-            </section>
-          )}
+              ) : null}
+            </div>
+          </div>
 
-          <section className="rounded-xs border border-border bg-white p-4">
-            <h3 className="mb-2 font-display text-xs font-extrabold uppercase tracking-widest">Movement History</h3>
-            {movements.length === 0 ? (
-              <p className="text-xs text-muted">No movements recorded.</p>
-            ) : (
-              <ul className="space-y-2 text-xs">
-                {movements.slice(0, 8).map(m => (
-                  <li key={m.id} className="flex items-center gap-2 border-b border-border pb-2 last:border-0 last:pb-0">
-                    <MapPin className="size-3 shrink-0 text-muted" />
-                    <span className="font-mono text-[11px]">{m.fromBayId} → {m.toBayId}</span>
-                    <span className="text-muted">·</span>
-                    <span className="min-w-0 truncate text-muted">{m.reason}</span>
-                    <span className="ml-auto shrink-0 text-muted">{formatTime(m.at)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <div className="grid size-14 shrink-0 place-items-center rounded-2xl border border-[#e4e7ec] bg-[#f9fafb] font-mono text-lg font-bold text-ink">
+            {vehicle.bayId}
+          </div>
         </div>
 
-        <div className="space-y-5">
-          {vorCases.length > 0 && (
-            <section className="rounded-xs border border-vor/30 bg-white p-4">
-              <h3 className="mb-2 flex items-center gap-1 font-display text-xs font-extrabold uppercase tracking-widest text-vor">
-                <ShieldAlert className="size-3.5" /> VOR Cases
-              </h3>
+        {vehicle.notes ? (
+          <p className="mt-4 rounded-xl border border-[#fecdca] bg-[#fef3f2] px-3 py-2 text-sm text-[#b42318]">
+            {vehicle.notes}
+          </p>
+        ) : null}
+
+        <div className="-mx-1 mt-4 flex gap-2 overflow-x-auto pb-1">
+          <PermissionGate permission="check.complete">
+            <Link
+              to="/yard/$vehicleId/check"
+              params={{ vehicleId: vehicle.id }}
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-white"
+            >
+              <ClipboardCheck className="size-4" aria-hidden />
+              Start check
+            </Link>
+          </PermissionGate>
+          {canSpotAudit ? (
+            <Link
+              to="/yard/$vehicleId/check"
+              params={{ vehicleId: vehicle.id }}
+              search={{ type: "yard-spot" }}
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-[#e4e7ec] bg-white px-4 text-sm font-medium text-ink shadow-sm"
+            >
+              <Search className="size-4 text-[#667085]" aria-hidden />
+              Spot audit
+            </Link>
+          ) : null}
+          <PermissionGate permission="vehicle.move">
+            <button
+              type="button"
+              onClick={() => openSheet({ kind: "move", vehicleId: vehicle.id })}
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-[#e4e7ec] bg-white px-4 text-sm font-medium text-ink shadow-sm"
+            >
+              <MoveRight className="size-4 text-[#667085]" aria-hidden />
+              Move
+            </button>
+          </PermissionGate>
+          <PermissionGate permission="vehicle.move">
+            <Link
+              to="/yard/$vehicleId/adblue/refill"
+              params={{ vehicleId: vehicle.id }}
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-[#e4e7ec] bg-white px-4 text-sm font-medium text-ink shadow-sm"
+            >
+              <Droplets className="size-4 text-[#667085]" aria-hidden />
+              AdBlue
+            </Link>
+          </PermissionGate>
+          <button
+            type="button"
+            onClick={() => openSheet({ kind: "defect", vehicleId: vehicle.id })}
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-[#fecdca] bg-[#fffbfa] px-4 text-sm font-medium text-[#b42318]"
+          >
+            <TriangleAlert className="size-4" aria-hidden />
+            Report defect
+          </button>
+        </div>
+      </DashboardSurface>
+
+      {trip ? (
+        <DashboardSurface>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-ink">Assigned trip</h2>
+            <StatusPill label={trip.ready ? "Ready" : "Blocked"} tone={trip.ready ? "ok" : "warn"} />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink">
+                {trip.code} — {trip.service}
+              </p>
+              <p className="mt-1 text-sm text-[#667085]">
+                Depart {trip.departAt}
+                <span className="mx-1.5 text-[#d0d5dd]">·</span>
+                Driver {driverName ?? <span className="text-[#b42318]">unassigned</span>}
+              </p>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-[#98a2b3]" aria-hidden />
+          </div>
+        </DashboardSurface>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <DashboardSurface>
+          <h2 className="mb-3 text-base font-semibold text-ink">Movement history</h2>
+          {movements.length === 0 ? (
+            <p className="text-sm text-[#667085]">No movements recorded.</p>
+          ) : (
+            <ul className="space-y-2">
+              {movements.slice(0, 8).map(m => (
+                <li
+                  key={m.id}
+                  className="flex items-center gap-3 rounded-xl border border-[#eaecf0] bg-[#fcfcfd] px-4 py-3"
+                >
+                  <MapPin className="size-4 shrink-0 text-[#98a2b3]" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono text-sm font-medium text-ink">
+                      {m.fromBayId} → {m.toBayId}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-[#667085]">{m.reason}</p>
+                  </div>
+                  <span className="shrink-0 text-xs tabular-nums text-[#98a2b3]">{formatTime(m.at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DashboardSurface>
+
+        <div className="space-y-4">
+          {vorCases.length > 0 ? (
+            <DashboardSurface className="border-[#fecdca]">
+              <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-[#b42318]">
+                <ShieldAlert className="size-4" aria-hidden />
+                VOR cases
+              </h2>
               <div className="space-y-2">
                 {vorCases.map(c => (
-                  <Link key={c.id} to="/vor/$caseId" params={{ caseId: c.id }} className="flex items-center justify-between rounded-xs border border-border p-2 text-xs hover:bg-secondary/50">
-                    <span className="font-mono">{c.id}</span>
-                    <span className="font-bold uppercase tracking-widest text-vor">{c.lifecycle}</span>
+                  <Link
+                    key={c.id}
+                    to="/vor/$caseId"
+                    params={{ caseId: c.id }}
+                    className="flex items-center justify-between rounded-xl border border-[#eaecf0] bg-[#fcfcfd] px-4 py-3 transition-colors hover:bg-white"
+                  >
+                    <span className="font-mono text-sm text-ink">{c.id}</span>
+                    <StatusPill label={c.lifecycle} tone="warn" />
                   </Link>
                 ))}
               </div>
-            </section>
-          )}
+            </DashboardSurface>
+          ) : null}
 
-          <section className="rounded-xs border border-border bg-white p-4">
-            <h3 className="mb-2 font-display text-xs font-extrabold uppercase tracking-widest">Open Defects · {defects.length}</h3>
+          <DashboardSurface>
+            <h2 className="mb-3 text-base font-semibold text-ink">Open defects · {defects.length}</h2>
             {defects.length === 0 ? (
-              <p className="text-xs text-muted">No defects recorded.</p>
+              <p className="text-sm text-[#667085]">No defects recorded.</p>
             ) : (
               <div className="space-y-2">
                 {defects.map(d => (
-                  <Link key={d.id} to="/defects/$defectId" params={{ defectId: d.id }} className="block rounded-xs border border-border p-2 hover:bg-secondary/50">
-                    <div className="flex justify-between text-xs">
-                      <span className="font-bold uppercase tracking-wider">{d.category}</span>
+                  <Link
+                    key={d.id}
+                    to="/defects/$defectId"
+                    params={{ defectId: d.id }}
+                    className="block rounded-xl border border-[#eaecf0] bg-[#fcfcfd] px-4 py-3 transition-colors hover:bg-white"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-ink">{d.category}</span>
                       <SevBadge sev={d.severity} />
                     </div>
-                    <p className="mt-1 text-xs text-muted">{d.notes}</p>
+                    <p className="mt-1 text-sm text-[#667085]">{d.notes}</p>
                   </Link>
                 ))}
               </div>
             )}
-          </section>
+          </DashboardSurface>
         </div>
       </div>
     </div>
@@ -167,8 +257,15 @@ function VehicleDetail() {
 }
 
 function SevBadge({ sev }: { sev: string }) {
-  const cls = sev === "Safety-critical" ? "bg-vor text-white" : sev === "Major" ? "bg-warn text-black" : "bg-secondary text-foreground";
-  return <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-sm tracking-widest ${cls}`}>{sev}</span>;
+  const cls =
+    sev === "Safety-critical"
+      ? "bg-[#fef3f2] text-[#b42318] border-[#fecdca]"
+      : sev === "Major"
+        ? "bg-[#fff6ed] text-[#c4320a] border-[#fddcab]"
+        : "bg-[#f2f4f7] text-[#475467] border-[#e4e7ec]";
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{sev}</span>
+  );
 }
 
 function formatTime(iso: string) {

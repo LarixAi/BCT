@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { WORK_ORDER_TYPE_LABELS } from '@/lib/maintenance/constants'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export type CreateWorkOrderPrefill = {
   vehicleId?: string
@@ -24,7 +26,7 @@ export function CreateWorkOrderPanel({
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: vehicles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
@@ -44,8 +46,8 @@ export function CreateWorkOrderPanel({
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['maintenance-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['maintenance-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
       onClose()
     },
   })

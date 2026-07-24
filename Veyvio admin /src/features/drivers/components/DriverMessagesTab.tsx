@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
 import type { DriverProfile } from '@/lib/drivers/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DriverMessagesTab({ driver }: { driver: DriverProfile }) {
   const displayName = `${driver.firstName} ${driver.lastName}`.trim()
@@ -13,7 +15,7 @@ export function DriverMessagesTab({ driver }: { driver: DriverProfile }) {
   const [error, setError] = useState('')
 
   const { data: messages = [], isLoading } = useQuery({
-    queryKey: ['messages', 'driver', driver.id],
+    queryKey: tKey(['messages', 'driver', driver.id]),
     queryFn: () => api.getMessages({ driverId: driver.id }),
   })
 
@@ -27,8 +29,8 @@ export function DriverMessagesTab({ driver }: { driver: DriverProfile }) {
     onSuccess: async () => {
       setBody('')
       setError('')
-      await queryClient.invalidateQueries({ queryKey: ['messages', 'driver', driver.id] })
-      await queryClient.invalidateQueries({ queryKey: ['messages'] })
+      await queryClient.invalidateQueries({ queryKey: tKey(['messages', 'driver', driver.id]) })
+      await queryClient.invalidateQueries({ queryKey: tKey(['messages']) })
     },
     onError: (err: Error) => setError(err.message || 'Message could not be sent.'),
   })

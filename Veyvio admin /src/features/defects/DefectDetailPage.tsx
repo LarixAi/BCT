@@ -16,7 +16,9 @@ import { EvidenceUploadPanel } from './components/EvidenceUploadPanel'
 import { DefectSourcePanel } from './components/DefectSourcePanel'
 import { DefectAuditPanel } from './components/DefectAuditPanel'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type DetailTab = 'overview' | 'evidence' | 'triage' | 'repair' | 'verification' | 'restrictions' | 'impact' | 'history' | 'audit'
 
@@ -38,7 +40,7 @@ export function DefectDetailPage() {
   const [vorReason, setVorReason] = useState('')
 
   const { data: defect, isLoading, error, isError } = useQuery({
-    queryKey: ['defect-detail', id],
+    queryKey: tKey(['defect-detail', id]),
     queryFn: () => api.getDefectDetailById(id!),
     enabled: !!id,
   })
@@ -57,8 +59,8 @@ export function DefectDetailPage() {
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['defects-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['defect-detail', id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['defects-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['defect-detail', id]) })
       setActiveTab('overview')
     },
   })
@@ -70,8 +72,8 @@ export function DefectDetailPage() {
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['defects-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['defect-detail', id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['defects-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['defect-detail', id]) })
       setShowVorConfirm(false)
     },
   })

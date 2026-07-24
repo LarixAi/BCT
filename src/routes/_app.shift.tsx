@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { SectionHeader } from "@/components/yard/primitives";
+import { ClipboardList } from "lucide-react";
 import { PermissionGate } from "@/components/yard/PermissionGate";
 import { SyncStatusBadge } from "@/components/yard/status/SyncStatusBadge";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useTenancyStore } from "@/platform/tenancy/context-store";
 import { useSessionStore } from "@/platform/auth/session-store";
@@ -13,7 +12,10 @@ import { buildHandoverSummary } from "@/domain/yard/handover-summary";
 import { SHIFT } from "@/data/fixtures";
 import { toast } from "sonner";
 import { yardCopy } from "@/copy/yard-messages";
-import { ClipboardList } from "lucide-react";
+import { DashboardSurface } from "@/features/home/HomeDashboardPrimitives";
+import { HubCallout, HubMiniStat, HubSectionHeading, hubListPanelClass } from "@/features/hub/HubContentPrimitives";
+import { HubOpsPageLayout } from "@/features/hub/HubOpsPageLayout";
+import { HubPrimaryButton } from "@/features/hub/HubPageHeader";
 
 export const Route = createFileRoute("/_app/shift")({
   head: () => ({
@@ -57,109 +59,92 @@ function ShiftPage() {
   }
 
   return (
-    <div className="space-y-5 animate-in-up pb-4">
-      <SectionHeader title="Shift & Handover" sub="outgoing summary" />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Panel label="Company" value={companyName ?? "—"} />
-        <Panel label="Depot" value={depotName ? `${depotName} (${depotCode})` : "—"} />
-        <Panel label="Shift window" value={SHIFT.window} />
-        <Panel label="Signed in" value={user ? `${user.firstName} ${user.lastName}` : "—"} />
-      </div>
-
-      <section className="space-y-2">
-        <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted px-1">Fleet snapshot</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Stat label="Available" value={summary.available} />
-          <Stat label="On line" value={summary.onDepartureLine} tone="primary" />
-          <Stat label="VOR" value={summary.vor} tone="vor" />
-          <Stat label="Off-site" value={summary.offSite} />
-          <Stat label="Open defects" value={summary.openDefects} tone="warn" />
-          <Stat label="Active VOR cases" value={summary.activeVorCases} tone="vor" />
-          <Stat label="Trips ready" value={summary.tripsReady} tone="ok" />
-          <Stat label="Trips blocked" value={summary.tripsBlocked} tone="warn" />
+    <HubOpsPageLayout title="Shift & handover" description="Depot context and outgoing handover summary.">
+      <DashboardSurface>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <InfoRow label="Company" value={companyName ?? "—"} />
+          <InfoRow label="Depot" value={depotName ? `${depotName} (${depotCode})` : "—"} />
+          <InfoRow label="Shift window" value={SHIFT.window} />
+          <InfoRow label="Signed in" value={user ? `${user.firstName} ${user.lastName}` : "—"} />
         </div>
-      </section>
+      </DashboardSurface>
+
+      <DashboardSurface>
+        <HubSectionHeading title="Fleet snapshot" description="Live counts for this shift." />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <HubMiniStat label="Available" value={summary.available} />
+          <HubMiniStat label="On line" value={summary.onDepartureLine} />
+          <HubMiniStat label="VOR" value={summary.vor} tone="vor" />
+          <HubMiniStat label="Off-site" value={summary.offSite} />
+          <HubMiniStat label="Open defects" value={summary.openDefects} tone="warn" />
+          <HubMiniStat label="Active VOR cases" value={summary.activeVorCases} tone="vor" />
+          <HubMiniStat label="Trips ready" value={summary.tripsReady} tone="ok" />
+          <HubMiniStat label="Trips blocked" value={summary.tripsBlocked} tone="warn" />
+        </div>
+      </DashboardSurface>
 
       {summary.blockedTripCodes.length > 0 && (
-        <section className="bg-warn/5 border border-warn/30 rounded-xs p-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-warn">Blocked departures</div>
-          <p className="text-xs mt-1 text-muted">{summary.blockedTripCodes.join(" · ")}</p>
-        </section>
+        <HubCallout tone="warn">
+          Blocked departures: {summary.blockedTripCodes.join(" · ")}
+        </HubCallout>
       )}
 
-      <div className="bg-white border border-border rounded-xs p-4 space-y-3">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-muted">Connectivity</div>
+      <DashboardSurface className="space-y-3">
+        <HubSectionHeading title="Connectivity" />
         <SyncStatusBadge />
-        {lastSyncedAt && (
-          <p className="text-xs text-muted">
+        {lastSyncedAt ? (
+          <p className="text-sm text-[#667085]">
             Last sync {new Date(lastSyncedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-            {pendingCount > 0 && ` · ${pendingCount} pending`}
+            {pendingCount > 0 ? ` · ${pendingCount} pending` : ""}
           </p>
-        )}
-      </div>
+        ) : null}
+      </DashboardSurface>
 
-      <section className="space-y-2">
-        <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted px-1">Outgoing handover</h2>
+      <DashboardSurface className="space-y-3">
+        <HubSectionHeading title="Outgoing handover" description="Summarise open issues for incoming shift." />
         <Textarea
           value={notes}
           onChange={e => setNotes(e.target.value)}
           placeholder="Summarise open issues, vehicles to watch, and context for incoming shift…"
           rows={4}
+          className="rounded-xl border-[#e4e7ec]"
         />
         <PermissionGate permission="handover.complete">
-          <Button
-            onClick={handleComplete}
-            className="w-full bg-primary hover:bg-primary/90 text-white uppercase tracking-widest font-bold"
-          >
-            <ClipboardList className="size-4 mr-2" /> Complete handover
-          </Button>
+          <HubPrimaryButton onClick={handleComplete} className="w-full sm:w-auto">
+            <ClipboardList className="size-4" />
+            Complete handover
+          </HubPrimaryButton>
         </PermissionGate>
-      </section>
+      </DashboardSurface>
 
       {handovers.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted px-1">Recent handovers</h2>
-          <div className="bg-white border border-border rounded-xs overflow-hidden divide-y divide-border">
+        <DashboardSurface>
+          <HubSectionHeading title="Recent handovers" />
+          <div className={hubListPanelClass}>
             {handovers.slice(0, 5).map(h => (
-              <div key={h.id} className="p-3">
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="font-bold">{h.by}</span>
-                  <span className="text-muted">{new Date(h.at).toLocaleString()}</span>
+              <div key={h.id} className="p-4">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-semibold text-ink">{h.by}</span>
+                  <span className="text-[#667085]">{new Date(h.at).toLocaleString()}</span>
                 </div>
-                <p className="mt-2 text-sm">{h.notes}</p>
-                <div className="mt-2 text-[10px] text-muted uppercase tracking-widest">
+                <p className="mt-2 text-sm text-[#667085]">{h.notes}</p>
+                <p className="mt-2 text-xs text-[#98a2b3]">
                   {h.summary.tripsReady} ready · {h.summary.tripsBlocked} blocked · {h.summary.vor} VOR
-                </div>
+                </p>
               </div>
             ))}
           </div>
-        </section>
+        </DashboardSurface>
       )}
-    </div>
+    </HubOpsPageLayout>
   );
 }
 
-function Panel({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white border border-border rounded-xs p-4">
-      <div className="text-[10px] uppercase tracking-widest text-muted font-bold">{label}</div>
-      <div className="text-lg font-display font-extrabold mt-1">{value}</div>
-    </div>
-  );
-}
-
-function Stat({ label, value, tone = "default" }: { label: string; value: number; tone?: "default" | "vor" | "warn" | "primary" | "ok" }) {
-  const toneClass =
-    tone === "vor" ? "text-vor"
-    : tone === "warn" ? "text-warn"
-    : tone === "primary" ? "text-primary"
-    : tone === "ok" ? "text-ok"
-    : "text-foreground";
-  return (
-    <div className="bg-white border border-border rounded-xs p-3 text-center">
-      <div className={`text-xl font-display font-extrabold tabular-nums ${toneClass}`}>{value}</div>
-      <div className="text-[9px] font-bold uppercase tracking-widest text-muted">{label}</div>
+    <div className="rounded-xl border border-[#eaecf0] bg-[#fcfcfd] p-4">
+      <div className="text-sm font-medium text-[#667085]">{label}</div>
+      <div className="mt-1 font-display text-lg font-bold text-ink">{value}</div>
     </div>
   );
 }

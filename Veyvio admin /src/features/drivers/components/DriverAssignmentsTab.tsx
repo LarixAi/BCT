@@ -6,6 +6,8 @@ import { StatusPill, formatDate } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
 import type { DriverProfile } from '@/lib/drivers/types'
 import { useOperationalContext } from '@/lib/context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DriverAssignmentsTab({ driver }: { driver: DriverProfile }) {
   const { operationalDateIso } = useOperationalContext()
@@ -15,7 +17,7 @@ export function DriverAssignmentsTab({ driver }: { driver: DriverProfile }) {
   const to = toDate.toISOString().slice(0, 10)
 
   const { data: duties = [], isLoading } = useQuery({
-    queryKey: ['driver-assignments', driver.id, from, to],
+    queryKey: tKey(['driver-assignments', driver.id, from, to]),
     queryFn: () => api.getDuties({ from, to }),
   })
 

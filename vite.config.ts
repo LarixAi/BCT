@@ -32,6 +32,7 @@ export default defineConfig({
       alias: {
         "@veyvio/ops": path.resolve(__dirname, "shared/veyvio-ops"),
         "@veyvio/incidents": path.resolve(__dirname, "shared/veyvio-incidents"),
+        "@veyvio/yard": path.resolve(__dirname, "shared/veyvio-yard"),
       },
     },
     ...(isMobileBuild

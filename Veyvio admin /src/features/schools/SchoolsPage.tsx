@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function formatSchoolAddress(address: unknown): string | null {
   if (!address) return null
@@ -15,7 +17,7 @@ function formatSchoolAddress(address: unknown): string | null {
 
 export function SchoolsPage() {
   const { data: schools = [], isLoading, isError, error } = useQuery({
-    queryKey: ['schools'],
+    queryKey: tKey(['schools']),
     queryFn: async () => {
       const rows = await api.getSchools()
       return (Array.isArray(rows) ? rows : []).map((s) => ({

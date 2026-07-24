@@ -23,6 +23,8 @@ import {
 import type { ReportAvailability, ReportCategoryId } from '@/lib/reports/types'
 import { TransfersReportSection } from '@/features/transfers/TransfersReportSection'
 import { ReportFiltersBar } from './ReportFiltersBar'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function monthStartIso() {
   const d = new Date()
@@ -46,12 +48,12 @@ export function ReportsPage() {
   const [category, setCategory] = useState<ReportCategoryId | 'all'>('all')
 
   const { data: summary, isLoading, isError, error, dataUpdatedAt } = useQuery({
-    queryKey: ['reports-summary', from, to],
+    queryKey: tKey(['reports-summary', from, to]),
     queryFn: () => api.getReportsSummary({ from, to }),
   })
 
   const { data: dashboard } = useQuery({
-    queryKey: ['dashboard'],
+    queryKey: tKey(['dashboard']),
     queryFn: () => api.getDashboard(),
   })
 

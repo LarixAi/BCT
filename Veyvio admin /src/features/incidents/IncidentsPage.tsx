@@ -11,7 +11,9 @@ import { PriorityIncidentBanner } from './components/PriorityIncidentBanner'
 import { ReportIncidentPanel } from './components/ReportIncidentPanel'
 import { api } from '@/lib/api/client'
 import { safeIncidentsHub } from '@/lib/api/safe-hubs'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function IncidentsPage() {
   const { user } = useAuth()
@@ -29,7 +31,7 @@ export function IncidentsPage() {
   const canSettings = canManageIncidentSettings(permissions)
 
   const { data: hub, isLoading, error, isError } = useQuery({
-    queryKey: ['incidents-hub'],
+    queryKey: tKey(['incidents-hub']),
     queryFn: () => api.getIncidentsHub(),
   })
 
@@ -40,7 +42,7 @@ export function IncidentsPage() {
   }
 
   function refresh() {
-    queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
   }
 
   if (isLoading) return <p className="text-sm text-muted">Loading incidents…</p>

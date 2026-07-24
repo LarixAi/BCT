@@ -7,6 +7,8 @@ import { resolveFleetResourcesHub } from '@/lib/fleet-resources/resolve-hub'
 import type { TyreAsset } from '@/lib/fleet-resources/types'
 import type { VehicleProfile, WheelPositionState } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const LEGAL_TREAD_MM = 1.6
 const WARN_TREAD_MM = 3
@@ -35,7 +37,7 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
   const [selected, setSelected] = useState<string | null>(vehicle.wheelLayout[0]?.position ?? null)
 
   const { data: resources } = useQuery({
-    queryKey: ['fleet-resources-hub'],
+    queryKey: tKey(['fleet-resources-hub']),
     queryFn: () =>
       resolveFleetResourcesHub({
         fetchLiveHub: () => api.getFleetResourcesHub(),
@@ -48,8 +50,8 @@ export function VehicleWheelsTab({ vehicle, actorName }: { vehicle: VehicleProfi
   const completeRetorque = useMutation({
     mutationFn: (taskId: string) => api.completeVehicleRetorque(vehicle.id, taskId, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profile', vehicle.id] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', vehicle.id]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
     },
   })
 

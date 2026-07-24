@@ -75,10 +75,10 @@ jobs:
 
       - name: Build
         env:
-          VITE_MOCK_API: "true"
+          CI: "true"
         run: |
           cd "Veyvio admin "
-          npm run build
+          npm run build:ci
 
   driver:
     name: Driver
@@ -150,4 +150,9 @@ jobs:
           VEYVIO_ISOLATION_PASSWORD: ${{ secrets.VEYVIO_ISOLATION_PASSWORD }}
         run: |
           cd "Veyvio admin "
+          if [ -z "${VEYVIO_ANON_KEY}" ]; then
+            echo "::warning::VEYVIO_ANON_KEY is not set — tenant isolation smoke skipped."
+            echo "Add VEYVIO_ANON_KEY and related secrets before merging tenant-isolation work to main."
+            exit 0
+          fi
           npm run test:tenant-isolation

@@ -10,9 +10,21 @@ import type {
   YardHubVehicle,
 } from "@/platform/auth/command-auth-api";
 import type { YardRole } from "@/types/permissions";
-import type { DamageObservation, DamageSeverity } from "@/types/condition";
+import type { DamageObservation, DamageRecord, DamageSeverity, InspectionMedia, VehicleInspection } from "@/types/condition";
 import type { YardTask, YardTaskKind, YardTaskPriority, YardTaskStatus } from "@/types/tasks";
-import type { Bay, BayZone, Movement, MovementReason, Vehicle, VehicleStatus, VehicleType } from "@/types/yard";
+import type {
+  Bay,
+  BayZone,
+  Movement,
+  MovementReason,
+  Vehicle,
+  VehicleStatus,
+  VehicleType,
+} from "@/types/yard";
+import type { YardHubLayoutSnapshot } from "@veyvio/yard";
+import { ingestHubPlatformEvents } from "@/platform/ops/ingest-hub-platform-events";
+import { defaultSpatialYardLayout } from "@veyvio/yard";
+import type { YardCheckResult, YardCheckSectionResult, YardCheckType, CheckSafetyOutcome, YardCheckEvidenceItem } from "@/types/yard-check";
 
 type HubBodyworkReport = {
   id: string;
@@ -100,19 +112,24 @@ function mapTaskStatus(status: string): YardTaskStatus {
 }
 
 function mapHubTask(row: YardHubTask, companyId: string): YardTask {
+  const status = mapTaskStatus(row.status);
   return {
     id: row.id,
     title: row.title,
     description: row.instructions ?? undefined,
     kind: mapTaskKind(row.taskType),
     priority: mapTaskPriority(row.priority),
-    status: mapTaskStatus(row.status),
+    status,
     dueAt: row.dueAt ?? undefined,
     vehicleId: row.vehicleId || undefined,
+    assigneeId: row.assignedStaffId ?? undefined,
     assigneeName: row.assignedStaffName ?? undefined,
     createdAt: row.createdAt,
     createdBy: row.createdBy || companyId,
-    acceptedAt: row.status === "in_progress" ? row.createdAt : undefined,
+    acceptedAt:
+      status === "in_progress"
+        ? row.startedAt ?? row.updatedAt ?? row.createdAt
+        : undefined,
     completedAt: row.completedAt ?? undefined,
   };
 }
@@ -166,6 +183,258 @@ function mapBodyworkReports(reports: HubBodyworkReport[]): DamageObservation[] {
   }));
 }
 
+type HubCheckEvidenceMeta = {
+  safetyOutcome?: CheckSafetyOutcome;
+  durationSeconds?: number;
+  completedBy?: string;
+  odometerPhotoDataUrl?: string;
+  photos?: HubProjectedEvidence[];
+};
+
+type HubProjectedEvidence = {
+  id?: string;
+  kind?: string;
+  label?: string;
+  capturedAt?: string;
+  url?: string | null;
+  photoDataUrl?: string | null;
+};
+
+type HubVehicleCheck = {
+  id: string;
+  vehicleId?: string;
+  registrationNumber?: string;
+  driverName?: string | null;
+  checkType?: string;
+  result?: string;
+  startedAt?: string | null;
+  submittedAt?: string;
+  odometer?: number | null;
+  odometerPhotoDataUrl?: string | null;
+  checklist?: {
+    yardSections?: YardCheckSectionResult[];
+    checkType?: string;
+    responses?: HubDriverCheckResponse[];
+  };
+  evidence?: HubCheckEvidenceMeta | HubProjectedEvidence[];
+  sections?: HubDriverCheckSection[];
+};
+
+type HubDriverCheckResponse = {
+  itemId?: string;
+  key?: string;
+  sectionKey?: string;
+  category?: string;
+  questionTitle?: string;
+  label?: string;
+  responseStatus?: string;
+  status?: string;
+  driverNote?: string;
+  photoDataUrl?: string;
+  zone?: string;
+  damageType?: string;
+};
+
+type HubDriverCheckSection = {
+  id?: string;
+  section?: string;
+  question?: string;
+  answer?: string;
+  notes?: string | null;
+  photoDataUrl?: string | null;
+};
+
+function mapDriverAnswerToOutcome(answer: string | undefined): YardCheckSectionResult["outcome"] {
+  const normalized = (answer ?? "").toLowerCase();
+  if (normalized.includes("fail") || normalized.includes("defect")) return "defect";
+  if (normalized.includes("not applicable") || normalized === "n/a" || normalized === "na") return "na";
+  return "passed";
+}
+
+function mapHubDriverSection(item: HubDriverCheckSection, index: number): YardCheckSectionResult {
+  return {
+    sectionId: String(item.id ?? `section-${index}`),
+    title: String(item.question ?? item.section ?? `Check item ${index + 1}`),
+    outcome: mapDriverAnswerToOutcome(item.answer),
+    note: item.notes ?? undefined,
+    photoDataUrls: item.photoDataUrl ? [item.photoDataUrl] : undefined,
+  };
+}
+
+function mapHubDriverResponse(item: HubDriverCheckResponse, index: number): YardCheckSectionResult {
+  const status = String(item.responseStatus ?? item.status ?? "");
+  return {
+    sectionId: String(item.itemId ?? item.key ?? `response-${index}`),
+    title: String(item.questionTitle ?? item.label ?? item.sectionKey ?? item.category ?? `Item ${index + 1}`),
+    outcome: mapDriverAnswerToOutcome(status === "fail" ? "fail" : status === "na" ? "na" : status === "pass" ? "pass" : status),
+    note: item.driverNote ?? undefined,
+    photoDataUrls: item.photoDataUrl ? [item.photoDataUrl] : undefined,
+  };
+}
+
+function resolveHubCheckSections(row: HubVehicleCheck): YardCheckSectionResult[] {
+  const yardNative = row.checklist?.yardSections;
+  if (Array.isArray(yardNative) && yardNative.length > 0) return yardNative;
+
+  if (Array.isArray(row.sections) && row.sections.length > 0) {
+    return row.sections.map(mapHubDriverSection);
+  }
+
+  const responses = row.checklist?.responses;
+  if (Array.isArray(responses) && responses.length > 0) {
+    return responses.map(mapHubDriverResponse);
+  }
+
+  return [];
+}
+
+function isDataUrl(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("data:");
+}
+
+function mapHubProjectedEvidence(item: HubProjectedEvidence, index: number): YardCheckEvidenceItem | null {
+  const imageDataUrl = isDataUrl(item.url)
+    ? item.url
+    : isDataUrl(item.photoDataUrl)
+      ? item.photoDataUrl
+      : undefined;
+  if (!imageDataUrl) return null;
+  return {
+    id: String(item.id ?? `evidence-${index}`),
+    kind: String(item.kind ?? "photo"),
+    label: String(item.label ?? "Evidence"),
+    imageDataUrl,
+    capturedAt: item.capturedAt ? String(item.capturedAt) : undefined,
+  };
+}
+
+function resolveHubCheckEvidence(row: HubVehicleCheck): YardCheckEvidenceItem[] {
+  const items: YardCheckEvidenceItem[] = [];
+  const seen = new Set<string>();
+
+  const push = (item: YardCheckEvidenceItem | null) => {
+    if (!item) return;
+    const key = `${item.kind}:${item.label}:${item.imageDataUrl.slice(0, 48)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    items.push(item);
+  };
+
+  if (Array.isArray(row.evidence)) {
+    row.evidence.forEach((item, index) => push(mapHubProjectedEvidence(item, index)));
+  } else if (row.evidence && typeof row.evidence === "object") {
+    const raw = row.evidence;
+    if (isDataUrl(raw.odometerPhotoDataUrl)) {
+      push({
+        id: "odometer",
+        kind: "odometer",
+        label: row.odometer != null ? `Odometer ${row.odometer}` : "Odometer reading",
+        imageDataUrl: raw.odometerPhotoDataUrl,
+      });
+    }
+    const photos = Array.isArray(raw.photos) ? raw.photos : [];
+    photos.forEach((photo, index) => push(mapHubProjectedEvidence(photo, index)));
+  }
+
+  if (isDataUrl(row.odometerPhotoDataUrl)) {
+    push({
+      id: "odometer",
+      kind: "odometer",
+      label: row.odometer != null ? `Odometer ${row.odometer}` : "Odometer reading",
+      imageDataUrl: row.odometerPhotoDataUrl,
+    });
+  }
+
+  return items;
+}
+
+function resolveHubCheckMeta(row: HubVehicleCheck): HubCheckEvidenceMeta {
+  return Array.isArray(row.evidence) ? {} : (row.evidence ?? {});
+}
+
+function mapHubCheckType(raw: string | undefined): YardCheckType {
+  const known: YardCheckType[] = [
+    "start-of-day",
+    "driver-changeover",
+    "between-run",
+    "return-to-yard",
+    "yard-spot",
+    "first-use",
+    "vor-assessment",
+    "return-to-service",
+    "scheduled-inspection",
+  ];
+  const normalized = (raw ?? "").trim().toLowerCase().replace(/_/g, "-");
+  if (known.includes(normalized as YardCheckType)) return normalized as YardCheckType;
+  if (normalized.includes("yard") && normalized.includes("spot")) return "yard-spot";
+  if (normalized.includes("return") && normalized.includes("service")) return "return-to-service";
+  if (normalized.includes("vor")) return "vor-assessment";
+  if (normalized.includes("scheduled")) return "scheduled-inspection";
+  return "start-of-day";
+}
+
+function mapHubVehicleCheck(row: HubVehicleCheck): YardCheckResult | null {
+  if (!row.vehicleId) return null;
+  const sections = resolveHubCheckSections(row);
+  const evidence = resolveHubCheckEvidence(row);
+  const meta = resolveHubCheckMeta(row);
+  const checkType = mapHubCheckType(row.checklist?.checkType ?? row.checkType);
+  const result = (row.result ?? "").toLowerCase();
+  const passed = !["fail", "failed"].includes(result);
+  const safetyOutcome =
+    meta.safetyOutcome ??
+    (result.includes("advisory") ? "attention" : passed ? "ready" : "hold");
+  const completedAt = row.submittedAt ?? new Date().toISOString();
+  return {
+    id: row.id,
+    vehicleId: String(row.vehicleId),
+    checkType,
+    startedAt: row.startedAt ?? completedAt,
+    completedAt,
+    at: completedAt,
+    by: meta.completedBy ?? row.driverName ?? "Yard",
+    odometer: row.odometer ?? undefined,
+    sections,
+    evidence: evidence.length > 0 ? evidence : undefined,
+    overallPassed: passed,
+    safetyOutcome,
+    durationSeconds: meta.durationSeconds ?? undefined,
+  };
+}
+
+function hubBayToBayId(bayLabel: string | null | undefined): string {
+  if (!bayLabel?.trim()) return "";
+  const match = bayLabel.match(/(\d+)/);
+  if (match) return `BAY-${match[1].padStart(2, "0")}`;
+  return bayLabel.trim();
+}
+
+function layoutSnapshotToBays(layout: YardHubLayoutSnapshot | null | undefined): Bay[] {
+  if (!layout?.bays?.length) return [];
+  return layout.bays.map(b => ({
+    id: b.id,
+    zone: "Parking" as BayZone,
+    bayNumber: b.bayNumber,
+    displayName: b.displayName,
+  }));
+}
+
+function resolveHubLayout(hub: YardHubResponse): YardHubLayoutSnapshot | null {
+  if (hub.yardLayout) return hub.yardLayout;
+  const spatial = defaultSpatialYardLayout(hub.depotCode, hub.depotName);
+  return {
+    layoutId: spatial.id,
+    depotCode: spatial.depotCode,
+    name: spatial.name,
+    canvasWidth: spatial.canvasWidth,
+    canvasHeight: spatial.canvasHeight,
+    yardMapEnabled: true,
+    zones: spatial.zones,
+    bays: spatial.bays,
+    gates: spatial.gates,
+  };
+}
+
 /**
  * Project Command `GET /yard/hub` into a Yard bootstrap payload.
  * No demo fleet, trips, or day plan — only live hub data.
@@ -177,14 +446,16 @@ export function mapYardHubToBootstrap(
   role: YardRole,
 ): BootstrapPayload {
   const shell = buildLiveBootstrapShell(companyId, depotId || hub.depotId, role);
+  const yardLayout = resolveHubLayout(hub);
+  const layoutBays = layoutSnapshotToBays(yardLayout);
 
-  const bayIds = new Set(shell.bays.map(b => b.id));
+  const bayIds = new Set((layoutBays.length ? layoutBays : shell.bays).map(b => b.id));
   const extraBays: Bay[] = [];
   const vehicles: Vehicle[] = hub.vehicles.map((row, index) => {
     const zone = mapZone(row);
-    let bayId = row.bay && String(row.bay).trim() ? String(row.bay) : "";
+    let bayId = hubBayToBayId(row.bay);
     if (!bayId || !bayIds.has(bayId)) {
-      const zoneBays = shell.bays.filter(b => b.zone === zone);
+      const zoneBays = (layoutBays.length ? layoutBays : shell.bays).filter(b => b.zone === zone);
       bayId = zoneBays[index % Math.max(zoneBays.length, 1)]?.id ?? `H${String(index + 1).padStart(2, "0")}`;
       if (!bayIds.has(bayId)) {
         bayIds.add(bayId);
@@ -199,7 +470,6 @@ export function mapYardHubToBootstrap(
       type: mapVehicleType(row.vehicleCategory),
       bayId,
       status,
-      fuelPct: 50,
       lastCheckAt: row.lastUpdatedAt ?? undefined,
       lastCheckPassed: status === "Available" || status === "On Departure Line" ? true : undefined,
       notes: row.exceptionLabels?.length ? row.exceptionLabels.join(", ") : undefined,
@@ -209,22 +479,45 @@ export function mapYardHubToBootstrap(
   const hubTasks = (hub.tasks ?? []).map(task => mapHubTask(task, companyId));
   const hubMovements = (hub.movements ?? []).map(mapHubMovement);
   const bodywork = mapBodyworkReports((hub.bodyworkReports ?? []) as HubBodyworkReport[]);
+  const hubChecks = (hub.vehicleChecks ?? [])
+    .map(row => mapHubVehicleCheck(row as HubVehicleCheck))
+    .filter((check): check is YardCheckResult => Boolean(check));
+
+  const bodyCondition = hub.bodyCondition ?? {};
+  const hubInspections = (bodyCondition.inspections ?? []) as VehicleInspection[];
+  const hubDamageRecords = (bodyCondition.damageRecords ?? []) as DamageRecord[];
+  const hubDamageObservations = (bodyCondition.damageObservations ?? []) as DamageObservation[];
+  const hubInspectionMedia = (bodyCondition.inspectionMedia ?? []) as InspectionMedia[];
+
+  const mergedObservations = hubDamageObservations.length > 0
+    ? [...hubDamageObservations, ...bodywork.filter(
+        b => !hubDamageObservations.some(o => o.id === b.id),
+      )]
+    : bodywork;
+
+  ingestHubPlatformEvents(hub.platformEvents);
 
   return {
     ...shell,
     dataSource: COMMAND_HUB_BOOTSTRAP_SOURCE,
     companyId,
     depotId: depotId || hub.depotId || shell.depotId,
+    depotCode: hub.depotCode ?? null,
+    yardMapEnabled: Boolean(yardLayout),
+    yardLayout,
     syncedAt: new Date().toISOString(),
-    bays: [...shell.bays, ...extraBays],
+    bays: layoutBays.length ? [...layoutBays, ...extraBays] : [...shell.bays, ...extraBays],
     vehicles,
     tasks: hubTasks,
     movements: hubMovements,
     trips: [],
     defects: [],
     vorCases: [],
-    yardChecks: [],
-    damageObservations: bodywork,
+    yardChecks: hubChecks,
+    inspections: hubInspections,
+    inspectionMedia: hubInspectionMedia,
+    damageObservations: mergedObservations,
+    damageRecords: hubDamageRecords,
     damageReviews: [],
     repairWorkOrders: [],
     operationalPlan: null,

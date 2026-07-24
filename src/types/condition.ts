@@ -10,14 +10,51 @@ export type InspectionType =
   | "weekly-bodywork"
   | "post-repair"
   | "offboarding"
-  | "manager-audit";
+  | "manager-audit"
+  | "routine-inspection"
+  | "start-shift-handover"
+  | "end-shift-return"
+  | "depot-transfer"
+  | "reported-damage"
+  | "after-incident"
+  | "lease-return"
+  | "disposal"
+  | "other";
+
+export type InspectionReason = InspectionType;
+
+export const INSPECTION_TYPE_LABELS: Record<InspectionType, string> = {
+  "onboarding-baseline": "Initial fleet baseline",
+  "start-of-day": "Start of day",
+  "yard-check": "Routine yard inspection",
+  "driver-pre-use": "Driver pre-use",
+  "return-to-yard": "End-of-shift return",
+  "post-incident": "After incident",
+  "weekly-bodywork": "Weekly bodywork",
+  "post-repair": "Post-repair verification",
+  offboarding: "Disposal / offboarding",
+  "manager-audit": "Manager audit",
+  "routine-inspection": "Routine inspection",
+  "start-shift-handover": "Start-of-shift handover",
+  "end-shift-return": "End-of-shift return",
+  "depot-transfer": "Depot transfer",
+  "reported-damage": "Reported damage",
+  "after-incident": "After incident",
+  "lease-return": "Lease return",
+  disposal: "Disposal",
+  other: "Other",
+};
 
 export type InspectionStatus =
   | "draft"
   | "in_progress"
+  | "submitted"
+  | "awaiting_review"
   | "awaiting_approval"
   | "approved"
   | "rejected"
+  | "returned_for_clarification"
+  | "escalated"
   | "awaiting_sync";
 
 export type InspectionSourceApp = "yard" | "driver" | "maintenance";
@@ -127,6 +164,7 @@ export interface VehicleInspection {
   id: string;
   vehicleId: string;
   inspectionType: InspectionType;
+  inspectionReason?: InspectionReason;
   sourceApp: InspectionSourceApp;
   status: InspectionStatus;
   startedBy: string;
@@ -139,6 +177,9 @@ export interface VehicleInspection {
   checkId?: string;
   dutyId?: string;
   notes?: string;
+  referenceNumber?: string;
+  recommendedVehicleStatus?: string;
+  approvedVehicleStatus?: string;
 }
 
 export interface DamageRecord {
@@ -156,6 +197,9 @@ export interface DamageRecord {
   lastConfirmedAt: string;
   operationalImpact?: boolean;
   defectId?: string;
+  referenceNumber?: string;
+  repairWorkOrderId?: string;
+  vorTriggered?: boolean;
 }
 
 export interface DamageObservation {

@@ -3,8 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { TYRE_STATUS_LABEL } from '@/lib/fleet-resources/constants'
 import type { FleetResourcesHubData, TyreAsset } from '@/lib/fleet-resources/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { useState } from 'react'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
   const { user } = useAuth()
@@ -12,7 +14,7 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState<'all' | 'attention' | 'stock' | 'fitted'>('all')
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['fleet-resources-hub'] })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: tKey(['fleet-resources-hub']) })
 
   const remove = useMutation({
     mutationFn: (tyreId: string) =>

@@ -7,7 +7,9 @@ import { DEFECT_SEVERITY_LABELS } from '@/lib/vehicles/defects'
 import type { FleetDefectRow } from '@/lib/maintenance/types'
 import type { DefectTriageStatus } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }) {
   const { user } = useAuth()
@@ -23,9 +25,9 @@ export function MaintenanceDefectsTab({ defects }: { defects: FleetDefectRow[] }
   const open = defects.filter((d) => d.status !== 'closed')
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['maintenance-hub'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profile'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['maintenance-hub']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile']) })
   }
 
   const triage = useMutation({

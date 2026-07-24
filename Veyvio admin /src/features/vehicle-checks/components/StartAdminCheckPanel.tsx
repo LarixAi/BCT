@@ -5,7 +5,9 @@ import { CHECK_TYPE_LABELS } from '@/lib/vehicles/checks'
 import type { VehicleCheckType } from '@/lib/vehicles/types'
 import type { ChecksHubData } from '@/lib/checks/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const TYPES = Object.keys(CHECK_TYPE_LABELS) as VehicleCheckType[]
 
@@ -21,8 +23,8 @@ export function StartAdminCheckPanel({ hub, onClose }: { hub: ChecksHubData; onC
   const start = useMutation({
     mutationFn: () => api.startAdminCheck({ vehicleId, checkType, notes: notes || undefined }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['checks-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['checks-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
       onClose()
     },
   })

@@ -6,6 +6,8 @@ import { equipmentNeedsAttention } from '@/lib/vehicles/equipment'
 import { resolveFleetResourcesHub } from '@/lib/fleet-resources/resolve-hub'
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleEquipmentTab({
   vehicle,
@@ -18,7 +20,7 @@ export function VehicleEquipmentTab({
 }) {
   const queryClient = useQueryClient()
   const { data: resources } = useQuery({
-    queryKey: ['fleet-resources-hub'],
+    queryKey: tKey(['fleet-resources-hub']),
     queryFn: () =>
       resolveFleetResourcesHub({
         fetchLiveHub: () => api.getFleetResourcesHub(),
@@ -34,7 +36,7 @@ export function VehicleEquipmentTab({
     mutationFn: ({ equipmentId, assigned }: { equipmentId: string; assigned: boolean }) =>
       api.updateVehicleEquipment(vehicle.id, { equipmentId, assigned }, actorName ?? 'System'),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-profile', vehicle.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', vehicle.id]) })
     },
   })
 

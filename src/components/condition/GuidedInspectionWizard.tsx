@@ -8,7 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { DefectPhotoCapture } from "@/components/yard/DefectPhotoCapture";
 import { BodyZoneDiagram } from "@/components/condition/BodyZoneDiagram";
 import { getBodyZones, getCaptureTemplate, VIDEO_WALKAROUND_INSTRUCTION } from "@/domain/condition/body-zones";
-import { defaultInspectionTypeForVehicle } from "@/domain/condition/inspection-mutations";
+import {
+  defaultInspectionTypeForContext,
+  getInspectionTypeGroups,
+  resolveInspectionWizardContext,
+  type InspectionWizardContext,
+} from "@/domain/condition/inspection-type-options";
 import { getConditionProfile } from "@/domain/condition/condition-helpers";
 import { useYard } from "@/store/yard";
 import type { CaptureSlot, InspectionType } from "@/types/condition";
@@ -22,9 +27,19 @@ interface GuidedInspectionWizardProps {
   vehicleId: string;
   initialType?: InspectionType;
   repairOrderId?: string;
+  /** Defaults to vehicle condition tab — bodywork types only. */
+  context?: InspectionWizardContext;
+  /** Where to navigate after successful submission. */
+  returnTo?: "/yard/$vehicleId/condition" | "/vehicle-bodywork/$vehicleId";
 }
 
-export function GuidedInspectionWizard({ vehicleId, initialType, repairOrderId }: GuidedInspectionWizardProps) {
+export function GuidedInspectionWizard({
+  vehicleId,
+  initialType,
+  repairOrderId,
+  context: contextProp,
+  returnTo = "/yard/$vehicleId/condition",
+}: GuidedInspectionWizardProps) {
   const vehicle = useYard(s => s.vehicles.find(v => v.id === vehicleId));
   const profiles = useYard(s => s.conditionProfiles);
   const damageRecords = useYard(s => s.damageRecords);
@@ -38,8 +53,10 @@ export function GuidedInspectionWizard({ vehicleId, initialType, repairOrderId }
   const navigate = useNavigate();
 
   const linkedRepair = repairOrderId ? repairOrders.find(o => o.id === repairOrderId) : undefined;
+  const wizardContext = contextProp ?? resolveInspectionWizardContext({ repairOrderId });
   const profile = getConditionProfile(profiles, vehicleId);
-  const defaultType = repairOrderId ? "post-repair" as InspectionType : (initialType ?? defaultInspectionTypeForVehicle(profile));
+  const defaultType = defaultInspectionTypeForContext(wizardContext, profile, initialType);
+  const inspectionTypeGroups = useMemo(() => getInspectionTypeGroups(wizardContext), [wizardContext]);
   const zones = useMemo(() => (vehicle ? getBodyZones(vehicle.type) : []), [vehicle]);
   const slots = useMemo(
     () => (vehicle ? getCaptureTemplate(vehicle.type, defaultType === "onboarding-baseline" ? "onboarding-baseline" : "standard") : []),
@@ -126,13 +143,15 @@ export function GuidedInspectionWizard({ vehicleId, initialType, repairOrderId }
     } else {
       toast.success(yardCopy.toast.inspection.completed);
     }
-    navigate({ to: "/yard/$vehicleId/condition", params: { vehicleId } });
+    navigate({ to: returnTo, params: { vehicleId } });
   };
+
+  const backLabel = returnTo.startsWith("/vehicle-bodywork") ? "Vehicle bodywork" : "Condition";
 
   return (
     <div className="space-y-5 pb-8">
-      <Link to="/yard/$vehicleId/condition" params={{ vehicleId }} className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-foreground">
-        <ArrowLeft className="size-3" /> Condition
+      <Link to={returnTo} params={{ vehicleId }} className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-foreground">
+        <ArrowLeft className="size-3" /> {backLabel}
       </Link>
 
       {step === "setup" && (
@@ -146,17 +165,25 @@ export function GuidedInspectionWizard({ vehicleId, initialType, repairOrderId }
             </div>
           )}
           <div>
-            <Label className="text-[10px] uppercase tracking-widest text-muted font-bold">Inspection type</Label>
+            <Label className="text-[10px] uppercase tracking-widest text-muted font-bold">Body inspection reason</Label>
+            <p className="text-[11px] text-muted mt-0.5 mb-1">
+              {wizardContext === "repair-verification"
+                ? "Confirm repaired bodywork before return to service."
+                : "Record exterior and interior condition for this vehicle."}
+            </p>
             <select
               value={inspectionType}
               onChange={e => setInspectionType(e.target.value as InspectionType)}
               className="mt-1 w-full border border-border rounded-xs p-2 text-sm bg-white"
+              disabled={wizardContext === "repair-verification"}
             >
-              <option value="onboarding-baseline">Onboarding baseline</option>
-              <option value="yard-check">Yard bodywork inspection</option>
-              <option value="weekly-bodywork">Weekly detailed bodywork</option>
-              <option value="post-repair">Post-repair verification</option>
-              <option value="return-to-yard">Return to yard</option>
+              {inspectionTypeGroups.map(group => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </optgroup>
+              ))}
             </select>
           </div>
           <div>
@@ -215,6 +242,7 @@ export function GuidedInspectionWizard({ vehicleId, initialType, repairOrderId }
               damageRecords={openDamage}
               selectedZoneId={selectedZone ?? undefined}
               onSelectZone={setSelectedZone}
+              embedded
             />
           </div>
           {selectedZone && (

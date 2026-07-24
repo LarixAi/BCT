@@ -381,6 +381,7 @@ export interface PassengerRecord {
   firstName: string
   lastName: string
   status?: string
+  customerId?: string | null
   customerName?: string | null
   routeName?: string | null
   needsWheelchair?: boolean

@@ -973,7 +973,12 @@ export async function submitWalkaroundCheck({
   };
 
   if (offlineSubmit || !navigator.onLine) {
-    enqueueWalkaroundSubmission(driver.id, payload);
+    enqueueWalkaroundSubmission(
+      driver.id,
+      payload,
+      driver.organisation_id ?? driver.organisationId,
+      driver.user_id ?? driver.id,
+    );
     discardWalkaroundDraft(driver, vehicle.id);
     const derived = deriveWalkaroundResult(responses);
     const bodyworkDamageCount = responses.filter(
@@ -1308,7 +1313,12 @@ async function insertWalkaroundCheck(payload) {
 
   if (checkError || !checkRow) {
     if (!navigator.onLine) {
-      enqueueWalkaroundSubmission(driver.id, payload);
+      enqueueWalkaroundSubmission(
+        driver.id,
+        payload,
+        driver.organisation_id ?? driver.organisationId,
+        driver.user_id ?? driver.id,
+      );
       discardWalkaroundDraft(driver, vehicle.id);
       return {
         ok: true,
@@ -1337,30 +1347,35 @@ async function insertWalkaroundCheck(payload) {
 }
 
 export async function flushPendingWalkaroundSubmissions(driver) {
-  const queue = loadSyncQueue(driver.id);
+  const companyId = driver.organisation_id ?? driver.organisationId;
+  const membershipId = driver.user_id ?? driver.id;
+  const queue = loadSyncQueue(driver.id, companyId, membershipId);
   if (!queue.length || !navigator.onLine) {
     return { synced: 0, remaining: queue.length };
   }
 
   let synced = 0;
   for (const item of queue) {
+    if (item.companyId && companyId && item.companyId !== companyId) {
+      continue;
+    }
     let result = await insertWalkaroundCheckViaCommand(item.payload);
     if (!result.ok && !result.skipLegacy) {
       result = await insertWalkaroundCheck(item.payload);
     }
     if (result.ok && !result.queued) {
-      dequeueWalkaroundSubmission(driver.id, item.id);
+      dequeueWalkaroundSubmission(driver.id, item.id, companyId, membershipId);
       synced += 1;
     } else if (!result.ok) {
       break;
     }
   }
 
-  return { synced, remaining: loadSyncQueue(driver.id).length };
+  return { synced, remaining: loadSyncQueue(driver.id, companyId, membershipId).length };
 }
 
-export function getPendingSyncCount(driverId) {
-  return loadSyncQueue(driverId).length;
+export function getPendingSyncCount(driverId, companyId, membershipId) {
+  return loadSyncQueue(driverId, companyId, membershipId).length;
 }
 
 function formatWalkaroundTimestamp(value) {

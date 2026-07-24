@@ -2,6 +2,13 @@ import { Fingerprint, ScanFace } from "lucide-react";
 import { op } from "@/lib/driver-operational-theme";
 import { DRIVER_SCREEN_TOP } from "@/lib/driverSafeArea";
 
+function tapButton(handler) {
+  return (event) => {
+    event.preventDefault();
+    handler?.();
+  };
+}
+
 /**
  * Full-screen app lock. Session remains; biometrics only unlock the UI.
  */
@@ -17,8 +24,8 @@ export default function BiometricLockScreen({
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex flex-col bg-[var(--ridova-navy)] text-white"
-      style={{ paddingTop: DRIVER_SCREEN_TOP }}
+      className="fixed inset-0 z-[9999] flex flex-col bg-[var(--ridova-navy)] text-white"
+      style={{ paddingTop: DRIVER_SCREEN_TOP, touchAction: "manipulation" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="biometric-lock-title"
@@ -45,16 +52,21 @@ export default function BiometricLockScreen({
 
         <button
           type="button"
-          disabled={busy}
-          onClick={onUnlock}
-          className={`mt-8 flex min-h-[52px] w-full max-w-xs items-center justify-center rounded-full font-semibold ${op.primaryBtn} disabled:opacity-60`}
+          onPointerDown={tapButton(onUnlock)}
+          className={`mt-8 flex min-h-[52px] w-full max-w-xs items-center justify-center rounded-full font-semibold ${op.primaryBtn} ${busy ? "opacity-70" : ""}`}
         >
-          {busy ? "Checking…" : `Use ${label}`}
+          {busy ? "Opening fingerprint…" : `Use ${label}`}
         </button>
+
+        {busy ? (
+          <p className="mt-3 max-w-xs text-xs text-white/60">
+            Complete the fingerprint prompt if it appears on your phone.
+          </p>
+        ) : null}
 
         <button
           type="button"
-          onClick={onUsePassword}
+          onPointerDown={tapButton(onUsePassword)}
           className="mt-4 min-h-[44px] text-sm font-medium text-white/75 underline-offset-4 hover:underline"
         >
           Use password instead
@@ -62,7 +74,7 @@ export default function BiometricLockScreen({
 
         <button
           type="button"
-          onClick={onUsePassword}
+          onPointerDown={tapButton(onUsePassword)}
           className="mt-6 min-h-[44px] text-xs font-medium text-white/50 underline-offset-4 hover:underline"
         >
           Sign out

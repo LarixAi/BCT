@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { DRIVER_AUTH_PATH } from "@/lib/driverAuthConfig";
-import DriverAuthEntry from "./DriverAuthEntry";
+import DriverAuthSelectCompany, {
+  savePendingCompanySelection,
+} from "./DriverAuthSelectCompany";
 import DriverAuthVerify from "./DriverAuthVerify";
 import DriverPhoneVerify from "./DriverPhoneVerify";
 import DriverSignUp from "./DriverSignUp";
@@ -9,7 +11,11 @@ import DriverCheckEmail from "./DriverCheckEmail";
 import DriverResetPassword from "./DriverResetPassword";
 
 /** Auth shell only — splash/welcome live on DriverApp via DriverLaunchGate. */
-export default function DriverAuthRoutes({ login, loginWithBiometrics, refresh }) {
+export default function DriverAuthRoutes({ login, loginWithBiometrics, refresh, pendingCompanySelection }) {
+  if (pendingCompanySelection) {
+    return <DriverAuthSelectCompany onComplete={() => refresh()} />;
+  }
+
   return (
     <Routes>
       <Route

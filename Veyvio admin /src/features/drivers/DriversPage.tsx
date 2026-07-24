@@ -10,7 +10,9 @@ import {
 import { canCreateDriver } from '@/lib/drivers/permissions'
 import type { DriverProfile } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type ListFilter =
   | 'all'
@@ -30,12 +32,12 @@ export function DriversPage() {
   const filter = (searchParams.get('filter') as ListFilter) || 'all'
 
   const { data: drivers = [], isLoading } = useQuery({
-    queryKey: ['driver-profiles'],
+    queryKey: tKey(['driver-profiles']),
     queryFn: () => api.getDriverProfiles(),
   })
 
   const { data: summary } = useQuery({
-    queryKey: ['driver-directory-summary'],
+    queryKey: tKey(['driver-directory-summary']),
     queryFn: () => api.getDriverDirectorySummary(),
   })
 

@@ -11,8 +11,8 @@ export function applyBootstrapToYard(payload: BootstrapPayload): void {
   usePermissionStore.getState().setPermissions(normalized.permissions as YardPermission[]);
 }
 
-export async function hydrateYardFromCache(depotId: string): Promise<boolean> {
-  const cached = await loadBootstrapCache(depotId);
+export async function hydrateYardFromCache(companyId: string, depotId: string): Promise<boolean> {
+  const cached = await loadBootstrapCache(companyId, depotId);
   if (!cached) return false;
   applyBootstrapToYard(cached);
   return true;
@@ -28,7 +28,7 @@ export async function hydrateYardFromApi(input: {
   role?: YardRole;
 }): Promise<{ fromCache: boolean; refreshed: boolean; error?: string }> {
   const { companyId, depotId, role = "yard_manager" } = input;
-  const fromCache = await hydrateYardFromCache(depotId);
+  const fromCache = await hydrateYardFromCache(companyId, depotId);
 
   try {
     const payload = await getYardApi().fetchBootstrap(companyId, depotId, role);

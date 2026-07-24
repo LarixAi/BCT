@@ -11,8 +11,10 @@ import {
   type PmiItemResult,
 } from '@/lib/maintenance/pmi-checklist'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import type { MaintenanceWorkOrder, VehicleProfile } from '@/lib/vehicles/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const RESULT_OPTIONS: { id: PmiItemResult; label: string }[] = [
   { id: 'pass', label: 'Pass' },
@@ -61,9 +63,9 @@ export function DigitalPmiForm({
   }, [])
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['maintenance-hub'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profile', vehicle.id] })
+    queryClient.invalidateQueries({ queryKey: tKey(['maintenance-hub']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', vehicle.id]) })
   }
 
   const saveItem = useMutation({

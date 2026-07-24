@@ -507,14 +507,42 @@ const SEVERITY_STYLES: Record<OpsActionSeverity, string> = {
 export function ActionQueuePanel({
   model,
   severityFilter,
+  bare = false,
 }: {
   model: OpsDashboardModel
   severityFilter: 'all' | OpsActionSeverity
+  bare?: boolean
 }) {
   const items =
     severityFilter === 'all'
       ? model.actionQueue
       : model.actionQueue.filter((a) => a.severity === severityFilter)
+
+  const body =
+    items.length === 0 ? (
+      <p className="text-sm text-muted">No open exceptions for this filter.</p>
+    ) : (
+      <ul className="space-y-2">
+        {items.map((a) => (
+          <li key={a.id} className={`rounded-lg border p-3 ${SEVERITY_STYLES[a.severity]}`}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{a.severity}</p>
+                <Link to={a.href} className="font-medium text-ink hover:text-command-700">
+                  {a.title}
+                </Link>
+              </div>
+              <span className="text-[10px] uppercase text-muted">{a.source}</span>
+            </div>
+            <p className="mt-1 text-sm text-ink-soft">{a.detail}</p>
+            <p className="mt-1 text-xs text-ink-soft">Next: {a.recommendedAction}</p>
+            {a.owner && <p className="text-xs text-muted">Owner: {a.owner}</p>}
+          </li>
+        ))}
+      </ul>
+    )
+
+  if (bare) return body
 
   return (
     <SectionCard
@@ -526,28 +554,7 @@ export function ActionQueuePanel({
         </Link>
       }
     >
-      {items.length === 0 ? (
-        <p className="text-sm text-muted">No open exceptions for this filter.</p>
-      ) : (
-        <ul className="space-y-2">
-          {items.map((a) => (
-            <li key={a.id} className={`rounded-lg border p-3 ${SEVERITY_STYLES[a.severity]}`}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{a.severity}</p>
-                  <Link to={a.href} className="font-medium text-ink hover:text-command-700">
-                    {a.title}
-                  </Link>
-                </div>
-                <span className="text-[10px] uppercase text-muted">{a.source}</span>
-              </div>
-              <p className="mt-1 text-sm text-ink-soft">{a.detail}</p>
-              <p className="mt-1 text-xs text-ink-soft">Next: {a.recommendedAction}</p>
-              {a.owner && <p className="text-xs text-muted">Owner: {a.owner}</p>}
-            </li>
-          ))}
-        </ul>
-      )}
+      {body}
     </SectionCard>
   )
 }

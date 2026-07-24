@@ -1,13 +1,13 @@
 import type { BookingType, DispatchMode } from '@/lib/bookings/types'
 
 export const BOOKING_STEPS = [
-  { id: 1, key: 'customer', label: 'Customer' },
-  { id: 2, key: 'passengers', label: 'Passengers' },
-  { id: 3, key: 'journey', label: 'Journey' },
-  { id: 4, key: 'requirements', label: 'Requirements' },
-  { id: 5, key: 'schedule', label: 'Schedule' },
-  { id: 6, key: 'pricing', label: 'Pricing' },
-  { id: 7, key: 'dispatch', label: 'Dispatch' },
+  { id: 1, key: 'journey', label: 'Journey' },
+  { id: 2, key: 'customer', label: 'Customer' },
+  { id: 3, key: 'passengers', label: 'Passengers' },
+  { id: 4, key: 'locations', label: 'Locations' },
+  { id: 5, key: 'schedule', label: 'Date & time' },
+  { id: 6, key: 'requirements', label: 'Requirements' },
+  { id: 7, key: 'pricing', label: 'Price & billing' },
   { id: 8, key: 'review', label: 'Review' },
 ] as const
 
@@ -42,12 +42,14 @@ export const DISPATCH_MODE_OPTIONS: { id: DispatchMode; label: string; descripti
 ]
 
 export const BOOKING_LIST_VIEWS = [
-  { id: 'all', label: 'All bookings' },
+  { id: 'all', label: 'All' },
   { id: 'draft', label: 'Drafts' },
-  { id: 'quotation', label: 'Quotes' },
   { id: 'confirmed', label: 'Confirmed' },
-  { id: 'unscheduled', label: 'Unscheduled' },
-  { id: 'recurring', label: 'Recurring' },
-  { id: 'today', label: 'Today' },
+  { id: 'unscheduled', label: 'Awaiting schedule' },
   { id: 'upcoming', label: 'Upcoming' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'cancelled', label: 'Cancelled' },
 ] as const
+
+/** Booking types that belong in School Routes or Dial-a-Ride, not the ordinary bookings register. */
+export const NON_ORDINARY_BOOKING_TYPES = new Set(['school', 'school_route', 'dial_a_ride'])

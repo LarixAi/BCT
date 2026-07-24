@@ -5,6 +5,8 @@ import { DriverInviteLinkBanner } from './DriverInviteLinkBanner'
 import type { DriverProfile, InvitationChannel } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
 import { cn } from '@/lib/cn'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const RESEND_COOLDOWN_MS = 15 * 60 * 1000
 
@@ -79,8 +81,8 @@ export function AppInvitePanel({
   const phoneUnverified = Boolean(driver.phone) && account.phoneVerified === false
 
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['driver-profile', driver.id] })
-    queryClient.invalidateQueries({ queryKey: ['driver-requirements', driver.id] })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', driver.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-requirements', driver.id]) })
   }
 
   const invite = useMutation({

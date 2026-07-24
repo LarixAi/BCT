@@ -4,7 +4,9 @@ import { SectionCard } from '@/components/ui'
 import { canInvestigateIncident, canViewMedicalIncident, canViewSafeguardingIncident } from '@/lib/incidents/permissions'
 import type { IncidentDetailRecord, IncidentPersonInvolved } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function IncidentPeoplePanel({ incident }: { incident: IncidentDetailRecord }) {
   const { user } = useAuth()
@@ -84,7 +86,7 @@ function PersonCard({
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incidentId] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incidentId]) })
       setEditing(false)
     },
   })

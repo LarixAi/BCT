@@ -3,6 +3,8 @@ import { mapYardHubToBootstrap } from "./map-yard-hub";
 import type { BootstrapPayload } from "@/data/mocks/bootstrap";
 import type { YardRole } from "@/types/permissions";
 import type { OutboxMutation } from "@/types/sync";
+import { formatSyncError } from "@/domain/sync/format-sync-error";
+import { isUntrustedServerId } from "@/domain/sync/is-trusted-server-id";
 import type { PushMutationResult, YardApi } from "./yard-api";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
 import {
@@ -52,7 +54,7 @@ export const liveYardApi: YardApi = {
     if (usesCommandYardApi()) {
       const token = getSessionSnapshot().accessToken;
       if (!token || token.startsWith("mock_")) {
-        return { serverId: `cmd_local_${mutation.localOperationId}` };
+        throw new Error("Sign in required to sync yard actions to Command");
       }
       const res = await fetch(commandApiUrl("/yard/mutations"), {
         method: "POST",
@@ -68,10 +70,17 @@ export const liveYardApi: YardApi = {
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(text || `Yard mutation failed (${res.status})`);
+        throw new Error(formatSyncError(text || `Yard mutation failed (${res.status})`));
       }
-      const body = await res.json().catch(() => ({})) as { serverId?: string; ok?: boolean };
-      return { serverId: body.serverId ?? mutation.localOperationId };
+      const body = await res.json().catch(() => ({})) as { serverId?: string; ok?: boolean; skipped?: boolean };
+      if (body.skipped) {
+        return { serverId: body.serverId ?? mutation.localOperationId };
+      }
+      const serverId = body.serverId ?? mutation.localOperationId;
+      if (isUntrustedServerId(serverId)) {
+        throw new Error("Command did not persist this yard action — handler may not be deployed yet");
+      }
+      return { serverId };
     }
 
     const base = getApiBaseUrl();
@@ -104,7 +113,7 @@ export const liveYardApi: YardApi = {
     }
 
     const base = getApiBaseUrl();
-    if (!base) throw new Error("VITE_API_BASE_URL is not configured");
+    if (!base) return { ok: false, mode: "unconfigured" };
     return parseJson<{ ok: boolean; mode: string }>(
       await fetch(`${base}/v1/yard/health`, { credentials: "include", headers: bearerHeaders() }),
     );

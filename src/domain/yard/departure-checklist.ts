@@ -51,8 +51,8 @@ export function buildDepartureChecklist(
     items.push({
       id: "fuel",
       label: "Fuel adequate",
-      passed: vehicle.fuelPct >= 25,
-      detail: `${vehicle.fuelPct}% fuel`,
+      passed: vehicle.fuelPct == null ? true : vehicle.fuelPct >= 25,
+      detail: vehicle.fuelPct == null ? "Fuel level not reported" : `${vehicle.fuelPct}% fuel`,
     });
 
     items.push({

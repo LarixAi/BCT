@@ -20,8 +20,11 @@ export type BayZone =
   | "Off-site";
 
 export interface Bay {
-  id: string;      // "A04"
+  id: string;      // "A04" or "BAY-08"
   zone: BayZone;
+  /** Live Yard Map — numbered bay when depot uses spatial layout */
+  bayNumber?: number;
+  displayName?: string;
 }
 
 export interface Vehicle {
@@ -30,7 +33,7 @@ export interface Vehicle {
   type: VehicleType;
   bayId: string;       // current location
   status: VehicleStatus;
-  fuelPct: number;
+  fuelPct?: number;
   lastCheckAt?: string; // ISO
   lastCheckPassed?: boolean;
   notes?: string;

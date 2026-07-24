@@ -2,19 +2,19 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
+import { LeaveApprovalWizard } from '@/features/attendance/LeaveApprovalWizard'
+import { formatLeaveWindow } from '@/features/attendance/leave-approval-utils'
 import { LEAVE_STATUS_LABEL, LEAVE_TYPE_LABEL } from '@/lib/attendance/constants'
 import {
-  approveLeaveRequest,
   cancelLeaveRequest,
   moveLeaveRequest,
-  rejectLeaveRequest,
-  suggestLeaveDates,
 } from '@/lib/attendance/leave-workflow'
 import type { LeaveRequestRecord } from '@/lib/attendance/types'
-import { suggestAlternativeDates } from '@/lib/holiday/engine'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { cn } from '@/lib/cn'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function TimeOffPage() {
   const { user } = useAuth()
@@ -24,14 +24,14 @@ export function TimeOffPage() {
     'Operations'
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [rejectReason, setRejectReason] = useState('')
+  const [wizardRequest, setWizardRequest] = useState<LeaveRequestRecord | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [moveStart, setMoveStart] = useState('')
   const [moveEnd, setMoveEnd] = useState('')
   const [moveReason, setMoveReason] = useState('')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['leave-requests'],
+    queryKey: tKey(['leave-requests']),
     queryFn: () => api.getLeaveRequests(),
   })
 
@@ -45,8 +45,8 @@ export function TimeOffPage() {
   const pending = useMemo(() => rows.filter((r) => r.status === 'pending'), [rows])
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['leave-requests'] })
-    queryClient.invalidateQueries({ queryKey: ['attendance-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['leave-requests']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['attendance-hub']) })
   }
 
   const mutateLeave = useMutation({
@@ -54,7 +54,6 @@ export function TimeOffPage() {
     onSuccess: (row) => {
       invalidate()
       setSelectedId(row.id)
-      setRejectReason('')
       setCancelReason('')
       setMoveReason('')
     },
@@ -134,7 +133,7 @@ export function TimeOffPage() {
                     </span>
                   </div>
                   <p className="mt-2 text-ink-soft">
-                    {formatWindow(row)}
+                    {formatLeaveWindow(row)}
                     {row.partialDay ? ' · Partial day' : ''}
                   </p>
                   <p className="mt-1 text-xs text-muted">
@@ -155,7 +154,7 @@ export function TimeOffPage() {
           >
             <dl className="space-y-2 text-sm">
               <Row label="Driver" value={`${selected.personName} (${selected.personNumber})`} />
-              <Row label="Dates" value={formatWindow(selected)} />
+              <Row label="Dates" value={formatLeaveWindow(selected)} />
               <Row label="Reason" value={selected.reason} />
               <Row label="Attachment" value={selected.attachmentLabel ?? 'None'} />
               <Row
@@ -176,62 +175,13 @@ export function TimeOffPage() {
 
             <div className="mt-4 space-y-2 border-t border-border pt-4">
               {(selected.status === 'pending' || selected.status === 'moved') && (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={mutateLeave.isPending}
-                    onClick={() =>
-                      mutateLeave.mutate(approveLeaveRequest(selected, actorName, 'Cover checked'))
-                    }
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    disabled={mutateLeave.isPending || !rejectReason.trim()}
-                    onClick={() =>
-                      mutateLeave.mutate(rejectLeaveRequest(selected, actorName, rejectReason))
-                    }
-                    className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
-                  >
-                    Reject
-                  </button>
-                  {(() => {
-                    const alt = suggestAlternativeDates({
-                      startDate: selected.startDate,
-                      endDate: selected.endDate,
-                    })
-                    if (!alt) return null
-                    return (
-                      <button
-                        type="button"
-                        disabled={mutateLeave.isPending}
-                        onClick={() =>
-                          mutateLeave.mutate(
-                            suggestLeaveDates(
-                              selected,
-                              actorName,
-                              alt,
-                              'Please consider these alternative dates.',
-                            ),
-                          )
-                        }
-                        className="rounded-lg border border-command-200 px-3 py-1.5 text-sm font-medium text-command-800 hover:bg-command-50 disabled:opacity-60"
-                      >
-                        Suggest {alt.startDate} → {alt.endDate}
-                      </button>
-                    )
-                  })()}
-                </div>
-              )}
-              {(selected.status === 'pending' || selected.status === 'moved') && (
-                <input
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Rejection reason (required to reject)"
-                  className="w-full rounded-lg border border-border px-3 py-1.5 text-sm"
-                />
+                <button
+                  type="button"
+                  onClick={() => setWizardRequest(selected)}
+                  className="w-full rounded-lg bg-command-600 px-3 py-2 text-sm font-medium text-white hover:bg-command-700"
+                >
+                  Review request
+                </button>
               )}
 
               {(selected.status === 'approved' ||
@@ -329,15 +279,21 @@ export function TimeOffPage() {
           </SectionCard>
         )}
       </div>
+
+      {wizardRequest && (
+        <LeaveApprovalWizard
+          request={wizardRequest}
+          actorName={actorName}
+          onClose={() => setWizardRequest(null)}
+          onComplete={(row) => {
+            setWizardRequest(null)
+            setSelectedId(row.id)
+            invalidate()
+          }}
+        />
+      )}
     </div>
   )
-}
-
-function formatWindow(row: LeaveRequestRecord) {
-  if (row.startDate === row.endDate) {
-    return `${row.startDate}${row.startTime ? ` ${row.startTime}` : ''}${row.endTime ? `–${row.endTime}` : ''}`
-  }
-  return `${row.startDate} → ${row.endDate}`
 }
 
 function Row({ label, value }: { label: string; value: string }) {

@@ -4,17 +4,19 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function CustomersPage() {
   const [search, setSearch] = useState('')
 
   const { data: customers = [], isLoading } = useQuery({
-    queryKey: ['customers'],
+    queryKey: tKey(['customers']),
     queryFn: () => api.getCustomers(),
   })
 
   const { data: routes = [] } = useQuery({
-    queryKey: ['routes'],
+    queryKey: tKey(['routes']),
     queryFn: () => api.getRoutes(),
   })
 

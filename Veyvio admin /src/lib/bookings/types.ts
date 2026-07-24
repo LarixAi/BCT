@@ -126,11 +126,21 @@ export interface BookingValidationItem {
   message: string
 }
 
+export type FundingType =
+  | 'private'
+  | 'customer_account'
+  | 'contract'
+  | 'local_authority'
+  | 'nhs'
+  | 'internal'
+  | 'other'
+
 export interface BookingDraft {
   id?: string
   reference?: string
   bookingType: BookingType
   status: BookingStatus
+  fundingType: FundingType
   customerId: string | null
   customerName: string | null
   passengers: BookingPassengerRef[]

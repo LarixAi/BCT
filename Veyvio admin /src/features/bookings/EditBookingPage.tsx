@@ -6,6 +6,8 @@ import { ValidationList } from '@/features/bookings/components/BookingWizardUi'
 import { JourneyStep } from '@/features/bookings/steps/JourneyStep'
 import { api } from '@/lib/api/client'
 import type { BookingDraft } from '@/lib/bookings/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type ApplyScope = 'trip_only' | 'all_future' | 'recurring_pattern' | 'exception'
 
@@ -18,13 +20,13 @@ export function EditBookingPage() {
   const [showImpact, setShowImpact] = useState(false)
 
   const { data: booking, isLoading } = useQuery({
-    queryKey: ['booking', id],
+    queryKey: tKey(['booking', id]),
     queryFn: () => api.getBooking(id!),
     enabled: !!id,
   })
 
   const { data: impact } = useQuery({
-    queryKey: ['booking-edit-impact', id, draft],
+    queryKey: tKey(['booking-edit-impact', id, draft]),
     queryFn: () =>
       api.calculateBookingEditImpact(id!, draft!, {
         driverName: 'Jane Smith',
@@ -35,7 +37,7 @@ export function EditBookingPage() {
   })
 
   const { data: validation = [] } = useQuery({
-    queryKey: ['booking-validation', draft],
+    queryKey: tKey(['booking-validation', draft]),
     queryFn: () => api.validateBookingDraft(draft!),
     enabled: !!draft,
   })
@@ -43,8 +45,8 @@ export function EditBookingPage() {
   const save = useMutation({
     mutationFn: () => api.updateBooking(id!, draft!, { applyScope }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['booking', id] })
-      queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['booking', id]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['bookings']) })
       navigate(`/bookings/${id}`)
     },
   })

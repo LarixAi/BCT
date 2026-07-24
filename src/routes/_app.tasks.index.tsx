@@ -1,14 +1,25 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
-import { SectionHeader } from "@/components/yard/primitives";
+import { createFileRoute } from "@tanstack/react-router";
+import { ArrowUpDown, Filter } from "lucide-react";
 import { useYard } from "@/store/yard";
 import { useSessionStore } from "@/platform/auth/session-store";
-import { taskStats, formatTaskDue, isTaskOpen } from "@/domain/tasks/task-stats";
-import { canAcceptTask } from "@/domain/tasks/task-workflow";
-import type { YardTask, YardTaskPriority, YardTaskStatus } from "@/types/tasks";
-import { ListTodo, Clock, AlertTriangle, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { RecentTasksTable } from "@/features/home/RecentTasksTable";
+import { DashboardSurface, SegmentedControl } from "@/features/home/HomeDashboardPrimitives";
+import { TaskCalendarStrip } from "@/features/tasks/TaskCalendarStrip";
+import { TasksKanbanBoard } from "@/features/tasks/TasksKanbanBoard";
+import { TasksPageHeader } from "@/features/tasks/TasksPageHeader";
+import { TaskStatusOverview } from "@/features/tasks/TaskStatusOverview";
+import { TasksSummaryCards } from "@/features/tasks/TasksSummaryCards";
+import {
+  activeBoardTasks,
+  buildStatusBreakdown,
+  isTaskUrgent,
+  pendingTaskCount,
+  sortTasks,
+  upcomingDeadlineCount,
+  type SortKey,
+} from "@/features/tasks/task-board-utils";
+import { getUserDisplayName, isTaskAssignedToUser } from "@/domain/tasks/task-workflow";
 
 export const Route = createFileRoute("/_app/tasks/")({
   head: () => ({
@@ -20,151 +31,98 @@ export const Route = createFileRoute("/_app/tasks/")({
   component: TasksPage,
 });
 
-type Filter = "all" | "mine" | "open" | "done";
+type ViewMode = "table" | "kanban" | "timeline";
 
-const PRIORITY_TONE: Record<YardTaskPriority, string> = {
-  Urgent: "bg-vor/10 text-vor border-vor/30",
-  High: "bg-warn/10 text-warn border-warn/40",
-  Normal: "bg-secondary text-muted border-border",
-  Low: "bg-secondary text-muted border-border",
-};
-
-const STATUS_LABEL: Record<YardTaskStatus, string> = {
-  open: "Open",
-  assigned: "Assigned",
-  in_progress: "In progress",
-  completed: "Done",
-  cancelled: "Cancelled",
-};
+const VIEW_OPTIONS: { id: ViewMode; label: string }[] = [
+  { id: "table", label: "Table" },
+  { id: "kanban", label: "Kanban" },
+  { id: "timeline", label: "Timeline" },
+];
 
 function TasksPage() {
   const tasks = useYard(s => s.tasks) ?? [];
-  const vehicles = useYard(s => s.vehicles);
   const acceptTask = useYard(s => s.acceptTask);
-  const userId = useSessionStore(s => s.user?.id);
-  const [filter, setFilter] = useState<Filter>("open");
+  const user = useSessionStore(s => s.user);
+  const userId = user?.id;
+  const userName = getUserDisplayName(user);
+  const [myTasksOnly, setMyTasksOnly] = useState(false);
 
-  const stats = useMemo(() => taskStats(tasks, userId), [tasks, userId]);
+  const [view, setView] = useState<ViewMode>("kanban");
+  const [urgentOnly, setUrgentOnly] = useState(false);
+  const [sort, setSort] = useState<SortKey>("due");
 
-  const filtered = useMemo(() => {
-    switch (filter) {
-      case "mine":
-        return (tasks ?? []).filter(t => isTaskOpen(t) && t.assigneeId === userId);
-      case "open":
-        return (tasks ?? []).filter(isTaskOpen);
-      case "done":
-        return (tasks ?? []).filter(t => t.status === "completed");
-      default:
-        return tasks ?? [];
-    }
-  }, [tasks, filter, userId]);
+  const breakdown = useMemo(() => buildStatusBreakdown(tasks), [tasks]);
+  const boardTasks = useMemo(() => {
+    let list = activeBoardTasks(tasks);
+    if (myTasksOnly) list = list.filter(t => isTaskAssignedToUser(t, userId, userName));
+    if (urgentOnly) list = list.filter(isTaskUrgent);
+    return sortTasks(list, sort);
+  }, [tasks, myTasksOnly, userId, userName, urgentOnly, sort]);
 
-  return (
-    <div className="space-y-4 animate-in-up pb-4">
-      <SectionHeader title="Tasks" sub="assigned work" />
-
-      <div className="grid grid-cols-3 gap-2">
-        <StatCard icon={<ListTodo className="size-4" />} label="Open" value={String(stats.open)} />
-        <StatCard icon={<Clock className="size-4" />} label="Due soon" value={String(stats.dueSoon)} />
-        <StatCard icon={<AlertTriangle className="size-4" />} label="Urgent" value={String(stats.urgent)} tone={stats.urgent > 0 ? "warn" : "default"} />
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {(["open", "mine", "all", "done"] as Filter[]).map(f => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => setFilter(f)}
-            className={`shrink-0 px-3 py-1.5 rounded-xs border text-[10px] font-bold uppercase tracking-widest ${
-              filter === f ? "border-primary bg-primary text-white" : "border-border bg-white text-muted"
-            }`}
-          >
-            {f === "mine" ? `Mine (${stats.mine})` : f}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-2">
-        {filtered.map(task => {
-          const vehicle = task.vehicleId ? vehicles.find(v => v.id === task.vehicleId) : undefined;
-          return (
-            <TaskRow
-              key={task.id}
-              task={task}
-              vehicleReg={vehicle?.reg}
-              userId={userId}
-              onAccept={acceptTask}
-            />
-          );
-        })}
-        {filtered.length === 0 && (
-          <p className="text-sm text-muted text-center py-8 border border-dashed border-border rounded-xs">
-            No tasks in this view.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TaskRow({
-  task,
-  vehicleReg,
-  userId,
-  onAccept,
-}: {
-  task: YardTask;
-  vehicleReg?: string;
-  userId?: string;
-  onAccept: (id: string) => void;
-}) {
-  const canAccept = canAcceptTask(task, userId);
+  const completed = breakdown.find(item => item.id === "completed")?.count ?? 0;
+  const pending = pendingTaskCount(tasks);
+  const upcoming = upcomingDeadlineCount(tasks);
 
   return (
-    <div className="bg-white border border-border rounded-xs p-3">
-      <div className="flex items-start justify-between gap-2">
-        <Link to="/tasks/$taskId" params={{ taskId: task.id }} className="min-w-0 flex-1 hover:opacity-90">
-          <div className="font-bold text-sm">{task.title}</div>
-          {vehicleReg && (
-            <div className="text-[10px] font-mono text-muted mt-0.5">{vehicleReg}</div>
-          )}
-        </Link>
-        <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm border shrink-0 ${PRIORITY_TONE[task.priority]}`}>
-          {task.priority}
-        </span>
+    <div className="space-y-5 pb-6 animate-in-up">
+      <TasksPageHeader />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <TaskStatusOverview breakdown={breakdown} />
+        <TasksSummaryCards completed={completed} pending={pending} upcoming={upcoming} />
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <div className="text-[10px] text-muted uppercase tracking-widest">
-          Due {formatTaskDue(task.dueAt)}
-          {task.assigneeName && <span className="ml-2 text-primary">· {task.assigneeName}</span>}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">{STATUS_LABEL[task.status]}</span>
-          {canAccept && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onAccept(task.id)}
-              className="text-[9px] uppercase tracking-widest font-bold h-7"
+
+      <TaskCalendarStrip tasks={tasks} />
+
+      <DashboardSurface className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-ink">All tasks</h2>
+            <p className="mt-0.5 text-sm text-[#667085]">{boardTasks.length} in this view</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMyTasksOnly(v => !v)}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium ${
+                myTasksOnly
+                  ? "border-[#abefc6] bg-[#ecfdf3] text-[#027a48]"
+                  : "border-[#e4e7ec] bg-white text-[#344054]"
+              }`}
             >
-              Accept
-            </Button>
-          )}
-          <Link to="/tasks/$taskId" params={{ taskId: task.id }}>
-            <ChevronRight className="size-4 text-muted" />
-          </Link>
+              Assigned to me
+            </button>
+            <button
+              type="button"
+              onClick={() => setUrgentOnly(v => !v)}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium ${
+                urgentOnly
+                  ? "border-[#fecdca] bg-[#fef3f2] text-[#b42318]"
+                  : "border-[#e4e7ec] bg-white text-[#344054]"
+              }`}
+            >
+              <Filter className="size-3.5" />
+              Urgent
+            </button>
+            <button
+              type="button"
+              onClick={() => setSort(s => (s === "due" ? "priority" : "due"))}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-xs font-medium text-[#344054]"
+            >
+              <ArrowUpDown className="size-3.5" />
+              Sort
+            </button>
+            <SegmentedControl value={view} onChange={setView} options={VIEW_OPTIONS} />
+          </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function StatCard({ icon, label, value, tone = "default" }: { icon: ReactNode; label: string; value: string; tone?: "default" | "warn" }) {
-  return (
-    <div className="bg-white border border-border rounded-xs p-3 text-center">
-      <div className={`flex justify-center mb-1 ${tone === "warn" ? "text-warn" : "text-muted"}`}>{icon}</div>
-      <div className={`text-xl font-extrabold font-display ${tone === "warn" ? "text-vor" : ""}`}>{value}</div>
-      <div className="text-[9px] font-bold uppercase tracking-widest text-muted">{label}</div>
+        {view === "kanban" && (
+          <TasksKanbanBoard tasks={boardTasks} userId={userId} userName={userName} onAccept={acceptTask} />
+        )}
+        {view === "table" && <RecentTasksTable tasks={boardTasks} />}
+        {view === "timeline" && <TaskCalendarStrip tasks={boardTasks} />}
+      </DashboardSurface>
     </div>
   );
 }

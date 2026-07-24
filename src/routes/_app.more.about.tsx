@@ -8,6 +8,8 @@ import {
   yardPageTitle,
 } from "@/components/brand/brand-copy";
 import { MoreSubpageLayout } from "@/components/yard/more/MoreSubpageLayout";
+import { DashboardSurface } from "@/features/home/HomeDashboardPrimitives";
+import { hubListPanelClass } from "@/features/hub/HubContentPrimitives";
 
 export const Route = createFileRoute("/_app/more/about")({
   head: () => ({ meta: [{ title: yardPageTitle("About") }] }),
@@ -17,26 +19,31 @@ export const Route = createFileRoute("/_app/more/about")({
 function AboutPage() {
   return (
     <MoreSubpageLayout title="About Veyvio Yard" eyebrow="Brand">
-      <div className="flex flex-col items-center gap-4 rounded-xs border border-border bg-white px-4 py-8 text-center">
-        <div className="rounded-xs bg-accent px-6 py-5">
-          <BrandWordmark size="header" className="text-left" />
+      <DashboardSurface>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="rounded-xl bg-accent px-6 py-5">
+            <BrandWordmark size="header" className="text-left" />
+          </div>
+          <p className="font-display text-lg font-extrabold text-ink">{BRAND_PRODUCT}</p>
+          <p className="text-sm text-[#667085]">Version 0.1.0</p>
+          <p className="max-w-xs text-sm font-semibold text-[#175cd3]">{BRAND_CAMPAIGN}</p>
+          <p className="text-sm italic text-[#667085]">{BRAND_PROMISE}</p>
+          <p className="text-xs text-[#667085]">{BRAND_FOCUSED_PROMISE}</p>
         </div>
-        <p className="font-display text-lg font-extrabold">{BRAND_PRODUCT}</p>
-        <p className="text-sm text-muted">Version 0.1.0</p>
-        <p className="max-w-xs text-sm font-semibold text-primary">{BRAND_CAMPAIGN}</p>
-        <p className="text-sm italic text-muted">{BRAND_PROMISE}</p>
-        <p className="text-xs text-muted">{BRAND_FOCUSED_PROMISE}</p>
-      </div>
-      <div className="rounded-xs border border-border bg-white divide-y divide-border">
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <span className="text-xs font-bold uppercase tracking-widest text-muted">Copyright</span>
-          <span className="text-sm font-medium">© 2026 Veyvio Ltd</span>
+      </DashboardSurface>
+
+      <DashboardSurface>
+        <div className={hubListPanelClass}>
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <span className="text-sm font-medium text-[#667085]">Copyright</span>
+            <span className="text-sm font-semibold text-ink">© 2026 Veyvio Ltd</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <span className="text-sm font-medium text-[#667085]">Environment</span>
+            <span className="text-sm font-semibold text-ink">Prototype</span>
+          </div>
         </div>
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <span className="text-xs font-bold uppercase tracking-widest text-muted">Environment</span>
-          <span className="text-sm font-medium">Prototype</span>
-        </div>
-      </div>
+      </DashboardSurface>
     </MoreSubpageLayout>
   );
 }

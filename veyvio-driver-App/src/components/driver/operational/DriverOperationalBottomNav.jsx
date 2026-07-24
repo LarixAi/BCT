@@ -4,6 +4,7 @@ import { DRIVER_SAFE_BOTTOM } from "@/lib/driverSafeArea";
 import { op } from "@/lib/driver-operational-theme";
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { useDriverUnreadNotificationCount } from "@/hooks/useDriverUnreadNotificationCount";
+import { prefetchDriverRoute } from "@/lib/prefetch-routes";
 
 const tabs = [
   { to: "/", label: "Home", Icon: Home, end: true },
@@ -72,6 +73,9 @@ export default function DriverOperationalBottomNav() {
               key={tab.to}
               to={tab.to}
               end={tab.end}
+              onMouseEnter={() => prefetchDriverRoute(tab.to)}
+              onFocus={() => prefetchDriverRoute(tab.to)}
+              onTouchStart={() => prefetchDriverRoute(tab.to)}
               className="flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1.5 rounded-xl transition-colors"
             >
               <TabContent label={tab.label} Icon={tab.Icon} active={active} badge={badge} />

@@ -70,16 +70,16 @@ export function SyncStatusBadge({ variant = "dark" }: { variant?: "dark" | "ligh
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`relative flex min-h-9 items-center gap-2 rounded border px-2.5 transition-colors ${toneClasses[tone]}`}
+          className={`relative flex size-9 items-center justify-center gap-2 rounded-lg border transition-colors lg:min-h-9 lg:w-auto lg:px-2.5 ${toneClasses[tone]}`}
           aria-label={`Record notifications: ${label}`}
         >
           <span className="relative">
             <Bell className="size-4" aria-hidden />
             {notificationCount === 0 ? (
-              <span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-primary ring-2 ring-accent" />
+              <span className={`absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-primary ${variant === "light" ? "ring-2 ring-white" : "ring-2 ring-accent"}`} />
             ) : null}
           </span>
-          <span className="hidden text-[10px] font-bold uppercase tracking-wider min-[390px]:inline">{label}</span>
+          <span className="hidden text-[10px] font-bold uppercase tracking-wider lg:inline">{label}</span>
           {notificationCount > 0 ? (
             <span className={`grid min-w-4 place-items-center rounded-full px-1 text-[9px] font-extrabold text-white ${
               failedCount > 0 ? "bg-vor" : "bg-warn"

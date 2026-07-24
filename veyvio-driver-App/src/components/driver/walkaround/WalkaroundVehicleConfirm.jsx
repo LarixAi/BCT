@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import DriverOperationalHeader from "@/components/driver/operational/DriverOperationalHeader";
 import DriverSyncBanner from "@/components/driver/operational/DriverSyncBanner";
 import WalkaroundStepper from "@/components/driver/walkaround/WalkaroundStepper";
+import VehicleConditionAcknowledgement from "@/components/driver/condition/VehicleConditionAcknowledgement";
 import { CHECK_TYPES } from "@/services/vehicle-check.service";
 import { op } from "@/lib/driver-operational-theme";
 import { formatUkTime } from "@/lib/uk-locale";
@@ -30,6 +31,9 @@ export default function WalkaroundVehicleConfirm({
   onBack,
   draftComplete = false,
   onContinueReview,
+  conditionSummary,
+  conditionAcknowledged = false,
+  onConditionAcknowledge,
 }) {
   const vehicle = session?.vehicle;
   const job = session?.job;
@@ -116,6 +120,17 @@ export default function WalkaroundVehicleConfirm({
             </p>
           ) : null}
         </div>
+
+        {conditionSummary?.enabled !== false && vehicle ? (
+          <VehicleConditionAcknowledgement
+            vehicleRegistration={vehicle.registration}
+            lastInspectionAt={conditionSummary?.lastInspectionAt}
+            openDamageCount={conditionSummary?.openDamageCount ?? 0}
+            restrictions={conditionSummary?.restrictions ?? []}
+            disabled={conditionAcknowledged}
+            onAcknowledge={onConditionAcknowledge}
+          />
+        ) : null}
 
         <div className={`${op.card} p-4 space-y-3`}>
           <label className="block">

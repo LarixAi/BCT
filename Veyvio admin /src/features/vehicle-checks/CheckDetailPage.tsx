@@ -11,7 +11,9 @@ import {
   SuspiciousFlagsPanel,
 } from './components/CheckWorkflowPanels'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function CheckDetailPage() {
   const { checkId } = useParams<{ checkId: string }>()
@@ -21,7 +23,7 @@ export function CheckDetailPage() {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: check, isLoading, error, isError } = useQuery({
-    queryKey: ['check-detail', checkId],
+    queryKey: tKey(['check-detail', checkId]),
     queryFn: () => api.getCheckDetail(checkId!),
     enabled: !!checkId,
   })
@@ -30,14 +32,14 @@ export function CheckDetailPage() {
     mutationFn: (decision: 'approve' | 'reject' | 'request_redo') =>
       api.reviewCheck({ checkId: checkId!, decision }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['checks-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['check-detail', checkId] })
+      queryClient.invalidateQueries({ queryKey: tKey(['checks-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['check-detail', checkId]) })
     },
   })
 
   const markVor = useMutation({
     mutationFn: () => api.markVehicleVor(check!.vehicleId, { reason: 'Failed vehicle check', category: 'safety_check' }, actorName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['check-detail', checkId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['check-detail', checkId]) }),
   })
 
   if (isLoading) return <p className="text-sm text-muted">Loading check…</p>

@@ -1,8 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
-import type { BookingDraft } from '@/lib/bookings/types'
+import { CUSTOMER_TYPE_LABELS } from '@/lib/bookings/constants'
+import { FUNDING_TYPE_OPTIONS } from '@/lib/bookings/booking-journey-utils'
+import type { BookingDraft, CustomerBookingContext, FundingType } from '@/lib/bookings/types'
+import { inferBookingCustomer } from '@/lib/bookings/resolve-booking-customer'
 import { api } from '@/lib/api/client'
 import { enrichPassenger } from '@/lib/bookings/passenger'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function PassengersStep({
   draft,
@@ -12,19 +17,33 @@ export function PassengersStep({
   onChange: (patch: Partial<BookingDraft>) => void
 }) {
   const { data: passengers = [] } = useQuery({
-    queryKey: ['passengers'],
+    queryKey: tKey(['passengers']),
     queryFn: () => api.getPassengers(),
   })
+
+  const { data: customers = [] } = useQuery({
+    queryKey: tKey(['customers']),
+    queryFn: () => api.getCustomers(),
+  })
+
+  function applyPassengerChange(nextPassengers: BookingDraft['passengers']) {
+    const inferred = inferBookingCustomer(
+      { customerId: draft.customerId, passengers: nextPassengers },
+      passengers,
+      customers,
+    )
+    onChange(inferred ? { passengers: nextPassengers, ...inferred } : { passengers: nextPassengers })
+  }
 
   function togglePassenger(id: string) {
     const exists = draft.passengers.find((p) => p.passengerId === id)
     if (exists) {
-      onChange({ passengers: draft.passengers.filter((p) => p.passengerId !== id) })
+      applyPassengerChange(draft.passengers.filter((p) => p.passengerId !== id))
       return
     }
     const record = passengers.find((p) => p.id === id)
     if (!record) return
-    onChange({ passengers: [...draft.passengers, enrichPassenger(record)] })
+    applyPassengerChange([...draft.passengers, enrichPassenger(record)])
   }
 
   return (

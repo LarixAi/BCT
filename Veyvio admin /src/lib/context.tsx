@@ -4,6 +4,8 @@ import { api } from './api'
 import { todayIsoDate } from './api/mappers'
 import type { ConnectionStatus } from './types'
 import { useAuth } from './auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 interface DepotOption {
   id: string
@@ -30,14 +32,14 @@ export function OperationalProvider({ children }: { children: ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('live')
 
   const { data: depots = [] } = useQuery({
-    queryKey: ['depots'],
+    queryKey: tKey(['depots']),
     queryFn: () => api.getDepots(),
     enabled: !!user?.activeTenantId,
     staleTime: 60_000,
   })
 
   const { data: driverSummary } = useQuery({
-    queryKey: ['driver-directory-summary'],
+    queryKey: tKey(['driver-directory-summary']),
     queryFn: () => api.getDriverDirectorySummary(),
     enabled: !!user?.activeTenantId,
     staleTime: 45_000,

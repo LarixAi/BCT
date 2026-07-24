@@ -12,7 +12,9 @@ import { isMockAuth } from "./auth-config";
 import {
   commandConfirmMfa,
   commandGetMe,
+  commandListMemberships,
   commandLogin,
+  commandRefreshAccessToken,
   commandSelectTenant,
   expiresAtFromJwt,
   type CommandAuthUser,
@@ -44,7 +46,10 @@ interface SessionStore extends SessionState {
   signIn: (credentials: SignInCredentials) => Promise<SignInResult>;
   completeMfa: (code: string) => Promise<SignInResult>;
   selectTenant: (tenantId: string) => Promise<void>;
+  prepareCompanySwitch: () => Promise<void>;
+  refreshPendingMemberships: () => Promise<PendingMembership[]>;
   refreshProfile: () => Promise<void>;
+  ensureValidAccessToken: (options?: { force?: boolean }) => Promise<string | null>;
   enableBiometric: () => void;
   unlockBiometric: () => void;
   completeBootstrap: () => void;
@@ -74,6 +79,31 @@ function toUserProfile(user: CommandAuthUser): UserProfile {
     firstName: user.firstName || "Yard",
     lastName: user.lastName || "User",
   };
+}
+
+function mockMembershipsForEmail(email: string): PendingMembership[] {
+  const normalized = email.trim().toLowerCase();
+  if (normalized === "laronelaing1@outlook.com" || normalized === "veyvio@outlook.com") {
+    return [
+      {
+        tenantId: "co_bct",
+        tenantName: "Brent Community Transport",
+        role: "yard_manager",
+      },
+      {
+        tenantId: "co_northwest",
+        tenantName: "Northwest Passenger Transport",
+        role: "yard_manager",
+      },
+    ];
+  }
+  return [
+    {
+      tenantId: "co_bct",
+      tenantName: "Brent Community Transport",
+      role: "yard_manager",
+    },
+  ];
 }
 
 function toPending(memberships: TenantMembershipOption[] | undefined): PendingMembership[] {
@@ -124,6 +154,7 @@ export const useSessionStore = create<SessionStore>()(
           await new Promise(r => setTimeout(r, 400));
           const user = mockUserFromEmail(credentials.email);
           const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+          const memberships = mockMembershipsForEmail(credentials.email);
           set({
             status: "authenticated",
             accessToken: `mock_token_${user.id}`,
@@ -133,8 +164,8 @@ export const useSessionStore = create<SessionStore>()(
             mfaVerified: false,
             trustedDevice: credentials.rememberDevice ?? false,
             mfaChallengeId: "mock_challenge",
-            pendingMemberships: [],
-            requiresTenantSelection: true,
+            pendingMemberships: memberships,
+            requiresTenantSelection: memberships.length > 1,
             pendingCompanyId: null,
             devMfaCode: null,
             bootstrapComplete: false,
@@ -275,7 +306,12 @@ export const useSessionStore = create<SessionStore>()(
           return;
         }
 
-        const { refreshToken, accessToken } = get();
+        const { refreshToken } = get();
+        if (!refreshToken) {
+          throw Object.assign(new Error("Session expired — sign in again to select a company"), { status: 401 });
+        }
+
+        const accessToken = await get().ensureValidAccessToken();
         const result = await commandSelectTenant(tenantId, refreshToken, accessToken);
         applyTokens(set, {
           accessToken: result.accessToken,
@@ -288,9 +324,79 @@ export const useSessionStore = create<SessionStore>()(
         });
       },
 
+      prepareCompanySwitch: async () => {
+        await get().refreshPendingMemberships();
+        set({ bootstrapComplete: false });
+      },
+
+      ensureValidAccessToken: async (options) => {
+        const state = get();
+        if (isMockAuth() || !state.accessToken || state.accessToken.startsWith("mock_")) {
+          return state.accessToken;
+        }
+        if (!state.refreshToken) {
+          get().signOut();
+          throw Object.assign(new Error("Session expired — sign in again"), { status: 401 });
+        }
+
+        const skewMs = 60_000;
+        const stillValid =
+          !options?.force &&
+          state.expiresAt &&
+          new Date(state.expiresAt).getTime() - skewMs > Date.now();
+
+        if (stillValid) return state.accessToken;
+
+        const refreshed = await commandRefreshAccessToken(state.refreshToken);
+        set({
+          status: "authenticated",
+          accessToken: refreshed.accessToken,
+          refreshToken: refreshed.refreshToken,
+          expiresAt: expiresAtFromJwt(refreshed.accessToken),
+        });
+        return refreshed.accessToken;
+      },
+
+      refreshPendingMemberships: async () => {
+        const { user, pendingMemberships } = get();
+        if (isMockAuth()) {
+          const mapped = mockMembershipsForEmail(user?.email ?? "");
+          set({
+            requiresTenantSelection: true,
+            pendingMemberships: mapped,
+          });
+          return mapped;
+        }
+
+        let accessToken = await get().ensureValidAccessToken();
+        try {
+          const memberships = await commandListMemberships(accessToken);
+          const mapped = toPending(memberships);
+          set({
+            requiresTenantSelection: true,
+            pendingMemberships: mapped,
+          });
+          return mapped;
+        } catch (err) {
+          const status = (err as { status?: number }).status;
+          if (status === 401 && get().refreshToken) {
+            accessToken = await get().ensureValidAccessToken({ force: true });
+            const memberships = await commandListMemberships(accessToken);
+            const mapped = toPending(memberships);
+            set({
+              requiresTenantSelection: true,
+              pendingMemberships: mapped,
+            });
+            return mapped;
+          }
+          throw err;
+        }
+      },
+
       refreshProfile: async () => {
-        const token = get().accessToken;
-        if (!token || isMockAuth() || token.startsWith("mock_")) return;
+        if (isMockAuth()) return;
+        const token = await get().ensureValidAccessToken();
+        if (!token || token.startsWith("mock_")) return;
         const me = await commandGetMe(token);
         set({
           user: toUserProfile(me),

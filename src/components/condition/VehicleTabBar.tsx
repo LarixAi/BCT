@@ -15,7 +15,11 @@ export function VehicleTabBar({ vehicle }: VehicleTabBarProps) {
   const pathname = useRouterState({ select: s => s.location.pathname });
 
   return (
-    <nav className="flex gap-1 border-b border-border bg-white rounded-xs overflow-x-auto">
+    <nav
+      className="inline-flex w-full min-w-0 items-center gap-0.5 overflow-x-auto rounded-full border border-[#e4e7ec] bg-[#f2f4f7] p-1 sm:w-auto"
+      role="tablist"
+      aria-label={`${vehicle.reg} sections`}
+    >
       {TABS.map(tab => {
         const href = tab.to.replace("$vehicleId", vehicle.id);
         const active = tab.exact
@@ -26,10 +30,12 @@ export function VehicleTabBar({ vehicle }: VehicleTabBarProps) {
             key={tab.id}
             to={tab.to}
             params={{ vehicleId: vehicle.id }}
-            className={`shrink-0 px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest border-b-2 transition-colors ${
+            role="tab"
+            aria-selected={active}
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all sm:px-4 ${
               active
-                ? "border-primary text-primary bg-primary/5"
-                : "border-transparent text-muted hover:text-foreground"
+                ? "bg-white text-ink shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
+                : "text-[#667085] hover:text-ink"
             }`}
           >
             {tab.label}

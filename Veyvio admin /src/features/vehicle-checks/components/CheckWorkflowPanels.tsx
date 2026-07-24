@@ -3,7 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import type { CheckDetailRecord } from '@/lib/checks/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function OperationalImpactPanel({ check }: { check: CheckDetailRecord }) {
   const impact = check.operationalImpact
@@ -37,8 +39,8 @@ export function ResolveImpactPanel({ check }: { check: CheckDetailRecord }) {
   const resolve = useMutation({
     mutationFn: () => api.resolveCheckImpact({ checkId: check.checkId, replacementVehicleId: vehicleId, reason }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['checks-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['check-detail', check.checkId] })
+      queryClient.invalidateQueries({ queryKey: tKey(['checks-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['check-detail', check.checkId]) })
       setOpen(false)
     },
   })
@@ -93,8 +95,8 @@ export function ConditionalReleasePanel({ check }: { check: CheckDetailRecord })
   const release = useMutation({
     mutationFn: () => api.conditionalReleaseCheck({ checkId: check.checkId, reason, restrictions }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['checks-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['check-detail', check.checkId] })
+      queryClient.invalidateQueries({ queryKey: tKey(['checks-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['check-detail', check.checkId]) })
       setOpen(false)
     },
   })

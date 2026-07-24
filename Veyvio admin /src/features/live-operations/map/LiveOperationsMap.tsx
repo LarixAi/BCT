@@ -24,6 +24,7 @@ export interface LiveVehicle {
   fleetNumber?: string
   driverName?: string
   runReference?: string
+  statusLabel: string
   latitude: number
   longitude: number
   status: VehicleOperationalStatus
@@ -40,6 +41,7 @@ interface LiveOperationsMapProps {
   onVehicleSelect?: (vehicle: LiveVehicle) => void
   onCollapse?: () => void
   description?: string
+  variant?: 'card' | 'immersive'
 }
 
 const DEFAULT_CENTRE: [number, number] = [-0.1276, 51.5072]
@@ -53,9 +55,11 @@ export const LiveOperationsMap = forwardRef<LiveOperationsMapHandle, LiveOperati
       onVehicleSelect,
       onCollapse,
       description = 'Operating area — live vehicle and trip locations',
+      variant = 'card',
     },
     ref,
   ) {
+    const immersive = variant === 'immersive'
     const mapContainerRef = useRef<HTMLDivElement | null>(null)
     const mapRef = useRef<MapLibreMap | null>(null)
     const markerRefs = useRef<Map<string, Marker>>(new Map())
@@ -174,7 +178,7 @@ export const LiveOperationsMap = forwardRef<LiveOperationsMapHandle, LiveOperati
 
         const marker = new maplibregl.Marker({
           element: markerRoot,
-          anchor: 'center',
+          anchor: 'bottom',
         })
           .setLngLat([vehicle.longitude, vehicle.latitude])
           .addTo(mapRef.current!)
@@ -194,6 +198,8 @@ export const LiveOperationsMap = forwardRef<LiveOperationsMapHandle, LiveOperati
         const root = markerRootRefs.current.get(vehicle.id)
         root?.render(
           <VehicleMapMarker
+            driverName={vehicle.driverName ?? vehicle.registration}
+            statusLabel={vehicle.statusLabel}
             registration={vehicle.registration}
             status={vehicle.status}
             selected={vehicle.id === selectedVehicleId}
@@ -203,12 +209,73 @@ export const LiveOperationsMap = forwardRef<LiveOperationsMapHandle, LiveOperati
       })
     }, [isMapReady, selectedVehicleId, validVehicles])
 
+    useEffect(() => {
+      if (!isMapReady || !mapRef.current || !selectedVehicleId) return
+      const vehicle = validVehicles.find((v) => v.id === selectedVehicleId)
+      if (!vehicle) return
+      mapRef.current.easeTo({
+        center: [vehicle.longitude, vehicle.latitude],
+        zoom: Math.max(mapRef.current.getZoom(), 12),
+        duration: 600,
+      })
+    }, [isMapReady, selectedVehicleId, validVehicles])
+
     const zoomIn = () => {
       mapRef.current?.zoomIn({ duration: 250 })
     }
 
     const zoomOut = () => {
       mapRef.current?.zoomOut({ duration: 250 })
+    }
+
+    const canvas = (
+      <div className={immersive ? 'live-map-immersive__canvas' : 'live-map-card__canvas'}>
+        <div
+          ref={mapContainerRef}
+          className={immersive ? 'live-map-immersive__map' : 'live-map-card__map'}
+          aria-label="Live fleet map"
+          style={immersive ? undefined : { height: MAP_HEIGHT_PX, minHeight: MAP_HEIGHT_PX }}
+        />
+
+        {!isMapReady && !mapError && (
+          <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center text-sm text-muted">
+            Loading map…
+          </div>
+        )}
+
+        {mapError && (
+          <div
+            className={
+              immersive
+                ? 'absolute inset-0 z-[2] flex items-center justify-center bg-amber-50 p-4 text-center text-sm text-amber-950'
+                : 'absolute inset-2 z-[2] flex items-center justify-center rounded-[11px] bg-amber-50 p-4 text-center text-sm text-amber-950'
+            }
+          >
+            Could not load map tiles ({mapError}). Check network access to map tile servers.
+          </div>
+        )}
+
+        <div
+          className={immersive ? 'live-map-immersive__controls' : 'live-map-card__controls'}
+          aria-label="Map controls"
+        >
+          <button type="button" aria-label="Zoom in" onClick={zoomIn}>
+            <Plus size={18} />
+          </button>
+          <button type="button" aria-label="Zoom out" onClick={zoomOut}>
+            <Minus size={18} />
+          </button>
+          <button type="button" aria-label="Fit all fleet vehicles" onClick={fitFleet}>
+            <LocateFixed size={17} />
+          </button>
+        </div>
+
+        <MapLegend immersive={immersive} />
+      </div>
+    )
+
+    if (immersive) {
+      return <section className="live-map-immersive">{canvas}</section>
     }
 
     return (
@@ -236,48 +303,15 @@ export const LiveOperationsMap = forwardRef<LiveOperationsMapHandle, LiveOperati
           </div>
         </header>
 
-        <div className="live-map-card__canvas">
-          <div
-            ref={mapContainerRef}
-            className="live-map-card__map"
-            aria-label="Live fleet map"
-            style={{ height: MAP_HEIGHT_PX, minHeight: MAP_HEIGHT_PX }}
-          />
-
-          {!isMapReady && !mapError && (
-            <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center text-sm text-muted">
-              Loading map…
-            </div>
-          )}
-
-          {mapError && (
-            <div className="absolute inset-2 z-[2] flex items-center justify-center rounded-[11px] bg-amber-50 p-4 text-center text-sm text-amber-950">
-              Could not load map tiles ({mapError}). Check network access to map tile servers.
-            </div>
-          )}
-
-          <div className="live-map-card__controls" aria-label="Map controls">
-            <button type="button" aria-label="Zoom in" onClick={zoomIn}>
-              <Plus size={18} />
-            </button>
-            <button type="button" aria-label="Zoom out" onClick={zoomOut}>
-              <Minus size={18} />
-            </button>
-            <button type="button" aria-label="Fit all fleet vehicles" onClick={fitFleet}>
-              <LocateFixed size={17} />
-            </button>
-          </div>
-
-          <MapLegend />
-        </div>
+        {canvas}
       </section>
     )
   },
 )
 
-function MapLegend() {
+function MapLegend({ immersive = false }: { immersive?: boolean }) {
   return (
-    <div className="live-map-legend">
+    <div className={immersive ? 'live-map-immersive__legend' : 'live-map-legend'}>
       <LegendItem colour="#10B981" label="On time" />
       <LegendItem colour="#F59E0B" label="At risk" />
       <LegendItem colour="#EF4444" label="Late" />

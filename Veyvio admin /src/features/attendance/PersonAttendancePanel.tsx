@@ -12,6 +12,8 @@ import {
 import type { AttendancePersonProfile, CalendarDayMark } from '@/lib/attendance/types'
 import { api } from '@/lib/api/client'
 import { cn } from '@/lib/cn'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const MARK_CELL: Record<CalendarDayMark, string> = {
   on_time: 'bg-emerald-100 text-emerald-900',
@@ -46,7 +48,7 @@ export function PersonAttendancePanel({
   const [period, setPeriod] = useState<'30' | '90' | '365'>('90')
 
   const { data: profile, isLoading } = useQuery({
-    queryKey: ['attendance-profile', personId, personName],
+    queryKey: tKey(['attendance-profile', personId, personName]),
     queryFn: (): Promise<AttendancePersonProfile | null> =>
       api.getAttendancePersonProfile({ personId, personName }),
   })

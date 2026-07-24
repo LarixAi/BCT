@@ -2,14 +2,18 @@ import { useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useYard } from "@/store/yard";
-import { drivers } from "@/data/fixtures";
-import { SectionHeader, RegPlate } from "@/components/yard/primitives";
+import { resolveDemoDriverName } from "@/platform/yard/demo-drivers";
+import { RegPlate } from "@/components/yard/primitives";
 import { PermissionGate } from "@/components/yard/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { getVehiclesInZone } from "@/features/yard/yard-map";
 import { canConfirmYardDeparture } from "@/domain/yard/departure-exit";
 import { yardCopy } from "@/copy/yard-messages";
-import { LineChart, CheckCircle2, LogOut } from "lucide-react";
+import { DashboardSurface } from "@/features/home/HomeDashboardPrimitives";
+import { HubSectionHeading, hubListPanelClass } from "@/features/hub/HubContentPrimitives";
+import { HubMetricCard, HubMetricStrip } from "@/features/hub/HubMetricCard";
+import { HubOpsPageLayout } from "@/features/hub/HubOpsPageLayout";
+import { CheckCircle2, LineChart, LogOut } from "lucide-react";
 import type { SheetKind } from "@/store/yard";
 
 export const Route = createFileRoute("/_app/departure-line")({
@@ -28,7 +32,8 @@ function DepartureLine() {
   const bays = useYard(s => s.bays);
   const openSheet = useYard(s => s.openSheet);
   const departVehicleForService = useYard(s => s.departVehicleForService);
-  const driverName = (id?: string) => drivers.find(d => d.id === id)?.name;
+  const dataSource = useYard(s => s.dataSource);
+  const driverName = (id?: string) => resolveDemoDriverName(id, dataSource);
 
   const departed = trips.filter(t => !!t.departedAt);
   const ready = trips.filter(t => t.ready && !t.departedAt);
@@ -43,20 +48,28 @@ function DepartureLine() {
   }
 
   return (
-    <div className="space-y-6 animate-in-up">
-      <SectionHeader
-        title={`Departure Line · ${trips.length}`}
-        sub={`${ready.length} ready · ${blocked.length} blocked · ${departed.length} departed · ${onLine.length} staged`}
-        action={
-          <Link to="/plan" className="text-[10px] font-bold uppercase tracking-widest text-primary">
-            Day plan →
-          </Link>
-        }
-      />
+    <HubOpsPageLayout
+      title="Departure line"
+      description={`${ready.length} ready · ${blocked.length} blocked · ${departed.length} departed · ${onLine.length} staged`}
+      primaryAction={
+        <Link
+          to="/plan"
+          className="inline-flex h-10 w-full items-center justify-center rounded-full border border-[#e4e7ec] bg-white px-4 text-sm font-medium text-ink shadow-sm sm:w-auto"
+        >
+          Day plan
+        </Link>
+      }
+    >
+      <HubMetricStrip>
+        <HubMetricCard label="Ready" value={ready.length} icon={CheckCircle2} tone="ok" />
+        <HubMetricCard label="Blocked" value={blocked.length} icon={LineChart} tone="warn" />
+        <HubMetricCard label="Departed" value={departed.length} icon={LogOut} />
+        <HubMetricCard label="On line" value={onLine.length} icon={LineChart} />
+      </HubMetricStrip>
 
-      <section className="space-y-2">
-        <h3 className="text-[10px] font-bold uppercase tracking-widest text-ok">Ready</h3>
-        <div className="bg-white border border-border rounded overflow-hidden">
+      <DashboardSurface>
+        <HubSectionHeading title="Ready to leave" description="Released vehicles awaiting departure confirmation." />
+        <div className={hubListPanelClass}>
           {ready.map(t => (
             <DepartureTripRow
               key={t.id}
@@ -69,13 +82,13 @@ function DepartureLine() {
               showConfirmLeft
             />
           ))}
-          {ready.length === 0 && <p className="p-4 text-xs text-muted">No trips are ready.</p>}
+          {ready.length === 0 && <p className="p-4 text-sm text-[#667085]">No trips are ready.</p>}
         </div>
-      </section>
+      </DashboardSurface>
 
-      <section className="space-y-2">
-        <h3 className="text-[10px] font-bold uppercase tracking-widest text-vor">Blocked</h3>
-        <div className="bg-white border border-border rounded overflow-hidden">
+      <DashboardSurface>
+        <HubSectionHeading title="Blocked" description="Trips that cannot leave until blockers are cleared." />
+        <div className={hubListPanelClass}>
           {blocked.map(t => (
             <DepartureTripRow
               key={t.id}
@@ -86,14 +99,14 @@ function DepartureLine() {
               showStage
             />
           ))}
-          {blocked.length === 0 && <p className="p-4 text-xs text-muted">Nothing blocked.</p>}
+          {blocked.length === 0 && <p className="p-4 text-sm text-[#667085]">Nothing blocked.</p>}
         </div>
-      </section>
+      </DashboardSurface>
 
       {departed.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted">Departed</h3>
-          <div className="bg-white border border-border rounded overflow-hidden">
+        <DashboardSurface>
+          <HubSectionHeading title="Departed" />
+          <div className={hubListPanelClass}>
             {departed.map(t => (
               <DepartureTripRow
                 key={t.id}
@@ -104,9 +117,9 @@ function DepartureLine() {
               />
             ))}
           </div>
-        </section>
+        </DashboardSurface>
       )}
-    </div>
+    </HubOpsPageLayout>
   );
 }
 

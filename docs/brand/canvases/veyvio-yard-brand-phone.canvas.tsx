@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   Callout,
   Card,
@@ -15,17 +16,23 @@ import {
   useHostTheme,
 } from "cursor/canvas";
 
-/** Brand hexes — intentional for this phone brand inventory canvas. */
+/** Brand hexes — matches shipped `src/styles.css` + live Yard UI (Jul 2026). */
 const MIDNIGHT = "#0B1526";
+const COMMAND_BLUE = "#2F6BFF";
 const YARD_TEAL = "#12A89D";
 const YARD_SKY = "#A2E9FF";
 const TEAL_SOFT = "#DDF7F3";
-const PAGE_BG = "#F5F7FA";
+const BLUE_SOFT = "#EFF6FF";
+const INK = "#101828";
+const PAGE_BG = "#F2F4F7";
+const SURFACE = "#FFFFFF";
+const NAV_ACTIVE = "#F2F4F7";
 const OK = "#178C4B";
 const WARN = "#D97706";
 const VOR = "#B42318";
 const BORDER = "#E4E7EC";
 const MUTED = "#667085";
+const ICON_MUTED = "#98A2B3";
 
 type HubTab = "Home" | "Checks" | "Vehicles" | "Yard" | "More";
 
@@ -34,7 +41,7 @@ function SvgIcon({
   size = 16,
   color = "currentColor",
 }: {
-  children: unknown;
+  children: ReactNode;
   size?: number;
   color?: string;
 }) {
@@ -83,8 +90,8 @@ function TabGlyph({ tab, color }: { tab: HubTab; color: string }) {
   if (tab === "Yard") {
     return (
       <SvgIcon color={color} size={18}>
-        <path d="M9 18 2 12l7-6 7 6-7 6Z" />
-        <path d="M16 18V9l6 5-6 4Z" />
+        <path d="M9 20 3 10.5 9 4l6 4.5 6-4.5L15 10.5 9 20Z" />
+        <path d="M9 10.5h6" />
       </SvgIcon>
     );
   }
@@ -100,7 +107,7 @@ function PhoneFrame({
   label,
   status = "light",
 }: {
-  children: unknown;
+  children: ReactNode;
   label: string;
   status?: "light" | "midnight";
 }) {
@@ -153,8 +160,9 @@ function HubBottomNav({ active = "Home" }: { active?: HubTab }) {
     <div
       style={{
         marginTop: "auto",
-        background: MIDNIGHT,
-        borderTop: "1px solid rgba(255,255,255,0.1)",
+        background: SURFACE,
+        borderTop: `1px solid ${BORDER}`,
+        boxShadow: "0 -4px 20px rgba(16,24,40,0.06)",
         display: "grid",
         gridTemplateColumns: "repeat(5, 1fr)",
         padding: "6px 4px 12px",
@@ -163,7 +171,8 @@ function HubBottomNav({ active = "Home" }: { active?: HubTab }) {
     >
       {tabs.map(label => {
         const isActive = label === active;
-        const color = isActive ? YARD_TEAL : "rgba(255,255,255,0.55)";
+        const color = isActive ? INK : MUTED;
+        const iconColor = isActive ? INK : ICON_MUTED;
         return (
           <div
             key={label}
@@ -173,12 +182,13 @@ function HubBottomNav({ active = "Home" }: { active?: HubTab }) {
               alignItems: "center",
               gap: 2,
               color,
+              background: isActive ? NAV_ACTIVE : "transparent",
+              borderRadius: 12,
+              padding: "6px 2px",
             }}
           >
-            <TabGlyph tab={label} color={color} />
-            <div style={{ fontSize: 7, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-              {label === "Vehicles" ? "Veh" : label}
-            </div>
+            <TabGlyph tab={label} color={iconColor} />
+            <div style={{ fontSize: 8, fontWeight: 600 }}>{label}</div>
           </div>
         );
       })}
@@ -186,29 +196,90 @@ function HubBottomNav({ active = "Home" }: { active?: HubTab }) {
   );
 }
 
-function ChromeHeader() {
+function LightAppHeader({ depot = "BCT Main Depot" }: { depot?: string }) {
   return (
-    <div style={{ background: MIDNIGHT, color: "#fff", flexShrink: 0 }}>
-      <div style={{ height: 3, background: YARD_TEAL }} />
+    <div
+      style={{
+        background: SURFACE,
+        borderBottom: `1px solid ${BORDER}`,
+        boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
+        flexShrink: 0,
+      }}
+    >
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           padding: "8px 12px 10px",
+          gap: 8,
         }}
       >
-        <Wordmark size="header" />
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 8, letterSpacing: "0.12em", color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>
-            Depot
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 12,
+              background: INK,
+              color: "#fff",
+              display: "grid",
+              placeItems: "center",
+              fontSize: 9,
+              fontWeight: 900,
+              flexShrink: 0,
+            }}
+          >
+            VY
           </div>
-          <div style={{ fontSize: 10, fontWeight: 700 }}>NORTH WEST (NW)</div>
+          <div style={{ minWidth: 0 }}>
+            <Wordmark onDark={false} size="header" />
+            <div style={{ fontSize: 9, color: MUTED, fontWeight: 500, marginTop: 2 }}>{depot}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              background: INK,
+              color: "#fff",
+              display: "grid",
+              placeItems: "center",
+              fontSize: 10,
+            }}
+          >
+            ⌖
+          </div>
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              border: `1px solid ${BORDER}`,
+              background: SURFACE,
+              position: "relative",
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: 4,
+                right: 4,
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                background: OK,
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
 
 function Wordmark({
   onDark = true,
@@ -222,7 +293,7 @@ function Wordmark({
   const veyvioSize = size === "splash" ? 26 : size === "header" ? 13 : 11;
   const yardSize = size === "splash" ? 12 : size === "header" ? 8 : 7;
   const veyvioColor = onDark ? "#FFFFFF" : MIDNIGHT;
-  const yardColor = onDark ? YARD_SKY : YARD_TEAL;
+  const yardColor = onDark ? YARD_SKY : COMMAND_BLUE;
 
   return (
     <div style={{ textAlign: align }}>
@@ -272,7 +343,7 @@ function SplashStatusRow({ label }: { label: string }) {
             width: 8,
             height: 8,
             borderRadius: 999,
-            background: YARD_TEAL,
+            background: COMMAND_BLUE,
           }}
         />
       </span>
@@ -283,7 +354,7 @@ function SplashStatusRow({ label }: { label: string }) {
 
 function SplashPhone() {
   return (
-    <PhoneFrame label="Splash · Midnight + Teal atmosphere" status="midnight">
+    <PhoneFrame label="Splash · Midnight + Command Blue ping" status="midnight">
       <div
         style={{
           flex: 1,
@@ -338,9 +409,9 @@ function SplashPhone() {
               width: 48,
               height: 2,
               borderRadius: 999,
-              background: YARD_TEAL,
+              background: COMMAND_BLUE,
               marginBottom: 16,
-              boxShadow: "0 0 20px rgba(18,168,157,0.55)",
+              boxShadow: "0 0 20px rgba(47,107,255,0.45)",
             }}
             aria-hidden
           />
@@ -384,43 +455,41 @@ function SplashPhone() {
 
 function HomePhone() {
   return (
-    <PhoneFrame label="Home · attention before KPIs">
-      <ChromeHeader />
-      <div style={{ flex: 1, overflow: "hidden", padding: "12px 12px 0" }}>
-        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.14em", color: MUTED, textTransform: "uppercase" }}>
-          Depot board
+    <PhoneFrame label="Home · Depot board dashboard">
+      <LightAppHeader />
+      <div style={{ flex: 1, overflow: "hidden", padding: "10px 12px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>Depot board</div>
+          <div style={{ fontSize: 8, fontWeight: 700, color: COMMAND_BLUE }}>Add task</div>
         </div>
-        <div style={{ marginTop: 4, fontSize: 15, fontWeight: 800, lineHeight: 1.25, color: MIDNIGHT }}>
-          Three vehicles need attention before service
+        <div style={{ marginTop: 8, display: "flex", gap: 6, overflow: "hidden" }}>
+          <KpiMini label="Available" value="38" />
+          <KpiMini label="Pending" value="4" />
+          <KpiMini label="VOR" value="2" tone="vor" />
         </div>
-        <div style={{ marginTop: 6, fontSize: 11, color: MUTED }}>Resolve vehicle issues and depot actions below.</div>
-
-        <div style={{ marginTop: 12, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: MUTED, textTransform: "uppercase" }}>
-          Needs attention
+        <div style={{ marginTop: 10, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: MUTED, textTransform: "uppercase" }}>
+          Needs attention · 3 actions
         </div>
         <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
-          <AttentionChip reg="BU25 ABC" label="Check due" tone="warn" />
-          <AttentionChip reg="YX74 KLM" label="VOR" tone="vor" />
+          <AttentionChip reg="2 VOR" label="Vehicles off road" tone="vor" />
+          <AttentionChip reg="3 checks" label="Yard checks due" tone="warn" />
         </div>
-
-        <div
-          style={{
-            marginTop: 12,
-            border: `1px solid ${BORDER}`,
-            background: "#fff",
-            borderRadius: 4,
-            padding: "10px 12px",
-          }}
-        >
-          <div style={{ fontSize: 9, fontWeight: 700, color: MUTED, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            Departure line
-          </div>
-          <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700 }}>BU25 DEF · Bay D12 · 07:40</div>
-          <div style={{ fontSize: 10, color: MUTED }}>Ready for service</div>
+        <div style={{ marginTop: 10, border: `1px solid ${BORDER}`, background: SURFACE, borderRadius: 8, padding: 8 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: MUTED, textTransform: "uppercase" }}>Depot readiness</div>
+          <div style={{ marginTop: 6, height: 36, borderRadius: 4, background: BLUE_SOFT, border: `1px solid ${BORDER}` }} />
         </div>
       </div>
       <HubBottomNav active="Home" />
     </PhoneFrame>
+  );
+}
+
+function KpiMini({ label, value, tone }: { label: string; value: string; tone?: "vor" }) {
+  return (
+    <div style={{ minWidth: 72, border: `1px solid ${BORDER}`, background: SURFACE, borderRadius: 8, padding: "8px 10px" }}>
+      <div style={{ fontSize: 8, fontWeight: 700, color: MUTED, textTransform: "uppercase" }}>{label}</div>
+      <div style={{ marginTop: 2, fontSize: 16, fontWeight: 800, color: tone === "vor" ? VOR : INK }}>{value}</div>
+    </div>
   );
 }
 
@@ -453,7 +522,7 @@ function AttentionChip({
 function ChecksPhone() {
   return (
     <PhoneFrame label="Checks · awaiting queue">
-      <ChromeHeader />
+      <LightAppHeader />
       <div style={{ flex: 1, padding: "12px 12px 0", overflow: "hidden" }}>
         <div style={{ fontSize: 14, fontWeight: 800 }}>Awaiting Check · 2</div>
         <VehicleRow reg="BU25 ABC" bay="P04" action="Start check" />
@@ -491,13 +560,11 @@ function VehicleRow({ reg, bay, action }: { reg: string; bay: string; action: st
       <div
         style={{
           marginTop: 8,
-          background: MIDNIGHT,
+          background: INK,
           color: "#fff",
           textAlign: "center",
           fontSize: 10,
           fontWeight: 800,
-          letterSpacing: "0.12em",
-          textTransform: "uppercase",
           padding: "8px 0",
           borderRadius: 4,
         }}
@@ -511,7 +578,7 @@ function VehicleRow({ reg, bay, action }: { reg: string; bay: string; action: st
 function VehiclesPhone() {
   return (
     <PhoneFrame label="Vehicles · inventory">
-      <ChromeHeader />
+      <LightAppHeader />
       <div style={{ flex: 1, padding: "12px 12px 0", overflow: "hidden" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 14, fontWeight: 800 }}>Vehicles · 48</div>
@@ -551,8 +618,8 @@ function FilterPill({ label, active }: { label: string; active?: boolean }) {
         fontWeight: 700,
         padding: "5px 8px",
         borderRadius: 99,
-        border: `1px solid ${active ? YARD_TEAL : BORDER}`,
-        background: active ? TEAL_SOFT : "#fff",
+        border: `1px solid ${active ? COMMAND_BLUE : BORDER}`,
+        background: active ? BLUE_SOFT : "#fff",
         color: active ? MIDNIGHT : MUTED,
       }}
     >
@@ -563,51 +630,84 @@ function FilterPill({ label, active }: { label: string; active?: boolean }) {
 
 function YardMapPhone() {
   return (
-    <PhoneFrame label="Yard · bay map">
-      <ChromeHeader />
-      <div style={{ flex: 1, padding: "12px 12px 0", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        <div style={{ fontSize: 14, fontWeight: 800 }}>Yard Map</div>
-        <div style={{ fontSize: 10, color: MUTED }}>Live bay occupancy</div>
+    <PhoneFrame label="Yard · LiveYardMap (BCT spatial)">
+      <LightAppHeader />
+      <div style={{ flex: 1, padding: "10px 12px 0", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          <MapToggle label="Map" active />
+          <MapToggle label="List" />
+        </div>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, fontSize: 9, fontWeight: 700 }}>
+          <span style={{ color: OK }}>● Ready 18</span>
+          <span style={{ color: WARN }}>● Attention 3</span>
+          <span style={{ color: VOR }}>● VOR 2</span>
+        </div>
         <div
           style={{
-            marginTop: 10,
+            marginTop: 8,
             flex: 1,
-            minHeight: 220,
+            minHeight: 210,
             border: `1px solid ${BORDER}`,
-            borderRadius: 4,
-            background: "#E8EEF2",
+            borderRadius: 8,
+            background: PAGE_BG,
             position: "relative",
             overflow: "hidden",
           }}
         >
-          {["Parking", "Departure", "Wash", "Workshop"].map((zone, i) => (
+          <div style={{ position: "absolute", inset: 12, border: `1px dashed ${BORDER}`, borderRadius: 6, background: "#EEF2F6" }} />
+          {["A01", "A02", "A03", "B01", "B02", "B03"].map((bay, i) => (
             <div
-              key={zone}
+              key={bay}
               style={{
                 position: "absolute",
-                left: 10 + (i % 2) * 120,
-                top: 14 + Math.floor(i / 2) * 100,
-                width: 110,
-                height: 84,
-                background: "#fff",
-                border: `1px solid ${BORDER}`,
+                left: 18 + (i % 3) * 72,
+                top: 28 + Math.floor(i / 3) * 52,
+                width: 58,
+                height: 34,
                 borderRadius: 4,
-                padding: 8,
+                border: `2px solid ${i === 1 ? YARD_TEAL : BORDER}`,
+                background: i === 4 ? "#FEF3C7" : i === 5 ? "#FEE4E2" : SURFACE,
+                fontSize: 8,
+                fontWeight: 800,
+                display: "grid",
+                placeItems: "center",
+                fontVariantNumeric: "tabular-nums",
               }}
             >
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>{zone}</div>
-              <div style={{ marginTop: 8, display: "flex", gap: 4, flexWrap: "wrap" }}>
-                <BayDot tone="ok" />
-                <BayDot tone="ok" />
-                <BayDot tone="warn" />
-                <BayDot tone={zone === "Workshop" ? "vor" : "ok"} />
-              </div>
+              {bay}
             </div>
           ))}
+          <div style={{ position: "absolute", right: 8, top: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+            {["+", "−", "◎"].map(btn => (
+              <div key={btn} style={{ width: 24, height: 24, borderRadius: 6, background: SURFACE, border: `1px solid ${BORDER}`, display: "grid", placeItems: "center", fontSize: 10, boxShadow: "0 1px 2px rgba(16,24,40,0.08)" }}>{btn}</div>
+            ))}
+          </div>
         </div>
+        <div style={{ marginTop: 6, fontSize: 9, color: MUTED }}>Tap bay · realtime vehicle locations</div>
       </div>
       <HubBottomNav active="Yard" />
     </PhoneFrame>
+  );
+}
+
+function MapToggle({ label, active }: { label: string; active?: boolean }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        textAlign: "center",
+        fontSize: 10,
+        fontWeight: 700,
+        padding: "6px 0",
+        borderRadius: 6,
+        background: active ? SURFACE : "transparent",
+        border: `1px solid ${active ? BORDER : "transparent"}`,
+        color: active ? INK : MUTED,
+        boxShadow: active ? "0 1px 2px rgba(16,24,40,0.06)" : "none",
+      }}
+    >
+      {label}
+    </div>
   );
 }
 
@@ -618,57 +718,46 @@ function BayDot({ tone }: { tone: "ok" | "warn" | "vor" }) {
 
 function MorePhone() {
   return (
-    <PhoneFrame label="More · Teal identity strip">
-      <ChromeHeader />
-      <div style={{ background: TEAL_SOFT, borderBottom: `1px solid ${YARD_TEAL}33`, padding: "10px 12px", flexShrink: 0 }}>
+    <PhoneFrame label="More · workflow + operations hub">
+      <LightAppHeader />
+      <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, padding: "10px 12px", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <Wordmark onDark={false} size="quiet" />
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 8, fontWeight: 700, color: YARD_TEAL, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: 8, fontWeight: 700, color: COMMAND_BLUE, letterSpacing: "0.1em", textTransform: "uppercase" }}>
               Depot
             </div>
-            <div style={{ fontSize: 10, fontWeight: 700 }}>North West</div>
+            <div style={{ fontSize: 10, fontWeight: 700 }}>BCT Main Depot</div>
           </div>
         </div>
       </div>
-      <div style={{ flex: 1, padding: "12px 12px 0", overflow: "hidden" }}>
-        <div
-          style={{
-            border: `1px solid ${BORDER}`,
-            background: "#fff",
-            borderRadius: 4,
-            padding: 12,
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-          }}
-        >
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 4,
-              background: MIDNIGHT,
-              color: "#fff",
-              display: "grid",
-              placeItems: "center",
-              fontWeight: 800,
-              fontSize: 13,
-            }}
-          >
-            JM
-          </div>
+      <div style={{ flex: 1, padding: "10px 12px 0", overflow: "hidden" }}>
+        <div style={{ border: `1px solid ${BORDER}`, background: SURFACE, borderRadius: 8, padding: 10, display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ width: 36, height: 36, borderRadius: 6, background: INK, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 12 }}>JM</div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 800 }}>Jordan Miller</div>
-            <div style={{ fontSize: 10, color: MUTED }}>Yard supervisor</div>
+            <div style={{ fontSize: 12, fontWeight: 800 }}>Jordan Miller</div>
+            <div style={{ fontSize: 9, color: MUTED }}>Yard supervisor · BCT</div>
           </div>
         </div>
-        <MoreRow label="Account" />
-        <MoreRow label="Settings & security" />
-        <MoreRow label="About Veyvio Yard" />
+        <SectionLabel text="Workflow" />
+        <MoreRow label="Tasks" />
+        <MoreRow label="Driver messages" />
+        <MoreRow label="Inspections" />
+        <SectionLabel text="Operations" />
+        <MoreRow label="Arrivals" />
+        <MoreRow label="VOR Board" />
+        <MoreRow label="Sync queue" />
       </div>
       <HubBottomNav active="More" />
     </PhoneFrame>
+  );
+}
+
+function SectionLabel({ text }: { text: string }) {
+  return (
+    <div style={{ marginTop: 10, marginBottom: 4, fontSize: 8, fontWeight: 700, color: MUTED, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+      {text}
+    </div>
   );
 }
 
@@ -769,8 +858,8 @@ function CheckChoice({ label, active }: { label: string; active?: boolean }) {
   return (
     <div
       style={{
-        border: `1px solid ${active ? YARD_TEAL : BORDER}`,
-        background: active ? TEAL_SOFT : "#fff",
+        border: `1px solid ${active ? COMMAND_BLUE : BORDER}`,
+        background: active ? BLUE_SOFT : "#fff",
         borderRadius: 4,
         padding: "12px 14px",
         fontSize: 12,
@@ -1135,19 +1224,52 @@ const MISSING_PAGE_GROUPS: RoutePageGroup[] = [
   },
 ];
 
+
+function DesktopWebPreview() {
+  return (
+    <div style={{ display: "flex", height: 280, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: "hidden", background: PAGE_BG }}>
+      <div style={{ width: 160, background: SURFACE, borderRight: `1px solid ${BORDER}`, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: INK, color: "#fff", fontSize: 8, fontWeight: 900, display: "grid", placeItems: "center" }}>VY</div>
+          <Wordmark onDark={false} size="quiet" />
+        </div>
+        <div style={{ fontSize: 8, color: MUTED, fontWeight: 700, textTransform: "uppercase" }}>Depot</div>
+        <div style={{ fontSize: 9, fontWeight: 700 }}>BCT Main Depot</div>
+        {["Home", "Checks", "Vehicles", "Yard", "More"].map((item, i) => (
+          <div key={item} style={{ fontSize: 10, fontWeight: i === 0 ? 800 : 600, color: i === 0 ? INK : MUTED, padding: "6px 8px", borderRadius: 6, background: i === 0 ? NAV_ACTIVE : "transparent" }}>{item}</div>
+        ))}
+      </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <div style={{ height: 44, borderBottom: `1px solid ${BORDER}`, background: SURFACE, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", fontSize: 9, color: MUTED }}>
+          <span>BCT · BCT Main Depot operations</span>
+          <span style={{ background: INK, color: "#fff", padding: "4px 8px", borderRadius: 6, fontWeight: 700 }}>Scan record</span>
+        </div>
+        <div style={{ flex: 1, padding: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 800 }}>Depot board</div>
+          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+            <KpiMini label="Available" value="38" />
+            <KpiMini label="Tasks" value="12" />
+            <KpiMini label="VOR" value="2" tone="vor" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RoutePagePhone({ page }: { page: RoutePageSpec }) {
   const publicSurface = page.surface === "public";
   const toneColor =
-    page.tone === "ok" ? OK : page.tone === "warn" ? WARN : page.tone === "vor" ? VOR : YARD_TEAL;
+    page.tone === "ok" ? OK : page.tone === "warn" ? WARN : page.tone === "vor" ? VOR : COMMAND_BLUE;
 
   return (
     <PhoneFrame label={`${page.title} · ${page.route}`} status={publicSurface ? "light" : "midnight"}>
       {publicSurface ? (
-        <div style={{ background: MIDNIGHT, color: "#fff", padding: "10px 12px", borderTop: `3px solid ${YARD_TEAL}` }}>
+        <div style={{ background: MIDNIGHT, color: "#fff", padding: "10px 12px", borderTop: `3px solid ${COMMAND_BLUE}` }}>
           <Wordmark size="header" />
         </div>
       ) : (
-        <ChromeHeader />
+        <LightAppHeader />
       )}
       <div style={{ flex: 1, background: PAGE_BG, padding: 12, overflow: "hidden" }}>
         <div style={{ fontSize: 8, fontWeight: 700, color: MUTED, letterSpacing: "0.1em", textTransform: "uppercase" }}>
@@ -1170,7 +1292,7 @@ function RoutePagePhone({ page }: { page: RoutePageSpec }) {
           </div>
         </div>
         {page.action ? (
-          <div style={{ marginTop: 12, borderRadius: 4, background: publicSurface ? YARD_TEAL : MIDNIGHT, color: "#fff", padding: "11px 12px", textAlign: "center", fontSize: 10, fontWeight: 800 }}>
+          <div style={{ marginTop: 12, borderRadius: 4, background: publicSurface ? COMMAND_BLUE : INK, color: "#fff", padding: "11px 12px", textAlign: "center", fontSize: 10, fontWeight: 800 }}>
             {page.action}
           </div>
         ) : null}
@@ -1184,20 +1306,20 @@ export default function VeyvioYardBrandPhoneCanvas() {
   return (
     <Stack gap={24} style={{ padding: 24 }}>
       <Stack gap={8}>
-        <H1>Veyvio Yard — phone brand</H1>
+        <H1>Veyvio Yard — phone + web brand (live)</H1>
         <Text tone="secondary">
-          Complete live route inventory from launch and authentication through depot operations, vehicle records,
-          evidence, work, sync and account surfaces.
+          Synced with shipped Yard UI: light dashboard chrome, Command Blue primary actions, live spatial yard map,
+          depot board home, and 44-route inventory. Midnight remains for splash and focused safety flows.
         </Text>
         <Row gap={8} style={{ flexWrap: "wrap" }}>
           <Pill tone="info" size="sm">
             Midnight #0B1526
           </Pill>
           <Pill tone="info" size="sm">
-            Yard Teal #12A89D
+            Command Blue #2F6BFF
           </Pill>
           <Pill tone="info" size="sm">
-            Yard Sky #A2E9FF
+            Yard Teal #12A89D (auth + map)
           </Pill>
           <Pill tone="neutral" size="sm">
             Hubs: Home · Checks · Vehicles · Yard · More
@@ -1205,16 +1327,17 @@ export default function VeyvioYardBrandPhoneCanvas() {
         </Row>
       </Stack>
 
-      <Callout tone="info" title="Canvas locations">
-        IDE (beside chat): veyvio-yard-splash.canvas.tsx. This git-committed canvas now mirrors all 44 live Yard UI
-        routes. Keep both references in sync when routes or shared chrome change.
+      <Callout tone="info" title="Synced with code (Jul 2026)">
+        Matches src/components/yard/shells/AppShell.tsx, BottomNav.tsx, features/yard-map/LiveYardMap.tsx, and
+        routes/_app.*. Web adds a 220px desktop sidebar; phone uses white header + bottom nav. Update this canvas when
+        chrome or hub IA changes.
       </Callout>
 
       <Grid columns={3} gap={16}>
         <Stat value="5" label="Primary hubs with bottom nav" tone="info" />
         <Stat value="44" label="Live UI routes represented" tone="success" />
-        <Stat value="Midnight" label="Tab bar + app chrome" />
-        <Stat value="Teal" label="Splash atmosphere + active nav" tone="success" />
+        <Stat value="Light" label="Hub chrome + bottom nav" />
+        <Stat value="Blue" label="Primary actions + links" tone="success" />
       </Grid>
 
       <H2>Primary hubs</H2>
@@ -1253,6 +1376,17 @@ export default function VeyvioYardBrandPhoneCanvas() {
           <CardHeader trailing={<Pill tone="success" size="sm">Hub</Pill>}>More</CardHeader>
           <CardBody>
             <MorePhone />
+          </CardBody>
+        </Card>
+      </Grid>
+
+
+      <H2>Web · desktop shell (lg+)</H2>
+      <Grid columns={1} gap={16}>
+        <Card>
+          <CardHeader trailing={<Pill size="sm">220px sidebar</Pill>}>AppShell desktop</CardHeader>
+          <CardBody>
+            <DesktopWebPreview />
           </CardBody>
         </Card>
       </Grid>
@@ -1297,15 +1431,18 @@ export default function VeyvioYardBrandPhoneCanvas() {
           <CardHeader>Rules across phone surfaces</CardHeader>
           <CardBody>
             <Stack gap={8}>
-              <Text size="small">1. Hub tabs: Home · Checks · Vehicles · Yard · More</Text>
-              <Text size="small">2. Splash: dual Teal atmosphere, campaign line, status ping, Veyvio footer</Text>
-              <Text size="small">3. Vehicles = records; Yard map = place and movement</Text>
-              <Text size="small">4. Focused: yard check, VOR case, damage capture — Midnight chrome, operational blockers</Text>
-              <Text size="small">5. More: Account · Settings · About are brand surfaces</Text>
+              <Text size="small">1. Hub tabs: Home · Checks · Vehicles · Yard · More (nav-routes.ts)</Text>
+              <Text size="small">2. Hub chrome: white header (VY badge + wordmark), ink Scan, sync badge, light bottom nav</Text>
+              <Text size="small">3. Primary actions: Command Blue #2F6BFF — aligned with Veyvio Command/Admin</Text>
+              <Text size="small">4. Yard Teal #12A89D: auth flows, map bay selection, splash atmosphere accent</Text>
+              <Text size="small">5. Home = Depot board (KPIs, needs attention, readiness chart) — not generic welcome</Text>
+              <Text size="small">6. Yard map = LiveYardMap SVG (BCT), Map/List toggle, layers, realtime bays</Text>
+              <Text size="small">7. More = Workflow + Operations sections (Tasks, VOR, sync, etc.)</Text>
+              <Text size="small">8. Focused safety flows keep Midnight chrome (check, VOR, damage)</Text>
               <Divider />
               <Text size="small" tone="secondary">
-                Yard workflow: A Get in → B Depot board → C Checks → D Vehicles &amp; map → E Focused → F Account.
-                Midnight for chrome/splash · Yard Teal for actions and active nav · never status by colour alone.
+                Web/desktop: 220px light sidebar mirrors bottom nav. Status always labelled + icon — never colour alone.
+                Splash/footer PWA theme stays Midnight #0B1526.
               </Text>
               <Text size="small" tone="secondary">
                 Route coverage: all 44 live Yard UI routes are represented above. AdBlue refill is live at

@@ -10,6 +10,8 @@ import { ManageAssignmentDrawer } from '@/features/transfers/ManageAssignmentDra
 import { api } from '@/lib/api/client'
 import { VEYVIO_TERMS } from '@/lib/terminology'
 import { cn } from '@/lib/cn'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const TABS = [
   'Overview',
@@ -40,7 +42,7 @@ export function OperationalTripDetailPage() {
   const [showTransfer, setShowTransfer] = useState(false)
 
   const { data: trip, isLoading, error, isError } = useQuery({
-    queryKey: ['operational-trip', id],
+    queryKey: tKey(['operational-trip', id]),
     queryFn: () => api.getOperationalTrip(id!),
     enabled: !!id,
   })

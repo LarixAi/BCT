@@ -10,6 +10,10 @@ export function isVehiclesNavActive(pathname: string): boolean {
   return true;
 }
 
+export function isVehicleBodyworkNavActive(pathname: string): boolean {
+  return pathname.startsWith("/vehicle-bodywork");
+}
+
 export function isYardNavActive(pathname: string): boolean {
   return (
     pathname.startsWith("/yard/map")
@@ -24,9 +28,10 @@ export function isMoreNavActive(pathname: string): boolean {
   return (
     pathname.startsWith("/more")
     || pathname.startsWith("/tasks")
+    || pathname.startsWith("/upcoming")
     || pathname.startsWith("/inspections")
     || pathname.startsWith("/defects")
     || pathname.startsWith("/vor")
     || pathname.startsWith("/shift")
-  );
+  ) && !pathname.startsWith("/vehicle-bodywork");
 }

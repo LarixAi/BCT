@@ -40,6 +40,8 @@ import type {
   PricingRuleRecord,
 } from './types'
 import { mockBookingsApi } from './mock-bookings'
+import { mockDialARideApi } from './mock-dial-a-ride'
+import { mockSchoolRoutesApi } from './mock-school-routes'
 import { mockTransfersApi } from './mock-transfers'
 import type { BookingDraft, BookingListItem, BookingRecord, CustomerBookingContext, CreateDraftOptions, CancelBookingInput, AutoPlanProposal, EditImpact } from '@/lib/bookings/types'
 import type {
@@ -278,9 +280,14 @@ let mockDuties: DutyDetailRecord[] = [
     startTime: '07:30',
     endTime: '09:30',
     status: 'passenger_boarded',
+    publicationStatus: 'published',
+    publishedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
+    acknowledgementRequired: true,
+    driverLifecycleStatus: 'acknowledged',
     route: { id: 'route-1', name: 'Oakwood School AM', stops: ROUTE_STOPS },
     driver: { id: 'drv-1', firstName: 'Jane', lastName: 'Smith', status: 'on_duty' },
     vehicle: { id: 'veh-1', registrationNumber: 'AB12 CDE', status: 'in_service' },
+    passengerAssistant: { id: 'pa-1', firstName: 'Chris', lastName: 'Walsh' },
     lastLatitude: 51.552,
     lastLongitude: -0.296,
     lastPositionAt: new Date().toISOString(),
@@ -292,9 +299,12 @@ let mockDuties: DutyDetailRecord[] = [
     startTime: '09:00',
     endTime: '12:00',
     status: 'in_progress',
+    publicationStatus: 'published',
+    publishedAt: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
     route: { id: 'route-2', name: 'Day Centre Run' },
     driver: { id: 'drv-2', firstName: 'Michael', lastName: 'Patel', status: 'on_duty' },
     vehicle: { id: 'veh-2', registrationNumber: 'GH56 HIJ', status: 'in_service' },
+    passengerAssistant: { id: 'pa-2', firstName: 'Priya', lastName: 'Shah' },
     lastLatitude: 51.515,
     lastLongitude: -0.142,
     lastPositionAt: new Date(Date.now() - 18 * 60_000).toISOString(),
@@ -306,6 +316,7 @@ let mockDuties: DutyDetailRecord[] = [
     startTime: '14:30',
     endTime: '17:00',
     status: 'unassigned',
+    publicationStatus: 'draft',
     route: { id: 'route-3', name: 'School PM Return' },
     driver: null,
     vehicle: null,
@@ -317,6 +328,7 @@ let mockDuties: DutyDetailRecord[] = [
     startTime: '17:30',
     endTime: '20:00',
     status: 'assigned',
+    publicationStatus: 'ready_to_publish',
     route: { id: 'route-2', name: 'Day Centre Run' },
     driver: { id: 'drv-3', firstName: 'Alice', lastName: 'Brown', status: 'available' },
     vehicle: { id: 'veh-3', registrationNumber: 'KL78 MNO', status: 'in_service' },
@@ -777,6 +789,10 @@ export class MockApiClient {
     return typeof window !== 'undefined' && sessionStorage.getItem('has_tenant') === '1'
   }
 
+  hasAuthSession(): boolean {
+    return Boolean(this.getToken())
+  }
+
   setPendingMemberships(memberships: TenantMembershipOption[]) {
     sessionStorage.setItem(MEMBERSHIPS_KEY, JSON.stringify(memberships))
   }
@@ -789,6 +805,21 @@ export class MockApiClient {
     } catch {
       return []
     }
+  }
+
+  async listMemberships() {
+    await delay()
+    return this.getPendingMemberships()
+  }
+
+  async ensureValidAccessToken() {
+    return this.getToken()
+  }
+
+  async refreshAccessToken() {
+    const token = this.getToken()
+    if (!token) throw new Error('Session expired — sign in again')
+    return token
   }
 
   async login(email: string, _password: string, _rememberMe = false): Promise<LoginResponse> {
@@ -1883,6 +1914,12 @@ export class MockApiClient {
   async getVehicleReportsHub() {
     await delay(50)
     return mockVehicleReportsApi.hub()
+  }
+
+  async getBodyConditionHub() {
+    await delay(50)
+    const { mockBodyConditionHub } = await import('./mock-body-condition')
+    return mockBodyConditionHub()
   }
 
   async getRoutes(): Promise<RouteRecord[]> {
@@ -3067,6 +3104,67 @@ export class MockApiClient {
     return trips[0] ?? null
   }
 
+  async assignPlanningTrip(
+    tripId: string,
+    input: { driverId?: string | null; vehicleId?: string | null },
+  ): Promise<OperationalTrip> {
+    await delay(80)
+    const drivers = getMockDrivers()
+    const vehicles = getMockVehicles()
+    const driver = input.driverId ? drivers.find((d) => d.id === input.driverId) : null
+    const vehicle = input.vehicleId ? vehicles.find((v) => v.id === input.vehicleId) : null
+    const trip = mockTransfersApi.assignTripResources(tripId, {
+      driverId: input.driverId ?? null,
+      driverName: driver ? `${driver.firstName} ${driver.lastName}` : null,
+      vehicleId: input.vehicleId ?? null,
+      vehicleRegistration: vehicle?.registrationNumber ?? null,
+    })
+    if (trip.dutyId) {
+      await this.assignDuty(trip.dutyId, {
+        driverId: input.driverId ?? null,
+        vehicleId: input.vehicleId ?? null,
+      })
+    }
+    return trip
+  }
+
+  async movePlanningJob(jobId: string, targetTripId: string): Promise<OperationalTrip> {
+    await delay(80)
+    return mockTransfersApi.moveJobToTrip(jobId, targetTripId)
+  }
+
+  async createPlanningTripFromJobs(
+    jobIds: string[],
+    opts?: { dutyId?: string | null; runReference?: string | null; routeName?: string | null },
+  ): Promise<OperationalTrip> {
+    await delay(100)
+    return mockTransfersApi.createTripFromJobs(jobIds, opts)
+  }
+
+  async validateSchedulePlanningAssignment(input: {
+    tripId: string
+    driverId?: string | null
+    vehicleId?: string | null
+    dutyDate: string
+  }) {
+    await delay(40)
+    const { validatePlanningAssignment } = await import('@/lib/schedule/assignment-validation')
+    const trip = mockTransfersApi.getTrip(input.tripId)
+    const profiles = await this.getDriverProfiles()
+    const vehicles = await this.getVehicleProfiles()
+    const duties = await this.getDuties({ date: input.dutyDate })
+    const driver = input.driverId ? profiles.find((p) => p.id === input.driverId) ?? null : null
+    const vehicle = input.vehicleId ? vehicles.find((v) => v.id === input.vehicleId) ?? null : null
+    return validatePlanningAssignment({
+      trip,
+      jobs: trip.jobs,
+      driver,
+      vehicle,
+      duties,
+      dutyDate: input.dutyDate,
+    })
+  }
+
   async getOperationalPosition(tripId: string): Promise<OperationalPosition> {
     await delay(50)
     return mockTransfersApi.getPosition(tripId)
@@ -3123,6 +3221,105 @@ export class MockApiClient {
   async getTransferReport(periodFrom: string, periodTo: string) {
     await delay(80)
     return mockTransfersApi.getTransferReport(periodFrom, periodTo)
+  }
+
+  async getDialARideMembers() {
+    await delay(50)
+    return mockDialARideApi.listMembers()
+  }
+
+  async getDialARideMember(id: string) {
+    await delay(50)
+    return mockDialARideApi.getMember(id)
+  }
+
+  async getDialARideRequests(params?: { view?: string }) {
+    await delay(50)
+    return mockDialARideApi.listRequests(params)
+  }
+
+  async getDialARideRequest(id: string) {
+    await delay(50)
+    return mockDialARideApi.getRequest(id)
+  }
+
+  async getDialARideSummary() {
+    await delay(30)
+    return mockDialARideApi.summary()
+  }
+
+  async createDialARideRequestDraft(memberId?: string) {
+    await delay(80)
+    return mockDialARideApi.createRequestDraft(memberId)
+  }
+
+  async saveDialARideRequest(draft: import('@/lib/dial-a-ride/types').DialARideRequestDraft) {
+    await delay(80)
+    return mockDialARideApi.saveRequest(draft)
+  }
+
+  async runDialARideServiceChecks(draft: import('@/lib/dial-a-ride/types').DialARideRequestDraft) {
+    await delay(80)
+    return mockDialARideApi.runServiceChecks(draft)
+  }
+
+  async acceptDialARideRequest(requestId: string, opts?: { overrideReason?: string }) {
+    await delay(120)
+    const result = mockDialARideApi.acceptRequest(requestId, {
+      overrideReason: opts?.overrideReason,
+      mockDuties,
+    })
+    return result
+  }
+
+  async declineDialARideRequest(requestId: string, reason: string) {
+    await delay(80)
+    return mockDialARideApi.declineRequest(requestId, reason)
+  }
+
+  async waitingListDialARideRequest(requestId: string) {
+    await delay(80)
+    return mockDialARideApi.waitingListRequest(requestId)
+  }
+
+  async getSchoolRoutes(params?: { view?: string }) {
+    await delay(50)
+    return mockSchoolRoutesApi.list(params)
+  }
+
+  async getSchoolRoute(id: string) {
+    await delay(50)
+    return mockSchoolRoutesApi.get(id)
+  }
+
+  async getSchoolRoutesSummary() {
+    await delay(30)
+    return mockSchoolRoutesApi.summary()
+  }
+
+  async createSchoolRouteDraft() {
+    await delay(80)
+    return mockSchoolRoutesApi.createDraft()
+  }
+
+  async saveSchoolRoute(draft: import('@/lib/school-routes/types').SchoolRouteDraft) {
+    await delay(80)
+    return mockSchoolRoutesApi.save(draft)
+  }
+
+  async publishSchoolRoute(routeId: string) {
+    await delay(150)
+    return mockSchoolRoutesApi.publish(routeId, { mockDuties })
+  }
+
+  async previewSchoolRouteJobCount(routeId: string) {
+    await delay(50)
+    return mockSchoolRoutesApi.previewJobCount(routeId)
+  }
+
+  async getSchoolRouteAttendance(routeId: string) {
+    await delay(50)
+    return mockSchoolRoutesApi.attendance(routeId)
   }
 
   async getCommandResource<T>(path: string): Promise<T> {

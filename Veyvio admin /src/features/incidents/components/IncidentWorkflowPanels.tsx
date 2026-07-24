@@ -15,7 +15,9 @@ import {
 } from '@/lib/incidents/permissions'
 import type { IncidentDetailRecord, IncidentSeverity } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function IncidentSafetyControlsPanel({ incident }: { incident: IncidentDetailRecord }) {
   const sc = incident.safetyControls
@@ -56,8 +58,8 @@ export function AcknowledgeIncidentPanel({ incident }: { incident: IncidentDetai
   const ack = useMutation({
     mutationFn: () => api.acknowledgeIncidentHub({ incidentId: incident.id, notes: notes || undefined }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
     },
   })
 
@@ -83,8 +85,8 @@ export function AssignIncidentPanel({ incident }: { incident: IncidentDetailReco
   const assign = useMutation({
     mutationFn: () => api.assignIncidentHub({ incidentId: incident.id, ownerName }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
     },
   })
 
@@ -113,7 +115,7 @@ export function IncidentEvidencePanel({ incident }: { incident: IncidentDetailRe
   const upload = useMutation({
     mutationFn: () => api.uploadIncidentEvidenceHub({ incidentId: incident.id, kind, label: label || 'Evidence' }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
       setLabel('')
     },
   })
@@ -157,8 +159,8 @@ export function CloseIncidentPanel({ incident }: { incident: IncidentDetailRecor
   const close = useMutation({
     mutationFn: () => api.closeIncidentHub({ incidentId: incident.id, reason }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
     },
   })
 
@@ -184,7 +186,7 @@ export function AddIncidentUpdatePanel({ incident }: { incident: IncidentDetailR
   const mutation = useMutation({
     mutationFn: () => api.addIncidentUpdateHub({ incidentId: incident.id, update }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
       setUpdate('')
     },
   })
@@ -218,8 +220,8 @@ export function ContainIncidentPanel({ incident }: { incident: IncidentDetailRec
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
     },
   })
 
@@ -251,8 +253,8 @@ export function EscalateIncidentPanel({ incident }: { incident: IncidentDetailRe
   const mutation = useMutation({
     mutationFn: () => api.escalateIncidentHub({ incidentId: incident.id, severity, reason }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
     },
   })
 
@@ -283,8 +285,8 @@ export function ReopenIncidentPanel({ incident }: { incident: IncidentDetailReco
   const mutation = useMutation({
     mutationFn: () => api.reopenIncidentHub({ incidentId: incident.id, reason }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
     },
   })
 
@@ -311,7 +313,7 @@ export function CreateDefectFromIncidentPanel({ incident }: { incident: Incident
   const mutation = useMutation({
     mutationFn: () => api.createDefectFromIncidentHub({ incidentId: incident.id, component, description }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
     },
   })
 
@@ -338,7 +340,7 @@ export function MarkIncidentVorPanel({ incident }: { incident: IncidentDetailRec
   const mutation = useMutation({
     mutationFn: () => api.markIncidentVehicleVorHub({ incidentId: incident.id, reason }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
     },
   })
 
@@ -372,7 +374,7 @@ export function RegulatoryDecisionPanel({ incident }: { incident: IncidentDetail
         actorName,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
       setDecision('')
     },
   })
@@ -412,7 +414,7 @@ export function AddCorrectiveActionPanel({ incident }: { incident: IncidentDetai
   const mutation = useMutation({
     mutationFn: () => api.addIncidentActionHub({ incidentId: incident.id, title, description, ownerName, dueDate, priority: 'medium' }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incident-detail', incident.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incident-detail', incident.id]) })
       setTitle('')
       setDescription('')
     },

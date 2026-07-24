@@ -2,10 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function IntegrationsPage() {
   const { data: integrations = [], isLoading } = useQuery({
-    queryKey: ['integrations'],
+    queryKey: tKey(['integrations']),
     queryFn: () => api.getIntegrations(),
   })
 

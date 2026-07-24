@@ -1,7 +1,12 @@
 import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supabase-js@2'
 import { HttpError } from './http.ts'
 import { resolveEntitlements, resolvePlatformRole, type EntitlementSnapshot } from './entitlements.ts'
-import { enforceTenantLifecycle } from './tenant-auth.ts'
+import { enforceTenantLifecycle, recordSecurityEvent } from './tenant-auth.ts'
+import {
+  assertSupportGrantWrite,
+  resolveActiveSupportGrant,
+  type ActiveSupportGrant,
+} from './support-access.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
@@ -34,6 +39,9 @@ export type RequestContext = {
   platformRole: string | null
   entitlements: EntitlementSnapshot | null
   tenantStatus: string
+  isSupportSession: boolean
+  supportGrantId: string | null
+  supportGrant: ActiveSupportGrant | null
   db: SupabaseClient
 }
 
@@ -99,6 +107,9 @@ export async function authenticate(request: Request, requireCompany = true): Pro
       platformRole,
       entitlements: null,
       tenantStatus: '',
+      isSupportSession: false,
+      supportGrantId: null,
+      supportGrant: null,
       db: admin,
     }
   }
@@ -111,9 +122,31 @@ export async function authenticate(request: Request, requireCompany = true): Pro
     .maybeSingle()
 
   const hasActiveMembership = !membershipError && membership?.status === 'active'
-  // Platform staff may call platform routes without a tenant membership.
-  if (!hasActiveMembership && !platformRole) {
-    throw new HttpError(403, 'Company access is unavailable', 'forbidden')
+  let supportGrant: ActiveSupportGrant | null = null
+
+  if (!hasActiveMembership) {
+    if (platformRole) {
+      supportGrant = await resolveActiveSupportGrant(data.user.id, companyId)
+    }
+    if (!supportGrant) {
+      await recordSecurityEvent({
+        companyId,
+        actorUserId: data.user.id,
+        eventType: 'auth.membership_denied',
+        message: 'Tenant access denied — no active membership or support grant',
+        severity: 'attention',
+      }).catch(() => undefined)
+      throw new HttpError(403, 'Company access is unavailable', 'forbidden')
+    }
+    assertSupportGrantWrite(supportGrant, request.method)
+    await recordSecurityEvent({
+      companyId,
+      actorUserId: data.user.id,
+      eventType: 'support.access_used',
+      message: 'Support grant used for tenant API access',
+      severity: 'attention',
+      metadata: { grantId: supportGrant.id, method: request.method, path: new URL(request.url).pathname },
+    }).catch(() => undefined)
   }
 
   const entitlements = companyId ? await resolveEntitlements(companyId) : null
@@ -122,7 +155,7 @@ export async function authenticate(request: Request, requireCompany = true): Pro
   }
 
   const roleIds = (membership?.role_ids as string[] | null) ?? []
-  let roleKey = platformRole && !hasActiveMembership ? 'platform' : 'member'
+  let roleKey = supportGrant ? 'support' : 'member'
   if (roleIds.length) {
     const { data: roles } = await admin.from('roles').select('id, name').in('id', roleIds).limit(1)
     roleKey = roles?.[0]?.name ?? roleKey
@@ -139,6 +172,9 @@ export async function authenticate(request: Request, requireCompany = true): Pro
     platformRole,
     entitlements,
     tenantStatus: entitlements?.tenantStatus ?? '',
+    isSupportSession: Boolean(supportGrant),
+    supportGrantId: supportGrant?.id ?? null,
+    supportGrant,
     db: admin,
   }
 }

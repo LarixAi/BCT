@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { canManageIncidentSettings } from '@/lib/incidents/permissions'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function IncidentIntegrationsPanel() {
   const { user } = useAuth()
@@ -11,14 +13,14 @@ export function IncidentIntegrationsPanel() {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
   const canProcess = canManageIncidentSettings(user?.permissions ?? [])
 
-  const { data: hub } = useQuery({ queryKey: ['incidents-hub'], queryFn: () => api.getIncidentsHub() })
+  const { data: hub } = useQuery({ queryKey: tKey(['incidents-hub']), queryFn: () => api.getIncidentsHub() })
   const feed = hub?.telematicsFeed ?? []
   const pending = feed.filter((f) => !f.processed)
 
   const process = useMutation({
     mutationFn: (feedItemId: string) => api.processTelematicsFeedHub({ feedItemId }, actorName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incidents-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['incidents-hub']) })
     },
   })
 

@@ -7,6 +7,8 @@ import { ValidationList } from '@/features/bookings/components/BookingWizardUi'
 import { CancelBookingDialog } from '@/features/bookings/CancelBookingDialog'
 import { VEYVIO_TERMS } from '@/lib/terminology'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function BookingDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -16,19 +18,19 @@ export function BookingDetailPage() {
   const [confirmationSent, setConfirmationSent] = useState(false)
 
   const { data: booking, isLoading, error, isError } = useQuery({
-    queryKey: ['booking', id],
+    queryKey: tKey(['booking', id]),
     queryFn: () => api.getBooking(id!),
     enabled: !!id,
   })
 
   const { data: validation = [] } = useQuery({
-    queryKey: ['booking-validation', booking],
+    queryKey: tKey(['booking-validation', booking]),
     queryFn: () => api.validateBookingDraft(booking!),
     enabled: !!booking,
   })
 
   const { data: opsTrips = [] } = useQuery({
-    queryKey: ['operational-trips-by-booking', id],
+    queryKey: tKey(['operational-trips-by-booking', id]),
     queryFn: () => api.getOperationalTripsByBooking(id!),
     enabled: !!id,
   })
@@ -50,7 +52,7 @@ export function BookingDetailPage() {
 
   const canEdit = booking.status !== 'cancelled' && booking.status !== 'closed'
   const canCancel = !['cancelled', 'closed', 'completed'].includes(booking.status)
-  const outboundTrip = booking.trips.find((t) => t.direction !== 'return') ?? booking.trips[0]
+  const outboundTrip = (booking.trips ?? []).find((t) => t.direction !== 'return') ?? booking.trips?.[0]
 
   return (
     <div className="space-y-6">
@@ -69,7 +71,7 @@ export function BookingDetailPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <Stat label="Trips" value={String(booking.trips.length)} />
+        <Stat label="Trips" value={String(booking.trips?.length ?? 0)} />
         <Stat label="Scheduling" value={booking.schedulingStatus} />
         <Stat label="Billing" value={booking.billingStatus} />
         <Stat label="Depot" value={booking.depotName ?? '—'} />
@@ -77,7 +79,7 @@ export function BookingDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Hierarchy" description="Booking → Trips → Stops">
-          {booking.trips.map((trip) => (
+          {(booking.trips ?? []).map((trip) => (
             <div key={trip.id} className="mb-4 last:mb-0">
               <div className="flex items-center gap-2">
                 <p className="font-medium text-ink">{trip.label}</p>
@@ -85,7 +87,7 @@ export function BookingDetailPage() {
               </div>
               <p className="text-xs text-muted">{trip.pickupDate}</p>
               <ol className="mt-2 space-y-1 border-l-2 border-border pl-4">
-                {trip.stops.map((stop) => (
+                {(trip.stops ?? []).map((stop) => (
                   <li key={stop.id} className="text-sm">
                     <span className="capitalize text-muted">{stop.type}</span>
                     <span className="mx-1 text-muted">·</span>
@@ -99,11 +101,11 @@ export function BookingDetailPage() {
 
         <SectionCard title="Passengers">
           <ul className="space-y-3">
-            {booking.passengers.map((p) => (
+            {(booking.passengers ?? []).map((p) => (
               <li key={p.passengerId} className="text-sm">
                 <p className="font-medium">{p.firstName} {p.lastName}</p>
                 <ul className="mt-1 list-inside list-disc text-ink-soft">
-                  {p.requirements.map((r) => (
+                  {(p.requirements ?? []).map((r) => (
                     <li key={r}>{r}</li>
                   ))}
                 </ul>
@@ -198,7 +200,7 @@ export function BookingDetailPage() {
           booking={booking}
           onClose={() => {
             setShowCancel(false)
-            queryClient.invalidateQueries({ queryKey: ['booking', id] })
+            queryClient.invalidateQueries({ queryKey: tKey(['booking', id]) })
           }}
         />
       )}

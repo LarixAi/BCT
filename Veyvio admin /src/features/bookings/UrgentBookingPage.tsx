@@ -5,6 +5,8 @@ import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
 import type { BookingDraft } from '@/lib/bookings/types'
 import { enrichPassenger } from '@/lib/bookings/passenger'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function UrgentBookingPage() {
   const navigate = useNavigate()
@@ -12,8 +14,8 @@ export function UrgentBookingPage() {
   const [draft, setDraft] = useState<BookingDraft | null>(null)
   const [error, setError] = useState('')
 
-  const { data: customers = [] } = useQuery({ queryKey: ['customers'], queryFn: () => api.getCustomers() })
-  const { data: passengers = [] } = useQuery({ queryKey: ['passengers'], queryFn: () => api.getPassengers() })
+  const { data: customers = [] } = useQuery({ queryKey: tKey(['customers']), queryFn: () => api.getCustomers() })
+  const { data: passengers = [] } = useQuery({ queryKey: tKey(['passengers']), queryFn: () => api.getPassengers() })
 
   useEffect(() => {
     api.createBookingDraft('replacement', { urgent: true }).then(setDraft).catch((e) => {
@@ -24,8 +26,8 @@ export function UrgentBookingPage() {
   const confirm = useMutation({
     mutationFn: () => api.confirmBookingDraft(draft!),
     onSuccess: (record) => {
-      queryClient.invalidateQueries({ queryKey: ['bookings'] })
-      queryClient.invalidateQueries({ queryKey: ['duties'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['bookings']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['duties']) })
       navigate(`/bookings/${record.id}`)
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Could not confirm'),

@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import type { DriverNoteCategory, DriverProfile } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const NOTE_CATEGORIES: { value: DriverNoteCategory; label: string }[] = [
   { value: 'general', label: 'General' },
@@ -36,7 +38,7 @@ export function DriverNotesAuditTab({
     onSuccess: () => {
       setBody('')
       setVisibleToDriver(false)
-      queryClient.invalidateQueries({ queryKey: ['driver-profile', driver.id] })
+      queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', driver.id]) })
     },
   })
 

@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { CUSTOMER_TYPE_LABELS } from '@/lib/bookings/constants'
-import type { BookingDraft, CustomerBookingContext } from '@/lib/bookings/types'
+import { FUNDING_TYPE_OPTIONS } from '@/lib/bookings/booking-journey-utils'
+import type { BookingDraft, CustomerBookingContext, FundingType } from '@/lib/bookings/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function CustomerStep({
   draft,
@@ -12,12 +15,12 @@ export function CustomerStep({
   onChange: (patch: Partial<BookingDraft>) => void
 }) {
   const { data: customers = [] } = useQuery({
-    queryKey: ['customers'],
+    queryKey: tKey(['customers']),
     queryFn: () => api.getCustomers(),
   })
 
   const { data: context } = useQuery({
-    queryKey: ['customer-booking-context', draft.customerId],
+    queryKey: tKey(['customer-booking-context', draft.customerId]),
     queryFn: () => api.getCustomerBookingContext(draft.customerId!),
     enabled: !!draft.customerId,
   })
@@ -28,6 +31,27 @@ export function CustomerStep({
 
   return (
     <div className="space-y-4">
+      <SectionCard title="Funding" description="Step 2 — who pays for this journey">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {FUNDING_TYPE_OPTIONS.map((opt) => (
+            <label
+              key={opt.id}
+              className={`flex cursor-pointer gap-2 rounded-lg border p-3 text-sm ${
+                draft.fundingType === opt.id ? 'border-command-500 bg-command-50' : 'border-border'
+              }`}
+            >
+              <input
+                type="radio"
+                name="funding-type"
+                checked={(draft.fundingType ?? 'customer_account') === opt.id}
+                onChange={() => onChange({ fundingType: opt.id as FundingType })}
+              />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      </SectionCard>
+
       <SectionCard title="Select customer" description="Search existing customers or link a new account">
         <input
           type="search"

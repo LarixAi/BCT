@@ -5,6 +5,9 @@ import { initialTasks } from "@/data/tasks-fixtures";
 import * as cfx from "@/data/condition-fixtures";
 import { initialAdBlueRefills } from "@/data/adblue-fixtures";
 import { buildDemoOperationalPlan } from "@/data/plan-fixtures";
+import { BCT_MAIN_DEPOT_LAYOUT } from "@veyvio/yard";
+import type { YardHubLayoutSnapshot } from "@veyvio/yard";
+import { bctBays, bctTrips, bctVehicles } from "@/data/bct-yard";
 import type {
   CustodyEvent,
   DamageObservation,
@@ -29,6 +32,9 @@ export type BootstrapDataSource = "mock" | typeof COMMAND_HUB_BOOTSTRAP_SOURCE;
 export interface BootstrapPayload {
   companyId: string;
   depotId: string;
+  depotCode?: string | null;
+  yardMapEnabled?: boolean;
+  yardLayout?: YardHubLayoutSnapshot | null;
   syncedAt: string;
   dataSource?: BootstrapDataSource;
   vehicles: typeof fx.vehicles;
@@ -58,6 +64,53 @@ export interface BootstrapPayload {
 }
 
 export function buildBootstrapPayload(companyId: string, depotId: string, role: YardRole = "yard_manager"): BootstrapPayload {
+  if (depotId === "dep_bct_main") {
+    const yardLayout: YardHubLayoutSnapshot = {
+      layoutId: BCT_MAIN_DEPOT_LAYOUT.id,
+      depotCode: BCT_MAIN_DEPOT_LAYOUT.depotCode,
+      name: BCT_MAIN_DEPOT_LAYOUT.name,
+      canvasWidth: BCT_MAIN_DEPOT_LAYOUT.canvasWidth,
+      canvasHeight: BCT_MAIN_DEPOT_LAYOUT.canvasHeight,
+      yardMapEnabled: true,
+      zones: BCT_MAIN_DEPOT_LAYOUT.zones,
+      bays: BCT_MAIN_DEPOT_LAYOUT.bays,
+      gates: BCT_MAIN_DEPOT_LAYOUT.gates,
+    };
+    return {
+      companyId,
+      depotId,
+      depotCode: "BCT-MAIN",
+      yardMapEnabled: true,
+      yardLayout,
+      syncedAt: new Date().toISOString(),
+      dataSource: "mock",
+      schemaVersion: BOOTSTRAP_SCHEMA_VERSION,
+      vehicles: bctVehicles,
+      bays: bctBays,
+      trips: bctTrips,
+      defects: [],
+      vorCases: [],
+      movements: [],
+      yardChecks: [],
+      equipment: initialVehicleEquipment,
+      depotStock: initialDepotStock,
+      permissions: ROLE_PERMISSIONS[role],
+      shiftWindow: "Day shift",
+      tasks: initialTasks,
+      conditionProfiles: cfx.buildInitialConditionProfiles(bctVehicles.map(v => v.id)),
+      inspections: [],
+      inspectionMedia: [],
+      damageRecords: [],
+      damageObservations: [],
+      damageReviews: [],
+      conditionSnapshots: [],
+      custodyTimeline: [],
+      repairWorkOrders: [],
+      adblueRefills: initialAdBlueRefills,
+      operationalPlan: null,
+    };
+  }
+
   return {
     companyId,
     depotId,

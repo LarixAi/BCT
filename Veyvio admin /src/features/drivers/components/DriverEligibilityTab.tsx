@@ -12,6 +12,8 @@ import type { DriverProfile } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
 import { ActivationResolutionCentre } from './ActivationResolutionCentre'
 import { EligibilityPanel } from './EligibilityPanel'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DriverEligibilityTab({
   driver,
@@ -33,9 +35,9 @@ export function DriverEligibilityTab({
   const [overrideExpires, setOverrideExpires] = useState('')
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['driver-profile', driver.id] })
-    queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['driver-eligibility-exceptions'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', driver.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-eligibility-exceptions']) })
   }
 
   const activate = useMutation({

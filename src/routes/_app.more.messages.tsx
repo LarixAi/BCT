@@ -4,6 +4,9 @@ import { MessageSquare } from "lucide-react";
 import { MoreSubpageLayout } from "@/components/yard/more/MoreSubpageLayout";
 import { yardPageTitle } from "@/components/brand/brand-copy";
 import { useSessionStore } from "@/platform/auth/session-store";
+import { DashboardSurface } from "@/features/home/HomeDashboardPrimitives";
+import { HubCallout, HubEmptyPanel, hubListPanelClass } from "@/features/hub/HubContentPrimitives";
+import { HubPrimaryButton } from "@/features/hub/HubPageHeader";
 
 export const Route = createFileRoute("/_app/more/messages")({
   head: () => ({ meta: [{ title: yardPageTitle("Driver messages") }] }),
@@ -34,6 +37,7 @@ function YardDriverMessagesPage() {
   const [messages, setMessages] = useState<YardMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [selected, setSelected] = useState<YardMessage | null>(null);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
@@ -42,6 +46,7 @@ function YardDriverMessagesPage() {
     void (async () => {
       setLoading(true);
       setError("");
+      setNotice("");
       const base = commandApiBase();
       if (!base || !accessToken || accessToken.startsWith("mock_")) {
         setMessages([]);
@@ -76,6 +81,7 @@ function YardDriverMessagesPage() {
     if (!base || !accessToken || accessToken.startsWith("mock_")) return;
     setSending(true);
     setError("");
+    setNotice("");
     try {
       const res = await fetch(`${base}/yard/messages`, {
         method: "POST",
@@ -92,7 +98,7 @@ function YardDriverMessagesPage() {
       });
       if (!res.ok) throw new Error("Reply could not be sent.");
       setReply("");
-      setError("Reply sent to the driver.");
+      setNotice("Reply sent to the driver.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Reply could not be sent.");
     } finally {
@@ -102,64 +108,73 @@ function YardDriverMessagesPage() {
 
   return (
     <MoreSubpageLayout title="Driver messages" eyebrow="Ops">
-      <p className="text-sm text-muted">
-        Drivers can message Yard from the Driver app. Replies here write back to the same Command thread.
-      </p>
+      <DashboardSurface>
+        <p className="text-sm text-[#667085]">
+          Drivers can message Yard from the Driver app. Replies here write back to the same Command thread.
+        </p>
+      </DashboardSurface>
 
-      {loading ? <p className="text-sm text-muted">Loading…</p> : null}
-      {error ? (
-        <div className="rounded-xs border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">{error}</div>
+      {loading ? (
+        <DashboardSurface>
+          <p className="text-sm text-[#667085]">Loading…</p>
+        </DashboardSurface>
       ) : null}
 
+      {error ? <HubCallout tone="warn">{error}</HubCallout> : null}
+      {notice ? <HubCallout tone="success">{notice}</HubCallout> : null}
+
       {!loading && messages.length === 0 && !error ? (
-        <div className="rounded-xs border border-border bg-white px-4 py-8 text-center">
-          <MessageSquare className="mx-auto size-8 text-primary" />
-          <p className="mt-3 font-bold">No driver messages yet</p>
-          <p className="mt-1 text-sm text-muted">
-            When a driver chooses Yard in Contact ops, the thread appears here and in Admin Yard.
-          </p>
-        </div>
+        <DashboardSurface>
+          <HubEmptyPanel
+            icon={MessageSquare}
+            title="No driver messages yet"
+            description="When a driver chooses Yard in Contact ops, the thread appears here and in Admin Yard."
+          />
+        </DashboardSurface>
       ) : null}
 
       {messages.length > 0 ? (
-        <div className="space-y-3">
-          <div className="overflow-hidden rounded-xs border border-border bg-white divide-y divide-border">
-            {messages.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setSelected(m)}
-                className="w-full px-3 py-3 text-left hover:bg-secondary/40"
-              >
-                <p className="text-sm font-bold">{m.driverName || "Driver"}</p>
-                <p className="text-sm">{m.subject}</p>
-                <p className="mt-0.5 line-clamp-2 text-xs text-muted">{m.body}</p>
-              </button>
-            ))}
-          </div>
+        <>
+          <DashboardSurface>
+            <div className={hubListPanelClass}>
+              {messages.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setSelected(m)}
+                  className={`w-full px-4 py-3 text-left transition-colors hover:bg-[#fcfcfd] ${
+                    selected?.id === m.id ? "bg-[#fcfcfd]" : ""
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-ink">{m.driverName || "Driver"}</p>
+                  <p className="text-sm text-ink">{m.subject}</p>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-[#667085]">{m.body}</p>
+                </button>
+              ))}
+            </div>
+          </DashboardSurface>
 
           {selected ? (
-            <div className="space-y-2 rounded-xs border border-border bg-white p-3">
-              <p className="text-sm font-bold">{selected.subject}</p>
-              <p className="whitespace-pre-wrap text-sm text-muted">{selected.body}</p>
+            <DashboardSurface className="space-y-3">
+              <p className="text-sm font-semibold text-ink">{selected.subject}</p>
+              <p className="whitespace-pre-wrap text-sm text-[#667085]">{selected.body}</p>
               <textarea
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
                 rows={3}
-                className="w-full rounded-xs border border-border px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-[#eaecf0] px-3 py-2 text-sm"
                 placeholder="Reply as Yard…"
               />
-              <button
-                type="button"
+              <HubPrimaryButton
                 disabled={sending || !reply.trim()}
                 onClick={() => void sendReply()}
-                className="w-full rounded-xs bg-primary px-3 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50"
+                className="w-full"
               >
                 {sending ? "Sending…" : "Send Yard reply"}
-              </button>
-            </div>
+              </HubPrimaryButton>
+            </DashboardSurface>
           ) : null}
-        </div>
+        </>
       ) : null}
     </MoreSubpageLayout>
   );

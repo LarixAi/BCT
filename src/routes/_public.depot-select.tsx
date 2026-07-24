@@ -10,12 +10,16 @@ import { yardCopy } from "@/copy/yard-messages";
 import type { Depot } from "@/types/tenancy";
 
 export const Route = createFileRoute("/_public/depot-select")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    switch: search.switch === "1" || search.switch === 1 || search.switch === true,
+  }),
   head: () => ({ meta: [{ title: "Select depot — Veyvio Yard" }] }),
   component: DepotSelectPage,
 });
 
 function DepotSelectPage() {
   const navigate = useNavigate();
+  const { switch: manualSwitch } = Route.useSearch();
   const companyId = useTenancyStore(s => s.companyId);
   const companyName = useTenancyStore(s => s.companyName);
   const selectDepot = useTenancyStore(s => s.selectDepot);
@@ -69,13 +73,13 @@ function DepotSelectPage() {
   }, [accessToken, companyId, companyName]);
 
   useEffect(() => {
-    if (loading || autoBound.current || depots.length !== 1) return;
+    if (loading || autoBound.current || depots.length !== 1 || manualSwitch) return;
     autoBound.current = true;
     selectDepot(depots[0]);
     navigate({ to: "/initial-sync" });
-  }, [loading, depots, selectDepot, navigate]);
+  }, [loading, depots, selectDepot, navigate, manualSwitch]);
 
-  if (!loading && depots.length === 1) {
+  if (!loading && depots.length === 1 && !manualSwitch) {
     return (
       <YardMobileAuthLayout
         title="Opening depot"

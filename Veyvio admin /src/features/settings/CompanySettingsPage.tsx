@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function CompanySettingsPage() {
   const queryClient = useQueryClient()
   const { data: company, isLoading } = useQuery({
-    queryKey: ['company'],
+    queryKey: tKey(['company']),
     queryFn: () => api.getCompany(),
   })
 
@@ -41,7 +43,7 @@ export function CompanySettingsPage() {
         },
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['company'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['company']) })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     },

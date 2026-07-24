@@ -86,7 +86,8 @@ export async function unlockBiometricAppLock(driverId) {
     void reportDriverSecurityEvent("driver.biometric_unlock_failed", { driverId }).catch(() => undefined);
     return {
       ok: false,
-      message: "Authentication cancelled. No changes were made. Try again, or use your password.",
+      message:
+        "Authentication cancelled or timed out. No changes were made. Try again, or use your password.",
     };
   }
 

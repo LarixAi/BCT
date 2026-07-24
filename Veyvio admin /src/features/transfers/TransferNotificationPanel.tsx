@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
 import type { TransferNotificationStatus } from '@/lib/transfers/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const STATUS_LABEL: Record<TransferNotificationStatus['status'], string> = {
   pending: 'Pending',
@@ -24,7 +26,7 @@ const CHANNEL_LABEL: Record<TransferNotificationStatus['channel'], string> = {
 
 export function TransferNotificationPanel({ tripId }: { tripId: string }) {
   const { data: transfers = [] } = useQuery({
-    queryKey: ['transfer-history', tripId],
+    queryKey: tKey(['transfer-history', tripId]),
     queryFn: () => api.getTransferHistory(tripId),
   })
 

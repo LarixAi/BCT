@@ -129,14 +129,16 @@ export async function resolvePlatformRole(userId: string): Promise<string | null
     return String(data.platform_role)
   }
 
-  // Bootstrap first platform operator (empty table or configured email).
-  const bootstrapEmail = (Deno.env.get('VEYVIO_PLATFORM_BOOTSTRAP_EMAIL') ?? 'admin@veyvio.test')
-    .trim()
-    .toLowerCase()
+  const allowBootstrap = Deno.env.get('ALLOW_PLATFORM_BOOTSTRAP') === 'true'
+  if (!allowBootstrap) return null
+
+  const bootstrapEmail = (Deno.env.get('VEYVIO_PLATFORM_BOOTSTRAP_EMAIL') ?? '').trim().toLowerCase()
+  if (!bootstrapEmail || bootstrapEmail === 'admin@veyvio.test') return null
+
   const { data: user } = await admin.from('users').select('email').eq('id', userId).maybeSingle()
   const { count } = await admin.from('platform_users').select('*', { count: 'exact', head: true })
   const email = String(user?.email ?? '').toLowerCase()
-  if ((count ?? 0) === 0 || email === bootstrapEmail) {
+  if ((count ?? 0) === 0 && email === bootstrapEmail) {
     await admin.from('platform_users').upsert({
       user_id: userId,
       platform_role: 'platform_admin',

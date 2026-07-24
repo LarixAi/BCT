@@ -10,6 +10,8 @@ import { InspectionsCalendarTab } from './InspectionsCalendarTab'
 import { InspectionsProvidersTab } from './InspectionsProvidersTab'
 import { InspectionsRegisterTab } from './InspectionsRegisterTab'
 import { ScheduleInspectionPanel } from './ScheduleInspectionPanel'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function resolveTab(raw: string | null): InspectionTab {
   if (raw && INSPECTION_TABS.some((t) => t.id === raw)) return raw as InspectionTab
@@ -26,7 +28,7 @@ export function InspectionsPage() {
   const [showImport, setShowImport] = useState(false)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['inspections-hub'],
+    queryKey: tKey(['inspections-hub']),
     queryFn: () =>
       resolveInspectionsHub({
         fetchLiveHub: () => api.getInspectionsHub(),
@@ -39,7 +41,7 @@ export function InspectionsPage() {
   const source = data?.source
 
   const { data: vehicles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
@@ -74,7 +76,7 @@ export function InspectionsPage() {
         outcome: 'incomplete',
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inspections-hub'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['inspections-hub']) })
       setShowImport(false)
     },
   })

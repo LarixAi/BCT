@@ -10,6 +10,7 @@ import {
   assertCompanyScopedDriver,
   assertCompanyScopedVehicle,
 } from './tenant-guards.ts'
+import { assertRunIdsInCompany } from './tenant-db.ts'
 
 type Row = Record<string, unknown>
 
@@ -204,6 +205,11 @@ export async function createDraftDuty(context: RequestContext, request: Request)
 
   const runIds = Array.isArray(input.runIds) ? input.runIds.filter(Boolean) : []
   if (runIds.length) {
+    try {
+      await assertRunIdsInCompany(context, runIds)
+    } catch {
+      return apiError(404, 'One or more runs were not found in this company', 'not_found')
+    }
     await admin.from('duty_runs').insert(
       runIds.map((runId, index) => ({
         duty_id: duty.id,
@@ -346,6 +352,11 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
   if (Array.isArray(input.runIds)) {
     await admin.from('duty_runs').delete().eq('duty_id', dutyId)
     if (input.runIds.length) {
+      try {
+        await assertRunIdsInCompany(context, input.runIds.filter(Boolean))
+      } catch {
+        return apiError(404, 'One or more runs were not found in this company', 'not_found')
+      }
       await admin.from('duty_runs').insert(
         input.runIds.map((runId, index) => ({
           duty_id: dutyId,

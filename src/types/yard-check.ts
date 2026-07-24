@@ -48,6 +48,23 @@ export interface YardCheckSectionResult {
   photoDataUrls?: string[];
 }
 
+export type YardCheckEvidenceKind =
+  | "odometer"
+  | "signature"
+  | "photo"
+  | "bodywork"
+  | "fuel"
+  | "note"
+  | "video";
+
+export interface YardCheckEvidenceItem {
+  id: string;
+  kind: YardCheckEvidenceKind | string;
+  label: string;
+  imageDataUrl: string;
+  capturedAt?: string;
+}
+
 export interface YardCheckResult {
   id: string;
   vehicleId: string;
@@ -58,6 +75,7 @@ export interface YardCheckResult {
   odometer?: number;
   inspectionId?: string;
   sections: YardCheckSectionResult[];
+  evidence?: YardCheckEvidenceItem[];
   overallPassed: boolean;
   safetyOutcome: CheckSafetyOutcome;
   durationSeconds?: number;

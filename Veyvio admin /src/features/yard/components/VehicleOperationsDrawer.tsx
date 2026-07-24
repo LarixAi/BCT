@@ -7,7 +7,9 @@ import { ACTIVITY_LABELS, CUSTODY_LABELS, PRESENCE_LABELS, READINESS_LABELS } fr
 import { canMarkYardVor, canReleaseFromYard } from '@/lib/yard/permissions'
 import type { YardHubData, YardTask, YardVehicleRow } from '@/lib/yard/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleOperationsDrawer({
   hub,
@@ -30,16 +32,16 @@ export function VehicleOperationsDrawer({
   const [rtsReason, setRtsReason] = useState('')
 
   const { data: vehicleProfile } = useQuery({
-    queryKey: ['vehicle-profile', row.vehicleId],
+    queryKey: tKey(['vehicle-profile', row.vehicleId]),
     queryFn: () => api.getVehicleProfile(row.vehicleId),
   })
 
   const vehicleTasks = hub.tasks.filter((t) => t.vehicleId === row.vehicleId && !['completed', 'cancelled'].includes(t.status))
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['yard-hub', hub.depotId] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profile', row.vehicleId] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['yard-hub', hub.depotId]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', row.vehicleId]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
   }
 
   const markVor = useMutation({

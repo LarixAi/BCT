@@ -15,15 +15,19 @@ import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as PublicUpdateRequiredRouteImport } from './routes/_public.update-required'
 import { Route as PublicSplashRouteImport } from './routes/_public.splash'
 import { Route as PublicSignInRouteImport } from './routes/_public.sign-in'
+import { Route as PublicResetPasswordRouteImport } from './routes/_public.reset-password'
 import { Route as PublicModuleUnavailableRouteImport } from './routes/_public.module-unavailable'
 import { Route as PublicMfaRouteImport } from './routes/_public.mfa'
 import { Route as PublicInitialSyncRouteImport } from './routes/_public.initial-sync'
+import { Route as PublicForgotPasswordRouteImport } from './routes/_public.forgot-password'
 import { Route as PublicDepotSelectRouteImport } from './routes/_public.depot-select'
 import { Route as PublicCompanySelectRouteImport } from './routes/_public.company-select'
 import { Route as PublicBiometricUnlockRouteImport } from './routes/_public.biometric-unlock'
 import { Route as PublicAccountRestrictedRouteImport } from './routes/_public.account-restricted'
 import { Route as AppYardRouteImport } from './routes/_app.yard'
 import { Route as AppVorRouteImport } from './routes/_app.vor'
+import { Route as AppVehicleBodyworkRouteImport } from './routes/_app.vehicle-bodywork'
+import { Route as AppUpcomingRouteImport } from './routes/_app.upcoming'
 import { Route as AppTasksRouteImport } from './routes/_app.tasks'
 import { Route as AppShiftRouteImport } from './routes/_app.shift'
 import { Route as AppScanRouteImport } from './routes/_app.scan'
@@ -37,6 +41,8 @@ import { Route as AppChecksRouteImport } from './routes/_app.checks'
 import { Route as AppArrivalsRouteImport } from './routes/_app.arrivals'
 import { Route as AppYardIndexRouteImport } from './routes/_app.yard.index'
 import { Route as AppVorIndexRouteImport } from './routes/_app.vor.index'
+import { Route as AppVehicleBodyworkIndexRouteImport } from './routes/_app.vehicle-bodywork.index'
+import { Route as AppUpcomingIndexRouteImport } from './routes/_app.upcoming.index'
 import { Route as AppTasksIndexRouteImport } from './routes/_app.tasks.index'
 import { Route as AppMoreIndexRouteImport } from './routes/_app.more.index'
 import { Route as AppInspectionsIndexRouteImport } from './routes/_app.inspections.index'
@@ -46,6 +52,8 @@ import { Route as PublicWelcomeStepRouteImport } from './routes/_public.welcome.
 import { Route as AppYardMapRouteImport } from './routes/_app.yard.map'
 import { Route as AppYardVehicleIdRouteImport } from './routes/_app.yard.$vehicleId'
 import { Route as AppVorCaseIdRouteImport } from './routes/_app.vor.$caseId'
+import { Route as AppVehicleBodyworkReportRouteImport } from './routes/_app.vehicle-bodywork.report'
+import { Route as AppVehicleBodyworkVehicleIdRouteImport } from './routes/_app.vehicle-bodywork.$vehicleId'
 import { Route as AppTasksTaskIdRouteImport } from './routes/_app.tasks.$taskId'
 import { Route as AppSimulateDriverReportRouteImport } from './routes/_app.simulate.driver-report'
 import { Route as AppMoreVehicleChecksRouteImport } from './routes/_app.more.vehicle-checks'
@@ -61,15 +69,18 @@ import { Route as AppInspectionsAnalyticsRouteImport } from './routes/_app.inspe
 import { Route as AppDefectsDefectIdRouteImport } from './routes/_app.defects.$defectId'
 import { Route as AppChecksCheckIdRouteImport } from './routes/_app.checks.$checkId'
 import { Route as AppYardVehicleIdIndexRouteImport } from './routes/_app.yard.$vehicleId.index'
+import { Route as AppVehicleBodyworkVehicleIdIndexRouteImport } from './routes/_app.vehicle-bodywork.$vehicleId.index'
 import { Route as ApiV1YardMutationsRouteImport } from './routes/api/v1/yard/mutations'
 import { Route as ApiV1YardHealthRouteImport } from './routes/api/v1/yard/health'
 import { Route as ApiV1YardBootstrapRouteImport } from './routes/api/v1/yard/bootstrap'
 import { Route as AppYardVehicleIdEquipmentRouteImport } from './routes/_app.yard.$vehicleId.equipment'
 import { Route as AppYardVehicleIdConditionRouteImport } from './routes/_app.yard.$vehicleId.condition'
 import { Route as AppYardVehicleIdCheckRouteImport } from './routes/_app.yard.$vehicleId.check'
+import { Route as AppVehicleBodyworkVehicleIdReportRouteImport } from './routes/_app.vehicle-bodywork.$vehicleId.report'
 import { Route as AppYardVehicleIdConditionInspectRouteImport } from './routes/_app.yard.$vehicleId.condition.inspect'
 import { Route as AppYardVehicleIdConditionCompareRouteImport } from './routes/_app.yard.$vehicleId.condition.compare'
 import { Route as AppYardVehicleIdAdblueRefillRouteImport } from './routes/_app.yard.$vehicleId.adblue.refill'
+import { Route as AppVehicleBodyworkVehicleIdDamageDamageIdRouteImport } from './routes/_app.vehicle-bodywork.$vehicleId.damage.$damageId'
 import { Route as AppYardVehicleIdConditionDamageDamageIdRouteImport } from './routes/_app.yard.$vehicleId.condition.damage.$damageId'
 
 const PublicRoute = PublicRouteImport.update({
@@ -100,6 +111,11 @@ const PublicSignInRoute = PublicSignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => PublicRoute,
 } as any)
+const PublicResetPasswordRoute = PublicResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => PublicRoute,
+} as any)
 const PublicModuleUnavailableRoute = PublicModuleUnavailableRouteImport.update({
   id: '/module-unavailable',
   path: '/module-unavailable',
@@ -113,6 +129,11 @@ const PublicMfaRoute = PublicMfaRouteImport.update({
 const PublicInitialSyncRoute = PublicInitialSyncRouteImport.update({
   id: '/initial-sync',
   path: '/initial-sync',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicForgotPasswordRoute = PublicForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => PublicRoute,
 } as any)
 const PublicDepotSelectRoute = PublicDepotSelectRouteImport.update({
@@ -143,6 +164,16 @@ const AppYardRoute = AppYardRouteImport.update({
 const AppVorRoute = AppVorRouteImport.update({
   id: '/vor',
   path: '/vor',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppVehicleBodyworkRoute = AppVehicleBodyworkRouteImport.update({
+  id: '/vehicle-bodywork',
+  path: '/vehicle-bodywork',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUpcomingRoute = AppUpcomingRouteImport.update({
+  id: '/upcoming',
+  path: '/upcoming',
   getParentRoute: () => AppRoute,
 } as any)
 const AppTasksRoute = AppTasksRouteImport.update({
@@ -210,6 +241,16 @@ const AppVorIndexRoute = AppVorIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppVorRoute,
 } as any)
+const AppVehicleBodyworkIndexRoute = AppVehicleBodyworkIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppVehicleBodyworkRoute,
+} as any)
+const AppUpcomingIndexRoute = AppUpcomingIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppUpcomingRoute,
+} as any)
 const AppTasksIndexRoute = AppTasksIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -255,6 +296,18 @@ const AppVorCaseIdRoute = AppVorCaseIdRouteImport.update({
   path: '/$caseId',
   getParentRoute: () => AppVorRoute,
 } as any)
+const AppVehicleBodyworkReportRoute =
+  AppVehicleBodyworkReportRouteImport.update({
+    id: '/report',
+    path: '/report',
+    getParentRoute: () => AppVehicleBodyworkRoute,
+  } as any)
+const AppVehicleBodyworkVehicleIdRoute =
+  AppVehicleBodyworkVehicleIdRouteImport.update({
+    id: '/$vehicleId',
+    path: '/$vehicleId',
+    getParentRoute: () => AppVehicleBodyworkRoute,
+  } as any)
 const AppTasksTaskIdRoute = AppTasksTaskIdRouteImport.update({
   id: '/$taskId',
   path: '/$taskId',
@@ -332,6 +385,12 @@ const AppYardVehicleIdIndexRoute = AppYardVehicleIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppYardVehicleIdRoute,
 } as any)
+const AppVehicleBodyworkVehicleIdIndexRoute =
+  AppVehicleBodyworkVehicleIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppVehicleBodyworkVehicleIdRoute,
+  } as any)
 const ApiV1YardMutationsRoute = ApiV1YardMutationsRouteImport.update({
   id: '/api/v1/yard/mutations',
   path: '/api/v1/yard/mutations',
@@ -364,6 +423,12 @@ const AppYardVehicleIdCheckRoute = AppYardVehicleIdCheckRouteImport.update({
   path: '/check',
   getParentRoute: () => AppYardVehicleIdRoute,
 } as any)
+const AppVehicleBodyworkVehicleIdReportRoute =
+  AppVehicleBodyworkVehicleIdReportRouteImport.update({
+    id: '/report',
+    path: '/report',
+    getParentRoute: () => AppVehicleBodyworkVehicleIdRoute,
+  } as any)
 const AppYardVehicleIdConditionInspectRoute =
   AppYardVehicleIdConditionInspectRouteImport.update({
     id: '/inspect',
@@ -381,6 +446,12 @@ const AppYardVehicleIdAdblueRefillRoute =
     id: '/adblue/refill',
     path: '/adblue/refill',
     getParentRoute: () => AppYardVehicleIdRoute,
+  } as any)
+const AppVehicleBodyworkVehicleIdDamageDamageIdRoute =
+  AppVehicleBodyworkVehicleIdDamageDamageIdRouteImport.update({
+    id: '/damage/$damageId',
+    path: '/damage/$damageId',
+    getParentRoute: () => AppVehicleBodyworkVehicleIdRoute,
   } as any)
 const AppYardVehicleIdConditionDamageDamageIdRoute =
   AppYardVehicleIdConditionDamageDamageIdRouteImport.update({
@@ -402,15 +473,19 @@ export interface FileRoutesByFullPath {
   '/scan': typeof AppScanRoute
   '/shift': typeof AppShiftRoute
   '/tasks': typeof AppTasksRouteWithChildren
+  '/upcoming': typeof AppUpcomingRouteWithChildren
+  '/vehicle-bodywork': typeof AppVehicleBodyworkRouteWithChildren
   '/vor': typeof AppVorRouteWithChildren
   '/yard': typeof AppYardRouteWithChildren
   '/account-restricted': typeof PublicAccountRestrictedRoute
   '/biometric-unlock': typeof PublicBiometricUnlockRoute
   '/company-select': typeof PublicCompanySelectRoute
   '/depot-select': typeof PublicDepotSelectRoute
+  '/forgot-password': typeof PublicForgotPasswordRoute
   '/initial-sync': typeof PublicInitialSyncRoute
   '/mfa': typeof PublicMfaRoute
   '/module-unavailable': typeof PublicModuleUnavailableRoute
+  '/reset-password': typeof PublicResetPasswordRoute
   '/sign-in': typeof PublicSignInRoute
   '/splash': typeof PublicSplashRoute
   '/update-required': typeof PublicUpdateRequiredRoute
@@ -428,6 +503,8 @@ export interface FileRoutesByFullPath {
   '/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
   '/simulate/driver-report': typeof AppSimulateDriverReportRoute
   '/tasks/$taskId': typeof AppTasksTaskIdRoute
+  '/vehicle-bodywork/$vehicleId': typeof AppVehicleBodyworkVehicleIdRouteWithChildren
+  '/vehicle-bodywork/report': typeof AppVehicleBodyworkReportRoute
   '/vor/$caseId': typeof AppVorCaseIdRoute
   '/yard/$vehicleId': typeof AppYardVehicleIdRouteWithChildren
   '/yard/map': typeof AppYardMapRoute
@@ -437,15 +514,20 @@ export interface FileRoutesByFullPath {
   '/inspections/': typeof AppInspectionsIndexRoute
   '/more/': typeof AppMoreIndexRoute
   '/tasks/': typeof AppTasksIndexRoute
+  '/upcoming/': typeof AppUpcomingIndexRoute
+  '/vehicle-bodywork/': typeof AppVehicleBodyworkIndexRoute
   '/vor/': typeof AppVorIndexRoute
   '/yard/': typeof AppYardIndexRoute
+  '/vehicle-bodywork/$vehicleId/report': typeof AppVehicleBodyworkVehicleIdReportRoute
   '/yard/$vehicleId/check': typeof AppYardVehicleIdCheckRoute
   '/yard/$vehicleId/condition': typeof AppYardVehicleIdConditionRouteWithChildren
   '/yard/$vehicleId/equipment': typeof AppYardVehicleIdEquipmentRoute
   '/api/v1/yard/bootstrap': typeof ApiV1YardBootstrapRoute
   '/api/v1/yard/health': typeof ApiV1YardHealthRoute
   '/api/v1/yard/mutations': typeof ApiV1YardMutationsRoute
+  '/vehicle-bodywork/$vehicleId/': typeof AppVehicleBodyworkVehicleIdIndexRoute
   '/yard/$vehicleId/': typeof AppYardVehicleIdIndexRoute
+  '/vehicle-bodywork/$vehicleId/damage/$damageId': typeof AppVehicleBodyworkVehicleIdDamageDamageIdRoute
   '/yard/$vehicleId/adblue/refill': typeof AppYardVehicleIdAdblueRefillRoute
   '/yard/$vehicleId/condition/compare': typeof AppYardVehicleIdConditionCompareRoute
   '/yard/$vehicleId/condition/inspect': typeof AppYardVehicleIdConditionInspectRoute
@@ -463,9 +545,11 @@ export interface FileRoutesByTo {
   '/biometric-unlock': typeof PublicBiometricUnlockRoute
   '/company-select': typeof PublicCompanySelectRoute
   '/depot-select': typeof PublicDepotSelectRoute
+  '/forgot-password': typeof PublicForgotPasswordRoute
   '/initial-sync': typeof PublicInitialSyncRoute
   '/mfa': typeof PublicMfaRoute
   '/module-unavailable': typeof PublicModuleUnavailableRoute
+  '/reset-password': typeof PublicResetPasswordRoute
   '/sign-in': typeof PublicSignInRoute
   '/splash': typeof PublicSplashRoute
   '/update-required': typeof PublicUpdateRequiredRoute
@@ -483,6 +567,7 @@ export interface FileRoutesByTo {
   '/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
   '/simulate/driver-report': typeof AppSimulateDriverReportRoute
   '/tasks/$taskId': typeof AppTasksTaskIdRoute
+  '/vehicle-bodywork/report': typeof AppVehicleBodyworkReportRoute
   '/vor/$caseId': typeof AppVorCaseIdRoute
   '/yard/map': typeof AppYardMapRoute
   '/welcome/$step': typeof PublicWelcomeStepRoute
@@ -491,15 +576,20 @@ export interface FileRoutesByTo {
   '/inspections': typeof AppInspectionsIndexRoute
   '/more': typeof AppMoreIndexRoute
   '/tasks': typeof AppTasksIndexRoute
+  '/upcoming': typeof AppUpcomingIndexRoute
+  '/vehicle-bodywork': typeof AppVehicleBodyworkIndexRoute
   '/vor': typeof AppVorIndexRoute
   '/yard': typeof AppYardIndexRoute
+  '/vehicle-bodywork/$vehicleId/report': typeof AppVehicleBodyworkVehicleIdReportRoute
   '/yard/$vehicleId/check': typeof AppYardVehicleIdCheckRoute
   '/yard/$vehicleId/condition': typeof AppYardVehicleIdConditionRouteWithChildren
   '/yard/$vehicleId/equipment': typeof AppYardVehicleIdEquipmentRoute
   '/api/v1/yard/bootstrap': typeof ApiV1YardBootstrapRoute
   '/api/v1/yard/health': typeof ApiV1YardHealthRoute
   '/api/v1/yard/mutations': typeof ApiV1YardMutationsRoute
+  '/vehicle-bodywork/$vehicleId': typeof AppVehicleBodyworkVehicleIdIndexRoute
   '/yard/$vehicleId': typeof AppYardVehicleIdIndexRoute
+  '/vehicle-bodywork/$vehicleId/damage/$damageId': typeof AppVehicleBodyworkVehicleIdDamageDamageIdRoute
   '/yard/$vehicleId/adblue/refill': typeof AppYardVehicleIdAdblueRefillRoute
   '/yard/$vehicleId/condition/compare': typeof AppYardVehicleIdConditionCompareRoute
   '/yard/$vehicleId/condition/inspect': typeof AppYardVehicleIdConditionInspectRoute
@@ -520,15 +610,19 @@ export interface FileRoutesById {
   '/_app/scan': typeof AppScanRoute
   '/_app/shift': typeof AppShiftRoute
   '/_app/tasks': typeof AppTasksRouteWithChildren
+  '/_app/upcoming': typeof AppUpcomingRouteWithChildren
+  '/_app/vehicle-bodywork': typeof AppVehicleBodyworkRouteWithChildren
   '/_app/vor': typeof AppVorRouteWithChildren
   '/_app/yard': typeof AppYardRouteWithChildren
   '/_public/account-restricted': typeof PublicAccountRestrictedRoute
   '/_public/biometric-unlock': typeof PublicBiometricUnlockRoute
   '/_public/company-select': typeof PublicCompanySelectRoute
   '/_public/depot-select': typeof PublicDepotSelectRoute
+  '/_public/forgot-password': typeof PublicForgotPasswordRoute
   '/_public/initial-sync': typeof PublicInitialSyncRoute
   '/_public/mfa': typeof PublicMfaRoute
   '/_public/module-unavailable': typeof PublicModuleUnavailableRoute
+  '/_public/reset-password': typeof PublicResetPasswordRoute
   '/_public/sign-in': typeof PublicSignInRoute
   '/_public/splash': typeof PublicSplashRoute
   '/_public/update-required': typeof PublicUpdateRequiredRoute
@@ -547,6 +641,8 @@ export interface FileRoutesById {
   '/_app/more/vehicle-checks': typeof AppMoreVehicleChecksRoute
   '/_app/simulate/driver-report': typeof AppSimulateDriverReportRoute
   '/_app/tasks/$taskId': typeof AppTasksTaskIdRoute
+  '/_app/vehicle-bodywork/$vehicleId': typeof AppVehicleBodyworkVehicleIdRouteWithChildren
+  '/_app/vehicle-bodywork/report': typeof AppVehicleBodyworkReportRoute
   '/_app/vor/$caseId': typeof AppVorCaseIdRoute
   '/_app/yard/$vehicleId': typeof AppYardVehicleIdRouteWithChildren
   '/_app/yard/map': typeof AppYardMapRoute
@@ -556,15 +652,20 @@ export interface FileRoutesById {
   '/_app/inspections/': typeof AppInspectionsIndexRoute
   '/_app/more/': typeof AppMoreIndexRoute
   '/_app/tasks/': typeof AppTasksIndexRoute
+  '/_app/upcoming/': typeof AppUpcomingIndexRoute
+  '/_app/vehicle-bodywork/': typeof AppVehicleBodyworkIndexRoute
   '/_app/vor/': typeof AppVorIndexRoute
   '/_app/yard/': typeof AppYardIndexRoute
+  '/_app/vehicle-bodywork/$vehicleId/report': typeof AppVehicleBodyworkVehicleIdReportRoute
   '/_app/yard/$vehicleId/check': typeof AppYardVehicleIdCheckRoute
   '/_app/yard/$vehicleId/condition': typeof AppYardVehicleIdConditionRouteWithChildren
   '/_app/yard/$vehicleId/equipment': typeof AppYardVehicleIdEquipmentRoute
   '/api/v1/yard/bootstrap': typeof ApiV1YardBootstrapRoute
   '/api/v1/yard/health': typeof ApiV1YardHealthRoute
   '/api/v1/yard/mutations': typeof ApiV1YardMutationsRoute
+  '/_app/vehicle-bodywork/$vehicleId/': typeof AppVehicleBodyworkVehicleIdIndexRoute
   '/_app/yard/$vehicleId/': typeof AppYardVehicleIdIndexRoute
+  '/_app/vehicle-bodywork/$vehicleId/damage/$damageId': typeof AppVehicleBodyworkVehicleIdDamageDamageIdRoute
   '/_app/yard/$vehicleId/adblue/refill': typeof AppYardVehicleIdAdblueRefillRoute
   '/_app/yard/$vehicleId/condition/compare': typeof AppYardVehicleIdConditionCompareRoute
   '/_app/yard/$vehicleId/condition/inspect': typeof AppYardVehicleIdConditionInspectRoute
@@ -585,15 +686,19 @@ export interface FileRouteTypes {
     | '/scan'
     | '/shift'
     | '/tasks'
+    | '/upcoming'
+    | '/vehicle-bodywork'
     | '/vor'
     | '/yard'
     | '/account-restricted'
     | '/biometric-unlock'
     | '/company-select'
     | '/depot-select'
+    | '/forgot-password'
     | '/initial-sync'
     | '/mfa'
     | '/module-unavailable'
+    | '/reset-password'
     | '/sign-in'
     | '/splash'
     | '/update-required'
@@ -611,6 +716,8 @@ export interface FileRouteTypes {
     | '/more/vehicle-checks'
     | '/simulate/driver-report'
     | '/tasks/$taskId'
+    | '/vehicle-bodywork/$vehicleId'
+    | '/vehicle-bodywork/report'
     | '/vor/$caseId'
     | '/yard/$vehicleId'
     | '/yard/map'
@@ -620,15 +727,20 @@ export interface FileRouteTypes {
     | '/inspections/'
     | '/more/'
     | '/tasks/'
+    | '/upcoming/'
+    | '/vehicle-bodywork/'
     | '/vor/'
     | '/yard/'
+    | '/vehicle-bodywork/$vehicleId/report'
     | '/yard/$vehicleId/check'
     | '/yard/$vehicleId/condition'
     | '/yard/$vehicleId/equipment'
     | '/api/v1/yard/bootstrap'
     | '/api/v1/yard/health'
     | '/api/v1/yard/mutations'
+    | '/vehicle-bodywork/$vehicleId/'
     | '/yard/$vehicleId/'
+    | '/vehicle-bodywork/$vehicleId/damage/$damageId'
     | '/yard/$vehicleId/adblue/refill'
     | '/yard/$vehicleId/condition/compare'
     | '/yard/$vehicleId/condition/inspect'
@@ -646,9 +758,11 @@ export interface FileRouteTypes {
     | '/biometric-unlock'
     | '/company-select'
     | '/depot-select'
+    | '/forgot-password'
     | '/initial-sync'
     | '/mfa'
     | '/module-unavailable'
+    | '/reset-password'
     | '/sign-in'
     | '/splash'
     | '/update-required'
@@ -666,6 +780,7 @@ export interface FileRouteTypes {
     | '/more/vehicle-checks'
     | '/simulate/driver-report'
     | '/tasks/$taskId'
+    | '/vehicle-bodywork/report'
     | '/vor/$caseId'
     | '/yard/map'
     | '/welcome/$step'
@@ -674,15 +789,20 @@ export interface FileRouteTypes {
     | '/inspections'
     | '/more'
     | '/tasks'
+    | '/upcoming'
+    | '/vehicle-bodywork'
     | '/vor'
     | '/yard'
+    | '/vehicle-bodywork/$vehicleId/report'
     | '/yard/$vehicleId/check'
     | '/yard/$vehicleId/condition'
     | '/yard/$vehicleId/equipment'
     | '/api/v1/yard/bootstrap'
     | '/api/v1/yard/health'
     | '/api/v1/yard/mutations'
+    | '/vehicle-bodywork/$vehicleId'
     | '/yard/$vehicleId'
+    | '/vehicle-bodywork/$vehicleId/damage/$damageId'
     | '/yard/$vehicleId/adblue/refill'
     | '/yard/$vehicleId/condition/compare'
     | '/yard/$vehicleId/condition/inspect'
@@ -702,15 +822,19 @@ export interface FileRouteTypes {
     | '/_app/scan'
     | '/_app/shift'
     | '/_app/tasks'
+    | '/_app/upcoming'
+    | '/_app/vehicle-bodywork'
     | '/_app/vor'
     | '/_app/yard'
     | '/_public/account-restricted'
     | '/_public/biometric-unlock'
     | '/_public/company-select'
     | '/_public/depot-select'
+    | '/_public/forgot-password'
     | '/_public/initial-sync'
     | '/_public/mfa'
     | '/_public/module-unavailable'
+    | '/_public/reset-password'
     | '/_public/sign-in'
     | '/_public/splash'
     | '/_public/update-required'
@@ -729,6 +853,8 @@ export interface FileRouteTypes {
     | '/_app/more/vehicle-checks'
     | '/_app/simulate/driver-report'
     | '/_app/tasks/$taskId'
+    | '/_app/vehicle-bodywork/$vehicleId'
+    | '/_app/vehicle-bodywork/report'
     | '/_app/vor/$caseId'
     | '/_app/yard/$vehicleId'
     | '/_app/yard/map'
@@ -738,15 +864,20 @@ export interface FileRouteTypes {
     | '/_app/inspections/'
     | '/_app/more/'
     | '/_app/tasks/'
+    | '/_app/upcoming/'
+    | '/_app/vehicle-bodywork/'
     | '/_app/vor/'
     | '/_app/yard/'
+    | '/_app/vehicle-bodywork/$vehicleId/report'
     | '/_app/yard/$vehicleId/check'
     | '/_app/yard/$vehicleId/condition'
     | '/_app/yard/$vehicleId/equipment'
     | '/api/v1/yard/bootstrap'
     | '/api/v1/yard/health'
     | '/api/v1/yard/mutations'
+    | '/_app/vehicle-bodywork/$vehicleId/'
     | '/_app/yard/$vehicleId/'
+    | '/_app/vehicle-bodywork/$vehicleId/damage/$damageId'
     | '/_app/yard/$vehicleId/adblue/refill'
     | '/_app/yard/$vehicleId/condition/compare'
     | '/_app/yard/$vehicleId/condition/inspect'
@@ -805,6 +936,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicSignInRouteImport
       parentRoute: typeof PublicRoute
     }
+    '/_public/reset-password': {
+      id: '/_public/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof PublicResetPasswordRouteImport
+      parentRoute: typeof PublicRoute
+    }
     '/_public/module-unavailable': {
       id: '/_public/module-unavailable'
       path: '/module-unavailable'
@@ -824,6 +962,13 @@ declare module '@tanstack/react-router' {
       path: '/initial-sync'
       fullPath: '/initial-sync'
       preLoaderRoute: typeof PublicInitialSyncRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/forgot-password': {
+      id: '/_public/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof PublicForgotPasswordRouteImport
       parentRoute: typeof PublicRoute
     }
     '/_public/depot-select': {
@@ -866,6 +1011,20 @@ declare module '@tanstack/react-router' {
       path: '/vor'
       fullPath: '/vor'
       preLoaderRoute: typeof AppVorRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/vehicle-bodywork': {
+      id: '/_app/vehicle-bodywork'
+      path: '/vehicle-bodywork'
+      fullPath: '/vehicle-bodywork'
+      preLoaderRoute: typeof AppVehicleBodyworkRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/upcoming': {
+      id: '/_app/upcoming'
+      path: '/upcoming'
+      fullPath: '/upcoming'
+      preLoaderRoute: typeof AppUpcomingRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/tasks': {
@@ -959,6 +1118,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppVorIndexRouteImport
       parentRoute: typeof AppVorRoute
     }
+    '/_app/vehicle-bodywork/': {
+      id: '/_app/vehicle-bodywork/'
+      path: '/'
+      fullPath: '/vehicle-bodywork/'
+      preLoaderRoute: typeof AppVehicleBodyworkIndexRouteImport
+      parentRoute: typeof AppVehicleBodyworkRoute
+    }
+    '/_app/upcoming/': {
+      id: '/_app/upcoming/'
+      path: '/'
+      fullPath: '/upcoming/'
+      preLoaderRoute: typeof AppUpcomingIndexRouteImport
+      parentRoute: typeof AppUpcomingRoute
+    }
     '/_app/tasks/': {
       id: '/_app/tasks/'
       path: '/'
@@ -1021,6 +1194,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/vor/$caseId'
       preLoaderRoute: typeof AppVorCaseIdRouteImport
       parentRoute: typeof AppVorRoute
+    }
+    '/_app/vehicle-bodywork/report': {
+      id: '/_app/vehicle-bodywork/report'
+      path: '/report'
+      fullPath: '/vehicle-bodywork/report'
+      preLoaderRoute: typeof AppVehicleBodyworkReportRouteImport
+      parentRoute: typeof AppVehicleBodyworkRoute
+    }
+    '/_app/vehicle-bodywork/$vehicleId': {
+      id: '/_app/vehicle-bodywork/$vehicleId'
+      path: '/$vehicleId'
+      fullPath: '/vehicle-bodywork/$vehicleId'
+      preLoaderRoute: typeof AppVehicleBodyworkVehicleIdRouteImport
+      parentRoute: typeof AppVehicleBodyworkRoute
     }
     '/_app/tasks/$taskId': {
       id: '/_app/tasks/$taskId'
@@ -1127,6 +1314,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppYardVehicleIdIndexRouteImport
       parentRoute: typeof AppYardVehicleIdRoute
     }
+    '/_app/vehicle-bodywork/$vehicleId/': {
+      id: '/_app/vehicle-bodywork/$vehicleId/'
+      path: '/'
+      fullPath: '/vehicle-bodywork/$vehicleId/'
+      preLoaderRoute: typeof AppVehicleBodyworkVehicleIdIndexRouteImport
+      parentRoute: typeof AppVehicleBodyworkVehicleIdRoute
+    }
     '/api/v1/yard/mutations': {
       id: '/api/v1/yard/mutations'
       path: '/api/v1/yard/mutations'
@@ -1169,6 +1363,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppYardVehicleIdCheckRouteImport
       parentRoute: typeof AppYardVehicleIdRoute
     }
+    '/_app/vehicle-bodywork/$vehicleId/report': {
+      id: '/_app/vehicle-bodywork/$vehicleId/report'
+      path: '/report'
+      fullPath: '/vehicle-bodywork/$vehicleId/report'
+      preLoaderRoute: typeof AppVehicleBodyworkVehicleIdReportRouteImport
+      parentRoute: typeof AppVehicleBodyworkVehicleIdRoute
+    }
     '/_app/yard/$vehicleId/condition/inspect': {
       id: '/_app/yard/$vehicleId/condition/inspect'
       path: '/inspect'
@@ -1189,6 +1390,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/yard/$vehicleId/adblue/refill'
       preLoaderRoute: typeof AppYardVehicleIdAdblueRefillRouteImport
       parentRoute: typeof AppYardVehicleIdRoute
+    }
+    '/_app/vehicle-bodywork/$vehicleId/damage/$damageId': {
+      id: '/_app/vehicle-bodywork/$vehicleId/damage/$damageId'
+      path: '/damage/$damageId'
+      fullPath: '/vehicle-bodywork/$vehicleId/damage/$damageId'
+      preLoaderRoute: typeof AppVehicleBodyworkVehicleIdDamageDamageIdRouteImport
+      parentRoute: typeof AppVehicleBodyworkVehicleIdRoute
     }
     '/_app/yard/$vehicleId/condition/damage/$damageId': {
       id: '/_app/yard/$vehicleId/condition/damage/$damageId'
@@ -1285,6 +1493,55 @@ const AppTasksRouteWithChildren = AppTasksRoute._addFileChildren(
   AppTasksRouteChildren,
 )
 
+interface AppUpcomingRouteChildren {
+  AppUpcomingIndexRoute: typeof AppUpcomingIndexRoute
+}
+
+const AppUpcomingRouteChildren: AppUpcomingRouteChildren = {
+  AppUpcomingIndexRoute: AppUpcomingIndexRoute,
+}
+
+const AppUpcomingRouteWithChildren = AppUpcomingRoute._addFileChildren(
+  AppUpcomingRouteChildren,
+)
+
+interface AppVehicleBodyworkVehicleIdRouteChildren {
+  AppVehicleBodyworkVehicleIdReportRoute: typeof AppVehicleBodyworkVehicleIdReportRoute
+  AppVehicleBodyworkVehicleIdIndexRoute: typeof AppVehicleBodyworkVehicleIdIndexRoute
+  AppVehicleBodyworkVehicleIdDamageDamageIdRoute: typeof AppVehicleBodyworkVehicleIdDamageDamageIdRoute
+}
+
+const AppVehicleBodyworkVehicleIdRouteChildren: AppVehicleBodyworkVehicleIdRouteChildren =
+  {
+    AppVehicleBodyworkVehicleIdReportRoute:
+      AppVehicleBodyworkVehicleIdReportRoute,
+    AppVehicleBodyworkVehicleIdIndexRoute:
+      AppVehicleBodyworkVehicleIdIndexRoute,
+    AppVehicleBodyworkVehicleIdDamageDamageIdRoute:
+      AppVehicleBodyworkVehicleIdDamageDamageIdRoute,
+  }
+
+const AppVehicleBodyworkVehicleIdRouteWithChildren =
+  AppVehicleBodyworkVehicleIdRoute._addFileChildren(
+    AppVehicleBodyworkVehicleIdRouteChildren,
+  )
+
+interface AppVehicleBodyworkRouteChildren {
+  AppVehicleBodyworkVehicleIdRoute: typeof AppVehicleBodyworkVehicleIdRouteWithChildren
+  AppVehicleBodyworkReportRoute: typeof AppVehicleBodyworkReportRoute
+  AppVehicleBodyworkIndexRoute: typeof AppVehicleBodyworkIndexRoute
+}
+
+const AppVehicleBodyworkRouteChildren: AppVehicleBodyworkRouteChildren = {
+  AppVehicleBodyworkVehicleIdRoute:
+    AppVehicleBodyworkVehicleIdRouteWithChildren,
+  AppVehicleBodyworkReportRoute: AppVehicleBodyworkReportRoute,
+  AppVehicleBodyworkIndexRoute: AppVehicleBodyworkIndexRoute,
+}
+
+const AppVehicleBodyworkRouteWithChildren =
+  AppVehicleBodyworkRoute._addFileChildren(AppVehicleBodyworkRouteChildren)
+
 interface AppVorRouteChildren {
   AppVorCaseIdRoute: typeof AppVorCaseIdRoute
   AppVorIndexRoute: typeof AppVorIndexRoute
@@ -1365,6 +1622,8 @@ interface AppRouteChildren {
   AppScanRoute: typeof AppScanRoute
   AppShiftRoute: typeof AppShiftRoute
   AppTasksRoute: typeof AppTasksRouteWithChildren
+  AppUpcomingRoute: typeof AppUpcomingRouteWithChildren
+  AppVehicleBodyworkRoute: typeof AppVehicleBodyworkRouteWithChildren
   AppVorRoute: typeof AppVorRouteWithChildren
   AppYardRoute: typeof AppYardRouteWithChildren
   AppIndexRoute: typeof AppIndexRoute
@@ -1383,6 +1642,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppScanRoute: AppScanRoute,
   AppShiftRoute: AppShiftRoute,
   AppTasksRoute: AppTasksRouteWithChildren,
+  AppUpcomingRoute: AppUpcomingRouteWithChildren,
+  AppVehicleBodyworkRoute: AppVehicleBodyworkRouteWithChildren,
   AppVorRoute: AppVorRouteWithChildren,
   AppYardRoute: AppYardRouteWithChildren,
   AppIndexRoute: AppIndexRoute,
@@ -1396,9 +1657,11 @@ interface PublicRouteChildren {
   PublicBiometricUnlockRoute: typeof PublicBiometricUnlockRoute
   PublicCompanySelectRoute: typeof PublicCompanySelectRoute
   PublicDepotSelectRoute: typeof PublicDepotSelectRoute
+  PublicForgotPasswordRoute: typeof PublicForgotPasswordRoute
   PublicInitialSyncRoute: typeof PublicInitialSyncRoute
   PublicMfaRoute: typeof PublicMfaRoute
   PublicModuleUnavailableRoute: typeof PublicModuleUnavailableRoute
+  PublicResetPasswordRoute: typeof PublicResetPasswordRoute
   PublicSignInRoute: typeof PublicSignInRoute
   PublicSplashRoute: typeof PublicSplashRoute
   PublicUpdateRequiredRoute: typeof PublicUpdateRequiredRoute
@@ -1410,9 +1673,11 @@ const PublicRouteChildren: PublicRouteChildren = {
   PublicBiometricUnlockRoute: PublicBiometricUnlockRoute,
   PublicCompanySelectRoute: PublicCompanySelectRoute,
   PublicDepotSelectRoute: PublicDepotSelectRoute,
+  PublicForgotPasswordRoute: PublicForgotPasswordRoute,
   PublicInitialSyncRoute: PublicInitialSyncRoute,
   PublicMfaRoute: PublicMfaRoute,
   PublicModuleUnavailableRoute: PublicModuleUnavailableRoute,
+  PublicResetPasswordRoute: PublicResetPasswordRoute,
   PublicSignInRoute: PublicSignInRoute,
   PublicSplashRoute: PublicSplashRoute,
   PublicUpdateRequiredRoute: PublicUpdateRequiredRoute,

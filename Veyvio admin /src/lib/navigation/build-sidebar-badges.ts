@@ -3,9 +3,10 @@ import type { DriverDirectorySummary } from '@/lib/drivers/types'
 import type { DutyRecord, MessageRecord } from '@/lib/api/types'
 import type { MaintenanceHubData } from '@/lib/maintenance/types'
 import { isOpenException } from '@/lib/exceptions/exception-filters'
-import { runSummary, tripSummary } from '@/lib/ops/runs-trips-schedule'
+import { runSummary } from '@/lib/ops/runs-trips-schedule'
 import type { OperationalException } from '@/lib/types'
 import type { OperationalTrip } from '@/lib/transfers/types'
+import { flattenTripsToJobs } from '@/lib/operations/job-register'
 import type { VehicleDirectorySummary } from '@/lib/vehicles/types'
 
 export type SidebarBadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
@@ -73,15 +74,11 @@ export function buildSidebarBadges(input: SidebarBadgeInput): SidebarBadgeMap {
 
   put('/bookings', badge(countBookingAttention(input.bookings), 'warning'))
 
+  const jobRows = flattenTripsToJobs(input.trips ?? [])
+  put('/jobs', badge(jobRows.filter((j) => j.status === 'unstarted' || j.status === 'waiting').length, 'warning'))
+
   const runs = runSummary(input.duties ?? [])
   put('/dispatch', badge(runs.unassigned, 'warning'))
-  put('/runs', badge(runs.active, 'info'))
-
-  const trips = tripSummary(input.trips ?? [])
-  put('Trips', badge(trips.total))
-  put('/trips?status=active', badge(trips.active, 'info'))
-  put('/trips?status=completed', badge(trips.complete))
-  put('/trips?status=cancelled', badge(trips.cancelled, trips.cancelled > 0 ? 'danger' : undefined))
 
   const drivers = input.driversSummary
   if (drivers) {

@@ -15,9 +15,11 @@ import type {
 import { api } from '@/lib/api/client'
 import type { DutyDetailRecord } from '@/lib/api/types'
 import type { OperationalTrip } from '@/lib/transfers/types'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { cn } from '@/lib/cn'
 import { MoveJourneyPanel } from './MoveJourneyPanel'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type Mode = 'view' | 'edit' | 'confirm'
 
@@ -63,13 +65,13 @@ export function JourneySequencePanel({
     error,
     refetch,
   } = useQuery({
-    queryKey: [
+    queryKey: tKey([
       'journey-sequence',
       tripId ?? duty?.id ?? 'none',
       initialTrip?.manifestVersion,
       initialTrip?.jobs?.length ?? 0,
       duty?.route?.stops?.length ?? 0,
-    ],
+    ]),
     queryFn: async () => {
       const project = async (trip: OperationalTrip) => {
         if (!trip.jobs?.length && duty) {
@@ -137,7 +139,7 @@ export function JourneySequencePanel({
   const activeTripId = workspace?.tripId ?? tripId ?? ''
 
   const { data: audit = [] } = useQuery({
-    queryKey: ['journey-sequence-audit', activeTripId],
+    queryKey: tKey(['journey-sequence-audit', activeTripId]),
     queryFn: () => mockJourneySequenceApi.listAudit(activeTripId),
     enabled: !!activeTripId,
   })
@@ -157,16 +159,16 @@ export function JourneySequencePanel({
   }, [workspace, mode, draftOrder, activeTripId])
 
   const previewQuery = useQuery({
-    queryKey: ['journey-sequence-preview', activeTripId, order, linkedDecision],
+    queryKey: tKey(['journey-sequence-preview', activeTripId, order, linkedDecision]),
     queryFn: () => mockJourneySequenceApi.previewReorder(activeTripId, order, linkedDecision),
     enabled: mode === 'confirm' && order.length > 0 && !!activeTripId,
   })
 
   const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['journey-sequence'] })
-    queryClient.invalidateQueries({ queryKey: ['journey-sequence-audit', activeTripId] })
-    queryClient.invalidateQueries({ queryKey: ['operational-trip', activeTripId] })
-    queryClient.invalidateQueries({ queryKey: ['assignment-history', activeTripId] })
+    queryClient.invalidateQueries({ queryKey: tKey(['journey-sequence']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['journey-sequence-audit', activeTripId]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['operational-trip', activeTripId]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['assignment-history', activeTripId]) })
   }
 
   const commit = useMutation({

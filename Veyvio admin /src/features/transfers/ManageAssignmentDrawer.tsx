@@ -18,7 +18,9 @@ import type {
 } from '@/lib/transfers/types'
 import { hasBlockingTransferErrors, hasTransferWarnings, getJobsInScope, requiresHandoverRecording } from '@/lib/transfers/validation'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const STEPS = [
   'What to transfer',
@@ -59,7 +61,7 @@ export function ManageAssignmentDrawer({
   const [error, setError] = useState('')
 
   const { data: loadedTrip, isLoading: tripLoading, isError: tripFailed } = useQuery({
-    queryKey: ['operational-trip', tripId],
+    queryKey: tKey(['operational-trip', tripId]),
     queryFn: () => api.getOperationalTrip(tripId),
     retry: false,
     enabled: Boolean(tripId) && !initialTrip,
@@ -68,7 +70,7 @@ export function ManageAssignmentDrawer({
   const trip = loadedTrip ?? initialTrip ?? null
 
   const { data: loadedPosition, isLoading: positionLoading } = useQuery({
-    queryKey: ['operational-position', tripId],
+    queryKey: tKey(['operational-position', tripId]),
     queryFn: () => api.getOperationalPosition(tripId),
     retry: false,
     enabled: Boolean(tripId),
@@ -81,14 +83,14 @@ export function ManageAssignmentDrawer({
   }, [loadedPosition, trip])
 
   const { data: candidates = [] } = useQuery({
-    queryKey: ['transfer-candidates', tripId],
+    queryKey: tKey(['transfer-candidates', tripId]),
     queryFn: () => api.getTransferCandidates(tripId),
     enabled: step >= 2,
     retry: false,
   })
 
   const { data: otherTrips = [] } = useQuery({
-    queryKey: ['operational-trips'],
+    queryKey: tKey(['operational-trips']),
     queryFn: () => api.getOperationalTrips(),
     enabled: scope === 'selected_jobs' || scope === 'remaining_jobs',
   })
@@ -131,14 +133,14 @@ export function ManageAssignmentDrawer({
   ])
 
   const { data: validation } = useQuery({
-    queryKey: ['transfer-validation', draftInput],
+    queryKey: tKey(['transfer-validation', draftInput]),
     queryFn: () => api.validateTransfer(draftInput!),
     enabled: !!draftInput && step >= 3,
     retry: false,
   })
 
   const { data: impact } = useQuery({
-    queryKey: ['transfer-impact', draftInput],
+    queryKey: tKey(['transfer-impact', draftInput]),
     queryFn: () => api.previewTransferImpact(draftInput!),
     enabled: !!draftInput && step >= 5,
     retry: false,
@@ -147,11 +149,11 @@ export function ManageAssignmentDrawer({
   const commit = useMutation({
     mutationFn: () => api.commitTransfer(draftInput!, `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['operational-trip', tripId] })
-      queryClient.invalidateQueries({ queryKey: ['operational-position', tripId] })
-      queryClient.invalidateQueries({ queryKey: ['assignment-history', tripId] })
-      queryClient.invalidateQueries({ queryKey: ['duties'] })
-      queryClient.invalidateQueries({ queryKey: ['live-dispatch'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['operational-trip', tripId]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['operational-position', tripId]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['assignment-history', tripId]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['duties']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['live-dispatch']) })
       onComplete?.()
       onClose()
     },

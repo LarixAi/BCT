@@ -7,6 +7,8 @@ import type { VehicleProfile } from '@/lib/vehicles/types'
 import { VehicleVorEpisodeCard } from './VehicleVorEpisodeCard'
 import { VehicleFuelCostsPanel } from '@/features/fleet-resources/VehicleFuelCostsPanel'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function money(value: number) {
   return `£${value.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
@@ -14,11 +16,11 @@ function money(value: number) {
 
 export function VehicleCostsTab({ vehicle }: { vehicle: VehicleProfile }) {
   const { data: adblueRaw = [] } = useQuery({
-    queryKey: ['vehicle-adblue', vehicle.id],
+    queryKey: tKey(['vehicle-adblue', vehicle.id]),
     queryFn: () => api.getVehicleAdBlueRecords(vehicle.id),
   })
   const { data: fleet } = useQuery({
-    queryKey: ['fleet-resources-hub'],
+    queryKey: tKey(['fleet-resources-hub']),
     queryFn: () =>
       resolveFleetResourcesHub({
         fetchLiveHub: () => api.getFleetResourcesHub(),

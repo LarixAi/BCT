@@ -13,7 +13,13 @@ export function useSyncLifecycle() {
   const wasOfflineRef = useRef(!isOnline());
 
   useEffect(() => {
-    void hydrate();
+    void hydrate().then(() => {
+      if (!isOnline()) return;
+      const { pendingCount } = useSyncStore.getState();
+      if (pendingCount > 0) {
+        void processOutbox();
+      }
+    });
   }, [hydrate]);
 
   useEffect(() => {

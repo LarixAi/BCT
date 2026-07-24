@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { AuthenticatorQr } from '@/features/auth/AuthenticatorQr'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type SupportGrant = {
   id: string
@@ -40,15 +42,15 @@ export function SecuritySettingsPage() {
   const [mfaConfirmCode, setMfaConfirmCode] = useState('')
 
   const grants = useQuery({
-    queryKey: ['support-grants'],
+    queryKey: tKey(['support-grants']),
     queryFn: () => api.listSupportGrants() as Promise<SupportGrant[]>,
   })
   const retention = useQuery({
-    queryKey: ['retention-policies'],
+    queryKey: tKey(['retention-policies']),
     queryFn: () => api.listRetentionPolicies() as Promise<RetentionPolicy[]>,
   })
   const exports = useQuery({
-    queryKey: ['data-exports'],
+    queryKey: tKey(['data-exports']),
     queryFn: () => api.listDataExports() as Promise<ExportJob[]>,
   })
 
@@ -89,7 +91,7 @@ export function SecuritySettingsPage() {
       setReason('')
       setTicket('')
       setMessage('Time-boxed support access granted. Activity is audited.')
-      queryClient.invalidateQueries({ queryKey: ['support-grants'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['support-grants']) })
     },
     onError: (err) => setMessage(err instanceof Error ? err.message : 'Support grant failed'),
   })
@@ -98,7 +100,7 @@ export function SecuritySettingsPage() {
     mutationFn: () => api.requestDataExport('company_full'),
     onSuccess: () => {
       setMessage('Company data export queued. You will see status below when ready.')
-      queryClient.invalidateQueries({ queryKey: ['data-exports'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['data-exports']) })
     },
     onError: (err) => setMessage(err instanceof Error ? err.message : 'Export request failed'),
   })

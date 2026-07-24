@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import DriverOperationalBottomNav from "./DriverOperationalBottomNav";
+import DriverPageLoader from "./DriverPageLoader";
 import { DRIVER_CONTENT_ABOVE_NAV, DRIVER_SAFE_BOTTOM } from "@/lib/driverSafeArea";
 import { op } from "@/lib/driver-operational-theme";
 import { DriverChromeContext } from "@/lib/driverChromeContext";
@@ -51,7 +52,15 @@ export default function DriverOperationalShell() {
             paddingBottom: showNav ? DRIVER_CONTENT_ABOVE_NAV : `calc(20px + ${DRIVER_SAFE_BOTTOM})`,
           }}
         >
-          <Outlet />
+          <Suspense
+            fallback={
+              <div className="flex min-h-[40vh] items-center justify-center">
+                <DriverPageLoader />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </div>
         {showNav ? <DriverOperationalBottomNav /> : null}
       </div>

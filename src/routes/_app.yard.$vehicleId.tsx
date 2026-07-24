@@ -22,7 +22,7 @@ function VehicleLayout() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4 pb-2 sm:space-y-6 sm:pb-4">
       {showTabs && vehicle && <VehicleTabBar vehicle={vehicle} />}
       <Outlet />
     </div>

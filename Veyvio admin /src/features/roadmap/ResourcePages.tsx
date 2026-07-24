@@ -4,6 +4,8 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type ResourceRow = Record<string, unknown>
 type Column = { key: string; label: string }
@@ -74,7 +76,7 @@ function ResourcePage({ definition }: { definition: ResourcePageDefinition }) {
     : baseEndpoint
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['command-resource', endpoint],
+    queryKey: tKey(['command-resource', endpoint]),
     queryFn: () => api.getCommandResource<unknown>(endpoint),
   })
   const rows = useMemo(() => rowsFromData(data, definition.objectKey), [data, definition.objectKey])

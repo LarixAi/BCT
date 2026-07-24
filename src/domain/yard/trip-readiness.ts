@@ -21,7 +21,7 @@ export function recomputeTrip(
     if (vehicle.status === "VOR") blockers.push("VOR");
     else if (vehicle.status === "In Workshop") blockers.push("Vehicle in workshop");
     else if (vehicle.status !== "On Departure Line") blockers.push("Not on departure line");
-    if (vehicle.fuelPct < 25) blockers.push("Fuel low");
+    if (vehicle.fuelPct != null && vehicle.fuelPct < 25) blockers.push("Fuel low");
     if (!vehicle.lastCheckPassed) blockers.push("Check missing");
     const readiness = computeReadiness(vehicle, equipment[vehicle.id]);
     if (readiness.state === "blocked") blockers.push("Equipment non-compliant");

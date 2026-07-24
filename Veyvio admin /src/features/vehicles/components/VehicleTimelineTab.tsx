@@ -11,15 +11,17 @@ import {
 } from '@/lib/vehicles/vehicle-timeline'
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function VehicleTimelineTab({ vehicle }: { vehicle: VehicleProfile }) {
   const [filter, setFilter] = useState<VehicleTimelineCategory>('all')
   const { data: adblueRaw = [] } = useQuery({
-    queryKey: ['vehicle-adblue', vehicle.id],
+    queryKey: tKey(['vehicle-adblue', vehicle.id]),
     queryFn: () => api.getVehicleAdBlueRecords(vehicle.id),
   })
   const { data: reports = [] } = useQuery({
-    queryKey: ['vehicle-reports', vehicle.id],
+    queryKey: tKey(['vehicle-reports', vehicle.id]),
     queryFn: () => api.getVehicleReports({ vehicleId: vehicle.id }),
   })
 

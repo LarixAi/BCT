@@ -130,7 +130,7 @@ function toRunRow(v: LiveDispatchVehicle, now: Date): LiveRunRow {
     escortRequired: false,
     latitude: v.lastLatitude,
     longitude: v.lastLongitude,
-    href: `/live-operations?duty=${v.dutyId}`,
+    href: `/runs/${v.dutyId}`,
   }
 }
 

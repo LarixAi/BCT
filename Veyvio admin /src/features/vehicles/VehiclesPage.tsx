@@ -10,6 +10,8 @@ import {
 } from '@/lib/vehicles/constants'
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type ListFilter =
   | 'all'
@@ -39,12 +41,12 @@ export function VehiclesPage() {
   }
 
   const { data: vehicles = [], isLoading } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
 
   const { data: summary } = useQuery({
-    queryKey: ['vehicle-directory-summary'],
+    queryKey: tKey(['vehicle-directory-summary']),
     queryFn: () => api.getVehicleDirectorySummary(),
   })
 

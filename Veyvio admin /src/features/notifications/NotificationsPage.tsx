@@ -13,6 +13,8 @@ import {
 } from '@/lib/notifications/build-notifications'
 import { NOTIFICATION_TABS, type NotificationTabId } from '@/lib/notifications/catalog'
 import type { NotificationItem } from '@/lib/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type SummaryFocus = 'unread' | 'action' | 'critical' | 'assigned' | null
 
@@ -25,7 +27,7 @@ export function NotificationsPage() {
   const [localRead, setLocalRead] = useState<Record<string, boolean>>({})
 
   const { data: apiNotifications = [], isLoading, error, isError, refetch, isFetching } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: tKey(['notifications']),
     queryFn: () => api.getNotifications(),
     refetchInterval: 60_000,
   })
@@ -54,7 +56,7 @@ export function NotificationsPage() {
         for (const n of inbox) next[n.id] = true
         return next
       })
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['notifications']) })
     },
   })
 
@@ -62,7 +64,7 @@ export function NotificationsPage() {
     mutationFn: (id: string) => api.markNotificationRead(id),
     onSuccess: (_data, id) => {
       setLocalRead((prev) => ({ ...prev, [id]: true }))
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['notifications']) })
     },
   })
 

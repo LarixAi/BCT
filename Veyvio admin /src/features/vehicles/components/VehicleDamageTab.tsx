@@ -4,6 +4,8 @@ import { SectionCard } from '@/components/ui'
 import { DAMAGE_CLASSIFICATION_LABELS, DAMAGE_ZONES, zoneLabel } from '@/lib/vehicles/damage'
 import type { DamageClassification, DamageZone, ReportDamageInput, VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
 
@@ -20,7 +22,7 @@ export function VehicleDamageTab({ vehicle, actorName }: { vehicle: VehicleProfi
   const [imageError, setImageError] = useState('')
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profile', vehicle.id] })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', vehicle.id]) })
   }
 
   const report = useMutation({

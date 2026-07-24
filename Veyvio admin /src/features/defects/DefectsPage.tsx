@@ -11,7 +11,9 @@ import { PriorityAlertPanel } from './components/PriorityAlertPanel'
 import { ReportDefectPanel } from './components/ReportDefectPanel'
 import { api } from '@/lib/api/client'
 import { safeDefectsHub } from '@/lib/api/safe-hubs'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DefectsPage() {
   const { user } = useAuth()
@@ -28,7 +30,7 @@ export function DefectsPage() {
   const canReport = canReportDefect(permissions)
 
   const { data: hub, isLoading, error, isError } = useQuery({
-    queryKey: ['defects-hub'],
+    queryKey: tKey(['defects-hub']),
     queryFn: () => api.getDefectsHub(),
   })
 
@@ -48,7 +50,7 @@ export function DefectsPage() {
   }
 
   function refresh() {
-    queryClient.invalidateQueries({ queryKey: ['defects-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['defects-hub']) })
   }
 
   if (isLoading) return <p className="text-sm text-muted">Loading defects…</p>

@@ -1,6 +1,6 @@
 # Veyvio Yard Brand Foundation
 
-**Reference canvas (phone lockups):** [canvases/veyvio-yard-brand-phone.canvas.tsx](./canvases/veyvio-yard-brand-phone.canvas.tsx)  
+**Reference canvas (phone + web lockups):** [canvases/veyvio-yard-brand-phone.canvas.tsx](./canvases/veyvio-yard-brand-phone.canvas.tsx) — synced with live `AppShell`, `BottomNav`, and `LiveYardMap` (Jul 2026).  
 **Phone surfaces checklist:** [veyvio-yard-phone-surfaces.md](./veyvio-yard-phone-surfaces.md)
 
 ## 1. Brand architecture

@@ -5,7 +5,10 @@ import { YARD_TASK_PRIORITY_LABELS, YARD_TASK_TYPE_LABELS } from '@/lib/yard/con
 import { canCreateYardTask } from '@/lib/yard/permissions'
 import type { YardHubData, YardTask } from '@/lib/yard/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+import { YardTaskProgress } from './components/YardTaskProgress'
+
 
 export function YardTasksTab({ hub }: { hub: YardHubData }) {
   const { user } = useAuth()
@@ -19,12 +22,12 @@ export function YardTasksTab({ hub }: { hub: YardHubData }) {
 
   const start = useMutation({
     mutationFn: (taskId: string) => api.startYardTask(taskId, actorName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['yard-hub', hub.depotId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['yard-hub', hub.depotId]) }),
   })
 
   const complete = useMutation({
     mutationFn: (taskId: string) => api.completeYardTask({ taskId }, actorName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['yard-hub', hub.depotId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['yard-hub', hub.depotId]) }),
   })
 
   return (
@@ -43,6 +46,7 @@ export function YardTasksTab({ hub }: { hub: YardHubData }) {
                 <th className="pb-2 pr-3 font-medium">Vehicle</th>
                 <th className="pb-2 pr-3 font-medium">Priority</th>
                 <th className="pb-2 pr-3 font-medium">Assigned</th>
+                <th className="pb-2 pr-3 font-medium">Progress</th>
                 <th className="pb-2 pr-3 font-medium">Status</th>
                 <th className="pb-2 pr-3 font-medium">Sync</th>
                 <th className="pb-2 font-medium">Actions</th>
@@ -112,6 +116,9 @@ function TaskRow({
       <td className="py-2.5 pr-3">{task.registrationNumber}</td>
       <td className={`py-2.5 pr-3 text-xs ${priorityClass}`}>{YARD_TASK_PRIORITY_LABELS[task.priority]}</td>
       <td className="py-2.5 pr-3">{task.assignedStaffName ?? '—'}</td>
+      <td className="py-2.5 pr-3">
+        <YardTaskProgress status={task.status} />
+      </td>
       <td className="py-2.5 pr-3">
         <StatusPill status={task.status} />
       </td>

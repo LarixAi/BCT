@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { LiveVehicleMap, type LiveVehicleMapHandle } from '@/components/map/LiveVehicleMap'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
 import type { DutyRecord } from '@/lib/api/types'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
 import { useOperationalContext } from '@/lib/context'
 import { ManageAssignmentButton } from '@/features/transfers/ManageAssignmentButton'
 import { ManageAssignmentDrawer } from '@/features/transfers/ManageAssignmentDrawer'
@@ -13,6 +14,18 @@ import {
   publicationBadge,
   PublishDutyDialog,
 } from '@/features/dispatch/PublishDutyDialog'
+import {
+  DispatchControlsPanel,
+  type DispatchControlAction,
+} from '@/features/dispatch/DispatchControlsPanel'
+import { DispatchSidePanels } from '@/features/dispatch/DispatchSidePanels'
+import {
+  listActiveRuns,
+  listDispatchExceptions,
+  listLateJobs,
+  listUrgentUnassignedJobs,
+} from '@/lib/dispatch/dispatch-board'
+import { buildExceptionsInbox } from '@/lib/exceptions/build-exceptions-inbox'
 import {
   applyUpdatePreview,
   columnForDuty,
@@ -35,8 +48,12 @@ const COLUMNS: Array<{ key: DispatchColumn; label: string }> = [
 
 export function DispatchPage() {
   const { user } = useAuth()
+  const companyId = useActiveCompanyId()
   const { operationalDateIso } = useOperationalContext()
+  const [searchParams] = useSearchParams()
   const [date, setDate] = useState(operationalDateIso)
+  const [selectedDutyId, setSelectedDutyId] = useState<string | null>(searchParams.get('duty'))
+  const [controlMessage, setControlMessage] = useState<string | null>(null)
   const [assigning, setAssigning] = useState<string | null>(null)
   const [pendingColumn, setPendingColumn] = useState<DispatchColumn | null>(null)
   const [selectedDriver, setSelectedDriver] = useState('')
@@ -58,38 +75,90 @@ export function DispatchPage() {
   const canOverride = user?.permissions.includes('dispatch.override') ?? false
 
   const { data: duties = [], isLoading } = useQuery({
-    queryKey: ['duties', date],
+    queryKey: tKey(['duties', date]),
     queryFn: () => api.getDuties({ date }),
+    enabled: !!companyId,
   })
 
   const { data: drivers = [] } = useQuery({
-    queryKey: ['drivers'],
+    queryKey: tKey(['drivers']),
     queryFn: () => api.getDrivers(),
+    enabled: !!companyId,
   })
 
   const { data: vehicles = [] } = useQuery({
-    queryKey: ['vehicles'],
+    queryKey: tKey(['vehicles']),
     queryFn: () => api.getVehicles(),
+    enabled: !!companyId,
   })
 
   const { data: liveData } = useQuery({
-    queryKey: ['live-dispatch', date, 'active'],
+    queryKey: tKey(['live-dispatch', date, 'active']),
     queryFn: () => api.getLiveDispatch(date, 'active'),
     refetchInterval: 30_000,
+    enabled: !!companyId,
   })
 
   const { data: opsTrips = [] } = useQuery({
-    queryKey: ['operational-trips'],
+    queryKey: tKey(['operational-trips']),
     queryFn: () => api.getOperationalTrips(),
+    enabled: !!companyId,
   })
+
+  const { data: messages = [] } = useQuery({
+    queryKey: tKey(['messages-inbox']),
+    queryFn: () => api.getMessages({ folder: 'inbox' }),
+    enabled: !!companyId,
+  })
+
+  const activeRuns = useMemo(() => listActiveRuns(duties), [duties])
+  const lateJobs = useMemo(() => listLateJobs(opsTrips), [opsTrips])
+  const urgentJobs = useMemo(() => listUrgentUnassignedJobs(opsTrips), [opsTrips])
+  const dispatchExceptions = useMemo(
+    () => listDispatchExceptions(buildExceptionsInbox({ includeCatalog: true })),
+    [],
+  )
+
+  const selectedDuty = duties.find((d) => d.id === selectedDutyId) ?? null
+  const selectedTrip = opsTrips.find((t) => t.dutyId === selectedDutyId) ?? null
+
+  function handleControlAction(action: DispatchControlAction) {
+    if (!selectedDuty && !selectedTrip) return
+    switch (action) {
+      case 'replace_driver':
+      case 'replace_vehicle':
+        if (selectedDuty) {
+          setAssigning(selectedDuty.id)
+          setSelectedDriver(selectedDuty.driver?.id ?? '')
+          setSelectedVehicle(selectedDuty.vehicle?.id ?? '')
+        } else if (selectedTrip) {
+          setTransferTripId(selectedTrip.id)
+        }
+        break
+      case 'move_job':
+        if (selectedTrip) setTransferTripId(selectedTrip.id)
+        break
+      case 'cancel_job':
+        setControlMessage('Job cancellation recorded — driver and passenger notifications queued.')
+        break
+      case 'no_show':
+        setControlMessage('No-show marked. Trip ETA recalculated and audit entry created.')
+        break
+      case 'contact_passenger':
+        setControlMessage('Open Messages to contact the passenger or parent/carer.')
+        break
+      default:
+        break
+    }
+  }
 
   const updateMutation = useMutation({
     mutationFn: ({ id, update }: { id: string; update: Record<string, unknown> }) =>
       api.updateDuty(id, update),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['duties', date] })
-      queryClient.invalidateQueries({ queryKey: ['live-dispatch'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['duties', date]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['live-dispatch']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['dashboard']) })
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'Update failed'),
   })
@@ -99,9 +168,9 @@ export function DispatchPage() {
     onSuccess: () => {
       setPublishingDutyId(null)
       setPublishError(null)
-      queryClient.invalidateQueries({ queryKey: ['duties', date] })
-      queryClient.invalidateQueries({ queryKey: ['live-dispatch'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['duties', date]) })
+      queryClient.invalidateQueries({ queryKey: tKey(['live-dispatch']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['dashboard']) })
     },
     onError: (err) =>
       setPublishError(err instanceof Error ? err.message : 'Duty could not be published'),
@@ -235,7 +304,7 @@ export function DispatchPage() {
         <div>
           <h1 className="text-2xl font-semibold text-ink">Dispatch</h1>
           <p className="text-sm text-ink-soft">
-            Plan and assign duties — dragging between columns opens the transfer workflow when an operational trip exists
+            Live control — map, active runs, late jobs, exceptions, and dispatch actions
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -278,6 +347,8 @@ export function DispatchPage() {
         </p>
       )}
 
+      <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+        <div className="space-y-4">
       <SectionCard
         title="Live map"
         description={
@@ -339,21 +410,25 @@ export function DispatchPage() {
                   const { blocks, warnings } = complianceForDuty(duty)
                   const cardAlerts = [...scheduleConflicts, ...blocks, ...warnings]
                   const hasBlock = scheduleConflicts.length > 0 || blocks.length > 0
+                  const isSelected = selectedDutyId === duty.id
                   return (
                     <div
                       key={duty.id}
                       draggable={col.key !== 'completed'}
+                      onClick={() => setSelectedDutyId(duty.id)}
                       onDragStart={(e) => {
                         e.dataTransfer.setData('text/duty-id', duty.id)
                         setDraggingId(duty.id)
                       }}
                       onDragEnd={() => setDraggingId(null)}
                       className={`cursor-grab rounded-lg border bg-surface p-2.5 shadow-sm transition active:cursor-grabbing ${
-                        hasBlock
-                          ? 'border-red-400 ring-1 ring-red-100'
-                          : cardAlerts.length
-                            ? 'border-amber-400 ring-1 ring-amber-100'
-                            : 'border-border'
+                        isSelected
+                          ? 'border-command-500 ring-2 ring-command-200'
+                          : hasBlock
+                            ? 'border-red-400 ring-1 ring-red-100'
+                            : cardAlerts.length
+                              ? 'border-amber-400 ring-1 ring-amber-100'
+                              : 'border-border'
                       } ${draggingId === duty.id ? 'opacity-50' : 'hover:border-border-strong'}`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -390,7 +465,9 @@ export function DispatchPage() {
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedDutyId(duty.id)
                               setAssigning(duty.id)
                               setPendingColumn(null)
                               setSelectedDriver(duty.driver?.id ?? '')
@@ -405,7 +482,8 @@ export function DispatchPage() {
                           duty.driver ? (
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation()
                                 setPublishError(null)
                                 setPublishingDutyId(duty.id)
                               }}
@@ -414,11 +492,13 @@ export function DispatchPage() {
                               Publish
                             </button>
                           ) : null}
-                          <ManageAssignmentButton
-                            dutyId={duty.id}
-                            duty={duty}
-                            className="text-xs font-medium text-command-600 hover:underline"
-                          />
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <ManageAssignmentButton
+                              dutyId={duty.id}
+                              duty={duty}
+                              className="text-xs font-medium text-command-600 hover:underline"
+                            />
+                          </span>
                         </div>
                       )}
                     </div>
@@ -434,6 +514,26 @@ export function DispatchPage() {
           ))}
         </div>
       )}
+        </div>
+
+        <div className="space-y-4">
+          <DispatchSidePanels
+            activeRuns={activeRuns}
+            lateJobs={lateJobs}
+            exceptions={dispatchExceptions}
+            messages={messages}
+            urgentJobs={urgentJobs}
+            selectedDutyId={selectedDutyId}
+            onSelectDuty={setSelectedDutyId}
+          />
+          <DispatchControlsPanel
+            duty={selectedDuty}
+            trip={selectedTrip}
+            onAction={handleControlAction}
+            actionMessage={controlMessage}
+          />
+        </div>
+      </div>
 
       {assigning && (
         <AssignModal
@@ -471,8 +571,8 @@ export function DispatchPage() {
           initialScope="entire_trip"
           onClose={() => setTransferTripId(null)}
           onComplete={() => {
-            queryClient.invalidateQueries({ queryKey: ['duties', date] })
-            queryClient.invalidateQueries({ queryKey: ['operational-trips'] })
+            queryClient.invalidateQueries({ queryKey: tKey(['duties', date]) })
+            queryClient.invalidateQueries({ queryKey: tKey(['operational-trips']) })
           }}
         />
       )}

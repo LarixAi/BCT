@@ -161,4 +161,87 @@ describe('buildActivationResolution', () => {
     expect(induction?.lastRequestedChannels).toEqual(['email', 'in_app'])
     expect(isAggregateOnboardingFailure('onboarding_incomplete')).toBe(true)
   })
+
+  it('does not count renewal-due training as incomplete when modules are complete', () => {
+    const mandatoryKeys = [
+      'company_induction',
+      'driver_app',
+      'daily_vehicle_checks',
+      'emergency_procedures',
+      'data_protection_gdpr',
+      'driver_declaration',
+      'health_safety',
+      'safeguarding',
+    ] as const
+    const trainingRequirements = mandatoryKeys.map((key) => ({
+      id: `tr-${key}`,
+      key,
+      label: key,
+      requiredFor: 'All drivers',
+      category: 'mandatory' as const,
+      status: 'due_soon' as const,
+      completedAt: '2025-01-01',
+      expiresAt: '2026-08-01',
+      trainer: null,
+      progressPercentage: 100,
+      assessmentScore: null,
+    }))
+    const driver = minimalDriver({
+      operationalStatus: 'restricted',
+      trainingRequirements,
+      account: {
+        ...minimalDriver().account,
+        accountStatus: 'active',
+      },
+    })
+    const model = buildActivationResolution(driver)
+    expect(model.summary.trainingIncomplete).toBe(0)
+    expect(model.activateBlockedReasons.some((r) => r.includes('mandatory training'))).toBe(false)
+  })
+
+  it('treats completed driver-app modules as mandatory training, not separate qualifications', () => {
+    const trainingRequirements = [
+      {
+        id: 'tr-manual_handling',
+        key: 'manual_handling',
+        label: 'Manual handling',
+        requiredFor: 'All drivers',
+        category: 'mandatory' as const,
+        status: 'complete' as const,
+        completedAt: '2026-07-01',
+        expiresAt: '2029-07-01',
+        trainer: null,
+        progressPercentage: 100,
+        assessmentScore: null,
+      },
+      {
+        id: 'tr-safeguarding_adults',
+        key: 'safeguarding_adults',
+        label: 'Safeguarding adults',
+        requiredFor: 'All drivers',
+        category: 'mandatory' as const,
+        status: 'complete' as const,
+        completedAt: '2026-07-01',
+        expiresAt: '2029-07-01',
+        trainer: null,
+        progressPercentage: 100,
+        assessmentScore: null,
+      },
+    ]
+    const driver = minimalDriver({
+      operationalStatus: 'restricted',
+      trainingRequirements,
+      account: {
+        ...minimalDriver().account,
+        accountStatus: 'active',
+      },
+    })
+    const model = buildActivationResolution(driver)
+    const health = model.requirements.find((r) => r.definitionKey === 'health_safety')
+    const safeguarding = model.requirements.find((r) => r.definitionKey === 'safeguarding')
+    expect(health?.type).toBe('internal_training')
+    expect(health?.status).toBe('completed')
+    expect(safeguarding?.type).toBe('internal_training')
+    expect(safeguarding?.status).toBe('completed')
+  })
 })

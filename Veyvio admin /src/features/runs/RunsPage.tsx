@@ -15,6 +15,12 @@ import {
   runSummary,
   type RunBoardFilter,
 } from '@/lib/ops/runs-trips-schedule'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+import {
+  formatWorkingTime,
+  lifecycleLabel,
+  runListRow,
+} from '@/lib/runs/run-register'
 
 const FILTERS: { id: RunBoardFilter; label: string }[] = [
   { id: 'all', label: 'All runs' },
@@ -34,17 +40,57 @@ export function RunsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('duty'))
 
   const { data: duties = [], isLoading, error, isError, refetch, isFetching } = useQuery({
-    queryKey: ['duties', date],
+    queryKey: tKey(['duties', date]),
     queryFn: () => api.getDuties({ date }),
   })
+
+  const { data: trips = [] } = useQuery({
+    queryKey: tKey(['operational-trips']),
+    queryFn: () => api.getOperationalTrips(),
+  })
+
+  const tripsByDuty = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const trip of trips) {
+      if (!trip.dutyId) continue
+      map.set(trip.dutyId, (map.get(trip.dutyId) ?? 0) + 1)
+    }
+    return map
+  }, [trips])
 
   useEffect(() => {
     const duty = searchParams.get('duty')
     if (duty) setSelectedId(duty)
+
+    const status = searchParams.get('filter') ?? searchParams.get('status')
+    if (!status) return
+    const mapped: RunBoardFilter | null =
+      status === 'active'
+        ? 'active'
+        : status === 'starting_soon'
+          ? 'starting_soon'
+          : status === 'delayed'
+            ? 'delayed'
+            : status === 'unassigned'
+              ? 'unassigned'
+              : status === 'completed'
+                ? 'completed'
+                : null
+    if (mapped) setFilter(mapped)
   }, [searchParams])
 
   const summary = useMemo(() => runSummary(duties), [duties])
   const filtered = useMemo(() => filterRuns(duties, filter, search), [duties, filter, search])
+  const rows = useMemo(
+    () =>
+      filtered.map((duty) =>
+        runListRow(duty, {
+          tripCount: tripsByDuty.get(duty.id) ?? 0,
+          depotName: trips.find((t) => t.dutyId === duty.id)?.depotName ?? null,
+        }),
+      ),
+    [filtered, tripsByDuty, trips],
+  )
   const selected = duties.find((d) => d.id === selectedId) ?? null
 
   function selectRun(id: string) {
@@ -173,73 +219,78 @@ export function RunsPage() {
       </div>
 
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_340px]">
-        <SectionCard title="Runs board" description={`${filtered.length} duties`} className="min-h-0 overflow-hidden" flush>
+        <SectionCard title="Run register" description={`${rows.length} duties`} className="min-h-0 overflow-hidden" flush>
           <div className="min-h-0 flex-1 overflow-auto">
             {isLoading ? (
               <p className="p-4 text-sm text-muted">Loading…</p>
-            ) : filtered.length === 0 ? (
+            ) : rows.length === 0 ? (
               <p className="p-8 text-center text-sm text-muted">No runs match this filter.</p>
             ) : (
               <table className="min-w-full text-left text-sm">
                 <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wide text-muted">
                   <tr className="border-b border-border">
+                    <th className="px-3 py-2 font-medium">Run</th>
+                    <th className="px-3 py-2 font-medium">Date</th>
+                    <th className="px-3 py-2 font-medium">Depot</th>
                     <th className="px-3 py-2 font-medium">Driver</th>
                     <th className="px-3 py-2 font-medium">Vehicle</th>
+                    <th className="px-3 py-2 font-medium">PA</th>
                     <th className="px-3 py-2 font-medium">Start</th>
                     <th className="px-3 py-2 font-medium">Finish</th>
-                    <th className="px-3 py-2 font-medium">Run</th>
-                    <th className="px-3 py-2 font-medium">Delay</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">Trips</th>
+                    <th className="px-3 py-2 font-medium">Working time</th>
+                    <th className="px-3 py-2 font-medium">Lifecycle</th>
+                    <th className="px-3 py-2 font-medium">Warning</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((duty) => {
-                    const delayMinutes = runScheduleDelayMinutes(duty)
-                    return (
-                      <tr
-                        key={duty.id}
-                        onClick={() => selectRun(duty.id)}
-                        className={cn(
-                          'cursor-pointer border-b border-border hover:bg-surface-muted',
-                          selectedId === duty.id && 'bg-command-50',
-                        )}
-                      >
-                        <td className="px-3 py-2.5 font-medium text-ink">
-                          {runDriverName(duty) ?? <span className="text-red-700">Unassigned</span>}
-                        </td>
-                        <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-ink-soft">
-                          {duty.vehicle?.registrationNumber ?? '—'}
-                        </td>
-                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">
-                          {formatDutyClock(duty.startTime)}
-                        </td>
-                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">
-                          {formatDutyClock(duty.endTime)}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <p className="font-semibold text-ink">{duty.reference}</p>
-                          <p className="text-xs text-muted">{duty.route?.name ?? '—'}</p>
-                        </td>
-                        <td
-                          className={cn(
-                            'px-3 py-2.5 tabular-nums',
-                            delayMinutes >= 20
-                              ? 'font-semibold text-red-800'
-                              : delayMinutes >= 8
-                                ? 'font-medium text-amber-800'
-                                : 'text-ink-soft',
-                          )}
+                  {rows.map((row) => (
+                    <tr
+                      key={row.id}
+                      onClick={() => selectRun(row.id)}
+                      className={cn(
+                        'cursor-pointer border-b border-border hover:bg-surface-muted',
+                        selectedId === row.id && 'bg-command-50',
+                      )}
+                    >
+                      <td className="px-3 py-2.5">
+                        <Link
+                          to={`/runs/${row.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-semibold text-command-700 hover:underline"
                         >
-                          {formatDelayLabel(delayMinutes)}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium capitalize text-ink-soft">
-                            {duty.status.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                          {row.reference}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.dutyDate}</td>
+                      <td className="px-3 py-2.5 text-ink-soft">{row.depotName}</td>
+                      <td className="px-3 py-2.5 font-medium text-ink">
+                        {row.driverName ?? <span className="text-red-700">Unassigned</span>}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs tabular-nums">
+                        {row.vehicleRegistration ?? '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-ink-soft">{row.passengerAssistantName ?? '—'}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.startTime}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.endTime}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{row.tripCount}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-ink-soft">
+                        {formatWorkingTime(row.workingTimeMinutes)}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium capitalize text-ink-soft">
+                          {lifecycleLabel(row.lifecycle)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {row.warning ? (
+                          <span className="text-xs font-medium text-amber-900">{row.warning}</span>
+                        ) : (
+                          <span className="text-xs text-ink-soft">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             )}

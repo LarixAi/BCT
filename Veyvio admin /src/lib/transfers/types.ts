@@ -85,7 +85,12 @@ export interface OperationalTrip {
   driverOnline: boolean
   routeName: string | null
   bookingId?: string | null
+  bookingReference?: string | null
   bookingTripId?: string | null
+  darRequestId?: string | null
+  darRequestReference?: string | null
+  schoolRouteId?: string | null
+  schoolRouteReference?: string | null
 }
 
 export type TransferScope =

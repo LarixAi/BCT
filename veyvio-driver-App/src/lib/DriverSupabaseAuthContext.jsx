@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { getDriverSessionContext, signInDriver, signOutDriver } from "@/services/session.service";
+import { savePendingCompanySelection } from "@/pages/driver/DriverAuthSelectCompany";
 import { linkDriverAccountIfNeeded } from "@/services/link-driver.service";
 import { buildAccessContext } from "@/lib/driver-access-mode";
 import { withTimeout } from "@/lib/withTimeout";
@@ -36,6 +37,7 @@ const HAS_BOOTED_MS = 4000;
 
 export function DriverSupabaseAuthProvider({ children }) {
   const [session, setSession] = useState(null);
+  const [pendingCompanySelection, setPendingCompanySelection] = useState(false);
   const [loading, setLoading] = useState(true);
   /** Bumped to ignore stale getDriverSessionContext results (e.g. SIGNED_IN vs login()). */
   const refreshGeneration = useRef(0);
@@ -81,6 +83,7 @@ export function DriverSupabaseAuthProvider({ children }) {
       }
 
       setSession(ctx);
+      if (ctx?.driver) setPendingCompanySelection(false);
       return ctx;
     } catch {
       if (generation !== refreshGeneration.current) return null;
@@ -187,9 +190,20 @@ export function DriverSupabaseAuthProvider({ children }) {
     screen,
     access,
     loading,
+    pendingCompanySelection,
     refresh,
     login: async (email, password) => {
       const result = await signInDriver(email, password);
+      if (result.requiresCompanySelection) {
+        savePendingCompanySelection({
+          memberships: result.memberships ?? [],
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        });
+        setPendingCompanySelection(true);
+        return result;
+      }
+      setPendingCompanySelection(false);
       // Prefer the context already loaded during sign-in so we don't wait on a
       // second session round-trip before leaving the auth shell.
       if (result.ok && result.context) {

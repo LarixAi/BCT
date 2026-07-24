@@ -6,7 +6,9 @@ import { EMPLOYMENT_TYPE_LABELS, WORK_PERMISSION_OPTIONS } from '@/lib/drivers/c
 import type { CreateDriverInput, EmploymentType, UpdateDriverInput } from '@/lib/drivers/types'
 import { DriverBackLink } from './components/DriverProfileHeader'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DriverFormPage() {
   const { id } = useParams<{ id: string }>()
@@ -17,7 +19,7 @@ export function DriverFormPage() {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: existing, isLoading } = useQuery({
-    queryKey: ['driver-profile', id],
+    queryKey: tKey(['driver-profile', id]),
     queryFn: () => api.getDriverProfile(id!),
     enabled: isEdit,
   })
@@ -83,9 +85,9 @@ export function DriverFormPage() {
       return api.createDriver(input, actorName)
     },
     onSuccess: (profile) => {
-      queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
-      queryClient.invalidateQueries({ queryKey: ['driver-directory-summary'] })
-      queryClient.invalidateQueries({ queryKey: ['drivers'] })
+      queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['driver-directory-summary']) })
+      queryClient.invalidateQueries({ queryKey: tKey(['drivers']) })
       navigate(`/drivers/${profile.id}`)
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Save failed'),

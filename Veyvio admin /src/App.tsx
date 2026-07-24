@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { CommandShell } from '@/components/layout/CommandShell'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
@@ -22,11 +22,22 @@ import {
   ResetPasswordPage,
 } from '@/features/auth/InviteAuthPages'
 import { BookingsPage } from '@/features/bookings/BookingsPage'
-import { CreateBookingPage } from '@/features/bookings/CreateBookingPage'
+import { BookingLegacyTypeRedirect } from '@/features/bookings/BookingLegacyTypeRedirect'
+import { BookingNewEntry } from '@/features/bookings/BookingNewEntry'
 import { UrgentBookingPage } from '@/features/bookings/UrgentBookingPage'
 import { EditBookingPage } from '@/features/bookings/EditBookingPage'
 import { OperationalTripDetailPage } from '@/features/transfers/OperationalTripDetailPage'
 import { BookingDetailPage } from '@/features/bookings/BookingDetailPage'
+import { JobsPage } from '@/features/jobs/JobsPage'
+import { DialARidePage } from '@/features/dial-a-ride/DialARidePage'
+import { CreateDialARideRequestPage } from '@/features/dial-a-ride/CreateDialARideRequestPage'
+import { DialARideRequestDetailPage } from '@/features/dial-a-ride/DialARideRequestDetailPage'
+import { DialARideMembersPage } from '@/features/dial-a-ride/DialARideMembersPage'
+import { DialARideMemberDetailPage } from '@/features/dial-a-ride/DialARideMemberDetailPage'
+import { SchoolRoutesPage } from '@/features/school-routes/SchoolRoutesPage'
+import { CreateSchoolRoutePage } from '@/features/school-routes/CreateSchoolRoutePage'
+import { SchoolRouteDetailPage } from '@/features/school-routes/SchoolRouteDetailPage'
+import { SchoolRouteAttendancePage } from '@/features/school-routes/SchoolRouteAttendancePage'
 import { DispatchPage } from '@/features/dispatch/DispatchPage'
 import { OverviewPage } from '@/features/overview/OverviewPage'
 import { LiveOperationsPage } from '@/features/live-operations/LiveOperationsPage'
@@ -56,6 +67,7 @@ import { CustomersPage } from '@/features/customers/CustomersPage'
 import { VehicleChecksPage } from '@/features/vehicle-checks/VehicleChecksPage'
 import { CheckDetailPage } from '@/features/vehicle-checks/CheckDetailPage'
 import { VehicleReportsPage } from '@/features/vehicle-reports/VehicleReportsPage'
+import { BodyConditionPage } from '@/features/body-condition/BodyConditionPage'
 import { VehicleReportDetailPage } from '@/features/vehicle-reports/VehicleReportDetailPage'
 import { IncidentsPage } from '@/features/incidents/IncidentsPage'
 import { IncidentDetailPage } from '@/features/incidents/IncidentDetailPage'
@@ -130,14 +142,7 @@ import { PlatformPlansPage } from '@/features/platform/PlatformPlansPage'
 import { PlatformSubscriptionsPage } from '@/features/platform/PlatformSubscriptionsPage'
 import { PlatformSupportPage } from '@/features/platform/PlatformSupportPage'
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 15_000,
-    },
-  },
-})
+import { queryClient } from '@/lib/query-client'
 
 function App() {
   return (
@@ -188,7 +193,18 @@ function App() {
                 <Route path="notifications" element={<NotificationsPage />} />
                 <Route path="bookings" element={<BookingsPage />} />
                 <Route path="bookings/new/urgent" element={<UrgentBookingPage />} />
-                <Route path="bookings/new" element={<CreateBookingPage />} />
+                <Route path="bookings/new/:bookingType" element={<BookingLegacyTypeRedirect />} />
+                <Route path="bookings/new" element={<BookingNewEntry />} />
+                <Route path="jobs" element={<JobsPage />} />
+                <Route path="dial-a-ride" element={<DialARidePage />} />
+                <Route path="dial-a-ride/new" element={<CreateDialARideRequestPage />} />
+                <Route path="dial-a-ride/members" element={<DialARideMembersPage />} />
+                <Route path="dial-a-ride/members/:memberId" element={<DialARideMemberDetailPage />} />
+                <Route path="dial-a-ride/requests/:requestId" element={<DialARideRequestDetailPage />} />
+                <Route path="school-routes" element={<SchoolRoutesPage />} />
+                <Route path="school-routes/new" element={<CreateSchoolRoutePage />} />
+                <Route path="school-routes/:routeId/attendance" element={<SchoolRouteAttendancePage />} />
+                <Route path="school-routes/:routeId" element={<SchoolRouteDetailPage />} />
                 <Route path="bookings/:id/edit" element={<EditBookingPage />} />
                 <Route path="bookings/:id" element={<BookingDetailPage />} />
                 <Route path="live-operations/trips/:id" element={<OperationalTripDetailPage />} />
@@ -238,6 +254,7 @@ function App() {
                 <Route path="vehicle-checks" element={<VehicleChecksPage />} />
                 <Route path="vehicle-reports/:id" element={<VehicleReportDetailPage />} />
                 <Route path="vehicle-reports" element={<VehicleReportsPage />} />
+                <Route path="body-condition" element={<BodyConditionPage />} />
                 <Route path="defects/:id" element={<DefectDetailPage />} />
                 <Route path="defects" element={<DefectsPage />} />
                 <Route path="inspections" element={<InspectionsPage />} />

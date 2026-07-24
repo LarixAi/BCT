@@ -8,6 +8,8 @@ import { evaluateDriverEligibility, jobContextFromBookingRequirements } from '@/
 import { resolveFleetResourcesHub } from '@/lib/fleet-resources/resolve-hub'
 import { evaluateVehicleRelease } from '@/lib/vehicles/release'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function DispatchStep({
   draft,
@@ -16,18 +18,18 @@ export function DispatchStep({
   draft: BookingDraft
   onChange: (patch: Partial<BookingDraft>) => void
 }) {
-  const { data: depots = [] } = useQuery({ queryKey: ['depots'], queryFn: () => api.getDepots() })
+  const { data: depots = [] } = useQuery({ queryKey: tKey(['depots']), queryFn: () => api.getDepots() })
   const { data: driverProfiles = [] } = useQuery({
-    queryKey: ['driver-profiles'],
+    queryKey: tKey(['driver-profiles']),
     queryFn: () => api.getDriverProfiles(),
   })
   const { data: vehicleProfiles = [] } = useQuery({
-    queryKey: ['vehicle-profiles'],
+    queryKey: tKey(['vehicle-profiles']),
     queryFn: () => api.getVehicleProfiles(),
   })
-  const { data: staff = [] } = useQuery({ queryKey: ['staff'], queryFn: () => api.getStaff() })
+  const { data: staff = [] } = useQuery({ queryKey: tKey(['staff']), queryFn: () => api.getStaff() })
   const { data: resources } = useQuery({
-    queryKey: ['fleet-resources-hub'],
+    queryKey: tKey(['fleet-resources-hub']),
     queryFn: () =>
       resolveFleetResourcesHub({
         fetchLiveHub: () => api.getFleetResourcesHub(),
@@ -255,7 +257,7 @@ function AutoPlanPanel({
   onAccept: (proposal: AutoPlanProposal) => void
 }) {
   const { data: proposal, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['auto-plan', draft.id, draft.bookingType, draft.requirements.wheelchairAccessible],
+    queryKey: tKey(['auto-plan', draft.id, draft.bookingType, draft.requirements.wheelchairAccessible]),
     queryFn: () => api.getAutoPlanProposal(draft),
   })
 

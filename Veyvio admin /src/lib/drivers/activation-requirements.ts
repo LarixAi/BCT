@@ -1,5 +1,5 @@
 import { DOCUMENT_REQUIREMENT_OPTIONS } from './constants'
-import { DRIVER_TRAINING_CATALOG, buildTrainingRequirements, isMandatoryTrainingKey } from './training'
+import { DRIVER_TRAINING_CATALOG, buildDriverTrainingRequirements, isMandatoryTrainingKey } from './training'
 import type { DriverDocument, DriverProfile, TrainingRequirement } from './types'
 
 export type RequirementType =
@@ -271,10 +271,14 @@ function findDocumentForDefinition(driver: DriverProfile, definitionKey: string)
 
 function trainingStatus(req: TrainingRequirement, meta: RequestMeta): RequirementStatus {
   // Completion from driver_training / verified certificate always wins over workflow overrides.
-  if (req.status === 'complete') return 'completed'
+  if (req.status === 'complete' || req.completedAt) {
+    return req.status === 'due_soon' ? 'expiring_soon' : 'completed'
+  }
   if (req.status === 'due_soon') return 'expiring_soon'
   if (req.status === 'expired') return 'expired'
   if (req.status === 'failed') return 'rejected'
+  if (req.status === 'in_progress') return 'in_progress'
+  if (req.status === 'assigned') return 'training_assigned'
 
   const override = meta.statusOverride
   if (override === 'approved' || override === 'completed') return 'completed'
@@ -291,9 +295,8 @@ function responsibleFor(type: RequirementType, status: RequirementStatus): strin
 
 export function buildActivationResolution(driver: DriverProfile): ActivationResolutionModel {
   const requirements: ActivationRequirement[] = []
-  const training = driver.trainingRequirements?.length
-    ? driver.trainingRequirements
-    : buildTrainingRequirements(driver)
+  // Match the Training tab: merge catalogue rows, legacy keys, and document evidence.
+  const training = buildDriverTrainingRequirements(driver)
 
   // Account setup
   const accountIncomplete = [
@@ -395,7 +398,11 @@ export function buildActivationResolution(driver: DriverProfile): ActivationReso
     }
 
     const meta = getRequirementRequestMeta(driver.id, req.key)
-    const isQual = QUALIFICATION_KEYS.has(req.key) || Boolean(catalog.documentTypes?.length)
+    // Mandatory modules (e.g. health & safety, safeguarding) are in-app training even when
+    // certificates can also be uploaded — only vehicle/role certificate courses are quals.
+    const isQual =
+      QUALIFICATION_KEYS.has(req.key) ||
+      (Boolean(catalog.documentTypes?.length) && catalog.category !== 'mandatory')
     const type: RequirementType = isQual ? 'qualification' : 'internal_training'
     let status = trainingStatus(req, meta)
     const blocksAll =
@@ -446,10 +453,13 @@ export function buildActivationResolution(driver: DriverProfile): ActivationReso
     documentsMissing: documents.filter((r) =>
       ['missing', 'request_sent', 'opened', 'rejected', 'expired'].includes(r.status),
     ).length,
-    trainingComplete: trainingRows.filter((r) => r.status === 'completed' || r.status === 'approved')
-      .length,
+    trainingComplete: trainingRows.filter((r) =>
+      ['completed', 'approved', 'expiring_soon'].includes(r.status),
+    ).length,
     trainingIncomplete: trainingRows.filter(
-      (r) => !['completed', 'approved', 'waived', 'not_applicable'].includes(r.status),
+      (r) =>
+        r.mandatory &&
+        !['completed', 'approved', 'waived', 'not_applicable', 'expiring_soon'].includes(r.status),
     ).length,
     qualificationsApproved: quals.filter((r) => r.status === 'completed' || r.status === 'approved')
       .length,
@@ -464,7 +474,9 @@ export function buildActivationResolution(driver: DriverProfile): ActivationReso
   const activateBlockedReasons: string[] = []
   if (accountIncomplete) activateBlockedReasons.push('Driver app account setup is incomplete')
   if (summary.trainingIncomplete > 0) {
-    activateBlockedReasons.push(`${summary.trainingIncomplete} mandatory training requirements are incomplete`)
+    activateBlockedReasons.push(
+      `${summary.trainingIncomplete} mandatory training requirement${summary.trainingIncomplete === 1 ? '' : 's'} ${summary.trainingIncomplete === 1 ? 'is' : 'are'} incomplete`,
+    )
   }
   if (summary.qualificationsMissing > 0) {
     activateBlockedReasons.push(`${summary.qualificationsMissing} qualifications or certificates are incomplete`)

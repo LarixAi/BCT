@@ -2,6 +2,7 @@ import {
   commandApiUrl,
   getSupabaseAnonKey,
   isMockAuth,
+  resolveSupabaseProjectUrl,
 } from "@/platform/auth/auth-config";
 import type { YardRole } from "@/types/permissions";
 
@@ -82,10 +83,13 @@ export interface YardHubTask {
   title: string;
   priority: string;
   status: string;
+  assignedStaffId?: string | null;
   assignedStaffName?: string | null;
   dueAt?: string | null;
   instructions?: string | null;
   createdAt: string;
+  updatedAt?: string | null;
+  startedAt?: string | null;
   completedAt?: string | null;
   createdBy: string;
 }
@@ -109,6 +113,9 @@ export interface YardHubMovement {
 export interface YardHubResponse {
   depotId: string;
   depotName: string;
+  depotCode?: string | null;
+  yardMapEnabled?: boolean;
+  yardLayout?: import("@veyvio/yard").YardHubLayoutSnapshot | null;
   shiftLabel?: string;
   operationalDate?: string;
   summary?: Record<string, number>;
@@ -117,8 +124,30 @@ export interface YardHubResponse {
   tasks?: YardHubTask[];
   exceptions?: unknown[];
   bodyworkReports?: unknown[];
+  bodyCondition?: {
+    inspections?: unknown[];
+    damageRecords?: unknown[];
+    damageObservations?: unknown[];
+    inspectionMedia?: unknown[];
+    acknowledgements?: unknown[];
+  };
   driverMessages?: unknown[];
   vehicleChecks?: unknown[];
+  platformEvents?: HubPlatformEventPayload[];
+}
+
+export type HubPlatformEventPayload = {
+  eventId: string;
+  eventType: string;
+  occurredAt: string;
+  tenantId: string;
+  depotId: string;
+  actorId: string;
+  correlationId: string;
+  aggregateId: string;
+  aggregateVersion: number;
+  payload: unknown;
+  consumers?: string[];
 }
 
 function apiErrorMessage(err: { message?: string | string[] }, fallback: string): string {
@@ -148,13 +177,51 @@ function authedHeaders(accessToken: string): Record<string, string> {
 
 async function parseJson<T>(res: Response, fallback: string): Promise<T> {
   if (!res.ok) {
-    if (res.status === 401) {
-      throw Object.assign(new Error("Session expired — sign in again"), { status: 401 });
-    }
     const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(apiErrorMessage(err, fallback));
+    const message = apiErrorMessage(err, fallback);
+    throw Object.assign(new Error(message), { status: res.status });
   }
   return res.json() as Promise<T>;
+}
+
+export async function commandRefreshAccessToken(refreshToken: string): Promise<{
+  accessToken: string;
+  refreshToken: string;
+}> {
+  const supabaseUrl = resolveSupabaseProjectUrl();
+  const anon = getSupabaseAnonKey();
+  if (!supabaseUrl || !anon) {
+    throw new Error("Sign-in service is not configured");
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: anon,
+        Authorization: `Bearer ${anon}`,
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  } catch {
+    throw Object.assign(new Error("Could not reach sign-in service — check your connection"), { status: 0 });
+  }
+
+  if (!res.ok) {
+    throw Object.assign(new Error("Session expired — sign in again"), { status: 401 });
+  }
+
+  const data = (await res.json()) as { access_token?: string; refresh_token?: string };
+  if (!data.access_token) {
+    throw Object.assign(new Error("Session expired — sign in again"), { status: 401 });
+  }
+
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token ?? refreshToken,
+  };
 }
 
 export async function commandLogin(
@@ -168,6 +235,30 @@ export async function commandLogin(
     body: JSON.stringify({ email, password, rememberMe }),
   });
   return parseJson<LoginResponse>(res, "Sign in failed");
+}
+
+export interface ForgotPasswordResponse {
+  ok: boolean;
+  message: string;
+  devResetToken: string | null;
+}
+
+export async function commandForgotPassword(email: string): Promise<ForgotPasswordResponse> {
+  const res = await fetch(commandApiUrl("/auth/forgot-password"), {
+    method: "POST",
+    headers: publicHeaders(),
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+  return parseJson<ForgotPasswordResponse>(res, "Could not start password reset");
+}
+
+export async function commandResetPassword(token: string, password: string): Promise<{ ok: boolean }> {
+  const res = await fetch(commandApiUrl("/auth/reset-password"), {
+    method: "POST",
+    headers: publicHeaders(),
+    body: JSON.stringify({ token, password }),
+  });
+  return parseJson<{ ok: boolean }>(res, "Password could not be reset");
 }
 
 export async function commandConfirmMfa(input: {
@@ -192,13 +283,35 @@ export async function commandSelectTenant(
   refreshToken: string | null,
   accessToken?: string | null,
 ): Promise<AuthTokensResponse> {
+  if (!refreshToken) {
+    throw Object.assign(new Error("Session expired — sign in again to select a company"), { status: 401 });
+  }
+
   const headers = accessToken ? authedHeaders(accessToken) : publicHeaders();
-  const res = await fetch(commandApiUrl("/auth/select-tenant"), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ tenantId, refreshToken }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(commandApiUrl("/auth/select-tenant"), {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ companyId: tenantId, tenantId, refreshToken }),
+    });
+  } catch {
+    throw Object.assign(new Error("Could not reach Command — check your connection"), { status: 0 });
+  }
   return parseJson<AuthTokensResponse>(res, "Could not select company");
+}
+
+export interface MembershipsResponse {
+  memberships: TenantMembershipOption[];
+}
+
+export async function commandListMemberships(accessToken: string): Promise<TenantMembershipOption[]> {
+  const res = await fetch(commandApiUrl("/auth/memberships"), {
+    method: "GET",
+    headers: authedHeaders(accessToken),
+  });
+  const data = await parseJson<MembershipsResponse>(res, "Could not load companies");
+  return Array.isArray(data.memberships) ? data.memberships : [];
 }
 
 export async function commandGetMe(accessToken: string): Promise<CommandAuthUser> {

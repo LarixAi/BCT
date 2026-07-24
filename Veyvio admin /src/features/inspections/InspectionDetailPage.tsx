@@ -12,8 +12,10 @@ import { daysRemainingLabel } from '@/lib/inspections/due'
 import { canSignOffInspection, inspectionSignOffBlockers } from '@/lib/inspections/sign-off'
 import type { InspectionStatus } from '@/lib/inspections/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import { InspectionChecklistPanel } from './InspectionChecklistPanel'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 function workflowIndex(status: InspectionStatus): number {
   if (status === 'failed' || status === 'held') return WORKFLOW_STEPS.indexOf('completed')
@@ -29,14 +31,14 @@ export function InspectionDetailPage() {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: inspection, isLoading, isError, error } = useQuery({
-    queryKey: ['inspection', inspectionId],
+    queryKey: tKey(['inspection', inspectionId]),
     queryFn: () => api.getInspection(inspectionId),
     enabled: Boolean(inspectionId),
   })
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['inspection', inspectionId] })
-    queryClient.invalidateQueries({ queryKey: ['inspections-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['inspection', inspectionId]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['inspections-hub']) })
   }
 
   const start = useMutation({

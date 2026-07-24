@@ -14,10 +14,9 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Main navigation"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-midnight text-white lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[#e4e7ec] bg-white shadow-[0_-4px_20px_rgba(16,24,40,0.06)] lg:hidden"
     >
-      <div className="h-[2px] w-full bg-command-500" aria-hidden />
-      <div className="mx-auto flex max-w-5xl items-end justify-around px-1 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+      <div className="mx-auto flex max-w-5xl items-stretch justify-around px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5">
         <NavTab to="/" label="Home" icon={<Home className="size-5" />} active={pathname === "/"} />
         <NavTab
           to="/checks"
@@ -54,15 +53,13 @@ function NavTab({
   return (
     <Link
       to={to}
-      className={`flex min-h-[52px] min-w-[56px] flex-col items-center gap-0.5 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors ${
-        active ? "text-command-500" : "text-white/60 hover:text-white"
+      className={`flex min-h-[52px] min-w-[56px] flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition-colors ${
+        active
+          ? "bg-[#f2f4f7] text-ink"
+          : "text-[#667085] hover:bg-[#f9fafb] hover:text-ink"
       }`}
     >
-      <span
-        className={`mb-0.5 h-0.5 rounded-full bg-command-500 transition-[width] ${active ? "w-5" : "w-0"}`}
-        aria-hidden
-      />
-      <span className="grid h-6 place-items-center" aria-hidden>
+      <span className={`grid h-6 place-items-center ${active ? "text-ink" : "text-[#98a2b3]"}`} aria-hidden>
         {icon}
       </span>
       {label}

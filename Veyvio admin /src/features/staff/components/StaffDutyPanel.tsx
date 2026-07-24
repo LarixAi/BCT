@@ -7,6 +7,8 @@ import { canManageStaffDuty } from '@/lib/staff/permissions'
 import { canStartDutyWithTraining } from '@/lib/staff/training'
 import type { StaffDutyStatus, StaffProfile } from '@/lib/staff/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const DUTY_ACTIONS: { status: StaffDutyStatus; label: string }[] = [
   { status: 'on_duty', label: 'Start duty' },
@@ -21,8 +23,8 @@ export function StaffDutyPanel({ staff, actorName, permissions }: { staff: Staff
   const canManage = canManageStaffDuty(permissions)
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['staff-profile', staff.id] })
-    queryClient.invalidateQueries({ queryKey: ['staff-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['staff-profile', staff.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['staff-hub']) })
   }
 
   const setDuty = useMutation({

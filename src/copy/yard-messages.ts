@@ -108,6 +108,23 @@ export const yardCopy = {
     signInTitle: "Sign in",
     signInSupporting: "Available to authorised transport teams only.",
     signInFailed: "Sign in failed. Check your credentials and try again.",
+    invalidCredentialsHint:
+      "That email and password were not accepted. Your Outlook or Microsoft password is not your Veyvio password — use the one you set when you accepted your Yard invite. If you have not opened that invite link yet, do that first, or reset your password below.",
+    forgotPasswordTitle: "Reset password",
+    forgotPasswordSubtitle:
+      "If an account exists for this email, we will send reset instructions. Your Outlook password is not used for Veyvio Yard.",
+    forgotPasswordSent: "If an account exists for this address, reset instructions have been sent.",
+    forgotPasswordDevLink: "Open temporary reset link (dev)",
+    resetPasswordTitle: "Choose a new password",
+    resetPasswordSubtitle: "At least 12 characters. Existing sessions will be signed out.",
+    resetPasswordSuccess: "Password updated — sign in with your new password.",
+    resetPasswordFailed: "This reset link is invalid or has expired.",
+    sendingReset: "Sending…",
+    sendResetLink: "Send reset link",
+    updatePassword: "Update password",
+    updatingPassword: "Updating…",
+    backToSignIn: "Back to sign in",
+    forgotPasswordLink: "Forgot password?",
     signingIn: "Signing in…",
     offlineAuth: "Offline — sign in when connection returns",
     weakConnection: "Weak connection",
@@ -120,6 +137,12 @@ export const yardCopy = {
     loadingDepots: "Loading depots…",
     noCompanies: "No companies are linked to this account.",
     noDepots: "No depots found for this company.",
+  },
+
+  connection: {
+    demoData: "Demo data — actions stay on this device until Command handlers are live",
+    liveBackend: "Connected to Command — fleet data from your operator",
+    loadingDepot: "Loading depot data from Command…",
   },
 
   empty: {
@@ -175,6 +198,17 @@ export const yardCopy = {
     emptyQueue: "No updates waiting to sync. Changes made offline will appear here.",
     loading: "Loading queue…",
     retryPending: "Retry pending",
+    retryFailed: "Retry failed",
+    routeNotDeployed:
+      "The live Command API does not have the yard sync route yet. Deploy command-api from the Admin repo, then retry failed updates below.",
+    staleFailureHint:
+      "These failures are from before the server was updated. They are real actions Kenny recorded on this device — not demo data. Tap Retry failed to upload them now, or Clear failed backlog if you only want a clean queue.",
+    queueExplainer:
+      "Each row is a real change made in the Yard app. op_… is this device’s queue id, not mock data.",
+    clearFailed: "Clear failed backlog",
+    clearFailedConfirm:
+      "Remove all failed items from this device? This does not undo work already on the server.",
+    byType: "By type",
     syncing: "Syncing…",
     workingOffline: "You are working offline",
     savedOnDevice: "Changes are being saved on this device",

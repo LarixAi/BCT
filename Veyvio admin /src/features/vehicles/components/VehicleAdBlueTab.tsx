@@ -6,6 +6,8 @@ import { formatMileage, normalizeAdBlueRecords } from '@/lib/adblue/normalize'
 import { FUEL_TYPE_LABELS } from '@/lib/vehicles/constants'
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const FILL_LABELS: Record<string, string> = {
   full: 'Filled AdBlue tank',
@@ -28,7 +30,7 @@ function fuelUsesAdBlue(fuelType: VehicleProfile['fuelType']) {
 
 export function VehicleAdBlueTab({ vehicle }: { vehicle: VehicleProfile }) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['vehicle-adblue', vehicle.id],
+    queryKey: tKey(['vehicle-adblue', vehicle.id]),
     queryFn: () => api.getVehicleAdBlueRecords(vehicle.id),
   })
 

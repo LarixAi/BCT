@@ -29,7 +29,9 @@ import {
   ReopenIncidentPanel,
 } from './components/IncidentWorkflowPanels'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type DetailTab = 'summary' | 'driver_report' | 'timeline' | 'people' | 'evidence' | 'investigation' | 'regulatory' | 'actions' | 'vehicle' | 'audit'
 
@@ -40,7 +42,7 @@ export function IncidentDetailPage() {
   const canSafeguarding = canViewSafeguardingIncident(user?.permissions ?? [])
 
   const { data: incident, isLoading, error, isError } = useQuery({
-    queryKey: ['incident-detail', id],
+    queryKey: tKey(['incident-detail', id]),
     queryFn: () => api.getIncidentDetail(id!),
     enabled: !!id,
   })

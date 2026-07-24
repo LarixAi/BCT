@@ -6,17 +6,19 @@ import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
 import type { ComplianceItemRecord } from '@/lib/api/types'
 import { formatRoleList } from '@/lib/format'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function ComplianceRulesPage() {
   const [days, setDays] = useState(30)
 
   const { data: expiring, isLoading: expiringLoading } = useQuery({
-    queryKey: ['compliance-expiring', days],
+    queryKey: tKey(['compliance-expiring', days]),
     queryFn: () => api.getComplianceExpiring(days),
   })
 
   const { data: settings, isLoading: settingsLoading } = useQuery({
-    queryKey: ['compliance-settings'],
+    queryKey: tKey(['compliance-settings']),
     queryFn: () => api.getComplianceAutomationSettings(),
   })
 

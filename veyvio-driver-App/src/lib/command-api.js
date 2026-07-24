@@ -215,6 +215,24 @@ export async function commandPostDriverLocation(accessToken, input = {}) {
   return { ok: true, ...(await response.json()) };
 }
 
+export async function commandPostDriverVehicleParked(accessToken, input = {}) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/vehicle-parked`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Parking location could not be recorded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
 export async function commandSignOffDuty(accessToken, dutyId) {
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };

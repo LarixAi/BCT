@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { SectionCard } from '@/components/ui'
 import { formatDate } from '@/components/ui/status'
-import {
-  ACCOUNT_STATUS_LABELS,
-  EMPLOYMENT_TYPE_LABELS,
-  OPERATIONAL_STATUS_LABELS,
-} from '@/lib/drivers/constants'
+import { ACCOUNT_STATUS_LABELS, EMPLOYMENT_TYPE_LABELS } from '@/lib/drivers/constants'
 import { canInviteAccountStatus, isAccountOffboarded, isAccountSuspended } from '@/lib/drivers/account-access'
-import { countDocumentsPendingAdminReview } from '@/lib/drivers/compliance'
 import {
   canEditDriver,
   canInviteDriver,
@@ -19,7 +13,7 @@ import {
   canSuspendDriver,
   canVerifyDriverDocuments,
 } from '@/lib/drivers/permissions'
-import { DriverBackLink, DriverProfileHeader } from './components/DriverProfileHeader'
+import { DriverProfileHeader } from './components/DriverProfileHeader'
 import { DriverSafetyTab } from './components/DriverSafetyTab'
 import { DriverComplianceTab } from './components/DriverComplianceTab'
 import { DriverEligibilityTab } from './components/DriverEligibilityTab'
@@ -34,8 +28,10 @@ import { DriverAccessSecurityTab } from './access/DriverAccessSecurityTab'
 import { SuspendDriverAccessDialog } from './components/SuspendDriverAccessDialog'
 import { DriverInviteLinkBanner } from './components/DriverInviteLinkBanner'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
 import type { SuspendDriverInput } from '@/lib/drivers/types'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const TABS = [
   'Overview',
@@ -70,7 +66,7 @@ export function DriverDetailPage() {
   }, [location.pathname])
 
   const { data: driver, isLoading, error, isError, refetch, isFetching } = useQuery({
-    queryKey: ['driver-profile', id],
+    queryKey: tKey(['driver-profile', id]),
     queryFn: async () => {
       try {
         return await api.getDriverProfile(id!)
@@ -85,14 +81,20 @@ export function DriverDetailPage() {
   })
 
   const { data: duties = [] } = useQuery({
-    queryKey: ['duties', 'today'],
+    queryKey: tKey(['duties', 'today']),
     queryFn: () => api.getDuties(),
   })
 
+  const { data: holidayData } = useQuery({
+    queryKey: tKey(['driver-holiday', id]),
+    queryFn: () => api.getDriverHoliday(id!),
+    enabled: !!id,
+  })
+
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['driver-profile', id] })
-    queryClient.invalidateQueries({ queryKey: ['driver-profiles'] })
-    queryClient.invalidateQueries({ queryKey: ['driver-directory-summary'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['driver-directory-summary']) })
   }
 
   const invite = useMutation({
@@ -121,12 +123,12 @@ export function DriverDetailPage() {
 
   const passwordReset = useMutation({
     mutationFn: () => api.initiateDriverPasswordReset(id!, actorName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['driver-profile', id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', id]) }),
   })
 
   const revokeSessions = useMutation({
     mutationFn: () => api.revokeDriverSessions(id!, actorName, 'Administrator revoked active sessions'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['driver-profile', id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', id]) }),
   })
 
   const suspend = useMutation({
@@ -145,7 +147,7 @@ export function DriverDetailPage() {
 
   const cancelInvite = useMutation({
     mutationFn: () => api.cancelDriverInvitation(id!, actorName, 'Revoked by administrator'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['driver-profile', id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', id]) }),
   })
 
   const driverAppEvents = useMemo(
@@ -189,47 +191,51 @@ export function DriverDetailPage() {
   const enabledPerms = (driver.workPermissions ?? []).filter((p) => p.enabled)
   const needsOnboarding = ['draft', 'onboarding', 'pending_compliance'].includes(driver.operationalStatus)
 
+  const leaveSummary = holidayData
+    ? {
+        remainingLabel: formatLeaveBalance(holidayData),
+        pendingCount: holidayData.pendingRequestCount,
+        yearLabel: holidayData.leaveYearLabel,
+      }
+    : null
+
   return (
     <div className="space-y-6">
-      <DriverBackLink />
-
       <DriverProfileHeader
         driver={driver}
+        todayDuties={todayDuties.length}
+        leaveSummary={leaveSummary}
+        onNavigateTab={(label) => setTab(label as (typeof TABS)[number])}
+        primaryAction={
+          canEditDriver(permissions) ? (
+            <Link
+              to={`/drivers/${driver.id}/edit`}
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-command-600 px-5 text-sm font-semibold text-white hover:bg-command-700"
+            >
+              Edit driver
+            </Link>
+          ) : null
+        }
         actions={
           <>
             {needsOnboarding && canEditDriver(permissions) && (
-              <Link
-                to={`/drivers/${driver.id}/onboarding`}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
-              >
-                Continue onboarding
-              </Link>
+              <Link to={`/drivers/${driver.id}/onboarding`}>Continue onboarding</Link>
             )}
             {needsOnboarding && canEditDriver(permissions) && (
               <button
                 type="button"
                 onClick={() => activate.mutate()}
                 disabled={activate.isPending}
-                className="rounded-lg bg-midnight px-3 py-1.5 text-sm font-medium text-white hover:bg-command-700 disabled:opacity-50"
                 title="Set operational status to Eligible for dispatch"
               >
                 {activate.isPending ? 'Activating…' : 'Activate for dispatch'}
               </button>
-            )}
-            {canEditDriver(permissions) && (
-              <Link
-                to={`/drivers/${driver.id}/edit`}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
-              >
-                Edit driver
-              </Link>
             )}
             {canInviteDriver(permissions) && canInviteAccountStatus(driver.account.accountStatus) && (
               <button
                 type="button"
                 onClick={() => invite.mutate()}
                 disabled={invite.isPending}
-                className="rounded-lg bg-command-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-command-700 disabled:opacity-50"
               >
                 {driver.account.invitationStatus === 'sent' ? 'Resend invitation' : 'Send invitation'}
               </button>
@@ -239,7 +245,6 @@ export function DriverDetailPage() {
                 type="button"
                 onClick={() => cancelInvite.mutate()}
                 disabled={cancelInvite.isPending}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
               >
                 Cancel invitation
               </button>
@@ -252,7 +257,6 @@ export function DriverDetailPage() {
                   type="button"
                   onClick={() => setSuspendOpen(true)}
                   disabled={suspend.isPending}
-                  className="rounded-lg border border-attention/40 px-3 py-1.5 text-sm font-medium text-attention hover:bg-attention/10"
                 >
                   Suspend access
                 </button>
@@ -262,7 +266,6 @@ export function DriverDetailPage() {
                 type="button"
                 onClick={() => reinstate.mutate()}
                 disabled={reinstate.isPending}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
               >
                 Reinstate access
               </button>
@@ -273,7 +276,6 @@ export function DriverDetailPage() {
                   type="button"
                   onClick={() => passwordReset.mutate()}
                   disabled={passwordReset.isPending}
-                  className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
                 >
                   Force password reset
                 </button>
@@ -281,17 +283,12 @@ export function DriverDetailPage() {
                   type="button"
                   onClick={() => revokeSessions.mutate()}
                   disabled={revokeSessions.isPending}
-                  className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-50"
                 >
                   Sign out every device
                 </button>
               </>
             )}
-            <button
-              type="button"
-              onClick={() => setTab('Access & Security')}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
-            >
+            <button type="button" onClick={() => setTab('Access & Security')}>
               Access & Security
             </button>
           </>
@@ -318,106 +315,84 @@ export function DriverDetailPage() {
         />
       )}
 
-      <nav className="flex gap-1 overflow-x-auto border-b border-border pb-px">
-        {TABS.map((label) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => setTab(label)}
-            className={`shrink-0 rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === label
-                ? 'border border-b-0 border-border bg-surface text-command-700'
-                : 'text-ink-soft hover:text-ink'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+      <section className="overflow-hidden rounded-xl border border-border bg-surface">
+        <nav className="flex gap-6 overflow-x-auto border-b border-border px-4 sm:px-6">
+          {TABS.map((label) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setTab(label)}
+              className={`shrink-0 border-b-2 px-1 pb-3 pt-4 text-sm font-medium transition ${
+                tab === label
+                  ? 'border-command-600 text-command-700'
+                  : 'border-transparent text-muted hover:border-border hover:text-ink'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
 
+        <div className="p-4 sm:p-6">
       {tab === 'Overview' && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Status (separate dimensions)" className="lg:col-span-2">
-            <dl className="grid gap-3 text-sm sm:grid-cols-3">
-              <Row label="Operational status" value={OPERATIONAL_STATUS_LABELS[driver.operationalStatus]} />
-              <Row label="Account status" value={ACCOUNT_STATUS_LABELS[driver.account.accountStatus]} />
-              <Row label="Compliance" value={driver.complianceStatus.replace(/_/g, ' ')} />
-              <Row label="Eligibility" value={driver.eligibility.summary} />
-              <Row label="Primary depot" value={driver.depotName ?? '—'} />
-              <Row label="Next assignment" value={driver.nextDutyReference ?? '—'} />
-              <Row
-                label="Expiring document"
-                value={
-                  driver.nearestExpiryLabel
-                    ? `${driver.nearestExpiryLabel} · ${formatDate(driver.nearestExpiryDate)}`
-                    : '—'
-                }
-              />
-            </dl>
-          </SectionCard>
-          <SectionCard title="Personal information">
-            <dl className="space-y-2 text-sm">
-              <Row label="Legal name" value={`${driver.firstName} ${driver.lastName}`} />
-              <Row label="Preferred name" value={driver.preferredName ?? '—'} />
-              <Row label="Date of birth" value={formatDate(driver.dateOfBirth)} />
-              <Row label="Email" value={driver.email ?? '—'} />
-              <Row label="Phone" value={driver.phone ?? '—'} />
-              <Row label="Home address" value={driver.homeAddress ?? '—'} />
-              <Row label="Emergency contact" value={driver.emergencyContact ?? '—'} />
-            </dl>
-          </SectionCard>
-          {driverAppEvents.length > 0 ? (
-            <SectionCard title="Driver app activity" className="lg:col-span-2">
-              <p className="mb-3 text-xs text-muted">
-                Recent updates from the Driver mobile app (onboarding and evidence).
-              </p>
-              <ul className="space-y-2 text-sm">
-                {driverAppEvents.map((event) => (
-                  <li key={event.id} className="flex flex-col gap-0.5 border-b border-border/60 pb-2 last:border-0">
-                    <span className="font-medium text-ink">{event.action}</span>
-                    <span className="text-xs text-muted">{formatDate(event.createdAt)}</span>
-                  </li>
-                ))}
-              </ul>
-            </SectionCard>
-          ) : null}
-          <SectionCard title="Employment">
-            <dl className="space-y-2 text-sm">
-              <Row label="Type" value={EMPLOYMENT_TYPE_LABELS[driver.employmentType]} />
-              <Row label="Employment status" value={driver.employmentStatus.replace(/_/g, ' ')} />
-              <Row label="Start date" value={formatDate(driver.startDate)} />
-              <Row label="Manager" value={driver.managerName ?? '—'} />
-              <Row label="Primary depot" value={driver.depotName ?? '—'} />
-              <Row
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">Employment summary</h3>
+            <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <OverviewField label="Employment type" value={EMPLOYMENT_TYPE_LABELS[driver.employmentType]} />
+              <OverviewField label="Employment status" value={driver.employmentStatus.replace(/_/g, ' ')} />
+              <OverviewField label="Start date" value={formatDate(driver.startDate)} />
+              <OverviewField label="Line manager" value={driver.managerName ?? '—'} />
+              <OverviewField label="Primary depot" value={driver.depotName ?? '—'} />
+              <OverviewField
                 label="Additional depots"
                 value={driver.secondaryDepotNames.length ? driver.secondaryDepotNames.join(', ') : '—'}
               />
+              <OverviewField label="Availability" value={driver.availabilityStatus.replace(/_/g, ' ')} />
+              <OverviewField label="Next assignment" value={driver.nextDutyReference ?? '—'} />
+              <OverviewField
+                label="App account"
+                value={ACCOUNT_STATUS_LABELS[driver.account.accountStatus]}
+              />
             </dl>
-          </SectionCard>
-          <SectionCard title="Operational permissions" className="lg:col-span-2">
-            <div className="flex flex-wrap gap-2">
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-ink">Operational permissions</h3>
+            <div className="mt-3 flex flex-wrap gap-2">
               {enabledPerms.map((p) => (
-                <span key={p.key} className="rounded-full bg-command-50 px-2.5 py-1 text-xs font-medium text-command-800">
+                <span
+                  key={p.key}
+                  className="rounded-full bg-command-50 px-2.5 py-1 text-xs font-medium text-command-800"
+                >
                   {p.label}
                 </span>
               ))}
-              {enabledPerms.length === 0 && <p className="text-sm text-muted">No work permissions configured.</p>}
+              {enabledPerms.length === 0 && (
+                <p className="text-sm text-muted">No work permissions configured.</p>
+              )}
             </div>
-          </SectionCard>
-          <SectionCard title="Current operational information" className="lg:col-span-2">
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <Row label="Today's duties" value={String(todayDuties.length)} />
-              <Row label="Availability" value={driver.availabilityStatus.replace(/_/g, ' ')} />
-              <Row
-                label="Active restrictions"
-                value={String(driver.restrictions.filter((r) => r.status === 'active').length)}
-              />
-              <Row
-                label="Documents awaiting review"
-                value={String(countDocumentsPendingAdminReview(driver.documents))}
-              />
-            </dl>
-          </SectionCard>
+          </div>
+
+          {driverAppEvents.length > 0 ? (
+            <div>
+              <h3 className="text-sm font-semibold text-ink">Driver app activity</h3>
+              <p className="mt-1 text-xs text-muted">
+                Recent updates from the Driver mobile app.
+              </p>
+              <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
+                {driverAppEvents.map((event) => (
+                  <li
+                    key={event.id}
+                    className="flex items-start justify-between gap-4 px-4 py-3 first:pt-3 last:pb-3"
+                  >
+                    <span className="text-sm font-medium text-ink">{event.action}</span>
+                    <span className="shrink-0 text-xs text-muted">{formatDate(event.createdAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -482,6 +457,8 @@ export function DriverDetailPage() {
           canEdit={canEditDriver(permissions)}
         />
       )}
+        </div>
+      </section>
 
       <SuspendDriverAccessDialog
         open={suspendOpen}
@@ -495,11 +472,24 @@ export function DriverDetailPage() {
   )
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function formatLeaveBalance(bundle: Awaited<ReturnType<typeof api.getDriverHoliday>>) {
+  if (bundle.displayUnit === 'hours') {
+    const hours = (bundle.minutes.remaining ?? 0) / 60
+    const formatted = Number.isInteger(hours) ? String(hours) : hours.toFixed(1).replace(/\.0$/, '')
+    return `${formatted} hours`
+  }
+  const days = bundle.days.remaining
+  if (days == null || Number.isNaN(Number(days))) return '—'
+  const n = Number(days)
+  const formatted = Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, '')
+  return `${formatted} days`
+}
+
+function OverviewField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-muted">{label}</dt>
-      <dd className="text-right font-medium text-ink">{value}</dd>
+    <div>
+      <dt className="text-sm text-muted">{label}</dt>
+      <dd className="mt-1 text-sm font-medium text-ink">{value}</dd>
     </div>
   )
 }

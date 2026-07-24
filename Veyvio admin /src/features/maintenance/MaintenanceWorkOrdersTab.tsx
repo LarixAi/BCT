@@ -13,7 +13,9 @@ import {
 import { WORK_ORDER_STATUS_LABELS } from '@/lib/vehicles/maintenance'
 import type { FleetWorkOrderRow } from '@/lib/maintenance/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 type ViewMode = 'board' | 'table'
 
@@ -73,8 +75,8 @@ export function MaintenanceWorkOrdersTab({
   }, [highlightWorkOrderId, filtered])
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['maintenance-hub'] })
-    queryClient.invalidateQueries({ queryKey: ['vehicle-profiles'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['maintenance-hub']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
   }
 
   const transition = useMutation({

@@ -35,7 +35,9 @@ import { StaffSessionsPanel } from './components/StaffSessionsPanel'
 import { temporaryDepotExpiringSoon } from '@/lib/staff/depot-access'
 import { canStartDutyWithTraining } from '@/lib/staff/training'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const TABS = [
   'Overview',
@@ -77,13 +79,13 @@ export function StaffDetailPage() {
   const actorName = `${user?.firstName ?? 'Admin'} ${user?.lastName ?? ''}`.trim()
 
   const { data: staff, isLoading, error, isError } = useQuery({
-    queryKey: ['staff-profile', id],
+    queryKey: tKey(['staff-profile', id]),
     queryFn: () => api.getStaffProfile(id!),
     enabled: !!id,
   })
 
   const { data: allStaff = [] } = useQuery({
-    queryKey: ['staff-profiles'],
+    queryKey: tKey(['staff-profiles']),
     queryFn: () => api.getStaffProfiles(),
   })
 
@@ -93,9 +95,9 @@ export function StaffDetailPage() {
   }, [tabFromQuery])
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['staff-profile', id] })
-    queryClient.invalidateQueries({ queryKey: ['staff-hub'] })
-    queryClient.invalidateQueries({ queryKey: ['staff'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['staff-profile', id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['staff-hub']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['staff']) })
   }
 
   const invite = useMutation({

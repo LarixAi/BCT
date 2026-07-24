@@ -46,6 +46,7 @@ import {
 import { normalizeAdBlueRecords } from '@/lib/adblue/normalize'
 import { normalizeVehicleProfile } from '@/lib/vehicles/readiness-projection'
 import { normalizeDriverProfileDocuments } from '@/lib/drivers/document-display'
+import { normalizeBookingRecord } from '@/lib/bookings/normalize-booking'
 import { safeMaintenanceHub } from '@/lib/api/safe-hubs'
 
 const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')
@@ -53,6 +54,8 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
 const TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
 const MEMBERSHIPS_KEY = 'pending_memberships'
+
+import { isAccessTokenExpired, resolveSupabaseProjectUrl } from './auth-session'
 
 /** Resolve `/api/...` against either a Nest-style origin or a Supabase Edge Function base URL. */
 function apiUrl(path: string): string {
@@ -159,6 +162,12 @@ export class ApiClient {
     return typeof window !== 'undefined' && sessionStorage.getItem('has_tenant') === '1'
   }
 
+  /** True when we can call authenticated APIs (access token and/or refresh token). */
+  hasAuthSession(): boolean {
+    if (this.getToken()) return true
+    return typeof window !== 'undefined' && Boolean(localStorage.getItem(REFRESH_TOKEN_KEY))
+  }
+
   setPendingMemberships(memberships: TenantMembershipOption[]) {
     sessionStorage.setItem(MEMBERSHIPS_KEY, JSON.stringify(memberships))
   }
@@ -173,7 +182,59 @@ export class ApiClient {
     }
   }
 
-  async fetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+  async refreshAccessToken(): Promise<string> {
+    if (typeof window === 'undefined') {
+      throw new Error('Session expired — sign in again')
+    }
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+    if (!refreshToken) throw new Error('Session expired — sign in again')
+
+    const supabaseUrl = resolveSupabaseProjectUrl(API_URL)
+    if (!supabaseUrl || !SUPABASE_ANON_KEY) {
+      throw new Error('Sign-in service is not configured')
+    }
+
+    const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+
+    if (!res.ok) throw new Error('Session expired — sign in again')
+    const data = (await res.json()) as { access_token?: string; refresh_token?: string }
+    if (!data.access_token) throw new Error('Session expired — sign in again')
+
+    this.setToken(data.access_token, this.hasTenant())
+    if (data.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token)
+    return data.access_token
+  }
+
+  async ensureValidAccessToken(options?: { force?: boolean }): Promise<string | null> {
+    const hasRefresh =
+      typeof window !== 'undefined' && Boolean(localStorage.getItem(REFRESH_TOKEN_KEY))
+    const token = this.getToken()
+
+    if (!token) {
+      if (!hasRefresh) return null
+      return this.refreshAccessToken()
+    }
+
+    if (!options?.force && !isAccessTokenExpired(token)) return token
+    if (!hasRefresh) throw new Error('Session expired — sign in again')
+    return this.refreshAccessToken()
+  }
+
+  async listMemberships() {
+    await this.ensureValidAccessToken()
+    const data = await this.fetch<{ memberships?: TenantMembershipOption[] }>('/auth/memberships')
+    return Array.isArray(data.memberships) ? data.memberships : []
+  }
+
+  async fetch<T = unknown>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
     const token = this.getToken()
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -202,6 +263,20 @@ export class ApiClient {
     }
 
     if (!res.ok) {
+      if (
+        res.status === 401 &&
+        token &&
+        !retried &&
+        typeof window !== 'undefined' &&
+        localStorage.getItem(REFRESH_TOKEN_KEY)
+      ) {
+        try {
+          await this.refreshAccessToken()
+          return this.fetch<T>(path, options, true)
+        } catch {
+          // Fall through to session expiry handling.
+        }
+      }
       if (res.status === 401 && token) {
         this.clearToken()
         if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
@@ -219,6 +294,12 @@ export class ApiClient {
   }
 
   async login(email: string, password: string, rememberMe = false) {
+    // Drop any previous session so a new sign-in cannot inherit stale tokens.
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(TOKEN_KEY)
+      this.accessToken = null
+    }
+
     // Public auth: never attach a leftover session token on login.
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (SUPABASE_ANON_KEY) {
@@ -242,6 +323,7 @@ export class ApiClient {
   }
 
   async selectTenant(tenantId: string) {
+    await this.ensureValidAccessToken()
     const refreshToken = typeof window === 'undefined' ? null : localStorage.getItem(REFRESH_TOKEN_KEY)
     const result = await this.fetch<AuthTokensResponse>('/auth/select-tenant', {
       method: 'POST',
@@ -407,8 +489,11 @@ export class ApiClient {
         }>
       })
       .then((result) => {
-        if (result.refreshToken && typeof window !== 'undefined') {
-          localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken)
+        if (typeof window !== 'undefined') {
+          if (result.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken)
+          if (result.accessToken) {
+            this.setToken(result.accessToken, false)
+          }
         }
         return result
       })
@@ -1037,6 +1122,16 @@ export class ApiClient {
       },
       reports: [],
     }))
+  }
+
+  async getBodyConditionHub(depotId?: string) {
+    const q = depotId ? `?depotId=${encodeURIComponent(depotId)}` : ''
+    try {
+      return await this.fetch<import('@/lib/body-condition/types').BodyConditionHubData>(`/body-condition/hub${q}`)
+    } catch {
+      const { mockBodyConditionHub } = await import('@/lib/api/mock-body-condition')
+      return mockBodyConditionHub()
+    }
   }
 
   returnVehicleToService(id: string, actorName: string, input: import('@/lib/vehicles/types').ReturnToServiceInput) {
@@ -2317,7 +2412,9 @@ export class ApiClient {
   }
 
   getBooking(id: string) {
-    return this.fetch<BookingRecord>(`/bookings/${id}`)
+    return this.fetch<BookingRecord>(`/bookings/${id}`).then((raw) =>
+      normalizeBookingRecord(raw as Record<string, unknown>),
+    )
   }
 
   createBookingDraft(bookingType?: BookingDraft['bookingType'], options?: CreateDraftOptions) {
@@ -2501,6 +2598,45 @@ export class ApiClient {
     }
   }
 
+  assignPlanningTrip(
+    tripId: string,
+    input: { driverId?: string | null; vehicleId?: string | null },
+  ) {
+    return this.fetch<import('@/lib/transfers/types').OperationalTrip>(
+      `/operational-trips/${tripId}/assign`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  movePlanningJob(jobId: string, targetTripId: string) {
+    return this.fetch<import('@/lib/transfers/types').OperationalTrip>(
+      `/operational-trips/${targetTripId}/jobs`,
+      { method: 'POST', body: JSON.stringify({ jobId }) },
+    )
+  }
+
+  createPlanningTripFromJobs(
+    jobIds: string[],
+    opts?: { dutyId?: string | null; runReference?: string | null; routeName?: string | null },
+  ) {
+    return this.fetch<import('@/lib/transfers/types').OperationalTrip>('/operational-trips/plan', {
+      method: 'POST',
+      body: JSON.stringify({ jobIds, ...opts }),
+    })
+  }
+
+  validateSchedulePlanningAssignment(input: {
+    tripId: string
+    driverId?: string | null
+    vehicleId?: string | null
+    dutyDate: string
+  }) {
+    return this.fetch<import('@/lib/schedule/planning-types').PlanningAssignmentValidation>(
+      '/schedule/planning/validate',
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
   async getOperationalPosition(tripId: string) {
     try {
       const raw = await this.fetch<unknown>(`/operational-trips/${tripId}/position`)
@@ -2565,6 +2701,119 @@ export class ApiClient {
   getTransferReport(periodFrom: string, periodTo: string) {
     return this.fetch<import('@/lib/transfers/types').TransferReportSummary>(
       `/transfers/report?from=${periodFrom}&to=${periodTo}`,
+    )
+  }
+
+  getDialARideMembers() {
+    return this.fetch<import('@/lib/dial-a-ride/types').DialARideMember[]>('/dial-a-ride/members')
+  }
+
+  getDialARideMember(id: string) {
+    return this.fetch<import('@/lib/dial-a-ride/types').DialARideMember>(`/dial-a-ride/members/${id}`)
+  }
+
+  getDialARideRequests(params?: { view?: string }) {
+    const q = params?.view ? `?view=${params.view}` : ''
+    return this.fetch<import('@/lib/dial-a-ride/types').DialARideRequestListItem[]>(`/dial-a-ride/requests${q}`)
+  }
+
+  getDialARideRequest(id: string) {
+    return this.fetch<import('@/lib/dial-a-ride/types').DialARideRequest>(`/dial-a-ride/requests/${id}`)
+  }
+
+  getDialARideSummary() {
+    return this.fetch<{
+      requestsToday: number
+      awaitingDecision: number
+      unscheduled: number
+      membersTravelling: number
+    }>('/dial-a-ride/summary')
+  }
+
+  createDialARideRequestDraft(memberId?: string) {
+    const q = memberId ? `?memberId=${memberId}` : ''
+    return this.fetch<import('@/lib/dial-a-ride/types').DialARideRequest>(`/dial-a-ride/requests/draft${q}`, {
+      method: 'POST',
+    })
+  }
+
+  saveDialARideRequest(draft: import('@/lib/dial-a-ride/types').DialARideRequestDraft) {
+    return this.fetch<import('@/lib/dial-a-ride/types').DialARideRequest>('/dial-a-ride/requests', {
+      method: 'PUT',
+      body: JSON.stringify(draft),
+    })
+  }
+
+  runDialARideServiceChecks(draft: import('@/lib/dial-a-ride/types').DialARideRequestDraft) {
+    return this.fetch<import('@/lib/dial-a-ride/eligibility').ServiceCheckOutcome>('/dial-a-ride/service-checks', {
+      method: 'POST',
+      body: JSON.stringify(draft),
+    })
+  }
+
+  acceptDialARideRequest(requestId: string, opts?: { overrideReason?: string }) {
+    return this.fetch<import('@/lib/dial-a-ride/types').DialARideRequest>(
+      `/dial-a-ride/requests/${requestId}/accept`,
+      { method: 'POST', body: JSON.stringify(opts ?? {}) },
+    )
+  }
+
+  declineDialARideRequest(requestId: string, reason: string) {
+    return this.fetch<import('@/lib/dial-a-ride/types').DialARideRequest>(
+      `/dial-a-ride/requests/${requestId}/decline`,
+      { method: 'POST', body: JSON.stringify({ reason }) },
+    )
+  }
+
+  waitingListDialARideRequest(requestId: string) {
+    return this.fetch<import('@/lib/dial-a-ride/types').DialARideRequest>(
+      `/dial-a-ride/requests/${requestId}/waiting-list`,
+      { method: 'POST' },
+    )
+  }
+
+  getSchoolRoutes(params?: { view?: string }) {
+    const q = params?.view ? `?view=${params.view}` : ''
+    return this.fetch<import('@/lib/school-routes/types').SchoolRouteListItem[]>(`/school-routes${q}`)
+  }
+
+  getSchoolRoute(id: string) {
+    return this.fetch<import('@/lib/school-routes/types').SchoolRoute>(`/school-routes/${id}`)
+  }
+
+  getSchoolRoutesSummary() {
+    return this.fetch<{
+      activeRoutes: number
+      pupilsToday: number
+      unscheduledJobs: number
+      exceptions: number
+    }>('/school-routes/summary')
+  }
+
+  createSchoolRouteDraft() {
+    return this.fetch<import('@/lib/school-routes/types').SchoolRoute>('/school-routes/draft', { method: 'POST' })
+  }
+
+  saveSchoolRoute(draft: import('@/lib/school-routes/types').SchoolRouteDraft) {
+    return this.fetch<import('@/lib/school-routes/types').SchoolRoute>('/school-routes', {
+      method: 'PUT',
+      body: JSON.stringify(draft),
+    })
+  }
+
+  publishSchoolRoute(routeId: string) {
+    return this.fetch<import('@/lib/school-routes/types').SchoolRoute>(`/school-routes/${routeId}/publish`, {
+      method: 'POST',
+    })
+  }
+
+  previewSchoolRouteJobCount(routeId: string) {
+    return this.fetch<{ count: number }>(`/school-routes/${routeId}/job-preview`)
+  }
+
+  getSchoolRouteAttendance(routeId: string) {
+    return this.fetch<import('@/lib/school-routes/types').SchoolRouteAttendanceRow[]>(
+      `/school-routes/${routeId}/attendance`,
     )
   }
 

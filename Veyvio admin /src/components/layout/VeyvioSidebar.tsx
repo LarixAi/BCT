@@ -3,6 +3,7 @@ import {
   Bell,
   BookOpenCheck,
   Building2,
+  Briefcase,
   Bus,
   CalendarDays,
   CalendarOff,
@@ -25,7 +26,6 @@ import {
   Plug,
   PoundSterling,
   Repeat2,
-  Route,
   School,
   Search,
   Settings,
@@ -83,20 +83,11 @@ const sectionDefs: SidebarSection[] = [
     label: "Operations",
     items: [
       { label: "Bookings", href: "/bookings", icon: CalendarDays },
-      { label: "Dispatch", href: "/dispatch", icon: Route },
-      { label: "Runs", href: "/runs", icon: Route },
-      {
-        label: "Trips",
-        icon: Route,
-        children: [
-          { label: "All trips", href: "/trips" },
-          { label: "Active", href: "/trips?status=active" },
-          { label: "Completed", href: "/trips?status=completed" },
-          { label: "Cancelled", href: "/trips?status=cancelled" },
-        ],
-      },
+      { label: "Jobs", href: "/jobs", icon: Briefcase },
+      { label: "Dial-a-Ride", href: "/dial-a-ride", icon: Users },
+      { label: "School Routes", href: "/school-routes", icon: School },
       { label: "Schedule", href: "/schedule", icon: CalendarDays },
-      { label: "Recurring Transport", href: "/recurring-transport", icon: Repeat2 },
+      { label: "Dispatch", href: "/dispatch", icon: Gauge },
     ],
   },
   {
@@ -109,29 +100,26 @@ const sectionDefs: SidebarSection[] = [
       { label: "Vehicles", href: "/vehicles", icon: Bus },
       { label: "Depots", href: "/depots", icon: Building2 },
       { label: "Yard Operations", href: "/yard", icon: Warehouse },
-      { label: "Maintenance", href: "/maintenance", icon: Wrench },
-      { label: "Fleet Resources", href: "/fleet-resources", icon: Fuel },
     ],
   },
   {
-    label: "Safety & Compliance",
+    label: "Maintenance",
     items: [
+      { label: "Maintenance", href: "/maintenance", icon: Wrench },
       { label: "Vehicle Checks", href: "/vehicle-checks", icon: ClipboardCheck },
-      { label: "Vehicle Reports", href: "/vehicle-reports", icon: FileText },
       { label: "Defects", href: "/defects", icon: AlertTriangle },
-      { label: "Inspections", href: "/inspections", icon: BookOpenCheck },
       { label: "Incidents", href: "/incidents", icon: Siren },
-      { label: "Compliance Rules", href: "/compliance-rules", icon: ShieldCheck },
+      { label: "Inspections", href: "/inspections", icon: BookOpenCheck },
+      { label: "Body condition", href: "/body-condition", icon: ClipboardCheck },
     ],
   },
   {
-    label: "Customers & Commercial",
+    label: "Customers",
     items: [
       { label: "Customers", href: "/customers", icon: Building2 },
       { label: "Passengers", href: "/passengers", icon: Users },
       { label: "Schools", href: "/schools", icon: School },
       { label: "Contracts", href: "/contracts", icon: FileText },
-      { label: "Pricing", href: "/pricing", icon: PoundSterling },
     ],
   },
   {
@@ -276,7 +264,7 @@ export function VeyvioSidebar({
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Trips: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
     defaultOpenSections(pathname),
   );

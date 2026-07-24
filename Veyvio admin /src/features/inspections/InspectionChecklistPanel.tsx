@@ -12,7 +12,9 @@ import {
 } from '@/lib/maintenance/pmi-checklist'
 import type { InspectionRecord } from '@/lib/inspections/types'
 import { api } from '@/lib/api/client'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 const RESULT_OPTIONS: { id: PmiItemResult; label: string }[] = [
   { id: 'pass', label: 'Pass' },
@@ -53,8 +55,8 @@ export function InspectionChecklistPanel({ inspection }: { inspection: Inspectio
   }, [])
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['inspection', inspection.id] })
-    queryClient.invalidateQueries({ queryKey: ['inspections-hub'] })
+    queryClient.invalidateQueries({ queryKey: tKey(['inspection', inspection.id]) })
+    queryClient.invalidateQueries({ queryKey: tKey(['inspections-hub']) })
   }
 
   const updateItem = useMutation({

@@ -4,6 +4,8 @@ import { SectionCard } from '@/components/ui'
 import type { BookingDraft } from '@/lib/bookings/types'
 import { estimatePricing } from '@/lib/bookings/validation'
 import { api } from '@/lib/api/client'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
+
 
 export function PricingStep({
   draft,
@@ -13,7 +15,7 @@ export function PricingStep({
   onChange: (patch: Partial<BookingDraft>) => void
 }) {
   const { data: context } = useQuery({
-    queryKey: ['customer-booking-context', draft.customerId],
+    queryKey: tKey(['customer-booking-context', draft.customerId]),
     queryFn: () => api.getCustomerBookingContext(draft.customerId!),
     enabled: !!draft.customerId,
   })
