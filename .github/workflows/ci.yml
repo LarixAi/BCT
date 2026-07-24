@@ -140,7 +140,6 @@ jobs:
           npm ci
 
       - name: Cross-tenant isolation smoke
-        if: ${{ secrets.VEYVIO_ANON_KEY != '' }}
         env:
           CI: "true"
           VEYVIO_ANON_KEY: ${{ secrets.VEYVIO_ANON_KEY }}
@@ -151,10 +150,9 @@ jobs:
           VEYVIO_ISOLATION_PASSWORD: ${{ secrets.VEYVIO_ISOLATION_PASSWORD }}
         run: |
           cd "Veyvio admin "
+          if [ -z "${VEYVIO_ANON_KEY}" ]; then
+            echo "::warning::VEYVIO_ANON_KEY is not set — tenant isolation smoke skipped."
+            echo "Add VEYVIO_ANON_KEY and related secrets before merging tenant-isolation work to main."
+            exit 0
+          fi
           npm run test:tenant-isolation
-
-      - name: Tenant isolation skipped (configure repo secrets)
-        if: ${{ secrets.VEYVIO_ANON_KEY == '' }}
-        run: |
-          echo "::warning::VEYVIO_ANON_KEY is not set — tenant isolation smoke skipped."
-          echo "Add VEYVIO_ANON_KEY, VEYVIO_API_URL, VEYVIO_SUPABASE_URL, VEYVIO_PLATFORM_EMAIL, VEYVIO_PLATFORM_PASSWORD, and VEYVIO_ISOLATION_PASSWORD in GitHub repo secrets before merging to main."
