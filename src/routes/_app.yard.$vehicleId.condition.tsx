@@ -37,10 +37,6 @@ function ConditionPage() {
     pathname.includes("/condition/compare") ||
     pathname.includes("/condition/damage/");
 
-  if (isNestedWorkflow) {
-    return <Outlet />;
-  }
-
   const vehicle = useYard(s => s.vehicles.find(v => v.id === vehicleId));
   const profiles = useYard(s => s.conditionProfiles);
   const damageRecords = useYard(s => s.damageRecords);
@@ -49,13 +45,18 @@ function ConditionPage() {
   const snapshots = useYard(s => s.conditionSnapshots);
   const custody = useYard(s => s.custodyTimeline);
 
+  const openDamage = useMemo(() => openDamageForVehicle(damageRecords, vehicleId), [damageRecords, vehicleId]);
+  const history = useMemo(() => inspectionsForVehicle(inspections, vehicleId), [inspections, vehicleId]);
+
+  if (isNestedWorkflow) {
+    return <Outlet />;
+  }
+
   if (!vehicle) throw notFound();
 
   const profile = getConditionProfile(profiles, vehicleId);
-  const openDamage = useMemo(() => openDamageForVehicle(damageRecords, vehicleId), [damageRecords, vehicleId]);
   const zones = getBodyZones(vehicle.type);
   const snapshot = latestApprovedSnapshot(snapshots, vehicleId);
-  const history = useMemo(() => inspectionsForVehicle(inspections, vehicleId), [inspections, vehicleId]);
   const pendingObs = observations.filter(
     o => o.vehicleId === vehicleId && ["new_not_reported", "possible_new_review"].includes(o.classification),
   );

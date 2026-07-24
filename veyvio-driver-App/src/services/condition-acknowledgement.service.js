@@ -1,5 +1,5 @@
 import { getCommandAccessToken } from "@/lib/command-session";
-import { commandApiUrl } from "@/lib/command-api";
+import { getCommandApiBaseUrl } from "@/lib/command-api";
 
 /**
  * Submit driver condition acknowledgement to Command API.
@@ -18,7 +18,7 @@ export async function submitConditionAcknowledgement({
     return { ok: false, message: "Sign in required to record acknowledgement." };
   }
 
-  const res = await fetch(`${commandApiUrl()}/driver/condition-acknowledgements`, {
+  const res = await fetch(`${getCommandApiBaseUrl()}/driver/condition-acknowledgements`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

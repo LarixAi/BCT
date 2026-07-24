@@ -13,5 +13,6 @@ export function getScopedCompanyId(): string {
 
 /** Prefix query keys with the active company — safe to call outside React hooks. */
 export function tKey(parts: readonly unknown[]) {
-  return tenantKeys.generic(activeCompanyId || '_none', ...parts)
+  const [domain, ...rest] = parts
+  return tenantKeys.generic(activeCompanyId || '_none', String(domain), ...rest)
 }

@@ -75,10 +75,10 @@ jobs:
 
       - name: Build
         env:
-          VITE_MOCK_API: "true"
+          CI: "true"
         run: |
           cd "Veyvio admin "
-          npm run build
+          npm run build:ci
 
   driver:
     name: Driver
@@ -140,6 +140,7 @@ jobs:
           npm ci
 
       - name: Cross-tenant isolation smoke
+        if: ${{ secrets.VEYVIO_ANON_KEY != '' }}
         env:
           CI: "true"
           VEYVIO_ANON_KEY: ${{ secrets.VEYVIO_ANON_KEY }}
@@ -151,3 +152,9 @@ jobs:
         run: |
           cd "Veyvio admin "
           npm run test:tenant-isolation
+
+      - name: Tenant isolation skipped (configure repo secrets)
+        if: ${{ secrets.VEYVIO_ANON_KEY == '' }}
+        run: |
+          echo "::warning::VEYVIO_ANON_KEY is not set — tenant isolation smoke skipped."
+          echo "Add VEYVIO_ANON_KEY, VEYVIO_API_URL, VEYVIO_SUPABASE_URL, VEYVIO_PLATFORM_EMAIL, VEYVIO_PLATFORM_PASSWORD, and VEYVIO_ISOLATION_PASSWORD in GitHub repo secrets before merging to main."

@@ -26,7 +26,9 @@
       "@veyvio/incidents": ["../shared/veyvio-incidents/index.ts"],
       "@veyvio/incidents/*": ["../shared/veyvio-incidents/*"],
       "@veyvio/ops": ["../shared/veyvio-ops/index.ts"],
-      "@veyvio/ops/*": ["../shared/veyvio-ops/*"]
+      "@veyvio/ops/*": ["../shared/veyvio-ops/*"],
+      "@veyvio/yard": ["../shared/veyvio-yard/index.ts"],
+      "@veyvio/yard/*": ["../shared/veyvio-yard/*"]
     }
   },
   "include": ["src"],

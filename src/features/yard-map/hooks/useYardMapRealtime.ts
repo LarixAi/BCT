@@ -65,7 +65,7 @@ export function useYardMapRealtime(enabled: boolean) {
       return channel;
     };
 
-    let channelPromise = setup();
+    const channelPromise = setup();
 
     return () => {
       cancelled = true;
