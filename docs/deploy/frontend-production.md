@@ -1,9 +1,10 @@
 # Frontend production deploy (Admin, Yard, Driver)
 
-Production builds must use live Command API and Supabase — mock flags are blocked by `validate-production-env.mjs`.
+Production builds must use live Command API and Supabase — mock flags are blocked by `validate-production-env.mjs` (Admin) and production config tests (Yard).
 
 - **Admin:** `docs/deploy/admin-production.md`
-- **Yard / Driver:** sections below
+- **Yard:** `docs/deploy/yard-production.md`
+- **Driver:** section below
 
 ## Required environment variables
 
@@ -39,16 +40,14 @@ npm run build:ci                  # CI / deploy (skips tsc gate)
 
 ### Veyvio Yard (repo root)
 
-| Variable | Production value |
-|----------|------------------|
-| `VITE_SUPABASE_URL` | Same Supabase project |
-| `VITE_SUPABASE_ANON_KEY` | Project anon key |
-| `VITE_COMMAND_API_BASE_URL` | Command API URL |
-| `VITE_MOCK_API` | **unset** or `false` |
+See **`docs/deploy/yard-production.md`** — Cloudflare Workers (Nitro), build env, Wrangler deploy, Capacitor/Android path, and yard map smoke.
+
+Quick build:
 
 ```bash
 npm ci
 npm run build
+npx nitro deploy --prebuilt   # after wrangler login
 ```
 
 ### Veyvio Driver (`veyvio-driver-App/`)

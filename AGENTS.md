@@ -4,7 +4,7 @@
 
 | App | Path | Stack |
 |-----|------|--------|
-| **Veyvio Yard** | repo root (`src/`) | TanStack Start + Vite + Nitro |
+| **Veyvio Yard** | repo root (`src/`) | TanStack Start + Vite + Nitro → Cloudflare Workers |
 | **Veyvio Admin (Command)** | `Veyvio admin /` | Vite SPA + Supabase `command-api` |
 | **Veyvio Driver** | `veyvio-driver-App/` | Vite SPA |
 | **Shared packages** | `shared/`, `packages/` | TypeScript libs |
@@ -20,7 +20,7 @@ Backend: Supabase Postgres + Edge Function `command-api` under `Veyvio admin /su
 
 ## Production environment
 
-See `docs/deploy/frontend-production.md` and `docs/deploy/admin-production.md`.
+See `docs/deploy/frontend-production.md`, `docs/deploy/admin-production.md`, and `docs/deploy/yard-production.md`.
 
 Non-negotiables for production builds:
 
