@@ -2,6 +2,9 @@
 
 Production builds must use live Command API and Supabase — mock flags are blocked by `validate-production-env.mjs`.
 
+- **Admin:** `docs/deploy/admin-production.md`
+- **Yard / Driver:** sections below
+
 ## Required environment variables
 
 ### Veyvio Admin (`Veyvio admin /`)
@@ -22,7 +25,7 @@ cp .env.example .env
 # set VITE_OPERATIONS_MOCK=false (never true)
 ```
 
-**Lovable / hosted Admin:** set the same `VITE_*` values in the project environment panel. Redeploy after changing env vars.
+Hosted deploy: see `docs/deploy/admin-production.md` — set `VITE_*` in your CI/static host, build `dist/`, enable SPA fallback.
 
 Build:
 

@@ -221,7 +221,7 @@ flowchart LR
 - Full colour rebrand of marketing site (out of scope for app repo)
 - Mobbin / paid design tools (free patterns already applied)
 - Real-time ML on device
-- Rewriting git history (Lovable constraint)
+- Rewriting git history on `main` after others have pulled
 
 ---
 
