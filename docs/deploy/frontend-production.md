@@ -42,12 +42,11 @@ npm run build:ci                  # CI / deploy (skips tsc gate)
 
 See **`docs/deploy/yard-production.md`** — Cloudflare Workers (Nitro), build env, Wrangler deploy, Capacitor/Android path, and yard map smoke.
 
-Quick build:
+Quick build + deploy:
 
 ```bash
 npm ci
-npm run build
-npx nitro deploy --prebuilt   # after wrangler login
+npm run deploy:yard   # build + wrangler deploy (interactive first time for workers.dev subdomain)
 ```
 
 ### Veyvio Driver (`veyvio-driver-App/`)

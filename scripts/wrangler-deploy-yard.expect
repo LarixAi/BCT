@@ -1,0 +1,30 @@
+#!/usr/bin/expect -f
+set timeout 300
+set account_subdomain "larixai-veyvio"
+
+spawn npx --yes wrangler deploy --config .output/server/wrangler.json
+
+expect "Would you like to register a workers.dev subdomain now?"
+send "yes\r"
+
+expect "What would you like your workers.dev subdomain to be?"
+send "$account_subdomain\r"
+
+expect {
+  "Ok to proceed?" {
+    send "yes\r"
+    exp_continue
+  }
+  "Successfully published" { }
+  "Current Version ID:" { }
+  -re {https://[a-zA-Z0-9.-]+\.workers\.dev} {
+    puts "\n$expect_out(0,string)"
+    exp_continue
+  }
+  "ERROR" { exit 1 }
+  timeout { exit 2 }
+  eof { }
+}
+
+wait
+exit 0

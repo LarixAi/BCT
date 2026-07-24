@@ -74,20 +74,34 @@ Sign in with a real yard-capable user (BCT membership). Mock auth is off when `V
 
 ## Deploy to Cloudflare
 
-### One-shot (after local build)
+### Prerequisites (one-time)
+
+1. `npx wrangler login` (OAuth — browser)
+2. Register a **workers.dev subdomain** for your Cloudflare account (account-level, not per worker). Either:
+   - Open [Workers onboarding](https://dash.cloudflare.com/?to=/:account/workers/onboarding) and complete the subdomain step, **or**
+   - Run deploy interactively in a terminal (not CI) and answer **yes** when Wrangler prompts to register (e.g. `larixai-veyvio` → `https://larixai-veyvio.workers.dev`)
+
+Until this is done, deploy fails with: *"You need to register a workers.dev subdomain before publishing"*.
+
+### Build + deploy
 
 ```bash
+npm ci
+# ensure .env has live VITE_* (see above)
 npm run build
-npx nitro deploy --prebuilt
+npx wrangler deploy --config .output/server/wrangler.json
 ```
 
-Requires [Wrangler](https://developers.cloudflare.com/workers/wrangler/) logged in (`npx wrangler login`).
+Worker URL after deploy: `https://larixai-bct.<your-account-subdomain>.workers.dev` (name from generated `wrangler.json`).
 
-### Manual Wrangler
+**Note:** Prefer `wrangler deploy --config .output/server/wrangler.json` from repo root. `npx nitro deploy --prebuilt` can conflict when both `.output/server/wrangler.json` and `.wrangler/deploy/config.json` exist.
+
+Optional helper (interactive TTY required): `scripts/wrangler-deploy-yard.expect`
+
+Verify upload without publishing:
 
 ```bash
-npm run build
-npx wrangler --cwd .output/server deploy
+npx wrangler deploy --config .output/server/wrangler.json --dry-run
 ```
 
 ### CI (GitHub Actions → Cloudflare)
