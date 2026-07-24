@@ -122,6 +122,12 @@ export const yardCopy = {
     noDepots: "No depots found for this company.",
   },
 
+  connection: {
+    demoData: "Demo data — actions stay on this device until Command handlers are live",
+    liveBackend: "Connected to Command — fleet data from your operator",
+    loadingDepot: "Loading depot data from Command…",
+  },
+
   empty: {
     noOpenDefects: "No open defects",
     nothingAwaitingCheck: "No vehicles awaiting a yard check",
@@ -175,6 +181,17 @@ export const yardCopy = {
     emptyQueue: "No updates waiting to sync. Changes made offline will appear here.",
     loading: "Loading queue…",
     retryPending: "Retry pending",
+    retryFailed: "Retry failed",
+    routeNotDeployed:
+      "The live Command API does not have the yard sync route yet. Deploy command-api from the Admin repo, then retry failed updates below.",
+    staleFailureHint:
+      "These failures are from before the server was updated. They are real actions Kenny recorded on this device — not demo data. Tap Retry failed to upload them now, or Clear failed backlog if you only want a clean queue.",
+    queueExplainer:
+      "Each row is a real change made in the Yard app. op_… is this device’s queue id, not mock data.",
+    clearFailed: "Clear failed backlog",
+    clearFailedConfirm:
+      "Remove all failed items from this device? This does not undo work already on the server.",
+    byType: "By type",
     syncing: "Syncing…",
     workingOffline: "You are working offline",
     savedOnDevice: "Changes are being saved on this device",

@@ -5,7 +5,8 @@ import { VehicleIdentityHeader } from "@/components/yard/VehicleIdentityHeader";
 import { PermissionGate } from "@/components/yard/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ClipboardCheck, Droplets, MoveRight, Search, TriangleAlert, MapPin, ShieldAlert, Fuel, Clock } from "lucide-react";
-import { drivers } from "@/data/fixtures";
+import { resolveDemoDriverName } from "@/platform/yard/demo-drivers";
+import { formatFuelPct } from "@/lib/format-fuel-pct";
 import { useCan } from "@/platform/permissions/use-can";
 
 export const Route = createFileRoute("/_app/yard/$vehicleId/")({
@@ -29,13 +30,14 @@ function VehicleDetail() {
   const defects = useMemo(() => allDefects.filter(d => d.vehicleId === vehicleId && !d.resolved), [allDefects, vehicleId]);
   const movements = useMemo(() => allMovements.filter(m => m.vehicleId === vehicleId), [allMovements, vehicleId]);
   const vorCases = useMemo(() => allVorCases.filter(c => c.vehicleId === vehicleId), [allVorCases, vehicleId]);
+  const dataSource = useYard(s => s.dataSource);
   const trip = useYard(s => s.trips.find(t => t.vehicleId === vehicleId));
   const openSheet = useYard(s => s.openSheet);
   const canSpotAudit = useCan("check.spot_audit");
 
   if (!vehicle) throw notFound();
 
-  const driverName = drivers.find(d => d.id === trip?.driverId)?.name;
+  const driverName = resolveDemoDriverName(trip?.driverId, dataSource);
   const isVor = vehicle.status === "VOR";
 
   return (
@@ -49,7 +51,7 @@ function VehicleDetail() {
         {vehicle.notes && <p className="mt-3 text-sm font-medium text-vor">⚠ {vehicle.notes}</p>}
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-muted">
-          <span className="inline-flex items-center gap-1"><Fuel className="size-3" />{vehicle.fuelPct}% fuel</span>
+          <span className="inline-flex items-center gap-1"><Fuel className="size-3" />{formatFuelPct(vehicle.fuelPct)} fuel</span>
           {vehicle.lastCheckAt && (
             <span className="inline-flex items-center gap-1"><Clock className="size-3" />Last check {formatTime(vehicle.lastCheckAt)}</span>
           )}

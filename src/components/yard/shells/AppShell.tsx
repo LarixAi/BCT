@@ -7,6 +7,7 @@ import { useSessionStore } from "@/platform/auth/session-store";
 import { BottomNav } from "./BottomNav";
 import { SyncStatusBadge } from "@/components/yard/status/SyncStatusBadge";
 import { SyncNoticeBanner } from "@/components/yard/status/SyncNoticeBanner";
+import { DataConnectionBanner } from "@/components/yard/status/DataConnectionBanner";
 import { useSyncLifecycle } from "@/features/sync/use-sync-lifecycle";
 import {
   isChecksNavActive,
@@ -25,44 +26,43 @@ export function AppShell({ children }: { children: ReactNode }) {
   useSyncLifecycle();
 
   return (
-    <div className="min-h-screen bg-page pb-28 text-ink lg:pb-0">
-      {/* Mobile header — Midnight chrome + Command Blue rail (Admin accent) */}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-midnight pt-safe text-white lg:hidden">
-        <div className="h-[3px] w-full bg-command-500" aria-hidden />
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-3 py-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <Link to="/" className="shrink-0" aria-label="Veyvio Yard home">
-              <BrandWordmark size="header" />
-            </Link>
-            <div className="hidden h-6 w-px bg-white/10 sm:block" />
-            <div className="flex min-w-0 flex-col">
-              <span className="text-[9px] font-medium uppercase leading-none tracking-widest text-white/50">Depot</span>
-              <span className="truncate font-display text-xs font-bold">
-                {depotName ? `${depotName} (${depotCode})` : "No depot selected"}
-              </span>
+    <div className="min-h-screen bg-[#f2f4f7] pb-[calc(4.5rem+env(safe-area-inset-bottom))] text-ink lg:pb-0">
+      {/* Mobile header — light dashboard chrome (matches desktop/web) */}
+      <header className="sticky top-0 z-40 border-b border-[#e4e7ec] bg-white pt-safe shadow-[0_1px_2px_rgba(16,24,40,0.04)] lg:hidden">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+          <Link to="/" className="flex min-w-0 flex-1 items-center gap-2.5" aria-label="Veyvio Yard home">
+            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-ink text-[10px] font-black text-white sm:size-9 sm:text-xs">
+              VY
+            </span>
+            <div className="min-w-0">
+              <BrandWordmark size="header" onDark={false} className="hidden sm:block" />
+              <p className="truncate text-[11px] font-medium text-[#667085] sm:mt-0.5">
+                {depotName ?? "Depot"}
+              </p>
             </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
+          </Link>
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <Link
               to="/scan"
-              className="grid size-9 place-items-center rounded-xl bg-command-500 text-white transition-colors hover:bg-command-700"
+              className="grid size-8 place-items-center rounded-full bg-ink text-white sm:inline-flex sm:h-9 sm:w-auto sm:gap-1.5 sm:px-3 sm:text-xs sm:font-semibold"
               aria-label="Scan vehicle or item"
             >
-              <ScanLine className="size-5" />
+              <ScanLine className="size-4" />
+              <span className="hidden sm:inline">Scan</span>
             </Link>
-            <SyncStatusBadge />
+            <SyncStatusBadge variant="light" />
           </div>
         </div>
       </header>
 
-      {/* Desktop sidebar — light Command style (matches Admin) */}
+      {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[220px] flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-fg lg:flex">
         <Link
           to="/"
           className="flex items-center gap-3 border-b border-sidebar-border px-2 pb-5"
           aria-label="Veyvio Yard home"
         >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-command-500 text-sm font-black text-white">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-ink text-sm font-black text-white">
             VY
           </span>
           <BrandWordmark size="header" onDark={false} />
@@ -112,14 +112,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="min-h-screen lg:pl-[220px]">
-        <header className="sticky top-0 z-30 hidden h-[58px] items-center justify-between border-b border-border border-t-[3px] border-t-command-500 bg-surface px-6 lg:flex">
-          <div className="min-w-0 truncate text-xs text-muted">
+        <header className="sticky top-0 z-30 hidden h-[58px] items-center justify-between border-b border-[#e4e7ec] bg-white px-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)] lg:flex">
+          <div className="min-w-0 truncate text-xs text-[#667085]">
             {companyName ?? "Veyvio Transport"} · {depotName ?? "No depot selected"} operations
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Link
               to="/scan"
-              className="inline-flex h-9 items-center gap-2 rounded-xl bg-command-500 px-3 text-xs font-bold text-white shadow-[0_8px_18px_rgb(47_107_255/0.22)] transition-colors hover:bg-command-700"
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-ink px-4 text-xs font-semibold text-white transition-opacity hover:opacity-90"
             >
               <ScanLine className="size-4" aria-hidden />
               Scan record
@@ -128,9 +128,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
+        <DataConnectionBanner />
         <SyncNoticeBanner />
 
-        <main className="mx-auto max-w-5xl px-3 py-3 sm:px-4 sm:py-6 lg:mx-0 lg:max-w-none lg:px-6 xl:px-8">
+        <main className="mx-auto max-w-5xl px-4 py-4 sm:px-5 sm:py-6 lg:mx-0 lg:max-w-none lg:px-6 xl:px-8">
           {children}
         </main>
       </div>
@@ -156,14 +157,14 @@ function DesktopNavItem({
   return (
     <Link
       to={to}
-      className={`group flex min-h-10 w-full items-center gap-3 rounded-xl text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-command-500 ${
+      className={`group flex min-h-10 w-full items-center gap-3 rounded-xl text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#101828]/20 ${
         active
-          ? "border-l-[3px] border-l-command-500 bg-sidebar-active pl-[9px] font-semibold text-sidebar-active-fg"
-          : "border-l-[3px] border-l-transparent px-3 text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg"
+          ? "bg-[#f2f4f7] pl-3 font-semibold text-ink"
+          : "px-3 text-[#667085] hover:bg-[#f9fafb] hover:text-ink"
       }`}
     >
       <span
-        className={`[&>svg]:size-4 ${active ? "text-command-500" : "text-sidebar-muted group-hover:text-sidebar-fg"}`}
+        className={`[&>svg]:size-4 ${active ? "text-ink" : "text-[#98a2b3] group-hover:text-ink"}`}
         aria-hidden
       >
         {icon}

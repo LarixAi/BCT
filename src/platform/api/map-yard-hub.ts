@@ -12,7 +12,19 @@ import type {
 import type { YardRole } from "@/types/permissions";
 import type { DamageObservation, DamageSeverity } from "@/types/condition";
 import type { YardTask, YardTaskKind, YardTaskPriority, YardTaskStatus } from "@/types/tasks";
-import type { Bay, BayZone, Movement, MovementReason, Vehicle, VehicleStatus, VehicleType } from "@/types/yard";
+import type {
+  Bay,
+  BayZone,
+  Movement,
+  MovementReason,
+  Vehicle,
+  VehicleStatus,
+  VehicleType,
+} from "@/types/yard";
+import type { YardHubLayoutSnapshot } from "@veyvio/yard";
+import { ingestHubPlatformEvents } from "@/platform/ops/ingest-hub-platform-events";
+import { BCT_MAIN_DEPOT_LAYOUT } from "@veyvio/yard";
+import type { YardCheckResult, YardCheckSectionResult, YardCheckType, CheckSafetyOutcome } from "@/types/yard-check";
 
 type HubBodyworkReport = {
   id: string;
@@ -166,6 +178,103 @@ function mapBodyworkReports(reports: HubBodyworkReport[]): DamageObservation[] {
   }));
 }
 
+type HubVehicleCheck = {
+  id: string;
+  vehicleId?: string;
+  registrationNumber?: string;
+  driverName?: string | null;
+  checkType?: string;
+  result?: string;
+  startedAt?: string | null;
+  submittedAt?: string;
+  odometer?: number | null;
+  checklist?: { yardSections?: YardCheckSectionResult[]; checkType?: string };
+  evidence?: { safetyOutcome?: CheckSafetyOutcome; durationSeconds?: number; completedBy?: string };
+};
+
+function mapHubCheckType(raw: string | undefined): YardCheckType {
+  const known: YardCheckType[] = [
+    "start-of-day",
+    "driver-changeover",
+    "between-run",
+    "return-to-yard",
+    "yard-spot",
+    "first-use",
+    "vor-assessment",
+    "return-to-service",
+    "scheduled-inspection",
+  ];
+  const normalized = (raw ?? "").trim().toLowerCase().replace(/_/g, "-");
+  if (known.includes(normalized as YardCheckType)) return normalized as YardCheckType;
+  if (normalized.includes("yard") && normalized.includes("spot")) return "yard-spot";
+  if (normalized.includes("return") && normalized.includes("service")) return "return-to-service";
+  if (normalized.includes("vor")) return "vor-assessment";
+  if (normalized.includes("scheduled")) return "scheduled-inspection";
+  return "start-of-day";
+}
+
+function mapHubVehicleCheck(row: HubVehicleCheck): YardCheckResult | null {
+  if (!row.vehicleId) return null;
+  const checklist = row.checklist ?? {};
+  const sections = Array.isArray(checklist.yardSections) ? checklist.yardSections : [];
+  const checkType = mapHubCheckType(checklist.checkType ?? row.checkType);
+  const result = (row.result ?? "").toLowerCase();
+  const passed = !["fail", "failed"].includes(result);
+  const safetyOutcome =
+    row.evidence?.safetyOutcome ??
+    (result.includes("advisory") ? "attention" : passed ? "ready" : "hold");
+  const completedAt = row.submittedAt ?? new Date().toISOString();
+  return {
+    id: row.id,
+    vehicleId: String(row.vehicleId),
+    checkType,
+    startedAt: row.startedAt ?? completedAt,
+    completedAt,
+    at: completedAt,
+    by: row.evidence?.completedBy ?? row.driverName ?? "Yard",
+    odometer: row.odometer ?? undefined,
+    sections,
+    overallPassed: passed,
+    safetyOutcome,
+    durationSeconds: row.evidence?.durationSeconds ?? undefined,
+  };
+}
+
+function hubBayToBayId(bayLabel: string | null | undefined): string {
+  if (!bayLabel?.trim()) return "";
+  const match = bayLabel.match(/(\d+)/);
+  if (match) return `BAY-${match[1].padStart(2, "0")}`;
+  return bayLabel.trim();
+}
+
+function layoutSnapshotToBays(layout: YardHubLayoutSnapshot | null | undefined): Bay[] {
+  if (!layout?.bays?.length) return [];
+  return layout.bays.map(b => ({
+    id: b.id,
+    zone: "Parking" as BayZone,
+    bayNumber: b.bayNumber,
+    displayName: b.displayName,
+  }));
+}
+
+function resolveHubLayout(hub: YardHubResponse): YardHubLayoutSnapshot | null {
+  if (hub.yardLayout) return hub.yardLayout;
+  if (hub.depotCode?.toUpperCase() === "BCT-MAIN" || hub.yardMapEnabled) {
+    return {
+      layoutId: BCT_MAIN_DEPOT_LAYOUT.id,
+      depotCode: BCT_MAIN_DEPOT_LAYOUT.depotCode,
+      name: BCT_MAIN_DEPOT_LAYOUT.name,
+      canvasWidth: BCT_MAIN_DEPOT_LAYOUT.canvasWidth,
+      canvasHeight: BCT_MAIN_DEPOT_LAYOUT.canvasHeight,
+      yardMapEnabled: true,
+      zones: BCT_MAIN_DEPOT_LAYOUT.zones,
+      bays: BCT_MAIN_DEPOT_LAYOUT.bays,
+      gates: BCT_MAIN_DEPOT_LAYOUT.gates,
+    };
+  }
+  return null;
+}
+
 /**
  * Project Command `GET /yard/hub` into a Yard bootstrap payload.
  * No demo fleet, trips, or day plan — only live hub data.
@@ -177,14 +286,16 @@ export function mapYardHubToBootstrap(
   role: YardRole,
 ): BootstrapPayload {
   const shell = buildLiveBootstrapShell(companyId, depotId || hub.depotId, role);
+  const yardLayout = resolveHubLayout(hub);
+  const layoutBays = layoutSnapshotToBays(yardLayout);
 
-  const bayIds = new Set(shell.bays.map(b => b.id));
+  const bayIds = new Set((layoutBays.length ? layoutBays : shell.bays).map(b => b.id));
   const extraBays: Bay[] = [];
   const vehicles: Vehicle[] = hub.vehicles.map((row, index) => {
     const zone = mapZone(row);
-    let bayId = row.bay && String(row.bay).trim() ? String(row.bay) : "";
+    let bayId = hubBayToBayId(row.bay);
     if (!bayId || !bayIds.has(bayId)) {
-      const zoneBays = shell.bays.filter(b => b.zone === zone);
+      const zoneBays = (layoutBays.length ? layoutBays : shell.bays).filter(b => b.zone === zone);
       bayId = zoneBays[index % Math.max(zoneBays.length, 1)]?.id ?? `H${String(index + 1).padStart(2, "0")}`;
       if (!bayIds.has(bayId)) {
         bayIds.add(bayId);
@@ -199,7 +310,6 @@ export function mapYardHubToBootstrap(
       type: mapVehicleType(row.vehicleCategory),
       bayId,
       status,
-      fuelPct: 50,
       lastCheckAt: row.lastUpdatedAt ?? undefined,
       lastCheckPassed: status === "Available" || status === "On Departure Line" ? true : undefined,
       notes: row.exceptionLabels?.length ? row.exceptionLabels.join(", ") : undefined,
@@ -209,21 +319,29 @@ export function mapYardHubToBootstrap(
   const hubTasks = (hub.tasks ?? []).map(task => mapHubTask(task, companyId));
   const hubMovements = (hub.movements ?? []).map(mapHubMovement);
   const bodywork = mapBodyworkReports((hub.bodyworkReports ?? []) as HubBodyworkReport[]);
+  const hubChecks = (hub.vehicleChecks ?? [])
+    .map(row => mapHubVehicleCheck(row as HubVehicleCheck))
+    .filter((check): check is YardCheckResult => Boolean(check));
+
+  ingestHubPlatformEvents(hub.platformEvents);
 
   return {
     ...shell,
     dataSource: COMMAND_HUB_BOOTSTRAP_SOURCE,
     companyId,
     depotId: depotId || hub.depotId || shell.depotId,
+    depotCode: hub.depotCode ?? null,
+    yardMapEnabled: Boolean(hub.yardMapEnabled || yardLayout),
+    yardLayout,
     syncedAt: new Date().toISOString(),
-    bays: [...shell.bays, ...extraBays],
+    bays: layoutBays.length ? [...layoutBays, ...extraBays] : [...shell.bays, ...extraBays],
     vehicles,
     tasks: hubTasks,
     movements: hubMovements,
     trips: [],
     defects: [],
     vorCases: [],
-    yardChecks: [],
+    yardChecks: hubChecks,
     damageObservations: bodywork,
     damageReviews: [],
     repairWorkOrders: [],

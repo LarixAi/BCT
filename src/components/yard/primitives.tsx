@@ -1,3 +1,4 @@
+import { formatFuelPct } from "@/lib/format-fuel-pct";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { ChevronRight, Fuel, Wrench, Package } from "lucide-react";
@@ -127,7 +128,7 @@ export function VehicleCard({ v, nextAction, zone }: { v: Vehicle; nextAction?: 
           </div>
           <div className="flex items-center gap-3 text-[11px] font-medium text-muted">
             <span className="uppercase tracking-wider">{zone ? `${zone} · ${v.type}` : v.type}</span>
-            <span className="inline-flex items-center gap-1"><Fuel className="size-3" />{v.fuelPct}%</span>
+            <span className="inline-flex items-center gap-1"><Fuel className="size-3" />{formatFuelPct(v.fuelPct)}</span>
             {v.lastCheckPassed === false && <span className="inline-flex items-center gap-1 text-vor"><Wrench className="size-3" />Check failed</span>}
           </div>
           <div className={`mt-2 flex items-center gap-2 text-[10px] ${tone.text}`}>
@@ -168,7 +169,7 @@ export function VehicleInventoryRow({ v, zone }: { v: Vehicle; zone: BayZone }) 
       <StatusChip status={v.status} className="w-fit" />
       <span className="inline-flex items-center gap-1 font-bold tabular-nums">
         <Fuel className="size-3 text-muted" aria-hidden />
-        {v.fuelPct}%
+        {formatFuelPct(v.fuelPct)}
       </span>
       <span className={`min-w-0 truncate font-bold ${tone.text}`}>
         {tone.label}

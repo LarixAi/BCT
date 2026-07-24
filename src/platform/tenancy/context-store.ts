@@ -2,10 +2,14 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Company, Depot, TenancyContext } from "@/types/tenancy";
 import type { YardRole } from "@/types/permissions";
+import { clearOutboxMutations } from "@/platform/storage/local-db";
+import { useSyncStore } from "@/platform/sync/outbox";
+import { clearYardState } from "@/platform/yard/clear-yard-state";
 
 interface TenancyStore extends TenancyContext {
   selectCompany: (company: Company, role: YardRole) => void;
   selectDepot: (depot: Depot) => void;
+  clearDepot: () => void;
   clearContext: () => void;
   isContextComplete: () => boolean;
 }
@@ -24,7 +28,12 @@ export const useTenancyStore = create<TenancyStore>()(
     (set, get) => ({
       ...EMPTY,
 
-      selectCompany: (company, role) =>
+      selectCompany: (company, role) => {
+        const previousCompanyId = get().companyId;
+        if (previousCompanyId && previousCompanyId !== company.id) {
+          clearYardState();
+          void clearOutboxMutations().then(() => useSyncStore.getState().hydrate());
+        }
         set({
           companyId: company.id,
           companyName: company.name,
@@ -32,16 +41,33 @@ export const useTenancyStore = create<TenancyStore>()(
           depotId: null,
           depotName: null,
           depotCode: null,
-        }),
+        });
+      },
 
-      selectDepot: (depot) =>
+      selectDepot: (depot) => {
+        const previousDepotId = get().depotId;
+        if (previousDepotId && previousDepotId !== depot.id) {
+          clearYardState();
+        }
         set({
           depotId: depot.id,
           depotName: depot.name,
           depotCode: depot.code,
+        });
+      },
+
+      clearDepot: () =>
+        set({
+          depotId: null,
+          depotName: null,
+          depotCode: null,
         }),
 
-      clearContext: () => set({ ...EMPTY }),
+      clearContext: () => {
+        clearYardState();
+        void clearOutboxMutations().then(() => useSyncStore.getState().hydrate());
+        set({ ...EMPTY });
+      },
 
       isContextComplete: () => {
         const s = get();

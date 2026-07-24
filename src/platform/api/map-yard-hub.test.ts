@@ -33,8 +33,9 @@ describe("mapYardHubToBootstrap", () => {
     expect(payload.vehicles).toHaveLength(2);
     expect(payload.vehicles[0].reg).toBe("AB12 CDE");
     expect(payload.vehicles[0].status).toBe("Available");
+    expect(payload.vehicles[0].fuelPct).toBeUndefined();
     expect(payload.vehicles[1].status).toBe("VOR");
-    expect(payload.tasks.length).toBeGreaterThan(0);
+    expect(payload.tasks).toEqual([]);
     expect(payload.bays.length).toBeGreaterThan(0);
   });
 });

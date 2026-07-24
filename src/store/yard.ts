@@ -1,16 +1,14 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import * as fx from "@/data/fixtures";
-import type { BootstrapPayload } from "@/data/mocks/bootstrap";
-import { initialVehicleEquipment, initialDepotStock, buildEquipmentForVehicle, mergeEquipmentForVehicles, isValidVehicleEquipment, type StockLine } from "@/data/equipment-fixtures";
-import { initialAdBlueRefills } from "@/data/adblue-fixtures";
-import { initialTasks } from "@/data/tasks-fixtures";
+import type { BootstrapDataSource, BootstrapPayload } from "@/data/mocks/bootstrap";
+import { createEmptyYardCoreState } from "@/platform/yard/empty-yard-state";
+import { buildEquipmentForVehicle, mergeEquipmentForVehicles, isValidVehicleEquipment, type StockLine } from "@/data/equipment-fixtures";
 import type { CompleteYardCheckInput, YardCheckResult } from "@/types/yard-check";
 import { computeOverallPassed, computeSafetyOutcome, severityForSection } from "@/domain/yard/check-outcome";
 import { getSectionDef, isManagerAuditCheck } from "@/domain/yard/check-templates";
 import { shouldAutoVorFromSection } from "@/domain/yard/check-vor";
 import { buildVorCaseFromDefect } from "@/domain/yard/vor-from-defect";
-import { applyVehicleMove } from "@/domain/yard/bay-zones";
+import { applyVehicleMove, zoneOfBay } from "@/domain/yard/bay-zones";
 import { applyVehicleDeparture } from "@/domain/yard/departure-exit";
 import {
   acknowledgePlan,
@@ -52,6 +50,7 @@ import { publishVehicleVorMarked } from "@/platform/ops/publish-vor-marked";
 import { createAdBlueRefillRecord } from "@/domain/fluids/adblue-refill";
 import type { AdBlueRefillInput, AdBlueRefillRecord } from "@/types/fluids";
 import type { OperationalDayPlan } from "@/types/plan";
+import type { YardHubLayoutSnapshot } from "@veyvio/yard";
 import type { YardTask } from "@/types/tasks";
 import type {
   Bay,
@@ -73,7 +72,6 @@ import type {
   ReadinessResult,
   VehicleEquipment,
 } from "@/types/equipment";
-import * as cfx from "@/data/condition-fixtures";
 import {
   approveBaselineInspection,
   completeInspectionRecord,
@@ -154,7 +152,13 @@ interface State {
   custodyTimeline: CustodyEvent[];
   repairWorkOrders: RepairWorkOrder[];
   operationalPlan: OperationalDayPlan | null;
+  depotCode: string | null;
+  yardMapEnabled: boolean;
+  yardLayout: YardHubLayoutSnapshot | null;
+  dataSource: BootstrapDataSource | null;
+  hydrated: boolean;
 
+  resetToEmpty: () => void;
   hydrateFromBootstrap: (payload: BootstrapPayload) => void;
   /** Drain driver/admin platform events (journey start, plan publish) while the app is open. */
   processIncomingOpsNotices: () => number;
@@ -226,8 +230,13 @@ interface State {
 const nowIso = () => new Date().toISOString();
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 8)}`;
 
+/** Server-backed yard tasks use UUID ids; local automation uses `task_xxx` and must not sync. */
+const SERVER_TASK_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function enqueueCreatedTasks(tasks: YardTask[]) {
   for (const task of tasks) {
+    if (!SERVER_TASK_ID.test(task.id)) continue;
     void enqueueYardMutation("task.update", {
       taskId: task.id,
       action: "create",
@@ -243,6 +252,7 @@ function enqueueCreatedTasks(tasks: YardTask[]) {
 
 function enqueueCompletedTasks(tasks: YardTask[]) {
   for (const task of tasks) {
+    if (!SERVER_TASK_ID.test(task.id)) continue;
     void enqueueYardMutation("task.update", {
       taskId: task.id,
       action: "complete",
@@ -298,31 +308,9 @@ function commitTripState(
 }
 
 export const useYard = create<State>((set, get) => ({
-  bays: fx.bays,
-  vehicles: fx.vehicles,
-  trips: recomputeAllTrips(fx.trips, fx.vehicles, initialVehicleEquipment),
-  defects: fx.defects,
-  vorCases: fx.vorCases,
-  movements: fx.movements,
-  adblueRefills: initialAdBlueRefills,
-  yardChecks: fx.yardChecks,
-  equipment: initialVehicleEquipment,
-  equipmentAudit: [],
-  depotStock: initialDepotStock,
-  departureReleases: [],
-  handovers: [],
-  tasks: initialTasks,
-  sheet: null,
-  conditionProfiles: cfx.buildInitialConditionProfiles(fx.vehicles.map(v => v.id)),
-  inspections: cfx.inspections,
-  inspectionMedia: cfx.inspectionMedia,
-  damageRecords: cfx.damageRecords,
-  damageObservations: cfx.damageObservations,
-  damageReviews: cfx.damageReviews,
-  conditionSnapshots: cfx.conditionSnapshots,
-  custodyTimeline: cfx.custodyTimeline,
-  repairWorkOrders: cfx.repairWorkOrders,
-  operationalPlan: null,
+  ...createEmptyYardCoreState(),
+
+  resetToEmpty: () => set(createEmptyYardCoreState()),
 
   hydrateFromBootstrap: (payload) => {
     const plan = payload.operationalPlan ?? null;
@@ -361,8 +349,13 @@ export const useYard = create<State>((set, get) => ({
       damageReviews: payload.damageReviews ?? get().damageReviews,
       conditionSnapshots: payload.conditionSnapshots ?? get().conditionSnapshots,
       custodyTimeline: payload.custodyTimeline ?? get().custodyTimeline,
-      repairWorkOrders: payload.repairWorkOrders ?? get().repairWorkOrders ?? cfx.repairWorkOrders,
+      repairWorkOrders: payload.repairWorkOrders ?? [],
       operationalPlan: plan,
+      depotCode: payload.depotCode ?? null,
+      yardMapEnabled: payload.yardMapEnabled ?? false,
+      yardLayout: payload.yardLayout ?? null,
+      dataSource: payload.dataSource ?? "mock",
+      hydrated: true,
     });
     get().processIncomingOpsNotices();
   },
@@ -433,7 +426,16 @@ export const useYard = create<State>((set, get) => ({
       trips,
       tasks,
     });
-    void enqueueYardMutation("vehicle.move", { vehicleId, fromBayId, toBayId, reason, note, movementId: mv.id });
+    const zone = zoneOfBay(toBayId, st.bays);
+    void enqueueYardMutation("vehicle.move", {
+      vehicleId,
+      fromBayId,
+      toBayId,
+      zone,
+      reason,
+      note,
+      movementId: mv.id,
+    });
   },
 
   recordAdBlueRefill: (vehicleId, input) => {
@@ -594,6 +596,7 @@ export const useYard = create<State>((set, get) => ({
       checkId: check.id,
       vehicleId,
       checkType: input.checkType,
+      startedAt: input.startedAt,
       passed: overallPassed,
       safetyOutcome,
       sections: input.sections,

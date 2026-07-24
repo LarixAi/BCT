@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useVehicleReadiness, useYard } from "@/store/yard";
 import { useCan } from "@/platform/permissions/use-can";
 import { RegPlate, StatusChip } from "@/components/yard/primitives";
+import { formatFuelPct } from "@/lib/format-fuel-pct";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
@@ -78,7 +79,7 @@ function EquipmentPage() {
             <div className="flex flex-col items-end gap-1">
               <StatusChip status={vehicle.status} />
               <div className="flex items-center gap-3 text-[11px] text-muted">
-                <span className="inline-flex items-center gap-1"><Fuel className="size-3" />{vehicle.fuelPct}%</span>
+                <span className="inline-flex items-center gap-1"><Fuel className="size-3" />{formatFuelPct(vehicle.fuelPct)}</span>
                 {vehicle.lastCheckAt && <span className="inline-flex items-center gap-1"><Clock className="size-3" />{formatTime(vehicle.lastCheckAt)}</span>}
               </div>
             </div>

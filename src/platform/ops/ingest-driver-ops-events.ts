@@ -1,7 +1,8 @@
 import { drainPlatformEventsForYard, type PlatformEvent } from "@veyvio/ops";
 import type { OperationalDayPlan } from "@/types/plan";
+import { getTenancySnapshot } from "@/platform/tenancy/context-store";
 
-const YARD_NOTICE_KEY = "veyvio.yard.driver.ops.notices.v1";
+const YARD_NOTICE_KEY_PREFIX = "veyvio.yard.driver.ops.notices.v1";
 
 export type YardDriverOpsNotice = {
   id: string;
@@ -12,10 +13,18 @@ export type YardDriverOpsNotice = {
   payload: unknown;
 };
 
+function noticeStorageKey(): string {
+  const { companyId, depotId } = getTenancySnapshot();
+  if (companyId && depotId) {
+    return `${YARD_NOTICE_KEY_PREFIX}:${companyId}:${depotId}`;
+  }
+  return YARD_NOTICE_KEY_PREFIX;
+}
+
 function readNotices(): YardDriverOpsNotice[] {
   if (typeof localStorage === "undefined") return [];
   try {
-    const raw = localStorage.getItem(YARD_NOTICE_KEY);
+    const raw = localStorage.getItem(noticeStorageKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw) as YardDriverOpsNotice[];
     return Array.isArray(parsed) ? parsed : [];
@@ -27,7 +36,7 @@ function readNotices(): YardDriverOpsNotice[] {
 function writeNotices(items: YardDriverOpsNotice[]): void {
   if (typeof localStorage === "undefined") return;
   try {
-    localStorage.setItem(YARD_NOTICE_KEY, JSON.stringify(items.slice(0, 100)));
+    localStorage.setItem(noticeStorageKey(), JSON.stringify(items.slice(0, 100)));
   } catch {
     /* ignore */
   }

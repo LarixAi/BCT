@@ -16,6 +16,7 @@ import { Check, X, Camera, TriangleAlert, MoveRight, ClipboardCheck, ShieldAlert
 import { getEmptyBaysInZone } from "@/features/yard/yard-map";
 import { buildDepartureChecklist, canReleaseTrip } from "@/domain/yard/departure-checklist";
 import { drivers } from "@/data/fixtures";
+import { isDemoDataSource } from "@/platform/yard/data-source";
 import { toast } from "sonner";
 import { yardCopy } from "@/copy/yard-messages";
 import { YardConfirmDialog } from "@/components/yard/YardConfirmDialog";
@@ -993,8 +994,12 @@ function DepartureReleaseSheet({ tripId }: { tripId: string }) {
   const close = useYard(s => s.closeSheet);
   const [note, setNote] = useState("");
 
+  const dataSource = useYard(s => s.dataSource);
   const vehicle = trip?.vehicleId ? vehicles.find(v => v.id === trip.vehicleId) : undefined;
-  const driver = trip?.driverId ? drivers.find(d => d.id === trip.driverId) : undefined;
+  const driver =
+    trip?.driverId && isDemoDataSource(dataSource)
+      ? drivers.find(d => d.id === trip.driverId)
+      : undefined;
   const items = useMemo(
     () => (trip ? buildDepartureChecklist(trip, vehicle, driver, vehicle ? equipment[vehicle.id] : undefined) : []),
     [trip, vehicle, driver, equipment],
