@@ -113,7 +113,7 @@ export const liveYardApi: YardApi = {
     }
 
     const base = getApiBaseUrl();
-    if (!base) throw new Error("VITE_API_BASE_URL is not configured");
+    if (!base) return { ok: false, mode: "unconfigured" };
     return parseJson<{ ok: boolean; mode: string }>(
       await fetch(`${base}/v1/yard/health`, { credentials: "include", headers: bearerHeaders() }),
     );
