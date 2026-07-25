@@ -52,7 +52,16 @@ function runStaticChecks() {
   }
 
   try {
-    execSync("npm run test:gate1-exit", { cwd: root, stdio: "inherit" });
+    execSync("npm run test:gate1-exit", {
+      cwd: root,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        VITE_ENABLE_BASE44: "",
+        VITE_ENABLE_PHV_MODULE: "",
+        VITE_MOCK_API: "",
+      },
+    });
     pass("Gate 1 exit automated tests");
   } catch {
     fail("Gate 1 exit automated tests");

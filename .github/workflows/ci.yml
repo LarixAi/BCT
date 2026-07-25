@@ -271,5 +271,22 @@ jobs:
           cd "Veyvio admin "
           npm ci
 
+      - name: Build Yard (production guard scan)
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-anon-key
+          VITE_COMMAND_API_BASE_URL: https://example.supabase.co/functions/v1/command-api
+        run: npm run build
+
+      - name: Build Driver (production guard scan)
+        working-directory: veyvio-driver-App
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-anon-key
+          VITE_COMMAND_API_BASE_URL: https://example.supabase.co/functions/v1/command-api
+          VITE_AUTH_API_BASE_URL: https://example.supabase.co/functions/v1/command-api
+          VITE_DRIVER_APP_URL: https://driver.example.com
+        run: npm run build
+
       - name: Gate 1 static preflight
         run: GATE1_SKIP_BUILD=1 npm run gate1:preflight -- --skip-build

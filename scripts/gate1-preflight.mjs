@@ -98,7 +98,11 @@ function main() {
   runStep("Admin driver write guards", "node scripts/driver-write-guards.unit.mjs", adminRoot);
 
   runStep("Yard unit tests", "npm test", root);
-  runStep("Driver Gate 1 e2e (vitest)", "npm run test:gate1-exit", driverRoot);
+  runStep("Driver Gate 1 e2e (vitest)", "npm run test:gate1-exit", driverRoot, {
+    VITE_ENABLE_BASE44: "",
+    VITE_ENABLE_PHV_MODULE: "",
+    VITE_MOCK_API: "",
+  });
 
   const failed = checks.filter((c) => !c.ok);
   if (failed.length) {

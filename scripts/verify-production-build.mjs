@@ -54,6 +54,10 @@ function walk(dir) {
 }
 
 if (!statSync(distDir, { throwIfNoEntry: false })) {
+  if (process.env.VERIFY_SKIP_BUILD || process.argv.includes("--skip-build")) {
+    console.warn(`Production guard: no build output at ${distDir} — run npm run build before verify:production-build.`);
+    process.exit(1);
+  }
   console.error(`Production guard failed: expected build output at ${distDir}`);
   process.exit(1);
 }
