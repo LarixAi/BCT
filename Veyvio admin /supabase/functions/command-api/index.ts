@@ -2,16 +2,23 @@
  * Veyvio Command API — authorised Command projection over shared platform domains.
  * Writes reach shared tables (company-scoped). Driver/Yard APIs will project the same records later.
  */
-import { apiError, corsHeaders, json, readJson, toApiErrorResponse, toCamelCase } from '../_shared/http.ts'
+import { apiError, corsHeaders, json, readJson, toApiErrorResponse } from '../_shared/http.ts'
+import {
+  listAdBlueRecordsForVehicle,
+  recordAdBlueRefill,
+} from '../_shared/adblue-records.ts'
 import {
   projectBookingDetail,
   projectBookingList,
   projectDriverProfile,
+  projectDriverVehicleReadiness,
+  projectDriverVehicleTimeline,
   projectDuties,
   projectDutyTrack,
   projectOperationalTripByDuty,
   projectOperationalTrips,
   projectVehicleProfile,
+  recordDriverVehicleHandbackReport,
   summariseDrivers,
   summariseVehicles,
   toOperationalPosition,
@@ -66,6 +73,19 @@ import {
   driverConditionAcknowledgementRoute,
   loadBodyConditionForYardHub,
 } from '../_shared/body-condition.ts'
+import { linkBodyworkDefectToDamageCase } from '../_shared/defect-damage-link.ts'
+import {
+  yardPermissionDeniedResponse,
+  yardPermissionForMutationType,
+  yardPermissionsForRole,
+} from '../_shared/yard-permissions.ts'
+import { applyPendingYardMutation } from '../_shared/yard-mutation-handlers.ts'
+import {
+  assertDriverAssignedDuty,
+  assertDriverAssignedVehicle,
+  assertRequestCompanyId,
+  guardDriverScopedWrite,
+} from '../_shared/driver-write-guards.ts'
 import {
   DRIVER_ONBOARDING_NOTIFICATION,
   notifyCompanyAdmins,
@@ -81,6 +101,11 @@ import {
   requireModule,
 } from '../_shared/tenant-guards.ts'
 import {
+  assertApplicationScope,
+  isPublicApiPath,
+  requiredScopesForApiPath,
+} from '../_shared/application-scopes.ts'
+import {
   companyEntitlements,
   platformAudit,
   platformBillingWebhook,
@@ -93,6 +118,7 @@ import {
   platformPatchFeatureFlag,
   platformPlans,
   platformSeedIsolation,
+  platformSeedBctPilot,
   platformSubscriptions,
   platformSupportGrant,
   platformSupportGrantRevoke,
@@ -156,6 +182,32 @@ import {
   signOffPublishedDuty,
   signOnPublishedDuty,
 } from '../_shared/duty-publication.ts'
+import {
+  notifyDriverVehicleOperationalAlert,
+  syncDriverComplianceWarningNotifications,
+} from '../_shared/driver-ops-notifications.ts'
+import { startDriverJourney, completeDriverJourney } from '../_shared/journey-handlers.ts'
+import {
+  getComplianceSettings,
+  upsertComplianceSettings,
+  DEFAULT_COMPLIANCE_SETTINGS,
+} from '../_shared/compliance-engine.ts'
+import { DEFAULT_DEFECT_AUTOMATION_RULES } from '../_shared/defect-automation.ts'
+import {
+  listVehicleReports,
+  getVehicleReport,
+  createVehicleReport,
+  reviewVehicleReport,
+  vehicleReportsHub,
+} from '../_shared/vehicle-reports.ts'
+import { recordFuelRefill, listFuelRecords } from '../_shared/fuel-records.ts'
+import {
+  listIntegrationKeys,
+  createIntegrationKey,
+  revokeIntegrationKey,
+} from '../_shared/integration-keys.ts'
+import { templatesForAudience } from '../_shared/notification-rules.ts'
+import { recordOverride } from '../_shared/override-audit.ts'
 
 type Row = Record<string, unknown>
 
@@ -891,6 +943,62 @@ async function driverBootstrap(request: Request) {
     }
   }
 
+  let eligibilityBlockers: string[] = []
+  let eligibilityWarnings: string[] = []
+  try {
+    const profile = (await projectDriverProfile(context.companyId, driverId)) as Row | null
+    const failures = Array.isArray((profile?.eligibility as Row | undefined)?.failures)
+      ? (((profile?.eligibility as Row).failures ?? []) as Row[])
+      : []
+    eligibilityBlockers = failures
+      .filter((failure) => String(failure.severity) === 'block')
+      .map((failure) => String(failure.message ?? failure.code ?? 'Not eligible'))
+    eligibilityWarnings = failures
+      .filter((failure) => String(failure.severity) !== 'block')
+      .map((failure) => String(failure.message ?? failure.code ?? 'Warning'))
+  } catch (error) {
+    console.error('driver bootstrap eligibility projection failed', error)
+  }
+
+  const nextDuty = publishedDuties[0] as Row | undefined
+  if (nextDuty?.vehicleCheck && (nextDuty.vehicleCheck as Row).canStartDuty === false) {
+    const checkStatus = String((nextDuty.vehicleCheck as Row).status ?? '')
+    if (checkStatus === 'failed') {
+      eligibilityBlockers.push('Vehicle check failed — speak to dispatch before signing on.')
+    } else if (checkStatus !== 'complete') {
+      eligibilityBlockers.push("Complete today's vehicle check before signing on.")
+    }
+  }
+
+  eligibilityBlockers = [...new Set(eligibilityBlockers)]
+  eligibilityWarnings = [...new Set(eligibilityWarnings)]
+
+  try {
+    await syncDriverComplianceWarningNotifications({
+      companyId: context.companyId,
+      driverId,
+      warnings: eligibilityWarnings,
+    })
+  } catch (error) {
+    console.error('driver compliance warning notifications failed', error)
+  }
+
+  let assignedVehicleReadiness: Row | null = null
+  const assignedVehicleId =
+    (nextDuty?.vehicle as Row | undefined)?.id ??
+    homeSummary.vehicleAssignment?.vehicleId ??
+    null
+  if (assignedVehicleId) {
+    try {
+      assignedVehicleReadiness = (await projectDriverVehicleReadiness(
+        context.companyId,
+        String(assignedVehicleId),
+      )) as Row | null
+    } catch (error) {
+      console.error('driver bootstrap vehicle readiness failed', error)
+    }
+  }
+
   return json({
     schemaVersion: 8,
     serverTime,
@@ -925,6 +1033,7 @@ async function driverBootstrap(request: Request) {
     },
     duties: publishedDuties,
     vehicleChecks,
+    assignedVehicleReadiness,
     messages: await projectDriverMessagesInbox({
       companyId: context.companyId,
       driverId,
@@ -932,10 +1041,11 @@ async function driverBootstrap(request: Request) {
     }),
     requiredActions: homeSummary.requiredActions ?? [],
     eligibility: {
-      allowed: accessStatus === 'active' || accessStatus === 'restricted',
+      allowed:
+        (accessStatus === 'active' || accessStatus === 'restricted') && eligibilityBlockers.length === 0,
       evaluatedAt: serverTime,
-      blockers: [],
-      warnings: [],
+      blockers: eligibilityBlockers,
+      warnings: eligibilityWarnings,
     },
     unresolvedIncidents: [],
     featurePolicy: {
@@ -989,6 +1099,220 @@ async function driverBootstrap(request: Request) {
       legacyMessages: [],
     },
   })
+}
+
+async function driverVehicleReadiness(request: Request) {
+  const context = await authenticate(request)
+  const vehicleId = new URL(request.url).searchParams.get('vehicleId')
+  if (!vehicleId) return apiError(400, 'vehicleId is required')
+
+  const { data: appAccount, error: accountError } = await admin
+    .from('driver_app_accounts')
+    .select('driver_id')
+    .eq('company_id', context.companyId)
+    .eq('user_id', context.user.id)
+    .maybeSingle()
+
+  if (accountError) return apiError(500, 'Driver account could not be loaded')
+  if (!appAccount?.driver_id) {
+    return apiError(403, 'No Driver account is linked to this login', 'driver_account_missing')
+  }
+
+  try {
+    const readiness = await projectDriverVehicleReadiness(context.companyId, vehicleId)
+    if (!readiness) return apiError(404, 'Vehicle not found', 'not_found')
+    return json(readiness)
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Vehicle readiness failed')
+  }
+}
+
+async function driverVehicleTimeline(request: Request) {
+  const context = await authenticate(request)
+  const vehicleId = new URL(request.url).searchParams.get('vehicleId')
+  if (!vehicleId) return apiError(400, 'vehicleId is required')
+
+  const { data: appAccount, error: accountError } = await admin
+    .from('driver_app_accounts')
+    .select('driver_id')
+    .eq('company_id', context.companyId)
+    .eq('user_id', context.user.id)
+    .maybeSingle()
+
+  if (accountError) return apiError(500, 'Driver account could not be loaded')
+  if (!appAccount?.driver_id) {
+    return apiError(403, 'No Driver account is linked to this login', 'driver_account_missing')
+  }
+
+  try {
+    const events = await projectDriverVehicleTimeline(context.companyId, vehicleId, 30)
+    return json({ vehicleId, events })
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Vehicle timeline failed')
+  }
+}
+
+async function driverListAdBlueRecords(request: Request) {
+  const context = await authenticate(request)
+  const vehicleId = new URL(request.url).searchParams.get('vehicleId')
+  if (!vehicleId) return apiError(400, 'vehicleId is required')
+
+  const { data: appAccount, error: accountError } = await admin
+    .from('driver_app_accounts')
+    .select('driver_id')
+    .eq('company_id', context.companyId)
+    .eq('user_id', context.user.id)
+    .maybeSingle()
+
+  if (accountError) return apiError(500, 'Driver account could not be loaded')
+  if (!appAccount?.driver_id) {
+    return apiError(403, 'No Driver account is linked to this login', 'driver_account_missing')
+  }
+
+  try {
+    const records = await listAdBlueRecordsForVehicle(context.companyId, vehicleId, 15)
+    return json({ vehicleId, records })
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'AdBlue history failed')
+  }
+}
+
+async function driverRecordAdBlueRefill(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const appAccount = resolved.appAccount!
+
+  try {
+    const input = await readJson<Row>(request)
+    const vehicleId = String(input.vehicleId ?? '')
+    if (!vehicleId) return apiError(400, 'vehicleId is required')
+
+    const driverId = String(appAccount.driver_id)
+    const depotId = input.depotId ? String(input.depotId) : null
+    try {
+      await guardDriverScopedWrite({
+        companyId: context.companyId,
+        driverId,
+        body: input,
+        vehicleId,
+        dutyId: input.linkedDutyId ? String(input.linkedDutyId) : null,
+        depotId,
+      })
+    } catch (error) {
+      return toApiErrorResponse(error, 'AdBlue refill not allowed')
+    }
+
+    const { data: vehicle, error: vehicleError } = await admin
+      .from('vehicles')
+      .select('id, registration, primary_depot_id, fuel_type')
+      .eq('company_id', context.companyId)
+      .eq('id', vehicleId)
+      .maybeSingle()
+    if (vehicleError || !vehicle) return apiError(404, 'Vehicle not found')
+
+    const fuelType = String(vehicle.fuel_type ?? '').toLowerCase()
+    if (fuelType && !['diesel', 'hybrid', 'plugin_hybrid'].includes(fuelType)) {
+      return apiError(400, 'This vehicle does not use AdBlue', 'not_applicable')
+    }
+
+    const { data: driverRow } = await admin
+      .from('drivers')
+      .select('id, staff_members(first_name, last_name)')
+      .eq('company_id', context.companyId)
+      .eq('id', driverId)
+      .maybeSingle()
+    const staff = (driverRow?.staff_members as Row | null) ?? {}
+    const driverName =
+      [staff.first_name, staff.last_name].filter(Boolean).join(' ').trim() ||
+      context.user.email ||
+      'Driver'
+
+    const record = await recordAdBlueRefill({
+      companyId: context.companyId,
+      depotId: depotId ?? (vehicle.primary_depot_id ? String(vehicle.primary_depot_id) : null),
+      vehicleId,
+      registration: String(vehicle.registration ?? ''),
+      driverId,
+      driverName,
+      userId: context.user.id,
+      payload: {
+        occurredAt: input.occurredAt ? String(input.occurredAt) : undefined,
+        mileage: Number(input.mileage),
+        amountLitres: Number(input.amountLitres),
+        fillType: input.fillType ? String(input.fillType) : undefined,
+        sourceType: input.sourceType ? String(input.sourceType) : undefined,
+        sourceLabel: input.sourceLabel ? String(input.sourceLabel) : null,
+        warningBefore: input.warningBefore ? String(input.warningBefore) : undefined,
+        warningCleared: input.warningCleared ? String(input.warningCleared) : undefined,
+        physicallyAddedBy: input.physicallyAddedBy ? String(input.physicallyAddedBy) : undefined,
+        physicallyAddedByName: input.physicallyAddedByName ? String(input.physicallyAddedByName) : null,
+        spillOrContamination: Boolean(input.spillOrContamination),
+        notes: input.notes ? String(input.notes) : null,
+        linkedDutyId: input.linkedDutyId ? String(input.linkedDutyId) : null,
+        receiptReference: input.receiptReference ? String(input.receiptReference) : null,
+      },
+    })
+
+    return json({ ok: true, record })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'AdBlue refill could not be recorded'
+    return apiError(400, message)
+  }
+}
+
+async function driverVehicleEquipment(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const appAccount = resolved.appAccount!
+  const input = await readJson<Row>(request)
+  const vehicleId = String(input.vehicleId ?? '')
+  if (!vehicleId) return apiError(400, 'vehicleId is required', 'invalid_input')
+
+  try {
+    await guardDriverScopedWrite({
+      companyId: context.companyId,
+      driverId: String(appAccount.driver_id),
+      body: input,
+      vehicleId,
+    })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Equipment check not allowed')
+  }
+
+  const items = Array.isArray(input.items) ? input.items : []
+  const missingItems = Array.isArray(input.missingItems) ? input.missingItems : []
+  const { data, error } = await admin
+    .from('vehicle_equipment_checks')
+    .insert({
+      company_id: context.companyId,
+      vehicle_id: vehicleId,
+      driver_id: appAccount.driver_id,
+      items,
+      missing_items: missingItems,
+      created_by: context.user.id,
+    })
+    .select('*')
+    .single()
+  if (error || !data) return apiError(500, error?.message ?? 'Equipment check could not be saved')
+  return json(expandRow(data), 201)
+}
+
+async function driverListVehicleEquipment(request: Request) {
+  const context = await authenticate(request)
+  const url = new URL(request.url)
+  const vehicleId = url.searchParams.get('vehicleId')
+  if (!vehicleId) return apiError(400, 'vehicleId is required', 'invalid_input')
+  const { data, error } = await admin
+    .from('vehicle_equipment_checks')
+    .select('*')
+    .eq('company_id', context.companyId)
+    .eq('vehicle_id', vehicleId)
+    .order('checked_at', { ascending: false })
+    .limit(20)
+  if (error) return apiError(500, error.message)
+  return json({ items: expandRow(data ?? []) })
 }
 
 async function driverAcknowledgeDuty(request: Request, dutyId: string) {
@@ -1706,6 +2030,12 @@ async function driverReportDefect(request: Request) {
   const appAccount = resolved.appAccount!
 
   const input = await readJson<Row>(request)
+  try {
+    assertRequestCompanyId(input.companyId, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Not allowed')
+  }
+
   const description = String(input.description ?? '').trim()
   if (!description) return apiError(400, 'Describe the defect before submitting.')
 
@@ -1725,14 +2055,31 @@ async function driverReportDefect(request: Request) {
 
   try {
     await assertCompanyScopedVehicle(vehicleId, context.companyId)
-  } catch {
-    return apiError(404, 'Vehicle not found in this company', 'not_found')
+    await assertDriverAssignedVehicle({
+      companyId: context.companyId,
+      driverId: String(appAccount.driver_id),
+      vehicleId,
+      depotId: input.depotId ? String(input.depotId) : null,
+    })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Vehicle not available')
   }
 
   const severityRaw = String(input.severity ?? 'major')
   const severity =
     severityRaw === 'critical' ? 'critical' : severityRaw === 'minor' ? 'attention' : 'attention'
   const now = new Date().toISOString()
+  const clientGeneratedId = input.clientId ? String(input.clientId).trim() : ''
+  if (clientGeneratedId) {
+    const { data: existing } = await admin
+      .from('defects')
+      .select('id, defect_reference, status, severity, description, vehicle_id, reported_at')
+      .eq('company_id', context.companyId)
+      .eq('client_generated_id', clientGeneratedId)
+      .maybeSingle()
+    if (existing) return json(existing, 200)
+  }
+
   const defectReference = `DEF-DRV-${Date.now().toString(36).toUpperCase()}`
 
   const { data, error } = await admin
@@ -1753,12 +2100,39 @@ async function driverReportDefect(request: Request) {
       created_by: context.user.id,
       updated_by: context.user.id,
       source_app: 'DRIVER',
-      client_generated_id: input.clientId ? String(input.clientId) : null,
+      client_generated_id: clientGeneratedId || null,
     })
     .select('id, defect_reference, status, severity, description, vehicle_id, reported_at')
     .single()
 
-  if (error) return apiError(500, error.message, 'database_error')
+  if (error) {
+    if (clientGeneratedId && String(error.code) === '23505') {
+      const { data: existing } = await admin
+        .from('defects')
+        .select('id, defect_reference, status, severity, description, vehicle_id, reported_at')
+        .eq('company_id', context.companyId)
+        .eq('client_generated_id', clientGeneratedId)
+        .maybeSingle()
+      if (existing) return json(existing, 200)
+    }
+    return apiError(500, error.message, 'database_error')
+  }
+
+  const defectRow = data as Row
+  const category = input.category ? String(input.category).toLowerCase() : 'driver_reported'
+  if (category === 'bodywork' || category === 'driver_reported') {
+    await ensureYardFollowUpForDriverDefect({
+      companyId: context.companyId,
+      vehicleId,
+      defectId: String(defectRow.id),
+      defectReference: String(defectRow.defect_reference ?? defectReference),
+      severity: severityRaw === 'critical' ? 'critical' : 'major',
+      description,
+      driverId: String(appAccount.driver_id),
+      userId: context.user.id,
+    })
+  }
+
   return json(data, 201)
 }
 
@@ -1769,6 +2143,12 @@ async function driverReportIncident(request: Request) {
   const appAccount = resolved.appAccount!
 
   const input = await readJson<Row>(request)
+  try {
+    assertRequestCompanyId(input.companyId, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Not allowed')
+  }
+
   const description = String(input.description ?? '').trim()
   if (!description) return apiError(400, 'Describe the incident before submitting.')
 
@@ -1777,14 +2157,31 @@ async function driverReportIncident(request: Request) {
     ? severityRaw
     : 'medium') as string
   const now = new Date().toISOString()
+  const clientGeneratedId = input.clientId ? String(input.clientId).trim() : ''
+  if (clientGeneratedId) {
+    const { data: existing } = await admin
+      .from('incidents')
+      .select('id, incident_reference, status, severity, description, reported_at')
+      .eq('company_id', context.companyId)
+      .eq('client_generated_id', clientGeneratedId)
+      .maybeSingle()
+    if (existing) return json(existing, 200)
+  }
+
   const incidentReference = `INC-DRV-${Date.now().toString(36).toUpperCase()}`
 
   let incidentVehicleId: string | null = input.vehicleId ? String(input.vehicleId) : null
   if (incidentVehicleId) {
     try {
       await assertCompanyScopedVehicle(incidentVehicleId, context.companyId)
-    } catch {
-      return apiError(404, 'Vehicle not found in this company', 'not_found')
+      await assertDriverAssignedVehicle({
+        companyId: context.companyId,
+        driverId: String(appAccount.driver_id),
+        vehicleId: incidentVehicleId,
+        depotId: input.depotId ? String(input.depotId) : null,
+      })
+    } catch (error) {
+      return toApiErrorResponse(error, 'Vehicle not available')
     }
   }
 
@@ -1806,11 +2203,23 @@ async function driverReportIncident(request: Request) {
       created_by: context.user.id,
       updated_by: context.user.id,
       source_app: 'DRIVER',
+      client_generated_id: clientGeneratedId || null,
     })
     .select('id, incident_reference, status, severity, description, reported_at')
     .single()
 
-  if (error) return apiError(500, error.message, 'database_error')
+  if (error) {
+    if (clientGeneratedId && String(error.code) === '23505') {
+      const { data: existing } = await admin
+        .from('incidents')
+        .select('id, incident_reference, status, severity, description, reported_at')
+        .eq('company_id', context.companyId)
+        .eq('client_generated_id', clientGeneratedId)
+        .maybeSingle()
+      if (existing) return json(existing, 200)
+    }
+    return apiError(500, error.message, 'database_error')
+  }
   return json(data, 201)
 }
 
@@ -1871,6 +2280,12 @@ async function driverSubmitVehicleCheck(request: Request) {
   const appAccount = resolved.appAccount!
 
   const input = await readJson<Row>(request)
+  try {
+    assertRequestCompanyId(input.companyId, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Not allowed')
+  }
+
   let vehicleId = input.vehicleId ? String(input.vehicleId) : ''
   let dutyId = input.dutyId ? String(input.dutyId) : ''
 
@@ -1895,6 +2310,30 @@ async function driverSubmitVehicleCheck(request: Request) {
 
   if (!vehicleId) {
     return apiError(400, 'No vehicle is assigned on a published duty. Ask dispatch before checking.')
+  }
+
+  if (dutyId) {
+    try {
+      await assertDriverAssignedDuty({
+        companyId: context.companyId,
+        driverId: String(appAccount.driver_id),
+        dutyId,
+        depotId: input.depotId ? String(input.depotId) : null,
+      })
+    } catch (error) {
+      return toApiErrorResponse(error, 'Duty not available')
+    }
+  }
+
+  try {
+    await assertDriverAssignedVehicle({
+      companyId: context.companyId,
+      driverId: String(appAccount.driver_id),
+      vehicleId,
+      depotId: input.depotId ? String(input.depotId) : null,
+    })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Vehicle not available')
   }
 
   const { data: vehicleRow, error: vehicleError } = await admin
@@ -1996,6 +2435,131 @@ function isBodyworkFailItem(item: Row) {
   return String(item.category ?? '').toLowerCase() === 'bodywork'
 }
 
+async function ensureYardFollowUpForDriverDefect(input: {
+  companyId: string
+  vehicleId: string
+  defectId: string
+  defectReference: string
+  severity: string
+  description: string
+  driverId?: string | null
+  userId?: string | null
+  zone?: string | null
+  damageType?: string | null
+}) {
+  await linkBodyworkDefectToDamageCase({
+    companyId: input.companyId,
+    defectId: input.defectId,
+    driverId: input.driverId,
+    userId: input.userId,
+    severity: input.severity,
+    zone: input.zone,
+    damageType: input.damageType,
+  }).catch((error) => {
+    console.error('defect → damage case link failed', error)
+  })
+
+  const { data: vehicle, error: vehicleError } = await admin
+    .from('vehicles')
+    .select('id, registration, primary_depot_id, operational_status')
+    .eq('company_id', input.companyId)
+    .eq('id', input.vehicleId)
+    .maybeSingle()
+  if (vehicleError || !vehicle) return null
+
+  const severity = String(input.severity ?? 'major').toLowerCase()
+  const isCritical = severity === 'critical' || severity === 'dangerous'
+  const instructions = `Driver-reported defect ${input.defectReference} (${input.defectId}). ${input.description}`.slice(
+    0,
+    500,
+  )
+
+  const { data: existing } = await admin
+    .from('yard_tasks')
+    .select('id')
+    .eq('company_id', input.companyId)
+    .eq('vehicle_id', input.vehicleId)
+    .eq('task_type', 'inspect_damage')
+    .in('status', ['open', 'assigned', 'in_progress'])
+    .ilike('instructions', `%${input.defectId}%`)
+    .maybeSingle()
+  if (existing) return { taskId: String(existing.id), skipped: true as const }
+
+  const now = new Date().toISOString()
+  const { data: task, error: taskError } = await admin
+    .from('yard_tasks')
+    .insert({
+      company_id: input.companyId,
+      depot_id: vehicle.primary_depot_id ?? null,
+      vehicle_id: vehicle.id,
+      registration_number: vehicle.registration ?? '—',
+      task_type: 'inspect_damage',
+      title: isCritical ? 'Urgent damage inspection' : 'Inspect driver-reported damage',
+      priority: isCritical ? 'urgent' : 'high',
+      status: 'open',
+      instructions,
+      evidence_required: true,
+      blocking_release: isCritical,
+      created_by: 'Driver app',
+      source_app: 'driver',
+      created_at: now,
+      updated_at: now,
+    })
+    .select('id')
+    .maybeSingle()
+
+  if (taskError) {
+    console.error('yard task from driver defect failed', taskError.message)
+    return null
+  }
+
+  const currentStatus = String(vehicle.operational_status ?? 'available')
+  if (isCritical) {
+    await admin
+      .from('vehicles')
+      .update({ operational_status: 'vor', updated_at: now })
+      .eq('company_id', input.companyId)
+      .eq('id', input.vehicleId)
+  } else if (!['vor', 'in_workshop', 'maintenance', 'awaiting_check'].includes(currentStatus)) {
+    await admin
+      .from('vehicles')
+      .update({ operational_status: 'awaiting_check', updated_at: now })
+      .eq('company_id', input.companyId)
+      .eq('id', input.vehicleId)
+  }
+
+  if (input.driverId) {
+    const registration = String(vehicle.registration ?? 'Vehicle')
+    try {
+      if (isCritical) {
+        await notifyDriverVehicleOperationalAlert({
+          companyId: input.companyId,
+          driverId: input.driverId,
+          vehicleId: input.vehicleId,
+          registration,
+          status: 'vor',
+          reason: `Your damage report ${input.defectReference} needs yard attention before this vehicle can enter service.`,
+          defectId: input.defectId,
+        })
+      } else {
+        await notifyDriverVehicleOperationalAlert({
+          companyId: input.companyId,
+          driverId: input.driverId,
+          vehicleId: input.vehicleId,
+          registration,
+          status: 'awaiting_check',
+          reason: `Damage report ${input.defectReference} recorded. Yard will inspect before release.`,
+          defectId: input.defectId,
+        })
+      }
+    } catch (error) {
+      console.error('driver vehicle status notification failed', error)
+    }
+  }
+
+  return { taskId: task?.id ? String(task.id) : null, skipped: false as const }
+}
+
 async function createBodyworkDefectsFromVehicleCheck(input: {
   companyId: string
   vehicleId: string
@@ -2086,7 +2650,21 @@ async function createBodyworkDefectsFromVehicleCheck(input: {
       console.error('bodywork defect create failed', error.message)
       continue
     }
-    if (data) created.push(data as Row)
+    if (data) {
+      created.push(data as Row)
+      await ensureYardFollowUpForDriverDefect({
+        companyId: input.companyId,
+        vehicleId: input.vehicleId,
+        defectId: String((data as Row).id),
+        defectReference: String((data as Row).defect_reference ?? defectReference),
+        severity,
+        description,
+        driverId: input.driverId,
+        userId: input.userId,
+        zone,
+        damageType,
+      })
+    }
   }
   return created
 }
@@ -2157,8 +2735,15 @@ async function persistDriverDocumentFile(
   bytes: Uint8Array,
   userId: string,
 ): Promise<{ fileObjectId: string | null; storagePath: string | null; error: string | null }> {
+  const { buildTenantStoragePath } = await import('../_shared/signed-storage.ts')
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_') || 'document.jpg'
-  const storageKey = `${companyId}/drivers/${driverId}/${requirementType}/${crypto.randomUUID()}-${safeName}`
+  const storageKey = buildTenantStoragePath(
+    companyId,
+    'drivers',
+    driverId,
+    requirementType,
+    `${crypto.randomUUID()}-${safeName}`,
+  )
   const bucket = 'driver-documents'
 
   const { error: uploadError } = await admin.storage.from(bucket).upload(storageKey, bytes, {
@@ -2572,6 +3157,12 @@ async function driverStartMessage(request: Request) {
   const appAccount = resolved.appAccount!
 
   const input = await readJson<Row>(request)
+  try {
+    assertRequestCompanyId(input.companyId ?? input.company_id, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Not allowed')
+  }
+
   const subject = String(input.subject ?? '').trim()
   const body = String(input.body ?? input.message ?? '').trim()
   if (!subject || !body) return apiError(400, 'Subject and message are required.')
@@ -2651,6 +3242,12 @@ async function driverReplyMessage(request: Request) {
   const appAccount = resolved.appAccount!
 
   const input = await readJson<Row>(request)
+  try {
+    assertRequestCompanyId(input.companyId ?? input.company_id, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Not allowed')
+  }
+
   const body = String(input.body ?? '').trim()
   if (!body) return apiError(400, 'Write a reply before sending.')
 
@@ -2667,15 +3264,17 @@ async function driverReplyMessage(request: Request) {
     .limit(1)
     .maybeSingle()
 
+  if (!prior?.id) return apiError(404, 'Conversation not found', 'not_found')
+
   const { data, error } = await admin
     .from('messages')
     .insert({
       company_id: context.companyId,
       conversation_id: conversationId,
       sender_id: context.user.id,
-      recipient_user_id: prior?.sender_id ? String(prior.sender_id) : null,
+      recipient_user_id: prior.sender_id ? String(prior.sender_id) : null,
       driver_id: String(appAccount.driver_id),
-      subject: prior?.subject ? String(prior.subject) : 'Driver reply',
+      subject: prior.subject ? String(prior.subject) : 'Driver reply',
       body,
       message_type: 'driver_reply',
       status: 'sent',
@@ -2873,6 +3472,8 @@ async function reportsSummary(request: Request) {
   const from = url.searchParams.get('from') ?? new Date().toISOString().slice(0, 10)
   const to = url.searchParams.get('to') ?? from
   const companyId = context.companyId
+  const fromIso = `${from}T00:00:00.000Z`
+  const toIso = `${to}T23:59:59.999Z`
 
   const counts = await Promise.all([
     admin.from('vehicles').select('*', { count: 'exact', head: true }).eq('company_id', companyId),
@@ -2886,6 +3487,44 @@ async function reportsSummary(request: Request) {
       .eq('company_id', companyId)
       .gte('service_date', from)
       .lte('service_date', to),
+    admin
+      .from('vehicle_checks')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('submitted_at', fromIso)
+      .lte('submitted_at', toIso),
+    admin
+      .from('vehicle_reports')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('report_type', 'handback')
+      .gte('reported_at', fromIso)
+      .lte('reported_at', toIso),
+    admin
+      .from('adblue_records')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('top_up_at', fromIso)
+      .lte('top_up_at', toIso),
+    admin
+      .from('defects')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('source_app', 'DRIVER')
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso),
+    admin
+      .from('fuel_records')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('recorded_at', fromIso)
+      .lte('recorded_at', toIso),
+    admin
+      .from('override_audit_events')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('occurred_at', fromIso)
+      .lte('occurred_at', toIso),
   ])
 
   return json({
@@ -2900,6 +3539,15 @@ async function reportsSummary(request: Request) {
     },
     operations: {
       dutiesInPeriod: counts[5].count ?? 0,
+      overridesInPeriod: counts[11].count ?? 0,
+    },
+    driverTelemetry: {
+      vehicleChecksSubmitted: counts[6].count ?? 0,
+      handbacksRecorded: counts[7].count ?? 0,
+      adblueRefills: counts[8].count ?? 0,
+      driverReportedDefects: counts[9].count ?? 0,
+      fuelRefills: counts[10].count ?? 0,
+      missedInspectionProxy: Math.max(0, (counts[5].count ?? 0) - (counts[6].count ?? 0)),
     },
     period: { from, to },
     generatedAt: new Date().toISOString(),
@@ -2912,8 +3560,17 @@ async function reportsPerformance(request: Request) {
   const from = url.searchParams.get('from') ?? new Date().toISOString().slice(0, 10)
   const to = url.searchParams.get('to') ?? from
   const companyId = context.companyId
+  const fromIso = `${from}T00:00:00.000Z`
+  const toIso = `${to}T23:59:59.999Z`
 
-  const [{ data: duties }, { count: defectCount }, { count: vehicleCount }] = await Promise.all([
+  const [
+    { data: duties },
+    { count: defectCount },
+    { count: vehicleCount },
+    { count: checksCount },
+    { count: publishedDutyCount },
+    { count: signedOnCount },
+  ] = await Promise.all([
     admin
       .from('duties')
       .select('id, status')
@@ -2924,9 +3581,29 @@ async function reportsPerformance(request: Request) {
       .from('defects')
       .select('*', { count: 'exact', head: true })
       .eq('company_id', companyId)
-      .gte('created_at', `${from}T00:00:00.000Z`)
-      .lte('created_at', `${to}T23:59:59.999Z`),
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso),
     admin.from('vehicles').select('*', { count: 'exact', head: true }).eq('company_id', companyId),
+    admin
+      .from('vehicle_checks')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('submitted_at', fromIso)
+      .lte('submitted_at', toIso),
+    admin
+      .from('duties')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('publication_status', 'published')
+      .gte('service_date', from)
+      .lte('service_date', to),
+    admin
+      .from('duties')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .not('actual_sign_on_at', 'is', null)
+      .gte('service_date', from)
+      .lte('service_date', to),
   ])
 
   const rows = duties ?? []
@@ -2935,14 +3612,207 @@ async function reportsPerformance(request: Request) {
   const avgDelayMinutes = 0
   const fleet = vehicleCount ?? 0
   const defectRate = fleet > 0 ? Math.round(((defectCount ?? 0) / fleet) * 1000) / 10 : 0
+  const published = publishedDutyCount ?? 0
+  const checks = checksCount ?? 0
+  const missedInspectionProxy = published > checks ? published - checks : 0
 
   return json({
     onTimePct,
     completedRuns: completed.length,
     avgDelayMinutes,
     defectRate,
+    driverTelemetry: {
+      vehicleChecksSubmitted: checks,
+      publishedDuties: published,
+      dutiesSignedOn: signedOnCount ?? 0,
+      missedInspectionProxy,
+    },
     period: { from, to },
   })
+}
+
+async function listRolesMatrix(request: Request) {
+  const context = await authenticate(request)
+  const companyId = context.companyId
+
+  const [{ data: roles, error: rolesError }, { data: catalog, error: catalogError }, { data: memberships }] =
+    await Promise.all([
+      admin.from('roles').select('id, name, description, is_system_role, status').eq('company_id', companyId).order('name'),
+      admin.from('permissions').select('code, description, module').order('module').order('code'),
+      admin
+        .from('company_memberships')
+        .select('id, role_ids, status')
+        .eq('company_id', companyId),
+    ])
+
+  if (rolesError) return apiError(500, rolesError.message, 'database_error')
+  if (catalogError) return apiError(500, catalogError.message, 'database_error')
+
+  const roleRows = roles ?? []
+  const roleIds = roleRows.map((row: Row) => String(row.id))
+  let rolePermissions: Array<{ role_id: string; permission_code: string; effect: string }> = []
+  if (roleIds.length) {
+    const { data: grants, error: grantsError } = await admin
+      .from('role_permissions')
+      .select('role_id, permission_code, effect')
+      .in('role_id', roleIds)
+    if (grantsError) return apiError(500, grantsError.message, 'database_error')
+    rolePermissions = (grants ?? []) as Array<{ role_id: string; permission_code: string; effect: string }>
+  }
+
+  const modules = [...new Set((catalog ?? []).map((p: Row) => String(p.module)))].sort()
+  const grantsByRole = new Map<string, string[]>()
+  for (const grant of rolePermissions) {
+    if (grant.effect !== 'allow') continue
+    const list = grantsByRole.get(grant.role_id) ?? []
+    list.push(grant.permission_code)
+    grantsByRole.set(grant.role_id, list)
+  }
+
+  const membershipRows = memberships ?? []
+  const mappedRoles = roleRows.map((role: Row) => {
+    const roleId = String(role.id)
+    const permissionCodes = [...new Set(grantsByRole.get(roleId) ?? [])].sort()
+    const userCount = membershipRows.filter((m: Row) => {
+      const status = String(m.status ?? 'active')
+      const ids = Array.isArray(m.role_ids) ? m.role_ids.map(String) : []
+      return status === 'active' && ids.includes(roleId)
+    }).length
+    const name = String(role.name ?? '')
+    return {
+      id: roleId,
+      roleKey: name,
+      label: name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+      description: role.description ?? '',
+      isSystemRole: Boolean(role.is_system_role),
+      status: role.status ?? 'active',
+      userCount,
+      permissionCodes,
+      permissionCount: permissionCodes.length,
+    }
+  })
+
+  return json({
+    roles: mappedRoles,
+    catalog: (catalog ?? []).map((p: Row) => ({
+      code: p.code,
+      description: p.description ?? '',
+      module: p.module,
+    })),
+    modules,
+  })
+}
+
+async function updateRolePermissions(request: Request, roleId: string) {
+  const context = await authenticate(request)
+  const companyId = context.companyId
+
+  const canManage =
+    Boolean(context.platformRole) ||
+    context.permissions.includes('settings.roles.manage') ||
+    context.permissions.includes('*')
+  if (!canManage) {
+    return apiError(403, 'You do not have permission to manage roles', 'permission_denied')
+  }
+
+  const { data: role, error: roleError } = await admin
+    .from('roles')
+    .select('id, name, company_id, is_system_role')
+    .eq('company_id', companyId)
+    .eq('id', roleId)
+    .maybeSingle()
+  if (roleError) return apiError(500, roleError.message, 'database_error')
+  if (!role) return apiError(404, 'Role not found', 'not_found')
+
+  const input = await readJson<{ permissionCodes?: string[] }>(request)
+  if (!Array.isArray(input.permissionCodes)) {
+    return apiError(400, 'permissionCodes array is required', 'invalid_input')
+  }
+
+  const codes = [...new Set(input.permissionCodes.map((c) => String(c).trim()).filter(Boolean))]
+  if (codes.length) {
+    const { data: catalog, error: catalogError } = await admin
+      .from('permissions')
+      .select('code')
+      .in('code', codes)
+    if (catalogError) return apiError(500, catalogError.message, 'database_error')
+    const known = new Set((catalog ?? []).map((row: Row) => String(row.code)))
+    const unknown = codes.filter((code) => !known.has(code))
+    if (unknown.length) {
+      return apiError(400, `Unknown permission codes: ${unknown.join(', ')}`, 'invalid_permission')
+    }
+  }
+
+  const { error: deleteError } = await admin.from('role_permissions').delete().eq('role_id', roleId)
+  if (deleteError) return apiError(500, deleteError.message, 'database_error')
+
+  if (codes.length) {
+    const { error: insertError } = await admin.from('role_permissions').insert(
+      codes.map((permission_code) => ({
+        role_id: roleId,
+        permission_code,
+        effect: 'allow',
+      })),
+    )
+    if (insertError) return apiError(500, insertError.message, 'database_error')
+  }
+
+  await admin.from('audit_events').insert({
+    company_id: companyId,
+    actor_type: 'user',
+    actor_id: context.user.id,
+    action: 'settings.roles.permissions_updated',
+    entity_type: 'role',
+    entity_id: roleId,
+    source_app: 'COMMAND',
+    detail: { roleName: role.name, permissionCodes: codes },
+  })
+
+  return listRolesMatrix(request)
+}
+
+async function createStorageSignedUrl(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<{
+    bucket?: string
+    storageKey?: string
+    expiresInSeconds?: number
+  }>(request)
+
+  const bucket = String(input.bucket ?? '').trim()
+  const storageKey = String(input.storageKey ?? '').trim()
+  if (!bucket || !storageKey) {
+    return apiError(400, 'bucket and storageKey are required', 'invalid_input')
+  }
+
+  const allowedBuckets = new Set([
+    'driver-documents',
+    'defect-photos',
+    'incident-evidence',
+    'vehicle-documents',
+    'lost-property-photos',
+  ])
+  if (!allowedBuckets.has(bucket)) {
+    return apiError(400, 'Bucket is not allowed for signed URLs', 'invalid_bucket')
+  }
+
+  try {
+    const { createTenantSignedUrl } = await import('../_shared/signed-storage.ts')
+    const signed = await createTenantSignedUrl({
+      bucket,
+      storageKey,
+      companyId: context.companyId,
+      expiresInSeconds: input.expiresInSeconds,
+    })
+    return json({
+      url: signed.signedUrl,
+      storageKey: signed.storageKey,
+      expiresInSeconds: signed.expiresInSeconds,
+      bucket,
+    })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Could not create signed URL')
+  }
 }
 
 async function listResource(request: Request, resource: string, id?: string) {
@@ -3155,6 +4025,7 @@ async function resolveDriverIdForLocation(
 async function driverPostLocation(request: Request) {
   const context = await authenticate(request)
   const input = await readJson<{
+    companyId?: string
     dutyId?: string
     latitude?: number
     longitude?: number
@@ -3164,6 +4035,12 @@ async function driverPostLocation(request: Request) {
     recordedAt?: string
     vehicleId?: string
   }>(request)
+
+  try {
+    assertRequestCompanyId(input.companyId, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Not allowed')
+  }
 
   const latitude = Number(input.latitude)
   const longitude = Number(input.longitude)
@@ -3181,15 +4058,14 @@ async function driverPostLocation(request: Request) {
   }
 
   if (dutyId) {
-    const { data: duty } = await admin
-      .from('duties')
-      .select('id, driver_id, vehicle_id, status')
-      .eq('company_id', context.companyId)
-      .eq('id', dutyId)
-      .maybeSingle()
-    if (!duty) return apiError(404, 'Duty not found', 'not_found')
-    if (duty.driver_id && String(duty.driver_id) !== driverId) {
-      return apiError(403, 'This duty is assigned to another driver', 'duty_not_yours')
+    try {
+      await assertDriverAssignedDuty({
+        companyId: context.companyId,
+        driverId,
+        dutyId,
+      })
+    } catch (error) {
+      return toApiErrorResponse(error, 'Duty not available')
     }
   } else {
     const today = new Date().toISOString().slice(0, 10)
@@ -3214,6 +4090,20 @@ async function driverPostLocation(request: Request) {
     .select('vehicle_id')
     .eq('id', dutyId)
     .maybeSingle()
+
+  const dutyVehicleId = dutyRow?.vehicle_id ? String(dutyRow.vehicle_id) : ''
+  const requestedVehicleId = isUuid(input.vehicleId) ? String(input.vehicleId) : ''
+  if (requestedVehicleId && dutyVehicleId && requestedVehicleId !== dutyVehicleId) {
+    try {
+      await assertDriverAssignedVehicle({
+        companyId: context.companyId,
+        driverId,
+        vehicleId: requestedVehicleId,
+      })
+    } catch (error) {
+      return toApiErrorResponse(error, 'Vehicle not available')
+    }
+  }
 
   const recordedAt = input.recordedAt && !Number.isNaN(Date.parse(input.recordedAt))
     ? new Date(input.recordedAt).toISOString()
@@ -3264,6 +4154,19 @@ async function driverVehicleParked(request: Request) {
 
     const driverId = await resolveDriverIdForLocation(context, input.dutyId ? String(input.dutyId) : null)
     if (!driverId) return apiError(403, 'No Driver account is linked to this login', 'driver_account_missing')
+
+    try {
+      await guardDriverScopedWrite({
+        companyId: context.companyId,
+        driverId,
+        body: input,
+        vehicleId,
+        dutyId: input.dutyId ? String(input.dutyId) : null,
+        depotId: depotId || null,
+      })
+    } catch (error) {
+      return toApiErrorResponse(error, 'Parking not allowed for this vehicle')
+    }
 
     const { data: vehicle, error: vehicleError } = await admin
       .from('vehicles')
@@ -3359,6 +4262,52 @@ async function driverVehicleParked(request: Request) {
       keysReturned,
     })
 
+    let handbackReport: Row | null = null
+    const endMileage = input.endMileage != null ? Number(input.endMileage) : null
+    const fuelLevel = input.fuelLevel ? String(input.fuelLevel) : null
+    const handbackChecks =
+      input.handbackChecks && typeof input.handbackChecks === 'object'
+        ? (input.handbackChecks as Record<string, boolean>)
+        : undefined
+    const shouldRecordHandback =
+      (Number.isFinite(endMileage) && endMileage != null) ||
+      Boolean(fuelLevel) ||
+      Boolean(input.notes) ||
+      Boolean(handbackChecks)
+
+    if (shouldRecordHandback) {
+      const { data: driverRow } = await admin
+        .from('drivers')
+        .select('id, staff_members(first_name, last_name)')
+        .eq('company_id', context.companyId)
+        .eq('id', driverId)
+        .maybeSingle()
+      const staff = (driverRow?.staff_members as Row | null) ?? {}
+      const driverName =
+        [staff.first_name, staff.last_name].filter(Boolean).join(' ').trim() ||
+        context.user.email ||
+        'Driver'
+
+      handbackReport = await recordDriverVehicleHandbackReport({
+        companyId: context.companyId,
+        depotId: resolvedDepotId,
+        vehicleId,
+        registration: vehicle.registration ? String(vehicle.registration) : 'Vehicle',
+        driverId,
+        driverName,
+        dutyId: input.dutyId ? String(input.dutyId) : null,
+        movementId: movementRow?.id ? String(movementRow.id) : null,
+        endMileage: Number.isFinite(endMileage) ? endMileage : null,
+        fuelLevel,
+        parkingLocation: destinationBay,
+        notes: input.notes ? String(input.notes) : null,
+        handbackChecks,
+        keysReturned,
+        keyLocation,
+        occurredAt: now,
+      })
+    }
+
     return json({
       ok: true,
       vehicleId,
@@ -3368,6 +4317,7 @@ async function driverVehicleParked(request: Request) {
       fullyInsideBay,
       recordedAt: now,
       platformEvent,
+      handbackReport,
     })
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'Could not record parking location')
@@ -3732,6 +4682,7 @@ async function loadYardOpsMovements(companyId: string, depotId?: string | null) 
 const YARD_TASK_TYPE_LABELS: Record<string, string> = {
   return_inspection: 'Return inspection',
   pre_departure_inspection: 'Pre-departure inspection',
+  inspect_damage: 'Inspect driver-reported damage',
   move_vehicle: 'Move vehicle',
   clean_interior: 'Clean interior',
   clean_exterior: 'Clean exterior',
@@ -3856,6 +4807,8 @@ async function yardHubData(context: Awaited<ReturnType<typeof authenticate>>, re
     depotId: activeDepot.id,
     depotName: activeDepot.name,
     depotCode: activeDepot.code || null,
+    roleKey: context.roleKey,
+    permissions: yardPermissionsForRole(context.roleKey),
     yardMapEnabled: layoutResult.yardMapEnabled,
     yardLayout: layoutResult.layout,
     shiftLabel: 'Day shift',
@@ -3907,28 +4860,42 @@ async function yardHubData(context: Awaited<ReturnType<typeof authenticate>>, re
   }
 }
 
-async function createYardTaskRoute(request: Request) {
-  const context = await authenticate(request)
-  try {
-    const input = await readJson<Row>(request)
-    const vehicleId = String(input.vehicleId ?? '')
-    const actorName = String(input.actorName ?? context.user.email ?? 'Yard user')
-    if (!vehicleId) return apiError(400, 'vehicleId is required')
+async function insertYardTaskForCompany(
+  context: Awaited<ReturnType<typeof authenticate>>,
+  input: Row,
+  actorName: string,
+): Promise<{ taskId: string; skipped?: boolean } | { error: Response }> {
+  const vehicleId = String(input.vehicleId ?? '')
+  if (!vehicleId) return { error: apiError(400, 'vehicleId is required') }
 
-    const { data: vehicle, error: vehicleError } = await admin
-      .from('vehicles')
-      .select('id, registration, primary_depot_id, depots(name)')
+  const defectId = input.defectId ? String(input.defectId) : ''
+  if (defectId) {
+    const { data: existing } = await admin
+      .from('yard_tasks')
+      .select('id')
       .eq('company_id', context.companyId)
-      .eq('id', vehicleId)
+      .eq('vehicle_id', vehicleId)
+      .in('status', ['open', 'assigned', 'in_progress', 'awaiting_sync'])
+      .ilike('instructions', `%(${defectId})%`)
       .maybeSingle()
-    if (vehicleError || !vehicle) return apiError(404, 'Vehicle not found')
+    if (existing?.id) return { taskId: String(existing.id), skipped: true }
+  }
 
-    const taskType = String(input.taskType ?? 'move_vehicle')
-    const title = String(input.title ?? YARD_TASK_TYPE_LABELS[taskType] ?? 'Yard task')
-    const depot = (vehicle.depots as Row | null) ?? {}
-    const now = new Date().toISOString()
+  const { data: vehicle, error: vehicleError } = await admin
+    .from('vehicles')
+    .select('id, registration, primary_depot_id, depots(name)')
+    .eq('company_id', context.companyId)
+    .eq('id', vehicleId)
+    .maybeSingle()
+  if (vehicleError || !vehicle) return { error: apiError(404, 'Vehicle not found') }
 
-    const { error } = await admin.from('yard_tasks').insert({
+  const taskType = String(input.taskType ?? 'move_vehicle')
+  const title = String(input.title ?? YARD_TASK_TYPE_LABELS[taskType] ?? 'Yard task')
+  const now = new Date().toISOString()
+
+  const { data: task, error } = await admin
+    .from('yard_tasks')
+    .insert({
       company_id: context.companyId,
       depot_id: vehicle.primary_depot_id ?? null,
       vehicle_id: vehicle.id,
@@ -3943,14 +4910,39 @@ async function createYardTaskRoute(request: Request) {
       evidence_required: Boolean(input.evidenceRequired),
       blocking_release: Boolean(input.blockingRelease),
       created_by: actorName,
-      source_app: 'command',
+      source_app: 'yard',
       created_at: now,
       updated_at: now,
     })
-    if (error) return apiError(400, error.message)
+    .select('id')
+    .maybeSingle()
 
-    const depotId = vehicle.primary_depot_id ? String(vehicle.primary_depot_id) : null
-    return json(await yardHubData(context, depotId))
+  if (error || !task?.id) {
+    return { error: apiError(400, error?.message ?? 'Could not create yard task') }
+  }
+
+  return { taskId: String(task.id) }
+}
+
+async function createYardTaskRoute(request: Request) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request)
+    const actorName = String(input.actorName ?? context.user.email ?? 'Yard user')
+    const inserted = await insertYardTaskForCompany(context, input, actorName)
+    if ('error' in inserted) return inserted.error
+
+    const depotId = input.vehicleId
+      ? (
+          await admin
+            .from('vehicles')
+            .select('primary_depot_id')
+            .eq('company_id', context.companyId)
+            .eq('id', String(input.vehicleId))
+            .maybeSingle()
+        ).data?.primary_depot_id
+      : null
+    return json(await yardHubData(context, depotId ? String(depotId) : null))
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'Could not create yard task')
   }
@@ -4248,6 +5240,13 @@ async function applyYardMutationRoute(request: Request) {
     if (bodyCompanyId && bodyCompanyId !== context.companyId) {
       return apiError(403, 'Company mismatch — sign in to the correct operator', 'company_mismatch')
     }
+
+    const requiredPermission = yardPermissionForMutationType(type, payload)
+    if (requiredPermission) {
+      const denied = yardPermissionDeniedResponse(context.roleKey, requiredPermission)
+      if (denied) return denied
+    }
+
     const actorName = context.user.email ?? 'Yard user'
 
     if (type === 'vehicle.move') {
@@ -4271,6 +5270,12 @@ async function applyYardMutationRoute(request: Request) {
 
     if (type === 'check.complete') {
       return completeYardCheckMutation(context, payload, actorName)
+    }
+
+    if (type === 'task.create') {
+      const inserted = await insertYardTaskForCompany(context, payload, actorName)
+      if ('error' in inserted) return inserted.error
+      return json({ ok: true, serverId: inserted.taskId, skipped: inserted.skipped === true })
     }
 
     if (type === 'task.update') {
@@ -4330,6 +5335,15 @@ async function applyYardMutationRoute(request: Request) {
 
     const bodyConditionResult = await applyBodyConditionYardMutation(type, context, payload, actorName)
     if (bodyConditionResult) return bodyConditionResult
+
+    const pendingResult = await applyPendingYardMutation(
+      type,
+      context,
+      payload,
+      actorName,
+      String(input.localOperationId ?? ''),
+    )
+    if (pendingResult) return pendingResult
 
     if (!type) return apiError(400, 'mutation type is required', 'mutation_type_required')
     return apiError(501, `Yard mutation not supported: ${type}`, 'mutation_not_supported')
@@ -4404,7 +5418,7 @@ async function loadYardBodyworkReportsForHub(companyId: string) {
     const { data, error } = await admin
       .from('defects')
       .select(
-        'id, defect_reference, vehicle_id, description, severity, status, location_on_vehicle, component, reported_at, evidence, vehicles(registration, fleet_number)',
+        'id, defect_reference, vehicle_id, description, severity, status, location_on_vehicle, component, reported_at, evidence, damage_case_id, vehicle_damage_cases(id, reference_number, status), vehicles(registration, fleet_number)',
       )
       .eq('company_id', companyId)
       .eq('category', 'bodywork')
@@ -4418,9 +5432,17 @@ async function loadYardBodyworkReportsForHub(companyId: string) {
     return (data ?? []).map((row: Row) => {
       const vehicle = (row.vehicles as Row | null) ?? {}
       const evidence = (row.evidence as Row | null) ?? {}
+      const damageCase = (row.vehicle_damage_cases as Row | null) ?? null
       return {
         id: String(row.id),
         defectRef: String(row.defect_reference ?? ''),
+        damageCaseId: row.damage_case_id
+          ? String(row.damage_case_id)
+          : damageCase?.id
+            ? String(damageCase.id)
+            : null,
+        damageReference: damageCase?.reference_number ? String(damageCase.reference_number) : null,
+        damageCaseStatus: damageCase?.status ? String(damageCase.status) : null,
         vehicleId: String(row.vehicle_id ?? ''),
         registrationNumber: String(vehicle.registration ?? '—'),
         fleetNumber: vehicle.fleet_number ? String(vehicle.fleet_number) : null,
@@ -6017,6 +7039,18 @@ async function activateDriver(request: Request, driverId: string) {
     input.overrideReason ? String(input.overrideReason) : 'Activated after eligibility review',
   )
 
+  if (input.overrideReason) {
+    await recordOverride({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      ruleCode: 'driver.activation_override',
+      reason: String(input.overrideReason),
+      entityType: 'driver',
+      entityId: driverId,
+      payload: { operationalStatus },
+    }).catch(() => undefined)
+  }
+
   return json(await projectDriverProfile(context.companyId, driverId))
 }
 
@@ -6387,19 +7421,23 @@ async function getDriverDocumentDownloadUrl(request: Request, driverId: string, 
   if (fileError) return apiError(500, fileError.message)
   if (!fileObj?.storage_key) return apiError(404, 'Stored file could not be found.', 'not_found')
 
-  const { data: signed, error: signError } = await admin.storage
-    .from('driver-documents')
-    .createSignedUrl(String(fileObj.storage_key), 60 * 60)
-  if (signError || !signed?.signedUrl) {
-    return apiError(400, signError?.message ?? 'Could not open document file.', 'storage_error')
+  try {
+    const { createTenantSignedUrl } = await import('../_shared/signed-storage.ts')
+    const signed = await createTenantSignedUrl({
+      bucket: 'driver-documents',
+      storageKey: String(fileObj.storage_key),
+      companyId: context.companyId,
+      expiresInSeconds: 60 * 60,
+    })
+    return json({
+      url: signed.signedUrl,
+      fileName: doc.file_name ?? fileObj.original_filename ?? `${doc.requirement_type}.jpg`,
+      mimeType: fileObj.mime_type ?? 'application/octet-stream',
+      label: doc.label ?? null,
+    })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Could not open document file.')
   }
-
-  return json({
-    url: signed.signedUrl,
-    fileName: doc.file_name ?? fileObj.original_filename ?? `${doc.requirement_type}.jpg`,
-    mimeType: fileObj.mime_type ?? 'application/octet-stream',
-    label: doc.label ?? null,
-  })
 }
 
 async function verifyDriverDocument(request: Request, driverId: string, documentId: string) {
@@ -7130,11 +8168,16 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'platform/billing/checkout' && request.method === 'POST') return platformCheckout(request)
   if (path === 'platform/billing/webhook' && request.method === 'POST') return platformBillingWebhook(request)
   if (path === 'system/seed-isolation' && request.method === 'POST') return platformSeedIsolation(request)
+  if (path === 'system/seed-bct-pilot' && request.method === 'POST') return platformSeedBctPilot(request)
 
-  // Entitlement gate for licensed modules (skip auth/public/platform/system)
+  // Entitlement + application-scope gates (skip auth/public/platform/system)
   const moduleKey = moduleForApiPath(path)
+  const needsAppScope =
+    !isPublicApiPath(path) &&
+    !path.startsWith('platform/') &&
+    requiredScopesForApiPath(path) !== null
   if (
-    moduleKey &&
+    (moduleKey || needsAppScope) &&
     !path.startsWith('auth/') &&
     !path.startsWith('platform/') &&
     !path.startsWith('system/') &&
@@ -7142,7 +8185,8 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   ) {
     try {
       const context = await authenticate(request)
-      requireModule(context, moduleKey)
+      if (moduleKey) requireModule(context, moduleKey)
+      await assertApplicationScope(context, path)
     } catch (error) {
       return toApiErrorResponse(error, 'Access denied')
     }
@@ -7198,8 +8242,38 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'auth/me' && request.method === 'GET') return getMe(request)
   if (path === 'auth/driver-session' && request.method === 'GET') return driverSession(request)
   if (path === 'driver/bootstrap' && request.method === 'GET') return driverBootstrap(request)
+  if (path === 'driver/vehicle-readiness' && request.method === 'GET') return driverVehicleReadiness(request)
+  if (path === 'driver/vehicle-timeline' && request.method === 'GET') return driverVehicleTimeline(request)
+  if (path === 'driver/adblue-records' && request.method === 'GET') return driverListAdBlueRecords(request)
+  if (path === 'driver/adblue-refill' && request.method === 'POST') return driverRecordAdBlueRefill(request)
+  if (path === 'driver/fuel-refill' && request.method === 'POST') return recordFuelRefill(await authenticate(request), request)
+  if (path === 'driver/fuel-records' && request.method === 'GET') return listFuelRecords(await authenticate(request), request)
   if (path === 'driver/location' && request.method === 'POST') return driverPostLocation(request)
   if (path === 'driver/vehicle-parked' && request.method === 'POST') return driverVehicleParked(request)
+  if (
+    segments[0] === 'driver' &&
+    segments[1] === 'journeys' &&
+    segments[2] &&
+    segments[3] === 'start' &&
+    request.method === 'POST'
+  ) {
+    return startDriverJourney(await authenticate(request), segments[2], request)
+  }
+  if (
+    segments[0] === 'driver' &&
+    segments[1] === 'journeys' &&
+    segments[2] &&
+    segments[3] === 'complete' &&
+    request.method === 'POST'
+  ) {
+    return completeDriverJourney(await authenticate(request), segments[2], request)
+  }
+  if (path === 'driver/vehicle-equipment' && request.method === 'POST') {
+    return driverVehicleEquipment(request)
+  }
+  if (path === 'driver/vehicle-equipment' && request.method === 'GET') {
+    return driverListVehicleEquipment(request)
+  }
   if (path === 'dashboard' && request.method === 'GET') return dashboard(request)
   if (path === 'users' && request.method === 'GET') return listCompanyUsers(request)
   if (path === 'schools' && request.method === 'GET') return listSchools(request)
@@ -7213,6 +8287,69 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'compliance' && request.method === 'GET') return complianceDashboard(request)
   if (path === 'compliance/expiries' && request.method === 'GET') return complianceExpiries(request)
   if (path === 'compliance/expiring' && request.method === 'GET') return complianceExpiries(request)
+  if (path === 'compliance/automation-settings' && request.method === 'GET') {
+    const context = await authenticate(request)
+    const settings = await getComplianceSettings(context.companyId)
+    return json({
+      ...settings,
+      defectAutomationRules: DEFAULT_DEFECT_AUTOMATION_RULES,
+    })
+  }
+  if (path === 'compliance/automation-settings' && request.method === 'PATCH') {
+    const context = await authenticate(request)
+    const input = await readJson<Partial<typeof DEFAULT_COMPLIANCE_SETTINGS>>(request)
+    const settings = await upsertComplianceSettings(context.companyId, input, context.user.id)
+    return json({
+      ...settings,
+      defectAutomationRules: DEFAULT_DEFECT_AUTOMATION_RULES,
+    })
+  }
+  if (path === 'vehicle-reports/hub' && request.method === 'GET') {
+    return vehicleReportsHub(await authenticate(request))
+  }
+  if (path === 'vehicle-reports' && request.method === 'GET') {
+    return listVehicleReports(await authenticate(request), request)
+  }
+  if (path === 'vehicle-reports' && request.method === 'POST') {
+    return createVehicleReport(await authenticate(request), request)
+  }
+  if (segments[0] === 'vehicle-reports' && segments[1] && segments[2] === 'review' && request.method === 'POST') {
+    return reviewVehicleReport(await authenticate(request), segments[1], request)
+  }
+  if (segments[0] === 'vehicle-reports' && segments[1] && request.method === 'GET') {
+    return getVehicleReport(await authenticate(request), segments[1])
+  }
+  if (path === 'settings/integration-keys' && request.method === 'GET') {
+    return listIntegrationKeys(await authenticate(request))
+  }
+  if (path === 'settings/integration-keys' && request.method === 'POST') {
+    return createIntegrationKey(await authenticate(request), request)
+  }
+  if (
+    segments[0] === 'settings' &&
+    segments[1] === 'integration-keys' &&
+    segments[2] &&
+    request.method === 'DELETE'
+  ) {
+    return revokeIntegrationKey(await authenticate(request), segments[2])
+  }
+  if (path === 'notifications/templates' && request.method === 'GET') {
+    await authenticate(request)
+    const url = new URL(request.url)
+    const audience = (url.searchParams.get('audience') ?? 'driver') as 'driver' | 'yard' | 'command'
+    return json({ items: templatesForAudience(audience) })
+  }
+  if (path === 'overrides' && request.method === 'GET') {
+    const context = await authenticate(request)
+    const { data, error } = await admin
+      .from('override_audit_events')
+      .select('*')
+      .eq('company_id', context.companyId)
+      .order('occurred_at', { ascending: false })
+      .limit(100)
+    if (error) return apiError(500, error.message)
+    return json({ items: expandRow(data ?? []) })
+  }
   if (path === 'safeguarding' && request.method === 'GET') {
     const context = await authenticate(request)
     const { data, error } = await admin
@@ -7226,7 +8363,17 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (path === 'exceptions' && request.method === 'GET') return listResource(request, 'exceptions')
   if (path === 'communication/delivery' && request.method === 'GET') return listResource(request, 'messages')
-  if (path === 'settings/roles' && request.method === 'GET') return listResource(request, 'roles')
+  if (path === 'settings/roles' && request.method === 'GET') return listRolesMatrix(request)
+  if (
+    segments[0] === 'settings' &&
+    segments[1] === 'roles' &&
+    segments[2] &&
+    segments[3] === 'permissions' &&
+    request.method === 'PATCH'
+  ) {
+    return updateRolePermissions(request, segments[2])
+  }
+  if (path === 'storage/signed-url' && request.method === 'POST') return createStorageSignedUrl(request)
   if (path === 'settings/invitations' && request.method === 'GET') return listResource(request, 'invitations')
   if (path === 'search' && request.method === 'GET') return globalSearch(request)
   if (path === 'profile' && request.method === 'GET') return profile(request)
@@ -7621,7 +8768,10 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
 }
 
 Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
+  // Preflight must never throw — browsers report that as "Failed to fetch" on every login.
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { status: 200, headers: corsHeaders })
+  }
 
   try {
     // Must await: bare `return handler()` skips try/catch and Safari shows "Load failed" (no CORS).

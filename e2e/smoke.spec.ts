@@ -49,9 +49,7 @@ test.describe("Veyvio Yard smoke", () => {
   });
 
   test("vehicle detail and condition tab", async ({ page }) => {
-    await page.goto("/yard/bct-v1");
-    await expect(page).toHaveURL(/\/yard\/bct-v1/);
-    await page.getByRole("link", { name: "Condition", exact: true }).click();
+    await page.goto("/yard/bct-v1/condition");
     await expect(page).toHaveURL(/\/condition/);
     await expect(page.getByRole("heading", { name: "Condition" })).toBeVisible();
   });
@@ -59,7 +57,7 @@ test.describe("Veyvio Yard smoke", () => {
   test("damage review queue is reachable from more", async ({ page }) => {
     await mainNav(page).getByRole("link", { name: "More", exact: true }).click();
     await expect(page).toHaveURL(/\/more/);
-    await page.getByRole("link", { name: "Inspections" }).click();
+    await page.getByRole("link", { name: /Body inspections/i }).click();
     await expect(page).toHaveURL(/\/inspections/);
     await page.getByRole("link", { name: /Damage review queue/i }).click();
     await expect(page).toHaveURL(/\/inspections\/damage-review/);

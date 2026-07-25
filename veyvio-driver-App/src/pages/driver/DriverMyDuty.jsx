@@ -8,13 +8,18 @@ import CommandBackendNotice from "@/components/driver/operational/CommandBackend
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { op } from "@/lib/driver-operational-theme";
 import { dutyHasNavigableStops } from "@/lib/command-duty-nav-job";
+import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { loadDriverBootstrap } from "@/services/driver-bootstrap.service";
 import {
   acknowledgeDuty,
   needsAck,
-  signOffDuty,
-  signOnDuty,
 } from "@/services/command-driver-ops.service";
+import {
+  signOffDutyWithOutbox,
+  signOnDutyWithOutbox,
+  hasPendingDutyOps,
+} from "@/services/driver-ops-outbox.service";
+import { canSignOnForDuty, getDutySignOnBlockers } from "@/lib/driver-sign-on-gate";
 
 export default function DriverMyDuty({ driver }) {
   const { session, bootstrap: sessionBootstrap, refresh } = useDriverSupabaseAuth();
@@ -23,6 +28,7 @@ export default function DriverMyDuty({ driver }) {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [actionMsg, setActionMsg] = useState("");
+  const [actionBlocked, setActionBlocked] = useState(false);
   const depotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
 
   const reload = useCallback(async ({ force = false } = {}) => {
@@ -71,10 +77,18 @@ export default function DriverMyDuty({ driver }) {
   const homeSummary = bootstrap?.legacy?.homeSummary;
   const signedOn = Boolean(next?.actualSignOnAt) || next?.lifecycleStatus === "in_progress";
   const signedOff = Boolean(next?.actualSignOffAt) || next?.lifecycleStatus === "completed";
+  const workspace = resolveDriverWorkspaceScope(driver, session);
+  const signOnBlockers = next ? getDutySignOnBlockers({ duty: next, bootstrap }) : [];
+  const signOnAllowed = next ? canSignOnForDuty({ duty: next, bootstrap }) : false;
+  const pendingSignOn =
+    next?.id && driver?.id
+      ? hasPendingDutyOps(driver.id, next.id, workspace.companyId, workspace.membershipId)
+      : false;
 
   async function handleAcknowledge(dutyId) {
     setBusyId(dutyId);
     setActionMsg("");
+    setActionBlocked(false);
     const result = await acknowledgeDuty(dutyId);
     setBusyId(null);
     if (!result.ok) {
@@ -89,10 +103,17 @@ export default function DriverMyDuty({ driver }) {
   async function handleSignOn(dutyId) {
     setBusyId(dutyId);
     setActionMsg("");
-    const result = await signOnDuty(dutyId);
+    setActionBlocked(false);
+    const result = await signOnDutyWithOutbox(driver, session, dutyId);
     setBusyId(null);
     if (!result.ok) {
+      setActionBlocked(Boolean(result.blocked));
       setActionMsg(result.message ?? "Sign-on failed.");
+      return;
+    }
+    if (result.queued) {
+      setActionBlocked(false);
+      setActionMsg(result.message ?? "Sign-on queued on this device.");
       return;
     }
     setActionMsg("Signed on — Admin can see you on duty.");
@@ -103,10 +124,15 @@ export default function DriverMyDuty({ driver }) {
   async function handleSignOff(dutyId) {
     setBusyId(dutyId);
     setActionMsg("");
-    const result = await signOffDuty(dutyId);
+    setActionBlocked(false);
+    const result = await signOffDutyWithOutbox(driver, session, dutyId);
     setBusyId(null);
     if (!result.ok) {
       setActionMsg(result.message ?? "Sign-off failed.");
+      return;
+    }
+    if (result.queued) {
+      setActionMsg(result.message ?? "Sign-off queued on this device.");
       return;
     }
     setActionMsg("Signed off — duty closed in Admin.");
@@ -133,7 +159,16 @@ export default function DriverMyDuty({ driver }) {
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
         ) : null}
         {actionMsg ? (
-          <div className="mt-4 rounded-xl border border-border bg-muted/40 p-3 text-sm">{actionMsg}</div>
+          <div
+            className={`mt-4 rounded-xl border p-3 text-sm ${
+              actionBlocked
+                ? "border-amber-200 bg-amber-50 text-amber-950"
+                : "border-border bg-muted/40"
+            }`}
+          >
+            {actionBlocked ? <p className="font-semibold">Sign-on blocked</p> : null}
+            <p className={actionBlocked ? "mt-1" : undefined}>{actionMsg}</p>
+          </div>
         ) : null}
 
         {!loading && !next ? (
@@ -178,14 +213,39 @@ export default function DriverMyDuty({ driver }) {
             ) : null}
 
             {!needsAck(next.lifecycleStatus) && !signedOn && !signedOff ? (
-              <Button
-                type="button"
-                disabled={busyId === next.id}
-                className={`mt-2 h-11 w-full ${op.primaryBtn}`}
-                onClick={() => void handleSignOn(next.id)}
-              >
-                {busyId === next.id ? "Signing on…" : "Sign on for duty"}
-              </Button>
+              <>
+                {pendingSignOn ? (
+                  <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+                    <p className="font-semibold">Sign-on pending sync</p>
+                    <p className="mt-1">
+                      This device recorded your sign-on — Command will apply it when connection returns.
+                    </p>
+                  </div>
+                ) : null}
+                {signOnBlockers.length ? (
+                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                    <p className="font-semibold">Sign-on blocked</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-4">
+                      {signOnBlockers.map((blocker) => (
+                        <li key={blocker}>{blocker}</li>
+                      ))}
+                    </ul>
+                    {signOnBlockers.some((b) => /vehicle check/i.test(b)) ? (
+                      <Button asChild variant="outline" className="mt-3 h-10 w-full">
+                        <Link to="/check">Open vehicle check</Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+                <Button
+                  type="button"
+                  disabled={busyId === next.id || !signOnAllowed}
+                  className={`mt-2 h-11 w-full ${op.primaryBtn}`}
+                  onClick={() => void handleSignOn(next.id)}
+                >
+                  {busyId === next.id ? "Signing on…" : "Sign on for duty"}
+                </Button>
+              </>
             ) : null}
 
             {signedOn && !signedOff ? (

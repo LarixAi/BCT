@@ -150,6 +150,13 @@ async function seedOne(org: IsolationOrg) {
     })
   }
 
+  const { data: membershipRow } = await admin
+    .from('company_memberships')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
   let { data: depot } = await admin
     .from('depots')
     .select('id')
@@ -261,6 +268,62 @@ async function seedOne(org: IsolationOrg) {
     driver = createdDriver
   }
 
+  await admin.from('driver_app_accounts').upsert(
+    {
+      company_id: companyId,
+      driver_id: driver.id,
+      user_id: userId,
+      membership_id: membershipRow?.id ?? null,
+      account_status: 'active',
+      registration_completed_at: new Date().toISOString(),
+      created_by: userId,
+      updated_by: userId,
+      source_app: 'COMMAND',
+    },
+    { onConflict: 'driver_id' },
+  )
+
+  let { data: vorVehicle } = await admin
+    .from('vehicles')
+    .select('id, registration')
+    .eq('company_id', companyId)
+    .eq('registration', `ISO-VOR-${org.label}`)
+    .maybeSingle()
+
+  if (!vorVehicle) {
+    const { data: createdVor, error: vorError } = await admin
+      .from('vehicles')
+      .insert({
+        company_id: companyId,
+        fleet_number: `ISO-VOR-${org.label}`,
+        registration: `ISO-VOR-${org.label}`,
+        make: 'Ford',
+        model: 'Transit',
+        year: 2020,
+        vehicle_class: 'minibus',
+        fuel_type: 'diesel',
+        seat_capacity: 8,
+        wheelchair_capacity: 0,
+        primary_depot_id: depot.id,
+        operational_status: 'vor',
+        ownership_type: 'owned',
+        status: 'active',
+        created_by: userId,
+        updated_by: userId,
+        source_app: 'COMMAND',
+      })
+      .select('id, registration')
+      .single()
+    if (vorError || !createdVor) throw new Error(vorError?.message ?? 'VOR vehicle seed failed')
+    vorVehicle = createdVor
+  } else {
+    await admin
+      .from('vehicles')
+      .update({ operational_status: 'vor', updated_by: userId, updated_at: new Date().toISOString() })
+      .eq('id', vorVehicle.id)
+      .eq('company_id', companyId)
+  }
+
   let { data: duty } = await admin
     .from('duties')
     .select('id')
@@ -296,6 +359,23 @@ async function seedOne(org: IsolationOrg) {
         vehicle_id: vehicle.id,
         updated_by: userId,
         updated_at: new Date().toISOString(),
+      })
+      .eq('id', duty.id)
+      .eq('company_id', companyId)
+  }
+
+  if (duty?.id && org.label === 'A') {
+    const publishedAt = new Date().toISOString()
+    await admin
+      .from('duties')
+      .update({
+        publication_status: 'published',
+        published_at: publishedAt,
+        driver_lifecycle_status: 'published',
+        acknowledgement_required: true,
+        version: 1,
+        updated_by: userId,
+        updated_at: publishedAt,
       })
       .eq('id', duty.id)
       .eq('company_id', companyId)
@@ -361,6 +441,8 @@ async function seedOne(org: IsolationOrg) {
     driverId: String(driver.id),
     driverNumber: String(driver.driver_number),
     dutyId: duty?.id ? String(duty.id) : null,
+    publishedDutyId: org.label === 'A' && duty?.id ? String(duty.id) : null,
+    vorVehicleId: vorVehicle?.id ? String(vorVehicle.id) : null,
     defectId: defect?.id ? String(defect.id) : null,
     storageProbePath: probePath,
   }

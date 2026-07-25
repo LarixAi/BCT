@@ -15,6 +15,17 @@ env:
   NODE_VERSION: "22"
 
 jobs:
+  secrets-audit:
+    name: Secrets audit (F-04)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan tracked files for committed secrets
+        run: npm run audit:secrets
+
   yard:
     name: Yard
     runs-on: ubuntu-latest
@@ -40,6 +51,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Production build guard (Blueprint F-03)
+        run: VERIFY_SKIP_BUILD=1 npm run verify:production-build
 
   admin:
     name: Admin
@@ -117,8 +131,81 @@ jobs:
           VITE_DRIVER_NAV_TEST_MODE: "true"
         run: npm run build
 
+  driver-production-guards:
+    name: Driver production guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: veyvio-driver-App
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: veyvio-driver-App/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Gate 1 automated exit tests
+        run: npm run test:gate1-exit
+
+      - name: Production build scan (no mock/Base44/PHV)
+        run: npm run verify:production-build
+
+  driver-android:
+    name: Driver Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: veyvio-driver-App
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: veyvio-driver-App/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install
+        run: npm ci
+
+      - name: Build web + sync Capacitor
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-anon-key
+          VITE_COMMAND_API_BASE_URL: https://example.supabase.co/functions/v1/command-api
+          VITE_AUTH_API_BASE_URL: https://example.supabase.co/functions/v1/command-api
+          VITE_DRIVER_APP_URL: https://driver.example.com
+        run: npm run build:android
+
+      - name: Assemble debug APK
+        run: npm run android:apk
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: veyvio-driver-debug-apk
+          path: veyvio-driver-App/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
   tenant-isolation:
-    name: Tenant isolation
+    name: Tenant isolation + dispatch gates
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Requires repo secrets against hosted Command API (see docs/plan/veyvio-multi-tenant-saas-roadmap.md).
@@ -139,7 +226,7 @@ jobs:
           cd "Veyvio admin "
           npm ci
 
-      - name: Cross-tenant isolation smoke
+      - name: Cross-tenant isolation + F-06 dispatch gates
         env:
           CI: "true"
           VEYVIO_ANON_KEY: ${{ secrets.VEYVIO_ANON_KEY }}
@@ -155,4 +242,34 @@ jobs:
             echo "Add VEYVIO_ANON_KEY and related secrets before merging tenant-isolation work to main."
             exit 0
           fi
-          npm run test:tenant-isolation
+          npm run test:dispatch-gates-live
+
+  gate1-preflight:
+    name: Gate 1 preflight (F-17)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Yard deps
+        run: npm ci
+
+      - name: Install Driver deps
+        run: |
+          cd veyvio-driver-App
+          npm ci
+
+      - name: Install Admin deps
+        run: |
+          cd "Veyvio admin "
+          npm ci
+
+      - name: Gate 1 static preflight
+        run: GATE1_SKIP_BUILD=1 npm run gate1:preflight -- --skip-build

@@ -8,12 +8,28 @@ import { defineConfig } from 'vite'
 const mobileDev = process.env.DRIVER_MOBILE === 'true'
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
+const enableBase44 = process.env.VITE_ENABLE_BASE44 === 'true'
+const enablePhvModule = process.env.VITE_ENABLE_PHV_MODULE === 'true'
+const useLegacyBase44 = enableBase44 || enablePhvModule
+
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
   logLevel: 'error', // Suppress warnings, only show errors
   resolve: {
     alias: [
+      ...(useLegacyBase44
+        ? []
+        : [
+            {
+              find: "@/api/base44Client",
+              replacement: path.resolve(rootDir, "./src/api/base44Client.stub.js"),
+            },
+            {
+              find: "@base44/sdk",
+              replacement: path.resolve(rootDir, "./src/api/base44-sdk.stub.js"),
+            },
+          ]),
       {
         find: "@core-support/brand/ridova-theme.css",
         replacement: path.resolve(rootDir, "../packages/brand/src/ridova-theme.css"),
@@ -34,16 +50,17 @@ export default defineConfig({
   },
   plugins: [
     ...(mobileDev ? [basicSsl()] : []),
-    base44({
-      // Support for legacy code that imports the base44 SDK with @/integrations, @/entities, etc.
-      // can be removed if the code has been updated to use the new SDK imports from @base44/sdk
-      legacySDKImports: process.env.BASE44_LEGACY_SDK_IMPORTS === 'true',
-      // Lighter dev server when testing the driver app on device
-      hmrNotifier: !mobileDev,
-      navigationNotifier: !mobileDev,
-      analyticsTracker: !mobileDev,
-      visualEditAgent: !mobileDev,
-    }),
+    ...(enableBase44
+      ? [
+          base44({
+            legacySDKImports: process.env.BASE44_LEGACY_SDK_IMPORTS === 'true',
+            hmrNotifier: !mobileDev,
+            navigationNotifier: !mobileDev,
+            analyticsTracker: !mobileDev,
+            visualEditAgent: !mobileDev,
+          }),
+        ]
+      : []),
     react(),
   ],
   server: {

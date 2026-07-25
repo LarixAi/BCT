@@ -11,6 +11,8 @@ import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { op } from "@/lib/driver-operational-theme";
 import { DRIVER_NAV_TOTAL_OFFSET } from "@/lib/driverSafeArea";
 import { refreshCommandBootstrap } from "@/services/command-driver-ops.service";
+import { commandPostDriverVehicleEquipment } from "@/lib/command-api";
+import { getSupabaseClient } from "@/lib/supabase/client";
 
 const EQUIPMENT_GROUPS = [
   {
@@ -79,6 +81,9 @@ export default function DriverVehicleEquipment({ driver }) {
   const [state, setState] = useState(emptyState);
   const [savedMsg, setSavedMsg] = useState("");
 
+  const [vehicleId, setVehicleId] = useState(null);
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     void (async () => {
       const depotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
@@ -95,6 +100,7 @@ export default function DriverVehicleEquipment({ driver }) {
         Boolean(vehicle?.wheelchairAccessible);
 
       setReg(nextReg);
+      setVehicleId(vehicle?.id ?? vehicle?.vehicleId ?? null);
       setMakeModel([vehicle?.make, vehicle?.model].filter(Boolean).join(" "));
       setAccessible(wheelchair);
 
@@ -171,8 +177,8 @@ export default function DriverVehicleEquipment({ driver }) {
     });
   };
 
-  const saveConfirmation = () => {
-    if (!allRequiredDone || !reg) return;
+  const saveConfirmation = async () => {
+    if (!allRequiredDone || !reg || saving) return;
     const next = {
       present: state.present,
       notFitted: state.notFitted,
@@ -186,6 +192,38 @@ export default function DriverVehicleEquipment({ driver }) {
     }
     setState(next);
     setSavedMsg(`Confirmed ${formatConfirmedAt(next.confirmedAt)}.`);
+
+    // Gate 2 — also persist to Command (best-effort; local confirmation remains).
+    if (vehicleId) {
+      setSaving(true);
+      try {
+        const supabase = getSupabaseClient();
+        const {
+          data: { session: authSession },
+        } = await supabase.auth.getSession();
+        const token = authSession?.access_token;
+        if (token) {
+          const items = Object.keys(next.present).filter((id) => next.present[id]);
+          const missingItems = Object.keys(next.notFitted).filter((id) => next.notFitted[id]);
+          const result = await commandPostDriverVehicleEquipment(token, {
+            vehicleId,
+            items,
+            missingItems,
+          });
+          if (!result.ok) {
+            setSavedMsg(
+              `Confirmed on device ${formatConfirmedAt(next.confirmedAt)}. Sync to Command pending — ${result.message}`,
+            );
+          } else {
+            setSavedMsg(`Confirmed and saved to Command ${formatConfirmedAt(next.confirmedAt)}.`);
+          }
+        }
+      } catch {
+        setSavedMsg(`Confirmed on device ${formatConfirmedAt(next.confirmedAt)}. Sync to Command pending.`);
+      } finally {
+        setSaving(false);
+      }
+    }
   };
 
   const clearConfirmation = () => {

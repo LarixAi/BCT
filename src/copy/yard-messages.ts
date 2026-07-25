@@ -201,6 +201,8 @@ export const yardCopy = {
     retryFailed: "Retry failed",
     routeNotDeployed:
       "The live Command API does not have the yard sync route yet. Deploy command-api from the Admin repo, then retry failed updates below.",
+    bodyConditionNotDeployed:
+      "Body inspection and damage evidence cannot reach Command until migration 202607250001_body_condition_inspection.sql is applied and command-api is redeployed. Your inspection is saved on this device — tap Retry failed after deploy, or Clear failed backlog to dismiss the queue.",
     staleFailureHint:
       "These failures are from before the server was updated. They are real actions Kenny recorded on this device — not demo data. Tap Retry failed to upload them now, or Clear failed backlog if you only want a clean queue.",
     queueExplainer:

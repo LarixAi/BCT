@@ -29,5 +29,7 @@ test.describe("Vehicle Bodywork fleet system", () => {
     await page.goto("/more/bodywork");
     await expect(page).toHaveURL(/\/vehicle-bodywork/);
     await expect(page.getByRole("heading", { name: "Vehicle Bodywork" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Driver bodywork reports" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /EO71 NTJ.*Patel/i })).toBeVisible();
   });
 });

@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { DRIVER_AUTH_PATH } from "@/lib/driverAuthConfig";
+import DriverAuthEntry from "./DriverAuthEntry";
 import DriverAuthSelectCompany, {
   savePendingCompanySelection,
 } from "./DriverAuthSelectCompany";

@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatSyncError, isMissingSyncRouteError } from "@/domain/sync/format-sync-error";
+import { formatSyncError, isBodyConditionDeployError } from "@/domain/sync/format-sync-error";
 
-describe("formatSyncError", () => {
-  it("explains missing yard sync route", () => {
-    const raw = JSON.stringify({ statusCode: 404, code: "not_found", message: "API route not found" });
-    expect(formatSyncError(raw)).toContain("not available on the live server");
-    expect(isMissingSyncRouteError(raw)).toBe(true);
-  });
-
-  it("explains inspection lookup failures during bodywork sync", () => {
-    expect(formatSyncError("Inspection not found")).toContain("inspection start to sync");
+describe("formatSyncError body condition", () => {
+  it("explains undeployed inspection.media handler", () => {
+    const raw = JSON.stringify({
+      code: "mutation_not_supported",
+      message: "Yard mutation not supported: inspection.media",
+    });
+    expect(formatSyncError(raw)).toContain("Body inspection sync is not on the live server");
+    expect(isBodyConditionDeployError(raw)).toBe(true);
   });
 });

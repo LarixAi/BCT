@@ -1,9 +1,12 @@
 import { getApiBaseUrl, usesCommandYardApi } from "./config";
+import { isProductionBuild } from "@/platform/api/production-guards";
 import { mapYardHubToBootstrap } from "./map-yard-hub";
 import type { BootstrapPayload } from "@/data/mocks/bootstrap";
 import type { YardRole } from "@/types/permissions";
 import type { OutboxMutation } from "@/types/sync";
 import { formatSyncError } from "@/domain/sync/format-sync-error";
+import { isBodyConditionMutationType } from "@/domain/sync/body-condition-mutations";
+import { assertYardMutationCommandSupported } from "@/domain/sync/yard-mutation-inventory";
 import { isUntrustedServerId } from "@/domain/sync/is-trusted-server-id";
 import type { PushMutationResult, YardApi } from "./yard-api";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
@@ -31,6 +34,27 @@ function bearerHeaders(): Record<string, string> {
   return headers;
 }
 
+function tryParseApiError(text: string): { message?: string; code?: string } | null {
+  try {
+    return JSON.parse(text) as { message?: string; code?: string };
+  } catch {
+    return null;
+  }
+}
+
+async function pushMutationViaLocalDevStub(mutation: OutboxMutation): Promise<PushMutationResult> {
+  const res = await fetch("/api/v1/yard/mutations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(mutation),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(formatSyncError(text || `Local yard stub failed (${res.status})`));
+  }
+  return res.json() as Promise<PushMutationResult>;
+}
+
 export const liveYardApi: YardApi = {
   async fetchBootstrap(companyId, depotId, role: YardRole) {
     if (usesCommandYardApi()) {
@@ -40,6 +64,12 @@ export const liveYardApi: YardApi = {
       }
       const hub = await commandFetchYardHub(token, depotId);
       return mapYardHubToBootstrap(hub, companyId, depotId, role);
+    }
+
+    if (isProductionBuild()) {
+      throw new Error(
+        "Command API is required for yard bootstrap in production. Set VITE_COMMAND_API_BASE_URL and VITE_SUPABASE_ANON_KEY.",
+      );
     }
 
     const base = getApiBaseUrl();
@@ -52,6 +82,7 @@ export const liveYardApi: YardApi = {
 
   async pushMutation(mutation: OutboxMutation): Promise<PushMutationResult> {
     if (usesCommandYardApi()) {
+      assertYardMutationCommandSupported(mutation.type);
       const token = getSessionSnapshot().accessToken;
       if (!token || token.startsWith("mock_")) {
         throw new Error("Sign in required to sync yard actions to Command");
@@ -70,6 +101,15 @@ export const liveYardApi: YardApi = {
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
+        const parsed = tryParseApiError(text);
+        if (
+          import.meta.env.DEV &&
+          res.status === 501 &&
+          parsed?.code === "mutation_not_supported" &&
+          isBodyConditionMutationType(mutation.type)
+        ) {
+          return pushMutationViaLocalDevStub(mutation);
+        }
         throw new Error(formatSyncError(text || `Yard mutation failed (${res.status})`));
       }
       const body = await res.json().catch(() => ({})) as { serverId?: string; ok?: boolean; skipped?: boolean };

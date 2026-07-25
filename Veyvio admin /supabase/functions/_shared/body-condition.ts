@@ -674,6 +674,7 @@ function projectInspection(row: Row) {
 }
 
 function projectDamageCase(row: Row) {
+  const linkedDefectId = row.linked_defect_id ? String(row.linked_defect_id) : undefined
   return {
     id: String(row.id),
     vehicleId: String(row.vehicle_id),
@@ -681,7 +682,12 @@ function projectDamageCase(row: Row) {
     damageType: String(row.damage_type ?? 'other'),
     severity: mapSeverityToLegacy(String(row.severity ?? 'cosmetic')),
     status: String(row.status ?? 'provisional').replace(/_/g, '-'),
-    origin: row.is_existing_damage ? 'existing_at_onboarding' : 'discovered_yard_check',
+    origin: linkedDefectId
+      ? 'driver_report'
+      : row.is_existing_damage
+        ? 'existing_at_onboarding'
+        : 'discovered_yard_check',
+    linkedDefectId,
     title: `${String(row.damage_type ?? 'Damage')} — ${String(row.vehicle_zone ?? 'zone')}`,
     description: row.description ? String(row.description) : undefined,
     firstObservedAt: String(row.first_detected_at ?? row.created_at),

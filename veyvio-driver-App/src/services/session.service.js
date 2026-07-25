@@ -17,6 +17,11 @@ import { withTimeout } from "@/lib/withTimeout";
 import { findEnabledBiometricEnrollment } from "@/features/auth/biometrics/biometric-preference";
 import { rebindBiometricCredentialIfEnabled } from "@/features/auth/biometrics/biometric-enrollment";
 
+/** Native/web storage can stall — never block the Signing in… spinner forever. */
+const APPLY_TOKENS_TIMEOUT_MS = 8000;
+const GET_SESSION_TIMEOUT_MS = 8000;
+const COMPLETE_SIGN_IN_TIMEOUT_MS = 45000;
+
 /** Map Command `driver_app_accounts.account_status` → fields the Ridova-shaped UI expects. */
 export function mapAccountStatusToDriverFields(accountStatus) {
   const status = String(accountStatus ?? "active");
@@ -197,9 +202,20 @@ async function ensureCompanyOnSession(supabase, accessToken, refreshToken) {
 
 export async function getDriverSessionContext() {
   const supabase = getSupabaseClient();
-  const {
-    data: { session: authSession },
-  } = await supabase.auth.getSession();
+  const sessionProbe = await withTimeout(
+    supabase.auth.getSession(),
+    GET_SESSION_TIMEOUT_MS,
+    null,
+  );
+  if (!sessionProbe) {
+    return {
+      userId: null,
+      routeTarget: "session_error",
+      driver: null,
+      linkError: "Could not restore your session. Check your connection and try again.",
+    };
+  }
+  const authSession = sessionProbe.data?.session;
 
   if (!authSession?.user || !authSession.access_token) return null;
 
@@ -429,16 +445,34 @@ function tokenTag(token) {
 
 export async function applyCommandTokens(supabase, accessToken, refreshToken) {
   console.log("[BIOMETRIC_DEBUG] applyCommandTokens setSession refresh " + tokenTag(refreshToken));
-  const { error } = await supabase.auth.setSession({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-  });
-  if (error) return { ok: false, message: formatAuthError(error.message) };
+  const applied = await withTimeout(
+    supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    }),
+    APPLY_TOKENS_TIMEOUT_MS,
+    null,
+  );
+  if (!applied) {
+    return {
+      ok: false,
+      message: "Sign-in timed out while saving your session. Check your connection and try again.",
+    };
+  }
+  if (applied.error) return { ok: false, message: formatAuthError(applied.error.message) };
   return { ok: true };
 }
 
 export async function completeDriverSignIn() {
-  const context = await getDriverSessionContext();
+  const context = await withTimeout(
+    getDriverSessionContext(),
+    COMPLETE_SIGN_IN_TIMEOUT_MS,
+    {
+      routeTarget: "session_error",
+      driver: null,
+      linkError: "Sign-in timed out while loading your Driver account. Check your connection and try again.",
+    },
+  );
   if (context?.routeTarget === "session_error") {
     const supabase = getSupabaseClient();
     await supabase.auth.signOut().catch(() => undefined);

@@ -221,6 +221,9 @@ export interface DamageObservation {
   mediaIds: string[];
   dutyId?: string;
   tripId?: string;
+  /** Inline photo from driver walkaround / hub bodywork report (not persisted separately). */
+  photoDataUrl?: string;
+  defectRef?: string;
 }
 
 export interface DamageReview {

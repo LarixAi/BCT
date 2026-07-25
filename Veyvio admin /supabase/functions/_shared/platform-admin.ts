@@ -2,6 +2,7 @@ import { admin, authenticate } from './supabase.ts'
 import { apiError, json, readJson } from './http.ts'
 import { requirePlatformRole, writePlatformAudit } from './tenant-guards.ts'
 import { createSaasCheckoutSession, handleSaasStripeWebhook, saasBillingConfigured } from './saas-billing.ts'
+import { seedBctPilotDriver } from './seed-bct-pilot.ts'
 import { seedIsolationTenants } from './seed-isolation.ts'
 import { createSupportGrant, listSupportGrants, revokeSupportGrant } from './tenant-auth.ts'
 import { applySubscriptionLifecycle } from './subscription-lifecycle.ts'
@@ -302,6 +303,28 @@ export async function platformSeedIsolation(request: Request) {
     return json(result)
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'Isolation seed failed')
+  }
+}
+
+export async function platformSeedBctPilot(request: Request) {
+  const context = await authenticate(request, false)
+  await requirePlatformRole(context.user.id, ['platform_admin'])
+  try {
+    const result = await seedBctPilotDriver()
+    await writePlatformAudit({
+      actorUserId: context.user.id,
+      action: 'platform.seed.bct_pilot',
+      targetCompanyId: result.companyId,
+      detail: {
+        email: result.email,
+        driverId: result.driverId,
+        dutyId: result.dutyId,
+        vehicleRegistration: result.vehicleRegistration,
+      },
+    })
+    return json(result)
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'BCT pilot seed failed')
   }
 }
 

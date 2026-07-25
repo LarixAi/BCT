@@ -4,24 +4,26 @@
  * Usage: VEYVIO_ANON_KEY=... node scripts/yard-live-smoke.mjs [email] [password]
  */
 import assert from 'node:assert/strict'
+import { bearerHeaders, resolveCommandApiEnv } from './lib/command-api-env.mjs'
 
-const API = process.env.VEYVIO_API_URL ?? 'https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api'
-const ANON = process.env.VEYVIO_ANON_KEY ?? ''
+const { api: API, anon: ANON } = resolveCommandApiEnv()
 const EMAIL = process.argv[2] ?? process.env.VEYVIO_YARD_EMAIL ?? 'admin@veyvio.test'
 const PASSWORD = process.argv[3] ?? process.env.VEYVIO_YARD_PASSWORD ?? 'VeyvioCommand1!'
+const BCT_NAME_HINT = process.env.VEYVIO_BCT_COMPANY_HINT ?? 'Brent'
 
-function headers(token = ANON) {
-  return {
-    'Content-Type': 'application/json',
-    apikey: ANON,
-    Authorization: `Bearer ${token}`,
-  }
+function pickBctMembership(memberships = []) {
+  return (
+    memberships.find((row) => {
+      const name = String(row.tenantName ?? row.companyName ?? '')
+      return name.includes(BCT_NAME_HINT) || name.includes('BCT')
+    }) ?? memberships[0]
+  )
 }
 
 async function req(path, { method = 'GET', body, token } = {}) {
   const res = await fetch(`${API}/api${path}`, {
     method,
-    headers: headers(token ?? ANON),
+    headers: bearerHeaders(ANON, token ?? ANON),
     body: body ? JSON.stringify(body) : undefined,
   })
   const text = await res.text()
@@ -49,7 +51,10 @@ async function login(email, password) {
         },
       }
     }
+    const bct = pickBctMembership(res.json.memberships ?? [])
     const companyId =
+      bct?.tenantId ??
+      bct?.companyId ??
       res.json.pendingCompanyId ??
       res.json.memberships?.[0]?.tenantId ??
       res.json.memberships?.[0]?.companyId
@@ -65,8 +70,8 @@ async function login(email, password) {
   }
 
   if (res.json?.requiresTenantSelection) {
-    const tenantId =
-      res.json.memberships?.[0]?.tenantId ?? res.json.memberships?.[0]?.companyId
+    const bct = pickBctMembership(res.json.memberships ?? [])
+    const tenantId = bct?.tenantId ?? bct?.companyId
     if (!tenantId) {
       return { status: 400, json: { message: 'Tenant selection required but no memberships returned' } }
     }
@@ -75,6 +80,21 @@ async function login(email, password) {
       token: res.json.accessToken,
       body: { companyId: tenantId, refreshToken: res.json.refreshToken },
     })
+  } else {
+    const me = await req('/auth/me', { token: res.json.accessToken })
+    const companyName = String(me.json?.tenantName ?? me.json?.companyName ?? '')
+    const onBct = companyName.includes(BCT_NAME_HINT) || companyName.includes('BCT')
+    if (me.status === 200 && !onBct && res.json.memberships?.length) {
+      const bct = pickBctMembership(res.json.memberships)
+      const tenantId = bct?.tenantId ?? bct?.companyId
+      if (tenantId) {
+        res = await req('/auth/select-tenant', {
+          method: 'POST',
+          token: res.json.accessToken,
+          body: { companyId: tenantId, refreshToken: res.json.refreshToken },
+        })
+      }
+    }
   }
 
   return res
@@ -138,18 +158,49 @@ async function main() {
   assert.equal(localTask.status, 200, JSON.stringify(localTask.json))
   assert.equal(localTask.json.skipped, true)
 
-  console.log('6) POST yard/mutations — unsupported type returns 501')
+  console.log('6) POST yard/mutations — equipment.assign (TD-009)')
   const equip = await req('/yard/mutations', {
     method: 'POST',
     token,
     body: {
       type: 'equipment.assign',
       companyId,
-      payload: { vehicleId, itemId: 'smoke-item' },
+      localOperationId: `smoke_equip_${Date.now()}`,
+      payload: { vehicleId, itemId: 'smoke-item', label: 'Smoke kit' },
     },
   })
-  assert.equal(equip.status, 501, JSON.stringify(equip.json))
-  assert.equal(equip.json.code, 'mutation_not_supported')
+  assert.equal(equip.status, 200, JSON.stringify(equip.json))
+  assert.ok(equip.json.serverId)
+
+  console.log('6b) POST yard/mutations — unsupported type returns 501')
+  const unknown = await req('/yard/mutations', {
+    method: 'POST',
+    token,
+    body: {
+      type: 'fleet.reindex',
+      companyId,
+      payload: { vehicleId },
+    },
+  })
+  assert.equal(unknown.status, 501, JSON.stringify(unknown.json))
+  assert.equal(unknown.json.code, 'mutation_not_supported')
+
+  console.log('6c) POST yard/mutations — plan.acknowledge (TD-009)')
+  const planAck = await req('/yard/mutations', {
+    method: 'POST',
+    token,
+    body: {
+      type: 'plan.acknowledge',
+      companyId,
+      payload: {
+        planId: `plan_smoke_${Date.now()}`,
+        operationalDate: new Date().toISOString().slice(0, 10),
+        version: 1,
+      },
+    },
+  })
+  assert.equal(planAck.status, 200, JSON.stringify(planAck.json))
+  assert.ok(planAck.json.serverId)
 
   console.log('7) POST yard/mutations — company mismatch rejected')
   const mismatch = await req('/yard/mutations', {
@@ -211,6 +262,34 @@ async function main() {
     checks.some((c) => c.vehicleId === vehicleId),
     'vehicleChecks missing vehicleId on hub item',
   )
+
+  console.log('11) POST yard/mutations — inspection.start handler deployed')
+  const inspectionProbe = await req('/yard/mutations', {
+    method: 'POST',
+    token,
+    body: {
+      type: 'inspection.start',
+      companyId,
+      payload: {
+        vehicleId,
+        inspectionId: `insp_smoke_${Date.now()}`,
+        inspectionType: 'weekly-bodywork',
+        startedAt: new Date().toISOString(),
+      },
+    },
+  })
+  assert.notEqual(
+    inspectionProbe.status,
+    501,
+    `inspection.start not deployed: ${JSON.stringify(inspectionProbe.json)}`,
+  )
+  assert.ok(
+    [200, 400, 404, 500].includes(inspectionProbe.status),
+    `unexpected inspection.start status ${inspectionProbe.status}`,
+  )
+  if (inspectionProbe.status === 200) {
+    assert.ok(inspectionProbe.json.serverId, 'inspection.start should return serverId when tables exist')
+  }
 
   console.log('yard-live-smoke: PASS')
   console.log(

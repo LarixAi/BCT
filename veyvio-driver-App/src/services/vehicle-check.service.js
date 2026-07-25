@@ -1,3 +1,10 @@
+import { countPendingOfflineCommands } from "@/services/driver-sync-status.service";
+import { getCommandApiBaseUrl } from "@/lib/command-api";
+import {
+  externalizeWalkaroundPayloadMedia,
+  hydrateWalkaroundPayloadMedia,
+  releaseWalkaroundPayloadMedia,
+} from "@/lib/walkaround-media-outbox";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { unwrapRelation } from "@/lib/supabase/relations";
 import { localToday } from "@/lib/local-date";
@@ -973,12 +980,10 @@ export async function submitWalkaroundCheck({
   };
 
   if (offlineSubmit || !navigator.onLine) {
-    enqueueWalkaroundSubmission(
-      driver.id,
-      payload,
-      driver.organisation_id ?? driver.organisationId,
-      driver.user_id ?? driver.id,
-    );
+    const companyId = driver.organisation_id ?? driver.organisationId;
+    const membershipId = driver.user_id ?? driver.id;
+    const externalized = await externalizeWalkaroundPayloadMedia(payload, { companyId, membershipId });
+    enqueueWalkaroundSubmission(driver.id, externalized, companyId, membershipId);
     discardWalkaroundDraft(driver, vehicle.id);
     const derived = deriveWalkaroundResult(responses);
     const bodyworkDamageCount = responses.filter(
@@ -998,7 +1003,7 @@ export async function submitWalkaroundCheck({
 
   const commandResult = await insertWalkaroundCheckViaCommand(payload);
   if (commandResult.ok) return commandResult;
-  if (commandResult.skipLegacy) {
+  if (getCommandApiBaseUrl() || commandResult.skipLegacy) {
     return { ok: false, message: commandResult.message ?? "Vehicle check could not be submitted." };
   }
 
@@ -1359,12 +1364,14 @@ export async function flushPendingWalkaroundSubmissions(driver) {
     if (item.companyId && companyId && item.companyId !== companyId) {
       continue;
     }
-    let result = await insertWalkaroundCheckViaCommand(item.payload);
-    if (!result.ok && !result.skipLegacy) {
-      result = await insertWalkaroundCheck(item.payload);
+    const hydrated = await hydrateWalkaroundPayloadMedia(item.payload);
+    let result = await insertWalkaroundCheckViaCommand(hydrated);
+    if (!result.ok && !getCommandApiBaseUrl() && !result.skipLegacy) {
+      result = await insertWalkaroundCheck(hydrated);
     }
     if (result.ok && !result.queued) {
       dequeueWalkaroundSubmission(driver.id, item.id, companyId, membershipId);
+      await releaseWalkaroundPayloadMedia(item.payload).catch(() => {});
       synced += 1;
     } else if (!result.ok) {
       break;
@@ -1375,7 +1382,7 @@ export async function flushPendingWalkaroundSubmissions(driver) {
 }
 
 export function getPendingSyncCount(driverId, companyId, membershipId) {
-  return loadSyncQueue(driverId, companyId, membershipId).length;
+  return countPendingOfflineCommands(driverId, companyId, membershipId);
 }
 
 function formatWalkaroundTimestamp(value) {

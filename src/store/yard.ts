@@ -25,6 +25,10 @@ import {
   tasksFromBlockedTrips,
 } from "@/domain/tasks/task-automation";
 import {
+  buildServerDefectTaskPayload,
+  buildServerVorTaskPayload,
+} from "@/domain/tasks/server-task-automation";
+import {
   applyAssignEquipment,
   applyClearEquipmentIssue,
   applyRecordEquipmentPresence,
@@ -48,6 +52,7 @@ import { hydrateYardFromApi } from "@/platform/yard/hydrate-yard-store";
 import type { YardRole } from "@/types/permissions";
 import { getActorName } from "@/platform/yard/get-actor-name";
 import { enqueueYardMutation } from "@/platform/yard/enqueue-yard-mutation";
+import { usesLiveCommandData } from "@/platform/yard/data-source";
 import { publishVehicleVorMarked } from "@/platform/ops/publish-vor-marked";
 import { createAdBlueRefillRecord } from "@/domain/fluids/adblue-refill";
 import type { AdBlueRefillInput, AdBlueRefillRecord } from "@/types/fluids";
@@ -272,6 +277,43 @@ function refreshHubTasksAfterMutation() {
     depotId: tenancy.depotId,
     role: (tenancy.role as YardRole) ?? "yard_manager",
   });
+}
+
+function followsServerTaskAuthoring(): boolean {
+  return usesLiveCommandData(get().dataSource);
+}
+
+/** Live Command hub: create yard_tasks on server. Demo/mock: local task_ automation only. */
+function automateDefectAndVorTasks(input: {
+  actor: string;
+  defects?: Defect[];
+  vorCases?: VorCase[];
+  vehicles: Vehicle[];
+}): YardTask[] {
+  const { actor, defects = [], vorCases = [], vehicles } = input;
+  if (followsServerTaskAuthoring()) {
+    for (const df of defects) {
+      const vehicle = vehicles.find(v => v.id === df.vehicleId);
+      void enqueueYardMutation("task.create", buildServerDefectTaskPayload(df, vehicle));
+    }
+    for (const vc of vorCases) {
+      const vehicle = vehicles.find(v => v.id === vc.vehicleId);
+      const defect =
+        defects.find(d => d.id === vc.defectId) ?? get().defects.find(d => d.id === vc.defectId);
+      void enqueueYardMutation("task.create", buildServerVorTaskPayload(vc, vehicle, defect));
+    }
+    refreshHubTasksAfterMutation();
+    return [];
+  }
+
+  const tasks: YardTask[] = [];
+  for (const df of defects) {
+    tasks.push(buildDefectTask(df, vehicles.find(v => v.id === df.vehicleId), actor, uid));
+  }
+  for (const vc of vorCases) {
+    tasks.push(buildVorTask(vc, vehicles.find(v => v.id === vc.vehicleId), actor, uid));
+  }
+  return tasks;
 }
 
 function equipmentMeta(vehicleId: string, actor: string) {
@@ -573,8 +615,12 @@ export const useYard = create<State>((set, get) => ({
       }, ...custodyTimeline];
     }
     const vehicle = vehicles.find(v => v.id === vehicleId);
-    const defectTasks = defectsWithVor.map(df => buildDefectTask(df, vehicle, actor, uid));
-    const vorTasks = newVorCases.map(vc => buildVorTask(vc, vehicle, actor, uid));
+    const automatedTasks = automateDefectAndVorTasks({
+      actor,
+      defects: defectsWithVor,
+      vorCases: newVorCases,
+      vehicles,
+    });
     let tasks = st.tasks;
     let checkCompleted: YardTask[] = [];
     if (overallPassed) {
@@ -592,7 +638,7 @@ export const useYard = create<State>((set, get) => ({
       { trips: st.trips, tasks },
       vehicles,
       st.equipment,
-      [...defectTasks, ...vorTasks],
+      automatedTasks,
     );
     set({
       yardChecks: [check, ...st.yardChecks],
@@ -640,8 +686,12 @@ export const useYard = create<State>((set, get) => ({
       ? st.vehicles.map(v => v.id === vehicleId ? { ...v, lastCheckPassed: false, status: v.status === "VOR" ? "VOR" : "Awaiting Check" as VehicleStatus } : v)
       : st.vehicles;
     const vehicle = st.vehicles.find(v => v.id === vehicleId);
-    const defectTask = buildDefectTask(df, vehicle, actor, uid);
-    const { trips, tasks } = commitTripState(st, vehicles, st.equipment, [defectTask]);
+    const automatedTasks = automateDefectAndVorTasks({
+      actor,
+      defects: [df],
+      vehicles: st.vehicles,
+    });
+    const { trips, tasks } = commitTripState(st, vehicles, st.equipment, automatedTasks);
     set({ defects: [df, ...st.defects], vehicles, trips, tasks });
     void enqueueYardMutation("defect.create", { defectId: df.id, vehicleId, category, severity, notes });
     return df;
@@ -694,8 +744,12 @@ export const useYard = create<State>((set, get) => ({
     const vehicles = st.vehicles.map(v => v.id === df.vehicleId ? { ...v, status: "VOR" as VehicleStatus } : v);
     const defects = st.defects.map(d => d.id === defectId ? { ...d, vorCaseId: vc.id } : d);
     const vehicle = st.vehicles.find(v => v.id === df.vehicleId);
-    const vorTask = buildVorTask(vc, vehicle, actor, uid);
-    const { trips, tasks } = commitTripState(st, vehicles, st.equipment, [vorTask]);
+    const automatedTasks = automateDefectAndVorTasks({
+      actor,
+      vorCases: [vc],
+      vehicles,
+    });
+    const { trips, tasks } = commitTripState(st, vehicles, st.equipment, automatedTasks);
     set({
       vorCases: [vc, ...st.vorCases],
       defects,
@@ -1275,23 +1329,25 @@ export const useYard = create<State>((set, get) => ({
         defects = [df, ...defects];
         damageRecords = damageRecords.map(d => d.id === record.id ? { ...d, defectId: df.id } : d);
 
-        const vehicle = vehicles.find(v => v.id === record.vehicleId);
-        if (op.recommendVor && op.vehicleStatus === "VOR") {
-          const vc = buildVorCaseFromDefect(df, actor, at, uid);
-          vorCases = [vc, ...vorCases];
-          defects = defects.map(d => d.id === df.id ? { ...d, vorCaseId: vc.id } : d);
-          vehicles = vehicles.map(v =>
-            v.id === record.vehicleId ? { ...v, status: "VOR" as VehicleStatus } : v,
-          );
-          const merged = mergeAutomatedTasks(tasks, [
-            buildDefectTask(df, vehicle, actor, uid),
-            buildVorTask(vc, vehicle, actor, uid),
-          ]);
-          tasks = merged.tasks;
-          enqueueCreatedTasks(merged.added);
-        } else {
-          const merged = mergeAutomatedTasks(tasks, [buildDefectTask(df, vehicle, actor, uid)]);
-          tasks = merged.tasks;
+        const automated = op.recommendVor && op.vehicleStatus === "VOR"
+          ? (() => {
+            const vc = buildVorCaseFromDefect(df, actor, at, uid);
+            vorCases = [vc, ...vorCases];
+            defects = defects.map(d => d.id === df.id ? { ...d, vorCaseId: vc.id } : d);
+            vehicles = vehicles.map(v =>
+              v.id === record.vehicleId ? { ...v, status: "VOR" as VehicleStatus } : v,
+            );
+            return automateDefectAndVorTasks({
+              actor,
+              defects: [df],
+              vorCases: [vc],
+              vehicles,
+            });
+          })()
+          : automateDefectAndVorTasks({ actor, defects: [df], vehicles });
+        const merged = mergeAutomatedTasks(tasks, automated);
+        tasks = merged.tasks;
+        if (!followsServerTaskAuthoring()) {
           enqueueCreatedTasks(merged.added);
         }
       }

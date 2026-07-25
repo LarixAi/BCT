@@ -49,3 +49,32 @@ export function assertSupportGrantWrite(grant: ActiveSupportGrant | null, method
     throw new HttpError(403, 'Support access is read-only for this grant', 'support_read_only')
   }
 }
+
+/** F-16 — expire/revoke checks; callers must refuse expired grants. */
+export function isSupportGrantActive(grant: {
+  expiresAt?: string | null
+  revokedAt?: string | null
+} | null): boolean {
+  if (!grant) return false
+  if (grant.revokedAt) return false
+  if (!grant.expiresAt) return false
+  return new Date(grant.expiresAt).getTime() > Date.now()
+}
+
+export async function revokeSupportGrant(input: {
+  grantId: string
+  companyId: string
+  actorUserId: string
+}): Promise<void> {
+  const now = new Date().toISOString()
+  const { error } = await admin
+    .from('privileged_access_grants')
+    .update({
+      revoked_at: now,
+      revoked_by: input.actorUserId,
+    })
+    .eq('id', input.grantId)
+    .eq('company_id', input.companyId)
+    .is('revoked_at', null)
+  if (error) throw new HttpError(500, error.message, 'database_error')
+}

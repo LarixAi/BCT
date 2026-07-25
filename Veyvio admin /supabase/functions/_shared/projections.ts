@@ -1172,6 +1172,383 @@ export function summariseVehicles(profiles: Row[]) {
   }
 }
 
+function documentStatusFromExpiry(expiryIso: string | null | undefined): 'valid' | 'expiring' | 'expired' | 'unknown' {
+  if (!expiryIso) return 'unknown'
+  const expiry = new Date(expiryIso)
+  if (Number.isNaN(expiry.getTime())) return 'unknown'
+  const now = Date.now()
+  if (expiry.getTime() < now) return 'expired'
+  const days = (expiry.getTime() - now) / (24 * 60 * 60 * 1000)
+  if (days <= 42) return 'expiring'
+  return 'valid'
+}
+
+function formatUkExpiryLabel(expiryIso: string | null | undefined): string {
+  if (!expiryIso) return 'Not on record in Command'
+  const expiry = new Date(expiryIso)
+  if (Number.isNaN(expiry.getTime())) return 'Not on record in Command'
+  return `Valid until ${expiry.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`
+}
+
+/** Driver-safe vehicle readiness slice — no admin-only fields. */
+export async function projectDriverVehicleReadiness(companyId: string, vehicleId: string) {
+  const profile = (await projectVehicleProfile(companyId, vehicleId)) as Row | null
+  if (!profile) return null
+
+  const readiness = (profile.readiness as Row | undefined) ?? {}
+  const documents: Row[] = []
+  const pushDoc = (id: string, label: string, expiry: unknown) => {
+    if (!expiry) return
+    const expiryDate = String(expiry)
+    const status = documentStatusFromExpiry(expiryDate)
+    documents.push({
+      id,
+      label,
+      expiryDate,
+      status,
+      detail: formatUkExpiryLabel(expiryDate),
+    })
+  }
+
+  pushDoc('mot', 'MOT certificate', profile.motExpiry)
+  pushDoc('insurance', 'Insurance', profile.insuranceExpiry)
+  pushDoc('tax', 'Road tax', profile.taxExpiry)
+  pushDoc('tachograph', 'Tachograph calibration', profile.tachographCalibrationExpiry)
+
+  for (const doc of Array.isArray(profile.documents) ? (profile.documents as Row[]) : []) {
+    const id = String(doc.id ?? doc.type ?? doc.label ?? 'document')
+    documents.push({
+      id,
+      label: String(doc.label ?? doc.type ?? 'Document'),
+      expiryDate: doc.expiryDate ? String(doc.expiryDate) : null,
+      status: documentStatusFromExpiry(doc.expiryDate ? String(doc.expiryDate) : null),
+      detail: doc.detail ? String(doc.detail) : formatUkExpiryLabel(doc.expiryDate ? String(doc.expiryDate) : null),
+    })
+  }
+
+  return {
+    vehicleId: String(profile.id),
+    registrationNumber: String(profile.registrationNumber ?? ''),
+    fleetNumber: profile.fleetNumber ? String(profile.fleetNumber) : null,
+    make: profile.make ? String(profile.make) : null,
+    model: profile.model ? String(profile.model) : null,
+    operationalStatus: String(profile.operationalStatus ?? 'unknown'),
+    conditionStatus: String(profile.conditionStatus ?? 'unknown'),
+    releaseDecision: String(profile.releaseDecision ?? 'released'),
+    assignmentEligible: Boolean(readiness.assignmentEligible),
+    blockingReasons: Array.isArray(readiness.blockingReasons)
+      ? (readiness.blockingReasons as string[]).map(String)
+      : [],
+    warningReasons: Array.isArray(readiness.warningReasons)
+      ? (readiness.warningReasons as string[]).map(String)
+      : [],
+    openDefectCount: Number(profile.openDefectCount ?? 0),
+    criticalDefectCount: Number(profile.criticalDefectCount ?? 0),
+    motExpiry: profile.motExpiry ? String(profile.motExpiry) : null,
+    insuranceExpiry: profile.insuranceExpiry ? String(profile.insuranceExpiry) : null,
+    taxExpiry: profile.taxExpiry ? String(profile.taxExpiry) : null,
+    lastCheckAt: profile.lastCheckAt ? String(profile.lastCheckAt) : null,
+    lastCheckType: profile.lastCheckType ? String(profile.lastCheckType) : null,
+    documents,
+    evaluatedAt: readiness.calculatedAt ? String(readiness.calculatedAt) : new Date().toISOString(),
+  }
+}
+
+export type DriverVehicleTimelineEvent = {
+  id: string
+  occurredAt: string
+  category: 'check' | 'defect' | 'yard' | 'handback' | 'fuel' | 'adblue' | 'report' | 'maintenance' | 'rts'
+  title: string
+  detail: string | null
+  actorName: string | null
+}
+
+function pushDriverTimelineEvent(events: DriverVehicleTimelineEvent[], event: DriverVehicleTimelineEvent) {
+  if (!event.occurredAt || Number.isNaN(new Date(event.occurredAt).getTime())) return
+  events.push(event)
+}
+
+export async function nextVehicleReportReference(companyId: string): Promise<string> {
+  const { count } = await admin
+    .from('vehicle_reports')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+  return `VR-${String((count ?? 0) + 1).padStart(5, '0')}`
+}
+
+export async function recordDriverVehicleHandbackReport(input: {
+  companyId: string
+  depotId: string
+  vehicleId: string
+  registration: string
+  driverId: string
+  driverName: string
+  dutyId?: string | null
+  movementId?: string | null
+  endMileage?: number | null
+  fuelLevel?: string | null
+  parkingLocation?: string | null
+  notes?: string | null
+  handbackChecks?: Record<string, boolean>
+  keysReturned?: boolean
+  keyLocation?: string | null
+  occurredAt?: string
+}) {
+  const occurredAt = input.occurredAt ?? new Date().toISOString()
+  const checks = input.handbackChecks ?? {}
+  const checkSummary = Object.entries(checks)
+    .filter(([, done]) => Boolean(done))
+    .map(([key]) => key.replaceAll('_', ' '))
+    .join(', ')
+  const descriptionParts = [
+    input.parkingLocation ? `Parked at ${input.parkingLocation}` : null,
+    input.fuelLevel ? `Fuel / charge: ${input.fuelLevel}` : null,
+    input.keysReturned === false ? 'Keys not returned' : input.keyLocation ? `Keys: ${input.keyLocation}` : null,
+    checkSummary ? `Return checks: ${checkSummary}` : null,
+    input.notes?.trim() ? input.notes.trim() : null,
+  ].filter(Boolean)
+
+  const reference = await nextVehicleReportReference(input.companyId)
+  const { data, error } = await admin
+    .from('vehicle_reports')
+    .insert({
+      company_id: input.companyId,
+      depot_id: input.depotId,
+      vehicle_id: input.vehicleId,
+      reference,
+      report_type: 'handback',
+      report_category: 'end_of_duty',
+      severity: 'minor',
+      stage: 'reported',
+      status: 'closed',
+      title: `End of duty handback — ${input.registration}`,
+      description: descriptionParts.join(' · ') || 'Driver completed vehicle handback.',
+      reported_by: input.driverName,
+      reported_by_role: 'driver',
+      reported_at: occurredAt,
+      mileage: input.endMileage ?? null,
+      location: input.parkingLocation ?? null,
+      linked_check_id: null,
+      closed_at: occurredAt,
+      created_by: null,
+      updated_by: null,
+    })
+    .select('id, reference')
+    .single()
+
+  if (error) throw new Error(error.message)
+
+  await admin.from('vehicle_report_status_history').insert({
+    company_id: input.companyId,
+    report_id: data.id,
+    action: 'recorded',
+    actor_name: input.driverName,
+    occurred_at: occurredAt,
+    detail: input.dutyId ? `Duty ${input.dutyId}` : null,
+  })
+
+  let fuelReportReference: string | null = null
+  if (input.fuelLevel) {
+    fuelReportReference = await nextVehicleReportReference(input.companyId)
+    await admin.from('vehicle_reports').insert({
+      company_id: input.companyId,
+      depot_id: input.depotId,
+      vehicle_id: input.vehicleId,
+      reference: fuelReportReference,
+      report_type: 'fuel_reading',
+      report_category: 'fluids',
+      severity: input.fuelLevel.toLowerCase().includes('low') ? 'moderate' : 'minor',
+      stage: 'reported',
+      status: 'closed',
+      title: `Fuel level — ${input.registration}`,
+      description: `Driver reported ${input.fuelLevel} at handback.`,
+      reported_by: input.driverName,
+      reported_by_role: 'driver',
+      reported_at: occurredAt,
+      mileage: input.endMileage ?? null,
+      location: input.parkingLocation ?? null,
+      closed_at: occurredAt,
+    })
+  }
+
+  return {
+    handbackReportId: String(data.id),
+    handbackReference: String(data.reference),
+    fuelReportReference,
+  }
+}
+
+export async function projectDriverVehicleTimeline(
+  companyId: string,
+  vehicleId: string,
+  limit = 25,
+): Promise<DriverVehicleTimelineEvent[]> {
+  const [
+    { data: checks },
+    { data: defects },
+    { data: movements },
+    { data: reports },
+    { data: adblueRows },
+    { data: fuelRows },
+  ] =
+    await Promise.all([
+    admin
+      .from('vehicle_checks')
+      .select('id, check_type, result, fuel_level, odometer, submitted_at, drivers(staff_members(first_name, last_name))')
+      .eq('company_id', companyId)
+      .eq('vehicle_id', vehicleId)
+      .order('submitted_at', { ascending: false })
+      .limit(limit),
+    admin
+      .from('defects')
+      .select('id, category, component, description, severity, status, reported_at')
+      .eq('company_id', companyId)
+      .eq('vehicle_id', vehicleId)
+      .order('reported_at', { ascending: false })
+      .limit(limit),
+    admin
+      .from('yard_movements')
+      .select('id, to_location, reason, completed_at, completed_by, note')
+      .eq('company_id', companyId)
+      .eq('vehicle_id', vehicleId)
+      .order('completed_at', { ascending: false })
+      .limit(limit),
+    admin
+      .from('vehicle_reports')
+      .select(
+        'id, reference, report_type, report_category, title, description, reported_at, reported_by, mileage, linked_work_order_id, status, stage',
+      )
+      .eq('company_id', companyId)
+      .eq('vehicle_id', vehicleId)
+      .order('reported_at', { ascending: false })
+      .limit(limit),
+    admin
+      .from('adblue_records')
+      .select('id, amount_litres, mileage, top_up_at, recorded_by_name, warning_before, warning_cleared')
+      .eq('company_id', companyId)
+      .eq('vehicle_id', vehicleId)
+      .order('top_up_at', { ascending: false })
+      .limit(limit),
+    admin
+      .from('fuel_records')
+      .select('id, litres, odometer, fuel_type, recorded_at, notes')
+      .eq('company_id', companyId)
+      .eq('vehicle_id', vehicleId)
+      .order('recorded_at', { ascending: false })
+      .limit(limit),
+  ])
+
+  const events: DriverVehicleTimelineEvent[] = []
+
+  for (const row of checks ?? []) {
+    const staff = ((row.drivers as Row | null)?.staff_members as Row | null) ?? {}
+    const actor = [staff.first_name, staff.last_name].filter(Boolean).join(' ').trim() || 'Driver'
+    pushDriverTimelineEvent(events, {
+      id: `check-${row.id}`,
+      occurredAt: String(row.submitted_at ?? ''),
+      category: 'check',
+      title: `Walkaround — ${String(row.check_type ?? 'check').replaceAll('_', ' ')}`,
+      detail: [row.result ? String(row.result) : null, row.fuel_level ? `Fuel ${row.fuel_level}` : null]
+        .filter(Boolean)
+        .join(' · ') || null,
+      actorName: actor,
+    })
+  }
+
+  for (const row of defects ?? []) {
+    const component = row.component ? String(row.component) : row.category ? String(row.category) : 'Defect'
+    pushDriverTimelineEvent(events, {
+      id: `defect-${row.id}`,
+      occurredAt: String(row.reported_at ?? ''),
+      category: 'defect',
+      title: `Defect — ${component}`,
+      detail: [row.severity ? String(row.severity) : null, row.status ? String(row.status) : null, row.description ? String(row.description) : null]
+        .filter(Boolean)
+        .join(' · ') || null,
+      actorName: null,
+    })
+  }
+
+  for (const row of movements ?? []) {
+    pushDriverTimelineEvent(events, {
+      id: `movement-${row.id}`,
+      occurredAt: String(row.completed_at ?? ''),
+      category: 'yard',
+      title: String(row.reason ?? 'Yard movement'),
+      detail: [row.to_location ? String(row.to_location) : null, row.note ? String(row.note) : null]
+        .filter(Boolean)
+        .join(' · ') || null,
+      actorName: row.completed_by ? String(row.completed_by) : null,
+    })
+  }
+
+  for (const row of reports ?? []) {
+    const reportType = String(row.report_type ?? 'report')
+    const category = String(row.report_category ?? '')
+    const linkedWo = row.linked_work_order_id ? String(row.linked_work_order_id) : null
+    let eventCategory: DriverVehicleTimelineEvent['category'] = 'report'
+    if (reportType === 'fuel_reading' || category === 'fuel_purchase') eventCategory = 'fuel'
+    else if (reportType === 'handback') eventCategory = 'handback'
+    else if (linkedWo || category.includes('work_order') || category.includes('maintenance')) {
+      eventCategory = 'maintenance'
+    } else if (category.includes('rts') || String(row.title ?? '').toLowerCase().includes('return to service')) {
+      eventCategory = 'rts'
+    }
+
+    pushDriverTimelineEvent(events, {
+      id: `report-${row.id}`,
+      occurredAt: String(row.reported_at ?? ''),
+      category: eventCategory,
+      title: String(row.title ?? 'Vehicle report'),
+      detail: [
+        row.reference ? String(row.reference) : null,
+        linkedWo ? `WO ${linkedWo}` : null,
+        row.description ? String(row.description) : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || null,
+      actorName: row.reported_by ? String(row.reported_by) : null,
+    })
+  }
+
+  for (const row of adblueRows ?? []) {
+    pushDriverTimelineEvent(events, {
+      id: `adblue-${row.id}`,
+      occurredAt: String(row.top_up_at ?? ''),
+      category: 'adblue',
+      title: `AdBlue refill — ${Number(row.amount_litres)} L`,
+      detail: [
+        row.mileage != null ? `${Number(row.mileage).toLocaleString('en-GB')} miles` : null,
+        row.warning_cleared ? `Warning ${String(row.warning_cleared).replaceAll('_', ' ')}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || null,
+      actorName: row.recorded_by_name ? String(row.recorded_by_name) : null,
+    })
+  }
+
+  for (const row of fuelRows ?? []) {
+    pushDriverTimelineEvent(events, {
+      id: `fuel-${row.id}`,
+      occurredAt: String(row.recorded_at ?? ''),
+      category: 'fuel',
+      title: `Fuel refill${row.litres != null ? ` — ${Number(row.litres)} L` : ''}`,
+      detail: [
+        row.fuel_type ? String(row.fuel_type) : null,
+        row.odometer != null ? `${Number(row.odometer).toLocaleString('en-GB')} miles` : null,
+        row.notes ? String(row.notes) : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || null,
+      actorName: null,
+    })
+  }
+
+  return events
+    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
+    .slice(0, limit)
+}
+
 export async function projectBookingList(companyId: string) {
   const { data: bookings, error } = await admin
     .from('bookings')

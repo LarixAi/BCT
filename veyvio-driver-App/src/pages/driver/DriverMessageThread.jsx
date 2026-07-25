@@ -3,10 +3,17 @@ import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import DriverOperationalHeader from "@/components/driver/operational/DriverOperationalHeader";
 import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
+import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { op } from "@/lib/driver-operational-theme";
 import { formatUkDateTime } from "@/lib/uk-locale";
 import { DRIVER_NAV_TOTAL_OFFSET } from "@/lib/driverSafeArea";
-import { getDriverMessageThread, replyToThread } from "@/services/messages.service";
+import {
+  clearReplyDraft,
+  getDriverMessageThread,
+  loadReplyDraft,
+  replyToThread,
+  saveReplyDraft,
+} from "@/services/messages.service";
 
 function audienceLabel(audience) {
   if (audience === "yard") return "Yard";
@@ -16,6 +23,7 @@ function audienceLabel(audience) {
 
 export default function DriverMessageThread({ driver }) {
   const { threadId } = useParams();
+  const { session } = useDriverSupabaseAuth();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -63,15 +71,37 @@ export default function DriverMessageThread({ driver }) {
     el.scrollTop = el.scrollHeight;
   }, [detail?.messages?.length]);
 
+  useEffect(() => {
+    if (!threadId) return;
+    void loadReplyDraft(driver, session, threadId).then((draft) => {
+      if (draft) setReply(draft);
+    });
+  }, [threadId, driver, session]);
+
+  useEffect(() => {
+    if (!threadId) return undefined;
+    const timer = window.setTimeout(() => {
+      void saveReplyDraft(driver, session, threadId, reply);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [reply, threadId, driver, session]);
+
   const sendReply = async () => {
     setSending(true);
-    const result = await replyToThread(driver, threadId, reply);
+    const result = await replyToThread(driver, threadId, reply, session);
     setSending(false);
     if (!result.ok) {
       setError(result.message);
       return;
     }
+    if (result.queued) {
+      setError("");
+      setReply("");
+      await clearReplyDraft(driver, session, threadId);
+      return;
+    }
     setReply("");
+    await clearReplyDraft(driver, session, threadId);
     await load();
   };
 

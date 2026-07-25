@@ -1,4 +1,5 @@
 import type { Bay, Trip, Vehicle } from "@/types/yard";
+import type { DamageObservation } from "@/types/condition";
 import { BCT_DEPOT_META } from "@veyvio/yard";
 
 /** Demo fleet for BCT Main Depot Live Yard Map (Phase 1). */
@@ -28,6 +29,40 @@ export const bctVehicles: Vehicle[] = [
 export const bctTrips: Trip[] = [
   { id: "bct-t1", code: "RUN-24017", service: "Morning school", departAt: "07:15", vehicleId: "bct-v1", driverId: "d1", ready: true, blockers: [] },
   { id: "bct-t2", code: "RUN-24022", service: "Day centre", departAt: "09:30", vehicleId: "bct-v10", driverId: "d2", ready: false, blockers: ["VOR"] },
+];
+
+/** Driver walkaround bodywork reports for BCT demo depot sync. */
+export const bctDriverBodyworkObservations: DamageObservation[] = [
+  {
+    id: "bct-obs-1",
+    inspectionId: "",
+    vehicleId: "bct-v3",
+    zoneId: "rear-bumper",
+    reportSource: "driver_report",
+    reportedBy: "Patel, S.",
+    observedAt: "2026-07-24T06:42:00Z",
+    classification: "possible_new_review",
+    damageType: "scuff",
+    description: "Paint scuff on rear bumper after reversing at school — photo attached on walkaround.",
+    severity: "cosmetic",
+    safeToOperate: true,
+    mediaIds: [],
+  },
+  {
+    id: "bct-obs-2",
+    inspectionId: "",
+    vehicleId: "bct-v15",
+    zoneId: "os-sliding-door",
+    reportSource: "driver_report",
+    reportedBy: "Williams, J.",
+    observedAt: "2026-07-23T16:10:00Z",
+    classification: "new_not_reported",
+    damageType: "dent",
+    description: "Small dent on offside sliding door — passenger reported hearing a knock.",
+    severity: "operational",
+    safeToOperate: true,
+    mediaIds: [],
+  },
 ];
 
 /** Use BCT demo data when depot is BCT-MAIN or live map is forced via env. */

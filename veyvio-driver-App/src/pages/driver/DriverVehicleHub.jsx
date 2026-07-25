@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ClipboardCheck,
+  Droplets,
   FileText,
   History,
   MapPin,
@@ -23,6 +24,15 @@ import {
   walkaroundSafetyFromHomeSummary,
 } from "@/services/driver-bootstrap.service";
 import { getWalkaroundSafetyStatus } from "@/services/vehicle-check.service";
+import { loadAssignedVehicleReadiness } from "@/services/vehicle-readiness.service";
+import { loadAssignedVehicleTimeline } from "@/services/vehicle-timeline.service";
+import {
+  conditionStatusLabel,
+  operationalStatusLabel,
+  operationalStatusTone,
+} from "@/lib/vehicle-readiness";
+import { formatTimelineWhen, timelineCategoryLabel } from "@/lib/vehicle-timeline";
+import { vehicleUsesAdBlue } from "@/lib/adblue-refill";
 
 function checkStatusFromSafety(safety) {
   if (!safety?.registration) {
@@ -89,6 +99,8 @@ export default function DriverVehicleHub({ driver }) {
   const [safety, setSafety] = useState(() =>
     walkaroundSafetyFromHomeSummary(sessionBootstrap?.legacy?.homeSummary),
   );
+  const [readiness, setReadiness] = useState(sessionBootstrap?.assignedVehicleReadiness ?? null);
+  const [timelinePreview, setTimelinePreview] = useState([]);
   const [loading, setLoading] = useState(() => !sessionBootstrap);
 
   useEffect(() => {
@@ -108,9 +120,15 @@ export default function DriverVehicleHub({ driver }) {
     let cancelled = false;
     void (async () => {
       const depotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
-      const [boot, walkaround] = await Promise.all([
+      const [boot, walkaround, readinessResult, timelineResult] = await Promise.all([
         loadDriverBootstrap({ depotId, force: false }).catch(() => null),
         getWalkaroundSafetyStatus(driver).catch(() => null),
+        loadAssignedVehicleReadiness({
+          bootstrap: sessionBootstrap,
+          vehicle,
+          depotId,
+        }).catch(() => ({ ok: false })),
+        loadAssignedVehicleTimeline({ bootstrap: sessionBootstrap }).catch(() => ({ ok: false })),
       ]);
       if (cancelled) return;
 
@@ -122,14 +140,19 @@ export default function DriverVehicleHub({ driver }) {
           setSignedOn,
           setSafety,
         });
+        if (boot.bootstrap?.assignedVehicleReadiness) {
+          setReadiness(boot.bootstrap.assignedVehicleReadiness);
+        }
       }
       if (walkaround) setSafety(walkaround);
+      if (readinessResult?.ok) setReadiness(readinessResult.readiness);
+      if (timelineResult?.ok) setTimelinePreview((timelineResult.events ?? []).slice(0, 3));
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [driver, session?.activeDepotId, session?.depots]);
+  }, [driver, session?.activeDepotId, session?.depots, sessionBootstrap]);
 
   const reg =
     vehicle?.registrationNumber ||
@@ -140,6 +163,10 @@ export default function DriverVehicleHub({ driver }) {
   const makeModel = [vehicle?.make, vehicle?.model].filter(Boolean).join(" ");
   const unassigned = !reg;
   const checkUi = useMemo(() => checkStatusFromSafety(safety), [safety]);
+  const showAdBlue = useMemo(
+    () => vehicleUsesAdBlue(vehicle ?? readiness),
+    [vehicle, readiness],
+  );
 
   if (loading) {
     return (
@@ -199,6 +226,73 @@ export default function DriverVehicleHub({ driver }) {
         </div>
       )}
 
+      {readiness ? (
+        <>
+          <DriverSectionTitle>Vehicle status from Command</DriverSectionTitle>
+          <div className={op.listCard}>
+            <InfoRow
+              icon={Wrench}
+              label="Operational status"
+              detail={operationalStatusLabel(readiness.operationalStatus)}
+              status={{
+                label: operationalStatusLabel(readiness.operationalStatus),
+                tone: operationalStatusTone(readiness.operationalStatus),
+              }}
+            />
+            <InfoRow
+              icon={ClipboardCheck}
+              label="Condition"
+              detail={conditionStatusLabel(readiness.conditionStatus)}
+              status={{
+                label: conditionStatusLabel(readiness.conditionStatus),
+                tone:
+                  readiness.conditionStatus === "safety_critical"
+                    ? "blocked"
+                    : readiness.conditionStatus === "repair_required"
+                      ? "warning"
+                      : "good",
+              }}
+            />
+            {readiness.openDefectCount > 0 ? (
+              <InfoRow
+                icon={Wrench}
+                label="Open defects"
+                detail={`${readiness.openDefectCount} open · ${readiness.criticalDefectCount} critical`}
+                status={{
+                  label: readiness.criticalDefectCount > 0 ? "Critical" : "Open",
+                  tone: readiness.criticalDefectCount > 0 ? "blocked" : "warning",
+                }}
+                to="/defects"
+              />
+            ) : (
+              <InfoRow
+                icon={Wrench}
+                label="Open defects"
+                detail="No open defects on record"
+                status={{ label: "Clear", tone: "good" }}
+              />
+            )}
+            {readiness.lastCheckAt ? (
+              <InfoRow
+                icon={History}
+                label="Last check"
+                detail={`${readiness.lastCheckType ?? "Check"} · ${new Date(readiness.lastCheckAt).toLocaleString("en-GB")}`}
+              />
+            ) : null}
+          </div>
+          {readiness.blockingReasons?.length ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+              <p className="font-semibold">Cannot enter service</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {readiness.blockingReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
       <DriverSectionTitle>Before you move</DriverSectionTitle>
       <div className={op.listCard}>
         <InfoRow
@@ -235,6 +329,20 @@ export default function DriverVehicleHub({ driver }) {
           detail="Accessibility and safety equipment"
           to="/vehicle/equipment"
         />
+        {showAdBlue ? (
+          <InfoRow
+            icon={Droplets}
+            label="Record AdBlue"
+            detail="Litres, mileage and warning clearance"
+            to="/vehicle/adblue"
+          />
+        ) : null}
+        <InfoRow
+          icon={Droplets}
+          label="Record fuel"
+          detail="Fuel purchase or top-up to Command"
+          to="/vehicle/fuel"
+        />
         <InfoRow
           icon={FileText}
           label="Vehicle documents"
@@ -247,7 +355,30 @@ export default function DriverVehicleHub({ driver }) {
           detail="Mileage, fuel, keys, damage and equipment"
           to="/vehicle/handback"
         />
+        <InfoRow
+          icon={History}
+          label="Vehicle history"
+          detail="Checks, defects, yard moves and handbacks"
+          to="/vehicle/timeline"
+        />
       </div>
+
+      {timelinePreview.length ? (
+        <>
+          <DriverSectionTitle>Recent activity</DriverSectionTitle>
+          <div className={op.listCard}>
+            {timelinePreview.map((event) => (
+              <InfoRow
+                key={event.id}
+                icon={History}
+                label={event.title}
+                detail={`${timelineCategoryLabel(event.category)} · ${formatTimelineWhen(event.occurredAt)}`}
+                to="/vehicle/timeline"
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
 
       {!unassigned && checkUi.tone === "warning" && checkUi.to === "/check" ? (
         <Button asChild className={`mt-5 h-12 w-full ${op.primaryBtn}`}>

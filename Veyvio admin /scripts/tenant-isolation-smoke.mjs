@@ -13,15 +13,32 @@
  */
 import assert from 'node:assert/strict'
 
-const API = process.env.VEYVIO_API_URL ?? 'https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api'
-const SUPABASE =
-  process.env.VEYVIO_SUPABASE_URL ?? API.replace(/\/functions\/v1\/command-api\/?$/, '')
-const ANON = process.env.VEYVIO_ANON_KEY ?? ''
+const DEFAULT_API = 'https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api'
+const DEFAULT_SUPABASE = 'https://qeckgqjrfbdyxchuncdt.supabase.co'
+
+function normalizeApiUrl(raw) {
+  const value = String(raw ?? '').trim()
+  if (!value) return DEFAULT_API
+  if (value.startsWith('/')) return `${DEFAULT_SUPABASE}${value}`.replace(/\/$/, '')
+  return value.replace(/\/$/, '')
+}
+
+function normalizeSupabaseUrl(apiUrl, explicit) {
+  const direct = String(explicit ?? '').trim()
+  if (direct) return direct.replace(/\/$/, '')
+  const derived = apiUrl.replace(/\/functions\/v1\/command-api\/?$/, '')
+  if (derived && derived !== apiUrl) return derived
+  return DEFAULT_SUPABASE
+}
+
+const API = normalizeApiUrl(process.env.VEYVIO_API_URL ?? process.env.VITE_API_URL)
+const SUPABASE = normalizeSupabaseUrl(API, process.env.VEYVIO_SUPABASE_URL ?? process.env.VITE_SUPABASE_URL)
+const ANON = String(process.env.VEYVIO_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
 const PLATFORM_EMAIL = process.env.VEYVIO_PLATFORM_EMAIL ?? 'admin@veyvio.test'
 const PLATFORM_PASSWORD = process.env.VEYVIO_PLATFORM_PASSWORD ?? 'VeyvioCommand1!'
 const ISOLATION_PASSWORD = process.env.VEYVIO_ISOLATION_PASSWORD ?? 'VeyvioIsolation1!'
 
-async function login(email, password) {
+async function login(email, password, options = {}) {
   const res = await fetch(`${API}/api/auth/login`, {
     method: 'POST',
     headers: {
@@ -29,10 +46,11 @@ async function login(email, password) {
       apikey: ANON,
       Authorization: `Bearer ${ANON}`,
     },
-    body: JSON.stringify({ email, password, rememberMe: false }),
+    body: JSON.stringify({ email, password }),
   })
-  const body = await res.json().catch(() => ({}))
+  let body = await res.json().catch(() => ({}))
   assert.equal(res.status, 200, `login failed for ${email}: ${JSON.stringify(body)}`)
+
   if (body.requiresMfaChallenge && body.devMfaCode && body.mfaChallengeId) {
     const confirm = await fetch(`${API}/api/auth/login/confirm`, {
       method: 'POST',
@@ -47,15 +65,65 @@ async function login(email, password) {
         companyId: body.pendingCompanyId,
       }),
     })
-    const confirmed = await confirm.json()
+    body = await confirm.json()
     assert.equal(confirm.status, 200, `MFA confirm failed for ${email}`)
-    return confirmed
   }
+
+  if (body.requiresTenantSelection && !options.skipTenantSelection) {
+    const tenantId = body.memberships?.[0]?.tenantId ?? body.memberships?.[0]?.companyId
+    assert.ok(tenantId, `tenant selection required but no membership for ${email}`)
+    const select = await fetch(`${API}/api/auth/select-tenant`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: ANON,
+        Authorization: `Bearer ${body.accessToken}`,
+      },
+      body: JSON.stringify({ companyId: tenantId, refreshToken: body.refreshToken }),
+    })
+    body = await select.json()
+    assert.equal(select.status, 200, `tenant select failed for ${email}: ${JSON.stringify(body)}`)
+  }
+
   return body
 }
 
 async function api(method, path, token, body) {
   const res = await fetch(`${API}/api${path}`, {
+    method,
+    headers: {
+      apikey: ANON,
+      Authorization: `Bearer ${token}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const text = await res.text()
+  let json = null
+  try {
+    json = text ? JSON.parse(text) : null
+  } catch {
+    json = text
+  }
+  return { status: res.status, json }
+}
+
+async function driverLogin(email, password) {
+  const res = await fetch(`${SUPABASE}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      apikey: ANON,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  })
+  const body = await res.json().catch(() => ({}))
+  assert.equal(res.status, 200, `driver login failed for ${email}: ${JSON.stringify(body)}`)
+  return body.access_token
+}
+
+async function driverApi(method, path, token, body) {
+  const res = await fetch(`${API}/${path}`, {
     method,
     headers: {
       apikey: ANON,
@@ -105,7 +173,7 @@ async function main() {
     return
   }
 
-  const platform = await login(PLATFORM_EMAIL, PLATFORM_PASSWORD)
+  const platform = await login(PLATFORM_EMAIL, PLATFORM_PASSWORD, { skipTenantSelection: true })
   assert.ok(platform.accessToken, 'platform token missing')
 
   const seed = await api('POST', '/system/seed-isolation', platform.accessToken)
@@ -211,6 +279,140 @@ async function main() {
   const unauth = await api('GET', '/vehicles/profiles', ANON)
   assert.ok([401, 403, 409].includes(unauth.status), 'unauthenticated list must fail')
 
+  // Part F §1 — application scope: Command-only login cannot use Driver API
+  const driverBootstrap = await api('GET', '/driver/bootstrap', platform.accessToken)
+  assertDenied(driverBootstrap.status, 'command user on driver/bootstrap')
+  const driverCode = driverBootstrap.json?.code ?? driverBootstrap.json?.error ?? ''
+  assert.ok(
+    driverCode === 'application_scope_forbidden' || driverCode === 'driver_account_missing',
+    `expected scope or driver account denial, got ${JSON.stringify(driverBootstrap.json)}`,
+  )
+
+  // Command staff may still reach yard/hub (COMMAND or YARD scope)
+  const yardHub = await api('GET', '/yard/hub', sessionA.accessToken)
+  assert.equal(yardHub.status, 200, `command admin should reach yard/hub, got ${yardHub.status}`)
+
+  const yardHubB = await api('GET', '/yard/hub', sessionB.accessToken)
+  assert.equal(yardHubB.status, 200, `Org B yard hub failed: ${yardHubB.status}`)
+  const yardHubBText = JSON.stringify(yardHubB.json ?? {})
+  assert.ok(
+    !yardHubBText.includes(orgA.vehicleRegistration),
+    'Org B yard hub must not include Org A vehicle registration',
+  )
+  assert.ok(!yardHubBText.includes(orgA.vehicleId), 'Org B yard hub must not include Org A vehicle id')
+
+  const yardCompanyMismatch = await api('POST', '/yard/mutations', sessionB.accessToken, {
+    type: 'vehicle.move',
+    companyId: orgA.companyId,
+    payload: {
+      vehicleId: orgB.vehicleId,
+      destinationBay: 'P01',
+      reason: 'isolation probe',
+    },
+  })
+  assert.equal(yardCompanyMismatch.status, 403, 'yard mutation company mismatch')
+  assert.equal(yardCompanyMismatch.json?.code, 'company_mismatch', 'expected company_mismatch code')
+
+  const foreignTaskCreate = await api('POST', '/yard/mutations', sessionB.accessToken, {
+    type: 'task.create',
+    payload: {
+      vehicleId: orgA.vehicleId,
+      taskType: 'inspect_damage',
+      title: 'Cross-tenant probe',
+      instructions: 'must not create',
+    },
+  })
+  assert.ok(
+    [403, 404].includes(foreignTaskCreate.status),
+    `foreign task.create expected 403/404, got ${foreignTaskCreate.status}`,
+  )
+
+  // F-06 — dispatch hard gates (requires seed-isolation driver accounts + lifecycle gates deployed)
+  if (orgA.vorVehicleId && orgB.dutyId) {
+    const crossVorAssign = await api('POST', `/duties/${orgB.dutyId}/assign`, sessionB.accessToken, {
+      vehicleId: orgA.vorVehicleId,
+    })
+    assertDenied(crossVorAssign.status, 'cross-tenant VOR assign')
+  }
+
+  if (orgB.vorVehicleId && orgB.dutyId) {
+    const vorAssignOwn = await api('POST', `/duties/${orgB.dutyId}/assign`, sessionB.accessToken, {
+      vehicleId: orgB.vorVehicleId,
+    })
+    assert.equal(vorAssignOwn.status, 409, `VOR assign should be blocked, got ${vorAssignOwn.status}`)
+    assert.equal(vorAssignOwn.json?.code, 'assignment_blocked', 'expected assignment_blocked for VOR vehicle')
+  }
+
+  if (orgA.publishedDutyId) {
+    const driverToken = await driverLogin(orgA.email, ISOLATION_PASSWORD)
+    const driverBootstrap = await driverApi('GET', 'driver/bootstrap', driverToken)
+    assert.equal(driverBootstrap.status, 200, `driver bootstrap failed: ${driverBootstrap.status}`)
+
+    const signOnWithoutAck = await driverApi(
+      'POST',
+      `driver/duties/${orgA.publishedDutyId}/sign-on`,
+      driverToken,
+      { deviceId: 'isolation-smoke' },
+    )
+    assert.equal(signOnWithoutAck.status, 409, 'sign-on without acknowledgement must be blocked')
+    assert.equal(
+      signOnWithoutAck.json?.code,
+      'acknowledgement_required',
+      `expected acknowledgement_required, got ${JSON.stringify(signOnWithoutAck.json)}`,
+    )
+
+    const crossVehicleDefect = await driverApi('POST', 'driver/defects', driverToken, {
+      vehicleId: orgB.vehicleId,
+      description: 'Cross-tenant vehicle probe defect',
+      severity: 'minor',
+    })
+    assert.ok(
+      [403, 404].includes(crossVehicleDefect.status),
+      `driver defect on foreign vehicle expected 403/404, got ${crossVehicleDefect.status}`,
+    )
+    const defectCode = crossVehicleDefect.json?.code ?? ''
+    assert.ok(
+      ['vehicle_not_assigned', 'not_found', 'company_mismatch'].includes(defectCode) ||
+        crossVehicleDefect.status === 404,
+      `expected vehicle_not_assigned or not_found, got ${JSON.stringify(crossVehicleDefect.json)}`,
+    )
+
+    const crossVehicleAdBlue = await driverApi('POST', 'driver/adblue-refill', driverToken, {
+      vehicleId: orgB.vehicleId,
+      mileage: 10000,
+      amountLitres: 5,
+      fillType: 'top_up',
+    })
+    assert.ok(
+      [403, 404].includes(crossVehicleAdBlue.status),
+      `driver AdBlue on foreign vehicle expected 403/404, got ${crossVehicleAdBlue.status}`,
+    )
+    const adBlueCode = crossVehicleAdBlue.json?.code ?? ''
+    assert.ok(
+      ['vehicle_not_assigned', 'not_found', 'company_mismatch'].includes(adBlueCode) ||
+        crossVehicleAdBlue.status === 404,
+      `expected vehicle_not_assigned or not_found for AdBlue, got ${JSON.stringify(crossVehicleAdBlue.json)}`,
+    )
+
+    const crossVehicleParked = await driverApi('POST', 'driver/vehicle-parked', driverToken, {
+      vehicleId: orgB.vehicleId,
+      depotId: orgA.depotId ?? orgB.depotId,
+      locationType: 'BAY',
+      bayNumber: 1,
+      keysReturned: true,
+    })
+    assert.ok(
+      [403, 404].includes(crossVehicleParked.status),
+      `driver vehicle-parked on foreign vehicle expected 403/404, got ${crossVehicleParked.status}`,
+    )
+    const parkedCode = crossVehicleParked.json?.code ?? ''
+    assert.ok(
+      ['vehicle_not_assigned', 'not_found', 'company_mismatch'].includes(parkedCode) ||
+        crossVehicleParked.status === 404,
+      `expected vehicle_not_assigned or not_found for vehicle-parked, got ${JSON.stringify(crossVehicleParked.json)}`,
+    )
+  }
+
   console.log('tenant-isolation: ok')
   console.log(
     JSON.stringify(
@@ -220,6 +422,8 @@ async function main() {
           vehicleId: orgA.vehicleId,
           driverId: orgA.driverId,
           dutyId: orgA.dutyId,
+          publishedDutyId: orgA.publishedDutyId ?? null,
+          vorVehicleId: orgA.vorVehicleId ?? null,
           defectId: orgA.defectId ?? null,
         },
         orgB: {
@@ -227,6 +431,7 @@ async function main() {
           vehicleId: orgB.vehicleId,
           driverId: orgB.driverId,
           dutyId: orgB.dutyId,
+          vorVehicleId: orgB.vorVehicleId ?? null,
         },
       },
       null,

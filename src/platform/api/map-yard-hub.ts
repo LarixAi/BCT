@@ -9,7 +9,7 @@ import type {
   YardHubTask,
   YardHubVehicle,
 } from "@/platform/auth/command-auth-api";
-import type { YardRole } from "@/types/permissions";
+import type { YardPermission, YardRole } from "@/types/permissions";
 import type { DamageObservation, DamageRecord, DamageSeverity, InspectionMedia, VehicleInspection } from "@/types/condition";
 import type { YardTask, YardTaskKind, YardTaskPriority, YardTaskStatus } from "@/types/tasks";
 import type {
@@ -23,6 +23,7 @@ import type {
 } from "@/types/yard";
 import type { YardHubLayoutSnapshot } from "@veyvio/yard";
 import { ingestHubPlatformEvents } from "@/platform/ops/ingest-hub-platform-events";
+import { parseDefectIdFromTaskInstructions } from "@/domain/tasks/server-task-automation";
 import { defaultSpatialYardLayout } from "@veyvio/yard";
 import type { YardCheckResult, YardCheckSectionResult, YardCheckType, CheckSafetyOutcome, YardCheckEvidenceItem } from "@/types/yard-check";
 
@@ -33,6 +34,11 @@ type HubBodyworkReport = {
   severity: string;
   reportedAt: string;
   zone?: string | null;
+  damageType?: string | null;
+  photoDataUrl?: string | null;
+  defectRef?: string | null;
+  damageCaseId?: string | null;
+  damageReference?: string | null;
 };
 
 function mapVehicleType(category: string | null | undefined): VehicleType {
@@ -113,6 +119,7 @@ function mapTaskStatus(status: string): YardTaskStatus {
 
 function mapHubTask(row: YardHubTask, companyId: string): YardTask {
   const status = mapTaskStatus(row.status);
+  const defectId = parseDefectIdFromTaskInstructions(row.instructions);
   return {
     id: row.id,
     title: row.title,
@@ -122,6 +129,7 @@ function mapHubTask(row: YardHubTask, companyId: string): YardTask {
     status,
     dueAt: row.dueAt ?? undefined,
     vehicleId: row.vehicleId || undefined,
+    defectId,
     assigneeId: row.assignedStaffId ?? undefined,
     assigneeName: row.assignedStaffName ?? undefined,
     createdAt: row.createdAt,
@@ -169,7 +177,8 @@ function mapBodyworkSeverity(severity: string): DamageSeverity {
 
 function mapBodyworkReports(reports: HubBodyworkReport[]): DamageObservation[] {
   return reports.map(report => ({
-    id: report.id,
+    id: report.damageCaseId ?? report.id,
+    damageId: report.damageCaseId ?? undefined,
     inspectionId: "",
     vehicleId: report.vehicleId,
     zoneId: report.zone ?? "unknown",
@@ -180,7 +189,18 @@ function mapBodyworkReports(reports: HubBodyworkReport[]): DamageObservation[] {
     description: report.description,
     severity: mapBodyworkSeverity(report.severity),
     mediaIds: [],
+    damageType: report.damageType ? mapBodyworkDamageType(report.damageType) : undefined,
+    photoDataUrl: report.photoDataUrl ?? undefined,
+    defectRef: report.defectRef ?? report.damageReference ?? undefined,
   }));
+}
+
+function mapBodyworkDamageType(raw: string): DamageObservation["damageType"] {
+  const normalized = raw.toLowerCase().replace(/-/g, "_");
+  const allowed = new Set([
+    "scratch", "scuff", "dent", "crack", "paint_damage", "glass_damage", "impact_damage", "other",
+  ]);
+  return allowed.has(normalized) ? (normalized as DamageObservation["damageType"]) : "other";
 }
 
 type HubCheckEvidenceMeta = {
@@ -446,6 +466,9 @@ export function mapYardHubToBootstrap(
   role: YardRole,
 ): BootstrapPayload {
   const shell = buildLiveBootstrapShell(companyId, depotId || hub.depotId, role);
+  const hubPermissions = Array.isArray(hub.permissions)
+    ? (hub.permissions.filter(Boolean) as YardPermission[])
+    : null;
   const yardLayout = resolveHubLayout(hub);
   const layoutBays = layoutSnapshotToBays(yardLayout);
 
@@ -489,10 +512,15 @@ export function mapYardHubToBootstrap(
   const hubDamageObservations = (bodyCondition.damageObservations ?? []) as DamageObservation[];
   const hubInspectionMedia = (bodyCondition.inspectionMedia ?? []) as InspectionMedia[];
 
+  const hubDamageRecordIds = new Set(hubDamageRecords.map(record => record.id));
+  const bodyworkOnly = bodywork.filter(
+    observation =>
+      !(observation.damageId && hubDamageRecordIds.has(observation.damageId)) &&
+      !hubDamageObservations.some(existing => existing.id === observation.id),
+  );
+
   const mergedObservations = hubDamageObservations.length > 0
-    ? [...hubDamageObservations, ...bodywork.filter(
-        b => !hubDamageObservations.some(o => o.id === b.id),
-      )]
+    ? [...hubDamageObservations, ...bodyworkOnly]
     : bodywork;
 
   ingestHubPlatformEvents(hub.platformEvents);
@@ -503,6 +531,7 @@ export function mapYardHubToBootstrap(
     companyId,
     depotId: depotId || hub.depotId || shell.depotId,
     depotCode: hub.depotCode ?? null,
+    permissions: hubPermissions?.length ? hubPermissions : shell.permissions,
     yardMapEnabled: Boolean(yardLayout),
     yardLayout,
     syncedAt: new Date().toISOString(),

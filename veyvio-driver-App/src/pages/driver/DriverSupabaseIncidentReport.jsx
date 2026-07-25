@@ -4,17 +4,19 @@ import { Button } from "@/components/ui/button";
 import PsvIncidentReportWizard from "@/components/driver/incidents/PsvIncidentReportWizard";
 import DriverOperationalHeader from "@/components/driver/operational/DriverOperationalHeader";
 import { op } from "@/lib/driver-operational-theme";
+import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { getSosOption } from "@/lib/tflIncidentTypes";
-import { reportIncidentViaCommand } from "@/services/command-driver-ops.service";
-import { reportDriverIncident } from "@/services/incidents.service";
+import { submitIncidentWithOutbox } from "@/services/driver-ops-outbox.service";
 
 export default function DriverSupabaseIncidentReport({ driver }) {
   const navigate = useNavigate();
   const { state: routeState } = useLocation();
+  const { session } = useDriverSupabaseAuth();
   const sosOption = getSosOption(routeState?.sosType);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [queued, setQueued] = useState(false);
 
   const handleSubmit = async (form) => {
     setSubmitting(true);
@@ -31,8 +33,7 @@ export default function DriverSupabaseIncidentReport({ driver }) {
       [sosContext?.sosLabel, form?.incidentType].filter(Boolean).join(" — ") ||
       "Driver incident report";
 
-    // Prefer Command so Admin Incidents hub receives the report.
-    const commandResult = await reportIncidentViaCommand({
+    const commandResult = await submitIncidentWithOutbox(driver, session, {
       description,
       incidentType: form?.incidentType || sosContext?.sosType || "general",
       severity: form?.severity || "medium",
@@ -41,19 +42,13 @@ export default function DriverSupabaseIncidentReport({ driver }) {
       vehicleId: form?.vehicleId,
     });
 
-    if (commandResult.ok) {
-      setSubmitting(false);
-      setDone(true);
-      return { ok: true };
-    }
-
-    // Fallback to legacy Ridova path if Command endpoint is not deployed yet.
-    const result = await reportDriverIncident(driver, { form, photos: form.photos, sosContext });
     setSubmitting(false);
-    if (!result.ok) {
-      setError(commandResult.message || result.message);
+    if (!commandResult.ok) {
+      setError(commandResult.message ?? "Incident could not be submitted.");
       return { ok: false };
     }
+
+    setQueued(Boolean(commandResult.queued));
     setDone(true);
     return { ok: true };
   };
@@ -63,7 +58,9 @@ export default function DriverSupabaseIncidentReport({ driver }) {
       <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-6 text-center">
         <h2 className="text-xl font-bold text-foreground">Report submitted</h2>
         <p className="mt-2 max-w-xs text-sm text-muted-foreground">
-          Your transport manager has been notified. Your submission is locked and cannot be edited.
+          {queued
+            ? "Incident saved on this device — will reach Command when connection returns."
+            : "Your transport manager has been notified. Your submission is locked and cannot be edited."}
         </p>
         <Button type="button" className={`mt-8 w-full max-w-xs ${op.primaryBtn}`} onClick={() => navigate("/")}>
           Back to home

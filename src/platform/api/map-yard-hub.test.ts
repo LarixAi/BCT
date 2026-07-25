@@ -195,4 +195,45 @@ describe("mapYardHubToBootstrap", () => {
       label: "Driver declaration signature",
     });
   });
+
+  it("maps hub tasks with defectId parsed from instructions", () => {
+    const hub: YardHubResponse = {
+      depotId: "dep_live",
+      depotName: "Wembley",
+      vehicles: [],
+      tasks: [
+        {
+          id: "task-uuid-1",
+          depotId: "dep_live",
+          vehicleId: "veh_1",
+          registrationNumber: "AB12 CDE",
+          taskType: "inspect_damage",
+          title: "Inspect driver-reported damage",
+          priority: "important",
+          status: "open",
+          instructions: "Driver-reported defect DEF-1 (a1b2c3d4-e5f6-4789-a012-3456789abcde). Mirror cracked",
+          createdAt: "2026-07-24T10:00:00.000Z",
+          createdBy: "Driver app",
+        },
+      ],
+    };
+
+    const payload = mapYardHubToBootstrap(hub, "co_live", "dep_live", "yard_manager");
+    expect(payload.tasks[0]?.defectId).toBe("a1b2c3d4-e5f6-4789-a012-3456789abcde");
+    expect(payload.tasks[0]?.id).toBe("task-uuid-1");
+  });
+
+  it("prefers server hub permissions over client role defaults", () => {
+    const hub: YardHubResponse = {
+      depotId: "dep_live",
+      depotName: "North Bolton",
+      roleKey: "yard_operative",
+      permissions: ["vehicle.view", "vehicle.move", "check.complete"],
+      vehicles: [],
+    };
+
+    const payload = mapYardHubToBootstrap(hub, "co_live", "dep_live", "yard_manager");
+    expect(payload.permissions).toEqual(["vehicle.view", "vehicle.move", "check.complete"]);
+    expect(payload.permissions).not.toContain("vehicle.mark_vor");
+  });
 });

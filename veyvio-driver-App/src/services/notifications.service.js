@@ -59,7 +59,17 @@ export function resolveDriverNotificationPath(actionUrl, notification = null) {
       return "/documents";
     }
     if (haystack.includes("onboarding") || haystack.includes("activation")) return "/onboarding";
-    if (haystack.includes("readiness") || haystack.includes("eligib")) return "/readiness";
+    if (haystack.includes("readiness") || haystack.includes("eligib") || haystack.includes("compliance")) {
+      return "/readiness";
+    }
+    if (
+      haystack.includes("vor") ||
+      haystack.includes("vehicle") ||
+      haystack.includes("adblue") ||
+      haystack.includes("handback")
+    ) {
+      return "/vehicle";
+    }
     if (haystack.includes("duty") || haystack.includes("job") || haystack.includes("trip")) return "/jobs";
     if (haystack.includes("walkaround") || haystack.includes("vehicle check")) return "/check";
     if (haystack.includes("message") || haystack.includes("inbox")) return "/messages";
@@ -83,6 +93,7 @@ export function resolveDriverNotificationPath(actionUrl, notification = null) {
     if (raw.startsWith("/training")) return "/training";
     if (raw.startsWith("/documents")) return "/documents";
     if (raw.startsWith("/duty")) return "/duty";
+    if (raw.startsWith("/vehicle")) return "/vehicle";
     if (raw.startsWith("/jobs") || raw.startsWith("/offers")) return raw.split("?")[0];
     if (raw.startsWith("/readiness")) return "/readiness";
     if (raw.startsWith("/messages") || raw.startsWith("/threads")) return raw.split("?")[0];

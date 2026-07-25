@@ -3370,10 +3370,37 @@ export class MockApiClient {
         { id: 'msg-8812', subject: 'Run AM-104 delay', channel: 'driver_app', deliveryState: 'acknowledged', createdAt: new Date().toISOString() },
         { id: 'msg-8808', subject: 'Revised passenger ETA', channel: 'sms', deliveryState: 'failed', createdAt: new Date().toISOString() },
       ],
-      'settings/roles': [
-        { id: 'role-1', roleKey: 'transport_manager', label: 'Transport manager', userCount: 6, permissions: ['*'] },
-        { id: 'role-2', roleKey: 'dispatcher', label: 'Dispatcher', userCount: 14, permissions: ['dispatch.read', 'dispatch.manage'] },
-      ],
+      'settings/roles': {
+        modules: ['dispatch', 'fleet', 'identity', 'operations'],
+        catalog: [
+          { code: 'bookings.read', description: 'Read bookings', module: 'operations' },
+          { code: 'dispatch.manage', description: 'Manage dispatch', module: 'dispatch' },
+          { code: 'vehicles.read', description: 'Read vehicles', module: 'fleet' },
+          { code: 'settings.roles.manage', description: 'Manage roles', module: 'identity' },
+        ],
+        roles: [
+          {
+            id: 'role-1',
+            roleKey: 'transport_manager',
+            label: 'Transport Manager',
+            userCount: 6,
+            isSystemRole: true,
+            status: 'active',
+            permissionCodes: ['bookings.read', 'dispatch.manage', 'vehicles.read', 'settings.roles.manage'],
+            permissionCount: 4,
+          },
+          {
+            id: 'role-2',
+            roleKey: 'dispatcher',
+            label: 'Dispatcher',
+            userCount: 14,
+            isSystemRole: true,
+            status: 'active',
+            permissionCodes: ['bookings.read', 'dispatch.manage'],
+            permissionCount: 2,
+          },
+        ],
+      },
       'settings/invitations': [
         { id: 'inv-1', email: 'sarah.jones@example.com', roleKey: 'dispatcher', status: 'invited', invitedAt: new Date().toISOString() },
       ],
@@ -3399,6 +3426,39 @@ export class MockApiClient {
     if (/^staff\/[^/]+$/.test(normalized)) return { id: 'staff-1', name: 'Sarah Mitchell', status: 'active', role: 'Transport manager', updatedAt: new Date().toISOString() } as T
     return (records[normalized] ?? []) as T
   }
+
+  async patchCommandResource<T>(path: string, body: unknown): Promise<T> {
+    await delay(80)
+    const normalized = path.split('?')[0].replace(/^\/+/, '')
+    const match = normalized.match(/^settings\/roles\/([^/]+)\/permissions$/)
+    if (!match) throw new Error(`Mock PATCH not implemented for ${path}`)
+    const roleId = match[1]
+    const codes = Array.isArray((body as { permissionCodes?: string[] })?.permissionCodes)
+      ? (body as { permissionCodes: string[] }).permissionCodes
+      : []
+    const matrix = (await this.getCommandResource<RolesMatrixMock>('/settings/roles')) as RolesMatrixMock
+    const roles = (matrix.roles ?? []).map((role) =>
+      role.id === roleId
+        ? {
+            ...role,
+            permissionCodes: codes,
+            permissionCount: codes.length,
+          }
+        : role,
+    )
+    return { ...matrix, roles } as T
+  }
+}
+
+type RolesMatrixMock = {
+  roles: Array<{
+    id: string
+    permissionCodes?: string[]
+    permissionCount?: number
+    [key: string]: unknown
+  }>
+  catalog?: unknown[]
+  modules?: string[]
 }
 
 export const mockApi = new MockApiClient()

@@ -113,6 +113,8 @@ export async function notifyDriverAppUser(input: {
   body: string
   severity?: NotificationSeverity
   actionUrl?: string | null
+  sourceEntityType?: string | null
+  sourceEntityId?: string | null
 }) {
   const { data: account } = await admin
     .from('driver_app_accounts')
@@ -131,8 +133,8 @@ export async function notifyDriverAppUser(input: {
     title: input.title,
     body: input.body,
     severity: input.severity ?? 'attention',
-    source_entity_type: 'driver',
-    source_entity_id: input.driverId,
+    source_entity_type: input.sourceEntityType ?? 'driver',
+    source_entity_id: input.sourceEntityId ?? input.driverId,
     action_url: input.actionUrl ?? '/onboarding',
     status: 'unread',
   })

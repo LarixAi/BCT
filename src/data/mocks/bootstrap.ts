@@ -7,7 +7,7 @@ import { initialAdBlueRefills } from "@/data/adblue-fixtures";
 import { buildDemoOperationalPlan } from "@/data/plan-fixtures";
 import { BCT_MAIN_DEPOT_LAYOUT } from "@veyvio/yard";
 import type { YardHubLayoutSnapshot } from "@veyvio/yard";
-import { bctBays, bctTrips, bctVehicles } from "@/data/bct-yard";
+import { bctBays, bctDriverBodyworkObservations, bctTrips, bctVehicles } from "@/data/bct-yard";
 import type {
   CustodyEvent,
   DamageObservation,
@@ -101,7 +101,7 @@ export function buildBootstrapPayload(companyId: string, depotId: string, role: 
       inspections: [],
       inspectionMedia: [],
       damageRecords: [],
-      damageObservations: [],
+      damageObservations: bctDriverBodyworkObservations,
       damageReviews: [],
       conditionSnapshots: [],
       custodyTimeline: [],

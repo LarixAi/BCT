@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CheckCircle2, Circle, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,8 +21,14 @@ import DriverSpeedCard from "@/components/driver/operational/DriverSpeedCard";
 import DriverTripSummary from "@/components/driver/operational/DriverTripSummary";
 import DriverJobManifestPanel from "@/components/driver/jobs/DriverJobManifestPanel";
 import DriverJobItineraryPanel from "@/components/driver/jobs/DriverJobItineraryPanel";
-import DriverPhvTripPanel from "@/components/driver/jobs/DriverPhvTripPanel";
+import { isPhvModuleEnabled } from "@/lib/phv-module-enabled";
 import { isPhvCustomerBookingJob } from "@/services/customer-phv-job.service";
+
+const DriverPhvTripPanel = lazy(() =>
+  isPhvModuleEnabled()
+    ? import("@/components/driver/jobs/DriverPhvTripPanel")
+    : Promise.resolve({ default: () => null }),
+);
 
 function stopState(stop) {
   if (stop.status === "completed") return "done";
@@ -215,13 +221,15 @@ export default function DriverSupabaseJobView({ driver }) {
               </div>
             ) : null}
 
-            {isPhvCustomerBookingJob(job) && !jobDone ? (
-              <DriverPhvTripPanel
-                job={job}
-                driver={driver}
-                disabled={busy || checkBlocksJob}
-                onUpdated={reload}
-              />
+            {isPhvModuleEnabled() && isPhvCustomerBookingJob(job) && !jobDone ? (
+              <Suspense fallback={null}>
+                <DriverPhvTripPanel
+                  job={job}
+                  driver={driver}
+                  disabled={busy || checkBlocksJob}
+                  onUpdated={reload}
+                />
+              </Suspense>
             ) : null}
 
             {!jobDone && !isPhvCustomerBookingJob(job) ? (

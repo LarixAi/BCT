@@ -108,27 +108,27 @@ export function dutyStateFromHomeSummary(homeSummary) {
 
 /** Prefer Command duty sign-on over legacy Ridova shift rows. */
 export function mergeDutyState(commandDutyState, legacyDutyState) {
-  if (commandDutyState?.isSignedOn || commandDutyState?.isShiftEnded) {
-    return {
-      ...(legacyDutyState ?? {}),
-      ...commandDutyState,
-      primaryVehicle: commandDutyState.primaryVehicle ?? legacyDutyState?.primaryVehicle ?? null,
-      scheduledStart: commandDutyState.scheduledStart ?? legacyDutyState?.scheduledStart ?? null,
-      scheduledStartLabel:
-        commandDutyState.scheduledStartLabel ?? legacyDutyState?.scheduledStartLabel ?? null,
-      nextTrip: commandDutyState.nextTrip ?? legacyDutyState?.nextTrip ?? null,
-      shift: {
-        signOnAt:
-          commandDutyState.shift?.signOnAt ?? legacyDutyState?.shift?.signOnAt ?? null,
-        signOffAt:
-          commandDutyState.shift?.signOffAt ?? legacyDutyState?.shift?.signOffAt ?? null,
-      },
-    };
+  if (commandDutyState != null) {
+    if (commandDutyState.isSignedOn || commandDutyState.isShiftEnded) {
+      return {
+        ...(legacyDutyState ?? {}),
+        ...commandDutyState,
+        primaryVehicle: commandDutyState.primaryVehicle ?? legacyDutyState?.primaryVehicle ?? null,
+        scheduledStart: commandDutyState.scheduledStart ?? legacyDutyState?.scheduledStart ?? null,
+        scheduledStartLabel:
+          commandDutyState.scheduledStartLabel ?? legacyDutyState?.scheduledStartLabel ?? null,
+        nextTrip: commandDutyState.nextTrip ?? legacyDutyState?.nextTrip ?? null,
+        shift: {
+          signOnAt:
+            commandDutyState.shift?.signOnAt ?? legacyDutyState?.shift?.signOnAt ?? null,
+          signOffAt:
+            commandDutyState.shift?.signOffAt ?? legacyDutyState?.shift?.signOffAt ?? null,
+        },
+      };
+    }
+    return commandDutyState;
   }
-  if (legacyDutyState?.isSignedOn || legacyDutyState?.isShiftEnded) {
-    return legacyDutyState;
-  }
-  return commandDutyState ?? legacyDutyState ?? null;
+  return legacyDutyState ?? null;
 }
 
 /** Fallback when homeSummary lags — read sign-on from published duties. */
@@ -176,47 +176,52 @@ export function dutyStateFromBootstrapDuties(bootstrap) {
   };
 }
 
-/** Same source as the Home "Next duty" card — keeps My duty in sync with that row. */
-export function dutyStateFromTripsSchedule(bootstrap) {
+/** Legacy trips schedule — scheduling hints only; never authoritative for sign-on state. */
+export function scheduleHintsFromTrips(bootstrap) {
   const trip = bootstrap?.legacy?.tripsSchedule?.today?.[0];
   if (!trip) return null;
 
-  const label = String(trip.primaryActionLabel ?? "");
-  const signedOn = label === "On duty" || String(trip.status) === "in_progress";
-  const reg = trip.vehicleRegistration ?? null;
-
   return {
-    isSignedOn: signedOn,
+    isSignedOn: false,
     isShiftEnded: false,
-    shift: signedOn
-      ? {
-          // Sign-on time may only exist on duties/homeSummary; keep null so timer can fill later.
-          signOnAt: null,
-          signOffAt: null,
-        }
+    shift: null,
+    primaryVehicle: trip.vehicleRegistration
+      ? { registration: trip.vehicleRegistration, id: null }
       : null,
-    primaryVehicle: reg ? { registration: reg, id: null } : null,
     scheduledStart: trip.scheduledStart ?? null,
     scheduledStartLabel: trip.scheduledStart ?? null,
     nextTrip: {
       name: trip.runName || trip.reference || "Duty",
       startTime: trip.scheduledStart ?? null,
     },
-    operationalState: signedOn ? "on_duty" : null,
+    operationalState: null,
     dutyId: trip.dutyId ?? trip.id ?? null,
     source: "command",
   };
 }
 
+/** @deprecated Use scheduleHintsFromTrips — kept for tests migrating off legacy sign-on inference. */
+export function dutyStateFromTripsSchedule(bootstrap) {
+  return scheduleHintsFromTrips(bootstrap);
+}
+
 /** Command-first duty projection used by Home. */
 export function commandDutyStateFromBootstrap(bootstrap, homeSummary) {
-  return mergeDutyState(
-    mergeDutyState(
-      dutyStateFromBootstrapDuties(bootstrap),
-      dutyStateFromHomeSummary(homeSummary),
-    ),
-    dutyStateFromTripsSchedule(bootstrap),
+  const commandDuty = mergeDutyState(
+    dutyStateFromBootstrapDuties(bootstrap),
+    dutyStateFromHomeSummary(homeSummary),
   );
+  const hints = scheduleHintsFromTrips(bootstrap);
+  if (!commandDuty) return hints;
+  if (!hints) return commandDuty;
+  return {
+    ...commandDuty,
+    primaryVehicle: commandDuty.primaryVehicle ?? hints.primaryVehicle ?? null,
+    scheduledStart: commandDuty.scheduledStart ?? hints.scheduledStart ?? null,
+    scheduledStartLabel: commandDuty.scheduledStartLabel ?? hints.scheduledStartLabel ?? null,
+    nextTrip: commandDuty.nextTrip ?? hints.nextTrip ?? null,
+    dutyId: commandDuty.dutyId ?? hints.dutyId ?? null,
+  };
 }
 
 export function walkaroundSafetyFromHomeSummary(homeSummary) {

@@ -101,6 +101,7 @@ import { PricingPage } from '@/features/pricing/PricingPage'
 import { TemplatesPage } from '@/features/templates/TemplatesPage'
 import { PerformancePage } from '@/features/performance/PerformancePage'
 import { AuditLogPage } from '@/features/audit/AuditLogPage'
+import { RolesPermissionsPage } from '@/features/settings/RolesPermissionsPage'
 import {
   AvailabilityPage,
   CancellationsPage,
@@ -121,7 +122,6 @@ import {
   PassengerDetailPage,
   ProfilePage,
   RiskAssessmentsPage,
-  RolesPage,
   SafeguardingPage,
   SchoolDetailPage,
   StaffEditPage,
@@ -289,7 +289,7 @@ function App() {
                 <Route path="audit" element={<AuditLogPage />} />
                 <Route path="settings/company" element={<CompanySettingsPage />} />
                 <Route path="settings/users" element={<UsersPage />} />
-                <Route path="settings/roles" element={<RolesPage />} />
+                <Route path="settings/roles" element={<RolesPermissionsPage />} />
                 <Route path="settings/invitations" element={<InviteUsersPage />} />
                 <Route path="settings/security" element={<SecuritySettingsPage />} />
                 <Route path="settings/notifications" element={<NotificationSettingsPage />} />

@@ -82,7 +82,15 @@ export default function WalkaroundResultScreen({ result, profile, driverId, onHo
         </p>
       ) : null}
 
-      {result?.autoSignedOn || result?.alreadySignedOn ? (
+      {result?.signOnBlocked ? (
+        <div className="mt-4 max-w-sm rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-950">
+          <p className="font-semibold">Duty sign-on blocked</p>
+          <p className="mt-1">
+            {result.signOnMessage ??
+              "Your check was saved, but Command blocked sign-on. Complete compliance or speak to dispatch."}
+          </p>
+        </div>
+      ) : result?.autoSignedOn || result?.alreadySignedOn ? (
         <p className="mt-4 max-w-sm rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
           {result.signOnMessage ||
             (result.alreadySignedOn

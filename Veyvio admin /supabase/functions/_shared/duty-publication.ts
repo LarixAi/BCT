@@ -6,19 +6,28 @@ import { admin } from './supabase.ts'
 import { apiError, json, readJson, toApiErrorResponse } from './http.ts'
 import type { RequestContext } from './supabase.ts'
 import {
+  appendVehicleReadinessGates,
+  finalizeEligibilityResult,
+  type EligibilityResult,
+} from './dispatch-assignment-gates.ts'
+import { evaluateAssignmentRules } from './rules-engine.ts'
+import { recordOverride, requireOverrideReason } from './override-audit.ts'
+import { emitDomainEvent } from './domain-events.ts'
+import {
+  dutyTransitionHttpStatus,
+  evaluateDutyLifecycleTransition,
+} from './duty-lifecycle-gates.ts'
+import {
   assertCompanyScopedDepot,
   assertCompanyScopedDriver,
   assertCompanyScopedVehicle,
 } from './tenant-guards.ts'
 import { assertRunIdsInCompany } from './tenant-db.ts'
+import { notifyDriverDutyPublished } from './driver-ops-notifications.ts'
 
 type Row = Record<string, unknown>
 
-export type EligibilityResult = {
-  status: 'eligible' | 'eligible_with_warnings' | 'blocked'
-  blockers: string[]
-  warnings: string[]
-}
+export type { EligibilityResult }
 
 function endOfServiceDayUtc(serviceDate: string): string {
   // Acknowledgement deadline: end of calendar day (UTC) before service date starts locally —
@@ -131,9 +140,55 @@ export async function evaluateDutyAssignmentEligibility(input: {
     warnings.push('Report or finish time is missing.')
   }
 
-  if (blockers.length) return { status: 'blocked', blockers, warnings }
-  if (warnings.length) return { status: 'eligible_with_warnings', blockers, warnings }
-  return { status: 'eligible', blockers, warnings }
+  const rules = await evaluateAssignmentRules({
+    companyId: input.companyId,
+    driverId: input.driverId,
+    vehicleId: input.vehicleId,
+    requireTodaysCheck: false,
+  })
+  blockers.push(...rules.blockers)
+  warnings.push(...rules.warnings)
+
+  return finalizeEligibilityResult(blockers, warnings)
+}
+
+/** Server-authoritative gate before a driver signs on for a published duty. */
+export async function evaluateDriverSignOnEligibility(input: {
+  companyId: string
+  driverId: string
+  duty: Row
+}): Promise<EligibilityResult> {
+  const blockers: string[] = []
+  const warnings: string[] = []
+
+  const assignment = await evaluateDutyAssignmentEligibility({
+    companyId: input.companyId,
+    driverId: input.driverId,
+    vehicleId: input.duty.vehicle_id ? String(input.duty.vehicle_id) : null,
+    serviceDate: String(input.duty.service_date),
+    plannedSignOn: input.duty.planned_sign_on_at ? String(input.duty.planned_sign_on_at) : null,
+    plannedSignOff: input.duty.planned_sign_off_at ? String(input.duty.planned_sign_off_at) : null,
+    excludeDutyId: String(input.duty.id),
+  })
+  blockers.push(...assignment.blockers)
+  warnings.push(...assignment.warnings)
+
+  const vehicleId = input.duty.vehicle_id ? String(input.duty.vehicle_id) : null
+  if (vehicleId) {
+    await appendVehicleReadinessGates({
+      companyId: input.companyId,
+      vehicleId,
+      driverId: input.driverId,
+      blockers,
+      warnings,
+      requireTodaysCheck: true,
+      readinessAlreadyChecked: true,
+    })
+  } else {
+    warnings.push('No vehicle assigned yet.')
+  }
+
+  return finalizeEligibilityResult(blockers, warnings)
 }
 
 export async function createDraftDuty(context: RequestContext, request: Request) {
@@ -250,6 +305,8 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
     specialInstructions?: string | null
     runIds?: string[]
     status?: string
+    /** F-07 — required when eligibility blockers are present. */
+    overrideReason?: string | null
   }>(request)
 
   const { data: existing, error: loadError } = await admin
@@ -320,8 +377,28 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
     excludeDutyId: dutyId,
   })
 
+  let overrideId: string | null = null
   if (eligibility.status === 'blocked') {
-    return apiError(409, eligibility.blockers[0] ?? 'Assignment is blocked', 'assignment_blocked')
+    const overrideCheck = requireOverrideReason(eligibility.blockers, input.overrideReason)
+    if (!overrideCheck.ok) {
+      return apiError(409, overrideCheck.message, 'assignment_blocked')
+    }
+    try {
+      const recorded = await recordOverride({
+        companyId: context.companyId,
+        actorUserId: context.user.id,
+        ruleCode: 'dispatch.assignment_blocked',
+        reason: overrideCheck.reason,
+        entityType: 'duty',
+        entityId: dutyId,
+        blockers: eligibility.blockers,
+        warnings: eligibility.warnings,
+        payload: { driverId, vehicleId },
+      })
+      overrideId = recorded.id
+    } catch (error) {
+      return apiError(500, error instanceof Error ? error.message : 'Override could not be recorded')
+    }
   }
 
   const publicationStatus =
@@ -372,10 +449,19 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
     dutyId,
     eventType: 'assigned',
     actorUserId: context.user.id,
-    payload: { eligibility, publicationStatus },
+    payload: { eligibility, publicationStatus, overrideId },
   })
 
-  return json({ duty: expandDutyRow(updated), eligibility })
+  await emitDomainEvent({
+    companyId: context.companyId,
+    eventType: 'duty.assigned',
+    entityType: 'duty',
+    entityId: dutyId,
+    actorUserId: context.user.id,
+    payload: { driverId, vehicleId, overrideId },
+  }).catch(() => undefined)
+
+  return json({ duty: expandDutyRow(updated), eligibility, overrideId })
 }
 
 export async function publishDuty(context: RequestContext, dutyId: string) {
@@ -447,14 +533,38 @@ export async function publishDuty(context: RequestContext, dutyId: string) {
     },
   })
 
-  // Push not wired in this slice — event records notification_pending for the next slice.
   await recordDutyAssignmentEvent({
     companyId: context.companyId,
     dutyId,
     eventType: 'notification_pending',
     actorUserId: context.user.id,
-    payload: { channel: 'push', template: 'duty_published' },
+    payload: { channel: 'in_app', template: 'duty_published' },
   })
+
+  let vehicleRegistration: string | null = null
+  if (existing.vehicle_id) {
+    const { data: vehicle } = await admin
+      .from('vehicles')
+      .select('registration')
+      .eq('company_id', context.companyId)
+      .eq('id', String(existing.vehicle_id))
+      .maybeSingle()
+    vehicleRegistration = vehicle?.registration ? String(vehicle.registration) : null
+  }
+
+  try {
+    await notifyDriverDutyPublished({
+      companyId: context.companyId,
+      driverId: String(existing.driver_id),
+      dutyId,
+      serviceDate: String(existing.service_date),
+      plannedSignOnAt: existing.planned_sign_on_at ? String(existing.planned_sign_on_at) : null,
+      vehicleRegistration,
+      eligibilityWarnings: eligibility.warnings,
+    })
+  } catch (error) {
+    console.error('driver duty published notification failed', error)
+  }
 
   return json({ duty: expandDutyRow(updated), eligibility })
 }
@@ -479,6 +589,15 @@ export async function acknowledgePublishedDuty(
   }
   if (String(existing.driver_id) !== driverId) {
     return apiError(403, 'This duty is not assigned to you', 'forbidden')
+  }
+
+  const acknowledgeTransition = evaluateDutyLifecycleTransition(existing, 'acknowledge')
+  if (!acknowledgeTransition.ok) {
+    return apiError(
+      dutyTransitionHttpStatus(acknowledgeTransition.code),
+      acknowledgeTransition.message,
+      acknowledgeTransition.code,
+    )
   }
 
   const revision = Number(existing.version ?? 1)
@@ -564,6 +683,44 @@ export async function signOnPublishedDuty(
     })
   }
 
+  const revision = Number(existing.version ?? 1)
+  let acknowledged = false
+  if (existing.acknowledgement_required !== false) {
+    const { data: ackRow } = await admin
+      .from('duty_acknowledgements')
+      .select('id')
+      .eq('company_id', context.companyId)
+      .eq('duty_id', dutyId)
+      .eq('driver_id', driverId)
+      .eq('revision', revision)
+      .maybeSingle()
+    acknowledged = Boolean(ackRow?.id)
+  } else {
+    acknowledged = true
+  }
+
+  const signOnTransition = evaluateDutyLifecycleTransition(existing, 'sign_on', { acknowledged })
+  if (!signOnTransition.ok) {
+    return apiError(
+      dutyTransitionHttpStatus(signOnTransition.code),
+      signOnTransition.message,
+      signOnTransition.code,
+    )
+  }
+
+  const signOnEligibility = await evaluateDriverSignOnEligibility({
+    companyId: context.companyId,
+    driverId,
+    duty: existing,
+  })
+  if (signOnEligibility.status === 'blocked') {
+    return apiError(
+      403,
+      signOnEligibility.blockers[0] ?? 'Cannot sign on for this duty',
+      'dispatch_blocked',
+    )
+  }
+
   const signedOnAt = new Date().toISOString()
   const { data: updated, error } = await admin
     .from('duties')
@@ -618,9 +775,6 @@ export async function signOffPublishedDuty(
   if (String(existing.driver_id) !== driverId) {
     return apiError(403, 'This duty is not assigned to you', 'forbidden')
   }
-  if (!existing.actual_sign_on_at) {
-    return apiError(409, 'Sign on before signing off', 'not_signed_on')
-  }
   if (existing.actual_sign_off_at) {
     return json({
       ok: true,
@@ -630,6 +784,15 @@ export async function signOffPublishedDuty(
       duty: expandDutyRow(existing),
       alreadySignedOff: true,
     })
+  }
+
+  const signOffTransition = evaluateDutyLifecycleTransition(existing, 'sign_off')
+  if (!signOffTransition.ok) {
+    return apiError(
+      dutyTransitionHttpStatus(signOffTransition.code),
+      signOffTransition.message,
+      signOffTransition.code,
+    )
   }
 
   const signedOffAt = new Date().toISOString()

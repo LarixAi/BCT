@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { commandPostDriverLocation } from "@/lib/command-api";
+import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import {
   dequeueFleetPing,
@@ -64,6 +65,8 @@ export async function sendDriverLocationPing({
   batteryLevel,
   appState,
   speedLimitMph,
+  companyId = null,
+  membershipId = null,
 }) {
   if (!driverId) return { ok: false, message: "Missing driver context" };
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -106,7 +109,7 @@ export async function sendDriverLocationPing({
   }
 
   if (legacyError && !commandResult.ok) {
-    enqueueFleetPing(driverId, payload);
+    enqueueFleetPing(driverId, payload, companyId, membershipId);
     return {
       ok: false,
       message: commandResult.message || legacyError.message,
@@ -124,14 +127,16 @@ export async function sendDriverLocationPing({
   return { ok: true };
 }
 
-export async function flushFleetPingQueue(driverId) {
-  const queue = loadFleetPingQueue(driverId);
+export async function flushFleetPingQueue(driverId, companyId, membershipId) {
+  const queue = loadFleetPingQueue(driverId, companyId, membershipId);
   if (queue.length === 0) return { flushed: 0 };
 
   const supabase = getSupabaseClient();
   let flushed = 0;
 
   for (const item of queue) {
+    const scopeCompanyId = companyId ?? item.companyId ?? null;
+    const scopeMembershipId = membershipId ?? item.membershipId ?? null;
     const commandResult = await postLocationToCommand({
       dutyId: item.payload.job_id,
       vehicleId: item.payload.vehicle_id,
@@ -143,7 +148,7 @@ export async function flushFleetPingQueue(driverId) {
     });
     const { error } = await supabase.from("driver_location_pings").insert(item.payload);
     if (error && !commandResult.ok) break;
-    dequeueFleetPing(driverId, item.id);
+    dequeueFleetPing(driverId, item.id, scopeCompanyId, scopeMembershipId);
     flushed += 1;
     if (item.payload.session_id) {
       await incrementSessionPingStats(item.payload.session_id, item.payload.speed_mph);
@@ -198,6 +203,8 @@ export function startFleetTrackingPings({ driver, active, onPing, dutyId = null 
     return () => {};
   }
 
+  const { companyId, membershipId } = resolveDriverWorkspaceScope(driver, driver);
+
   let cancelled = false;
 
   const sendPing = async () => {
@@ -209,7 +216,7 @@ export function startFleetTrackingPings({ driver, active, onPing, dutyId = null 
     }
     if (cancelled) return;
 
-    await flushFleetPingQueue(driver.id);
+    await flushFleetPingQueue(driver.id, companyId, membershipId);
 
     const pos = await readCurrentPosition();
     if (!pos || cancelled) {
@@ -262,6 +269,8 @@ export function startFleetTrackingPings({ driver, active, onPing, dutyId = null 
       batteryLevel,
       appState: detectAppState(),
       speedLimitMph,
+      companyId,
+      membershipId,
     });
 
     onPing?.({
@@ -283,7 +292,7 @@ export function startFleetTrackingPings({ driver, active, onPing, dutyId = null 
   }, PING_INTERVAL_MS);
 
   const onlineHandler = () => {
-    void flushFleetPingQueue(driver.id);
+    void flushFleetPingQueue(driver.id, companyId, membershipId);
   };
   window.addEventListener("online", onlineHandler);
 

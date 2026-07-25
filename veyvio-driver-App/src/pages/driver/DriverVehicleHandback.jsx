@@ -13,8 +13,16 @@ import { refreshCommandBootstrap } from "@/services/command-driver-ops.service";
 import {
   BCT_BAY_OPTIONS,
   SPECIAL_LOCATIONS,
-  reportDriverParkingLocation,
 } from "@/services/yard-parking.service";
+import {
+  persistHandbackDraft,
+  submitVehicleHandback,
+} from "@/services/vehicle-handback.service";
+import {
+  clearHandbackDraft,
+  loadHandbackDraft,
+} from "@/lib/vehicle-handback-draft.storage";
+import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 
 const RETURN_CHECKS = [
   { id: "interior", label: "Interior left clean and clear" },
@@ -48,6 +56,7 @@ function emptyForm() {
 
 export default function DriverVehicleHandback({ driver }) {
   const { session } = useDriverSupabaseAuth();
+  const workspace = resolveDriverWorkspaceScope(driver, session);
   const [reg, setReg] = useState("");
   const [vehicleId, setVehicleId] = useState("");
   const [depotId, setDepotId] = useState("");
@@ -75,17 +84,29 @@ export default function DriverVehicleHandback({ driver }) {
       setDutyId(duty?.dutyId || duty?.id || "");
       setDepotName(duty?.reportingLocation || boot?.bootstrap?.operator?.depotName || "");
 
-      try {
-        const raw = localStorage.getItem(storageKey(driver?.id, nextReg));
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          setForm({ ...emptyForm(), ...parsed, checks: { ...emptyForm().checks, ...parsed.checks } });
+      const nextVehicleId = vehicle?.vehicleId || vehicle?.id || "";
+      let restored = null;
+      if (workspace.companyId && workspace.membershipId && nextVehicleId) {
+        restored = loadHandbackDraft(workspace.companyId, workspace.membershipId, nextVehicleId);
+      }
+      if (!restored) {
+        try {
+          const raw = localStorage.getItem(storageKey(driver?.id, nextReg));
+          if (raw) restored = JSON.parse(raw);
+        } catch {
+          /* ignore legacy */
         }
-      } catch {
-        /* ignore */
+      }
+      if (restored) {
+        setForm({ ...emptyForm(), ...restored, checks: { ...emptyForm().checks, ...restored.checks } });
       }
     })();
-  }, [driver?.id, driver?.assignedVehicleRegistration, session?.activeDepotId, session?.depots]);
+  }, [driver?.id, driver?.assignedVehicleRegistration, session?.activeDepotId, session?.depots, workspace.companyId, workspace.membershipId]);
+
+  useEffect(() => {
+    if (!vehicleId || form.submittedAt || !workspace.companyId || !workspace.membershipId) return;
+    persistHandbackDraft(workspace.companyId, workspace.membershipId, vehicleId, form);
+  }, [form, vehicleId, workspace.companyId, workspace.membershipId]);
 
   const parkingLabel = useMemo(() => {
     if (form.parkingType === "BAY" && form.parkingBay) return `Bay ${form.parkingBay}`;
@@ -120,7 +141,7 @@ export default function DriverVehicleHandback({ driver }) {
     setSaving(true);
     setErrorMsg("");
     const special = SPECIAL_LOCATIONS.find((s) => s.id === form.parkingType);
-    const parkingResult = await reportDriverParkingLocation({
+    const parkingResult = await submitVehicleHandback({
       vehicleId,
       depotId,
       dutyId,
@@ -131,28 +152,34 @@ export default function DriverVehicleHandback({ driver }) {
       keysReturned: form.keysReturned,
       keyLocation: form.keyLocation,
       fullyInsideBay: form.fullyInsideBay,
+      endMileage: form.endMileage,
+      fuelLevel: form.fuelLevel,
+      notes: form.notes,
+      handbackChecks: form.checks,
+      companyId: workspace.companyId,
+      membershipId: workspace.membershipId,
     });
 
     if (!parkingResult.ok) {
-      setErrorMsg(parkingResult.message || "Parking location could not be recorded.");
+      setErrorMsg(parkingResult.message || "Handback could not be recorded in Command.");
       setSaving(false);
       return;
     }
 
     const next = {
       ...form,
-      submittedAt: new Date().toISOString(),
+      submittedAt: parkingResult.recordedAt ?? new Date().toISOString(),
       registration: reg,
       depotName,
       parkingLabel,
+      handbackReference: parkingResult.handbackReport?.handbackReference ?? null,
     };
-    try {
-      localStorage.setItem(storageKey(driver?.id, reg), JSON.stringify(next));
-    } catch {
-      /* ignore */
+    if (workspace.companyId && workspace.membershipId && vehicleId) {
+      clearHandbackDraft(workspace.companyId, workspace.membershipId, vehicleId);
     }
     setForm(next);
-    setSavedMsg(`Vehicle parked at ${parkingLabel}. Yard map updated.`);
+    const refLabel = next.handbackReference ? ` Ref ${next.handbackReference}.` : "";
+    setSavedMsg(`Vehicle parked at ${parkingLabel}. Handback recorded in Command.${refLabel}`);
     setSaving(false);
   };
 

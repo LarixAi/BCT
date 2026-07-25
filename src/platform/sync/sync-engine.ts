@@ -7,6 +7,7 @@ import { isOnline } from "@/platform/device/connectivity";
 import { applyBootstrapToYard, hydrateYardFromApi } from "@/platform/yard/hydrate-yard-store";
 import { getTenancySnapshot } from "@/platform/tenancy/context-store";
 import { notifySyncComplete, notifySyncFailed } from "@/platform/sync/sync-notify";
+import { sortOutboxForUpload } from "@/domain/sync/outbox-order";
 import { conflictMessage } from "@/domain/sync/conflict-policy";
 import { formatSyncError } from "@/domain/sync/format-sync-error";
 import { isUntrustedServerId } from "@/domain/sync/is-trusted-server-id";
@@ -68,7 +69,7 @@ async function processOutboxInner(): Promise<{ processed: number; failed: number
   await releaseStuckSyncingMutations();
 
   const mutations = await listOutboxMutations();
-  const pending = mutations.filter(m => m.status === "pending");
+  const pending = sortOutboxForUpload(mutations.filter(m => m.status === "pending"));
 
   if (pending.length === 0) {
     await sync.hydrate();
@@ -169,6 +170,34 @@ export async function probeYardSyncRoute(): Promise<boolean> {
       body: JSON.stringify({ type: "task.update", payload: { taskId: "probe" } }),
     });
     return res.status !== 404;
+  } catch {
+    return false;
+  }
+}
+
+/** False when live Command has not deployed body-inspection yard mutation handlers. */
+export async function probeBodyConditionSyncRoute(): Promise<boolean> {
+  if (isMockApi()) return true;
+  try {
+    const anon = getSupabaseAnonKey();
+    const token = getSessionSnapshot().accessToken;
+    const res = await fetch(commandApiUrl("/yard/mutations"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(anon ? { apikey: anon } : {}),
+        Authorization: `Bearer ${token && !token.startsWith("mock_") ? token : anon ?? ""}`,
+      },
+      body: JSON.stringify({
+        type: "inspection.start",
+        payload: { vehicleId: "00000000-0000-4000-8000-000000000099" },
+      }),
+    });
+    if (res.status === 501) {
+      const body = await res.json().catch(() => ({})) as { code?: string };
+      return body.code !== "mutation_not_supported";
+    }
+    return true;
   } catch {
     return false;
   }

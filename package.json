@@ -15,6 +15,14 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "verify:production-build": "node scripts/verify-production-build.mjs",
+    "audit:secrets": "node scripts/audit-secrets.mjs",
+    "gate1:preflight": "node scripts/gate1-preflight.mjs",
+    "gate1:bct-readiness": "npm run gate1:bct-readiness --prefix \"Veyvio admin \"",
+    "gate1:bct-pilot-setup": "npm run gate1:bct-pilot-setup --prefix \"Veyvio admin \"",
+    "gate1:rotate-credentials": "npm run gate1:rotate-credentials --prefix \"Veyvio admin \"",
+    "gate1:device-exit": "node veyvio-driver-App/scripts/gate1-device-exit.mjs",
+    "gate1:device-handset": "node veyvio-driver-App/scripts/gate1-device-handset.mjs",
     "build:mobile": "VITE_MOBILE_BUILD=true vite build --mode mobile",
     "deploy:yard": "npm run build && npx wrangler deploy --config .output/server/wrangler.json",
     "icons:android": "node scripts/generate-brand-icons.mjs",
@@ -109,6 +117,7 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.16",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "wrangler": "^4.114.0"
   }
 }

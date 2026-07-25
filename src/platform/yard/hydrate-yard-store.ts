@@ -1,11 +1,15 @@
 import { normalizeBootstrapPayload, type BootstrapPayload } from "@/data/mocks/bootstrap";
 import { getYardApi } from "@/platform/api";
+import { isProductionBuild } from "@/platform/api/production-guards";
 import { loadBootstrapCache, saveBootstrapCache } from "@/platform/storage/local-db";
 import { usePermissionStore } from "@/platform/permissions/permission-store";
 import { useYard } from "@/store/yard";
 import type { YardPermission, YardRole } from "@/types/permissions";
 
 export function applyBootstrapToYard(payload: BootstrapPayload): void {
+  if (isProductionBuild() && payload.dataSource === "mock") {
+    throw new Error("Mock yard bootstrap cannot be loaded in production builds.");
+  }
   const normalized = normalizeBootstrapPayload(payload);
   useYard.getState().hydrateFromBootstrap(normalized);
   usePermissionStore.getState().setPermissions(normalized.permissions as YardPermission[]);
@@ -14,6 +18,7 @@ export function applyBootstrapToYard(payload: BootstrapPayload): void {
 export async function hydrateYardFromCache(companyId: string, depotId: string): Promise<boolean> {
   const cached = await loadBootstrapCache(companyId, depotId);
   if (!cached) return false;
+  if (isProductionBuild() && cached.dataSource === "mock") return false;
   applyBootstrapToYard(cached);
   return true;
 }

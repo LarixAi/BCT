@@ -5,7 +5,8 @@ import DriverOperationalHeader from "@/components/driver/operational/DriverOpera
 import CommandBackendNotice from "@/components/driver/operational/CommandBackendNotice";
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { op } from "@/lib/driver-operational-theme";
-import { reportDefectViaCommand, refreshCommandBootstrap } from "@/services/command-driver-ops.service";
+import { submitDefectWithOutbox } from "@/services/driver-ops-outbox.service";
+import { refreshCommandBootstrap } from "@/services/command-driver-ops.service";
 
 const SEVERITIES = [
   { value: "minor", label: "Minor" },
@@ -42,15 +43,20 @@ export default function DriverDefectReport({ driver }) {
   const submit = async () => {
     setSubmitting(true);
     setError("");
-    const result = await reportDefectViaCommand({
+    const result = await submitDefectWithOutbox(driver, session, {
       description,
       severity,
       vehicleId: vehicleId || undefined,
       depotId: session?.activeDepotId ?? undefined,
+      category: "driver_reported",
     });
     setSubmitting(false);
     if (!result.ok) {
       setError(result.message);
+      return;
+    }
+    if (result.queued) {
+      setDone(true);
       return;
     }
     setRef(result.defect?.defect_reference ?? "");
@@ -80,7 +86,9 @@ export default function DriverDefectReport({ driver }) {
         {done ? (
           <div className="mt-8 space-y-4">
             <p className="font-medium text-emerald-700">
-              Defect reported{ref ? ` (${ref})` : ""}. Dispatch can see it in Admin.
+              {ref
+                ? `Defect reported (${ref}). Dispatch can see it in Admin.`
+                : "Defect saved on this device — will reach Command when connection returns."}
             </p>
             <Button onClick={() => navigate("/")} className={`w-full ${op.primaryBtn}`}>
               Back to home

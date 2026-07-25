@@ -3,12 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { yardCopy } from "@/copy/yard-messages";
 import { mutationLabel, MUTATION_STATUS_LABELS } from "@/domain/sync/mutation-labels";
-import { formatSyncError, isMissingSyncRouteError } from "@/domain/sync/format-sync-error";
+import { formatSyncError, isBodyConditionDeployError, isMissingSyncRouteError } from "@/domain/sync/format-sync-error";
 import { isMockApi } from "@/platform/api";
 import { getYardApi } from "@/platform/api";
 import { listOutboxMutations } from "@/platform/storage/local-db";
 import {
   clearFailedOutbox,
+  probeBodyConditionSyncRoute,
   probeYardSyncRoute,
   processOutbox,
   releaseStuckSyncingMutations,
@@ -50,6 +51,7 @@ function SyncQueuePage() {
   const [retrying, setRetrying] = useState(false);
   const [apiMode, setApiMode] = useState<string>("mock");
   const [syncRouteLive, setSyncRouteLive] = useState<boolean | null>(null);
+  const [bodyConditionSyncLive, setBodyConditionSyncLive] = useState<boolean | null>(null);
   const pendingCount = useSyncStore(s => s.pendingCount);
   const failedCount = useSyncStore(s => s.failedCount);
 
@@ -75,6 +77,7 @@ function SyncQueuePage() {
       .then(r => setApiMode(r.mode))
       .catch(() => setApiMode("live (unreachable)"));
     void probeYardSyncRoute().then(setSyncRouteLive);
+    void probeBodyConditionSyncRoute().then(setBodyConditionSyncLive);
   }, []);
 
   async function handleRetryPending() {
@@ -108,8 +111,11 @@ function SyncQueuePage() {
   const synced = mutations.filter(m => m.status === "synced");
   const typeBreakdown = useMemo(() => countByType(mutations), [mutations]);
   const staleRouteErrors = failed.some(m => isMissingSyncRouteError(m.error));
+  const bodyConditionDeployErrors = failed.some(m => isBodyConditionDeployError(m.error));
   const showDeployBanner = syncRouteLive === false;
+  const showBodyConditionDeployBanner = syncRouteLive === true && bodyConditionSyncLive === false;
   const showStaleHint = syncRouteLive === true && staleRouteErrors;
+  const showBodyConditionHint = syncRouteLive === true && (bodyConditionDeployErrors || showBodyConditionDeployBanner);
 
   return (
     <MoreSubpageLayout title="Sync queue" eyebrow="Pending uploads and retry">
@@ -118,6 +124,8 @@ function SyncQueuePage() {
         <p className="text-sm text-[#667085]">
           API mode · <span className="font-semibold text-ink">{apiMode}</span>
           {syncRouteLive === true ? <span className="text-[#027a48]"> · Yard sync route live</span> : null}
+          {bodyConditionSyncLive === true ? <span className="text-[#027a48]"> · Body inspection sync live</span> : null}
+          {bodyConditionSyncLive === false ? <span className="text-[#b42318]"> · Body inspection sync pending deploy</span> : null}
         </p>
         <div className="grid grid-cols-3 gap-3">
           <HubMiniStat label="Waiting" value={pending.length} tone="warn" />
@@ -146,6 +154,7 @@ function SyncQueuePage() {
       )}
 
       {showDeployBanner ? <HubCallout tone="error">{yardCopy.sync.routeNotDeployed}</HubCallout> : null}
+      {showBodyConditionHint ? <HubCallout tone="warn">{yardCopy.sync.bodyConditionNotDeployed}</HubCallout> : null}
       {showStaleHint ? <HubCallout tone="warn">{yardCopy.sync.staleFailureHint}</HubCallout> : null}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

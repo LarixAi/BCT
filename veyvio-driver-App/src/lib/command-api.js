@@ -45,6 +45,22 @@ async function readError(response, fallback) {
   }
 }
 
+async function readApiFailure(response, fallback) {
+  try {
+    const body = await response.json();
+    const message = Array.isArray(body.message)
+      ? body.message.join(", ")
+      : body.message ?? body.error ?? fallback;
+    return {
+      status: response.status,
+      code: body.code ?? body.errorCode ?? null,
+      message,
+    };
+  } catch {
+    return { status: response.status, code: null, message: fallback };
+  }
+}
+
 export async function commandLogin(email, password) {
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };
@@ -105,6 +121,150 @@ export async function commandDriverBootstrap(accessToken, depotId) {
   }
 
   return { ok: true, bootstrap: await response.json() };
+}
+
+export async function commandGetDriverVehicleReadiness(accessToken, vehicleId) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const qs = `?vehicleId=${encodeURIComponent(vehicleId)}`;
+  const response = await fetch(`${base}/driver/vehicle-readiness${qs}`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Vehicle readiness could not be loaded.") };
+  }
+
+  return { ok: true, readiness: await response.json() };
+}
+
+export async function commandGetDriverVehicleTimeline(accessToken, vehicleId) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const qs = `?vehicleId=${encodeURIComponent(vehicleId)}`;
+  const response = await fetch(`${base}/driver/vehicle-timeline${qs}`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Vehicle timeline could not be loaded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandGetDriverAdBlueRecords(accessToken, vehicleId) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const qs = `?vehicleId=${encodeURIComponent(vehicleId)}`;
+  const response = await fetch(`${base}/driver/adblue-records${qs}`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "AdBlue history could not be loaded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandPostDriverAdBlueRefill(accessToken, input) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/adblue-refill`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "AdBlue refill could not be recorded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandPostDriverFuelRefill(accessToken, input) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/fuel-refill`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Fuel refill could not be recorded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandStartJourney(accessToken, journeyId) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/journeys/${encodeURIComponent(journeyId)}/start`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Journey could not be started.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandCompleteJourney(accessToken, journeyId, input = {}) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/journeys/${encodeURIComponent(journeyId)}/complete`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Journey could not be completed.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandPostDriverVehicleEquipment(accessToken, input) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/vehicle-equipment`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Equipment check could not be saved.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
 }
 
 export async function commandDriverSession(accessToken) {
@@ -181,7 +341,12 @@ export async function commandSignOnDuty(accessToken, dutyId) {
   });
 
   if (!response.ok) {
-    return { ok: false, message: await readError(response, "Could not sign on for this duty.") };
+    const failure = await readApiFailure(response, "Could not sign on for this duty.");
+    return {
+      ok: false,
+      ...failure,
+      blocked: failure.code === "dispatch_blocked" || response.status === 403,
+    };
   }
 
   return { ok: true, ...(await response.json()) };
@@ -245,7 +410,12 @@ export async function commandSignOffDuty(accessToken, dutyId) {
   });
 
   if (!response.ok) {
-    return { ok: false, message: await readError(response, "Could not sign off this duty.") };
+    const failure = await readApiFailure(response, "Could not sign off this duty.");
+    return {
+      ok: false,
+      ...failure,
+      blocked: failure.code === "dispatch_blocked" || response.status === 403,
+    };
   }
 
   return { ok: true, ...(await response.json()) };
@@ -358,7 +528,8 @@ export async function commandReportDefect(accessToken, input) {
   });
 
   if (!response.ok) {
-    return { ok: false, message: await readError(response, "Defect could not be reported.") };
+    const failure = await readApiFailure(response, "Defect could not be reported.");
+    return { ok: false, ...failure };
   }
 
   return { ok: true, defect: await response.json() };
@@ -376,7 +547,8 @@ export async function commandReportIncident(accessToken, input) {
   });
 
   if (!response.ok) {
-    return { ok: false, message: await readError(response, "Incident could not be reported.") };
+    const failure = await readApiFailure(response, "Incident could not be reported.");
+    return { ok: false, ...failure };
   }
 
   return { ok: true, incident: await response.json() };

@@ -1,16 +1,4 @@
-import { createClient } from '@base44/sdk';
-import { appParams } from '@/lib/app-params';
-import { resolveApiHeaders, resolveServerUrl } from '@/lib/api-config';
-
-const { appId, token, functionsVersion, appBaseUrl } = appParams;
-
-//Create a client with authentication required
-export const base44 = createClient({
-  appId,
-  token,
-  functionsVersion,
-  serverUrl: resolveServerUrl(),
-  requiresAuth: false,
-  appBaseUrl: appBaseUrl || import.meta.env.VITE_BASE44_APP_BASE_URL || '',
-  headers: resolveApiHeaders(),
-});
+/**
+ * Re-export for PHV/Base44 pilots. Default builds alias this to base44Client.stub.js (vite.config.js).
+ */
+export { base44 } from "./base44Client.live.js";

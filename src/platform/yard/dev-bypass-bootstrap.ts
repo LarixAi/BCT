@@ -5,8 +5,9 @@ import { useTenancyStore } from "@/platform/tenancy/context-store";
 
 let seeded = false;
 
-/** Synchronous BCT demo seed for VITE_DEV_BYPASS_AUTH (E2E + local dev). */
+/** Synchronous BCT demo seed for VITE_DEV_BYPASS_AUTH (E2E + local dev only). */
 export function ensureDevBypassBootstrap(): void {
+  if (import.meta.env.PROD) return;
   if (import.meta.env.VITE_DEV_BYPASS_AUTH !== "true") return;
   if (typeof window === "undefined") return;
   if (seeded) return;

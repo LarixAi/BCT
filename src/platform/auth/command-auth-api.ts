@@ -114,6 +114,8 @@ export interface YardHubResponse {
   depotId: string;
   depotName: string;
   depotCode?: string | null;
+  roleKey?: string;
+  permissions?: string[];
   yardMapEnabled?: boolean;
   yardLayout?: import("@veyvio/yard").YardHubLayoutSnapshot | null;
   shiftLabel?: string;

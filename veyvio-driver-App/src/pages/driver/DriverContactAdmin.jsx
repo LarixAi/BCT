@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import DriverOperationalHeader from "@/components/driver/operational/DriverOperationalHeader";
 import CommandBackendNotice from "@/components/driver/operational/CommandBackendNotice";
+import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { op } from "@/lib/driver-operational-theme";
-import { contactAdmin } from "@/services/messages.service";
+import {
+  clearComposeDraft,
+  contactAdmin,
+  loadComposeDraft,
+  saveComposeDraft,
+} from "@/services/messages.service";
 
 const AUDIENCES = [
   {
@@ -26,19 +32,43 @@ const AUDIENCES = [
 
 export default function DriverContactAdmin({ driver }) {
   const navigate = useNavigate();
+  const { session } = useDriverSupabaseAuth();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [audience, setAudience] = useState("dispatch");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [queuedNotice, setQueuedNotice] = useState("");
+
+  useEffect(() => {
+    void loadComposeDraft(driver, session).then((draft) => {
+      if (!draft) return;
+      if (draft.subject) setSubject(draft.subject);
+      if (draft.message) setMessage(draft.message);
+      if (draft.audience) setAudience(draft.audience);
+    });
+  }, [driver, session]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void saveComposeDraft(driver, session, { subject, message, audience });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [subject, message, audience, driver, session]);
 
   const submit = async () => {
     setSubmitting(true);
     setError("");
-    const result = await contactAdmin(driver, { subject, message, audience });
+    setQueuedNotice("");
+    const result = await contactAdmin(driver, { subject, message, audience, session });
     setSubmitting(false);
     if (!result.ok) {
       setError(result.message);
+      return;
+    }
+    if (result.queued) {
+      setQueuedNotice(result.message);
+      await clearComposeDraft(driver, session);
       return;
     }
     navigate(`/threads/${result.threadId}`);
@@ -55,8 +85,13 @@ export default function DriverContactAdmin({ driver }) {
         <CommandBackendNotice
           status="ready"
           title="Messages reach Admin and Yard"
-          description="Choose who should see this. Dispatch and Yard share the same Command inbox — no old Ridova tables."
+          description="Drafts stay on this device in encrypted workspace storage — not browser localStorage."
         />
+        {queuedNotice ? (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            {queuedNotice}
+          </div>
+        ) : null}
         <form
           className={`mt-4 space-y-4 ${op.card} p-4`}
           onSubmit={(e) => {

@@ -477,17 +477,28 @@ export default function DriverWalkaroundFlow({ driver }) {
       }
 
       let signedOn = null;
+      const shouldAttemptSignOn =
+        checkType === CHECK_TYPES.daily.id || checkType === "driver_pre_use";
       // Daily / pre-use check completion signs the driver on for the published duty.
-      if (checkType === CHECK_TYPES.daily.id || checkType === "driver_pre_use") {
+      if (shouldAttemptSignOn) {
         const depotId = authSession?.activeDepotId ?? authSession?.depots?.[0]?.id ?? null;
         signedOn = await signOnDutyAfterVehicleCheck({
+          driver,
+          session: authSession,
           dutyId: session?.job?.id ?? null,
           depotId,
-        }).catch(() => null);
+        }).catch((error) => ({
+          ok: false,
+          message: error instanceof Error ? error.message : "Duty sign-on failed.",
+        }));
         if (signedOn?.ok && !signedOn.skipped) {
           await refreshAuth?.().catch(() => null);
         }
       }
+
+      const signOnBlocked = Boolean(
+        shouldAttemptSignOn && signedOn && !signedOn.ok && !signedOn.skipped && !signedOn.queued,
+      );
 
       flowInProgressRef.current = false;
       submittedRef.current = true;
@@ -495,13 +506,19 @@ export default function DriverWalkaroundFlow({ driver }) {
         ...result,
         autoSignedOn: Boolean(signedOn?.ok && signedOn?.autoSignedOn),
         alreadySignedOn: Boolean(signedOn?.alreadySignedOn),
-        signOnMessage: signedOn?.ok
-          ? signedOn.alreadySignedOn
-            ? "Already signed on for duty."
-            : signedOn.skipped
-              ? null
-              : "Signed on for duty — Home and Admin now show you on duty."
-          : signedOn?.message ?? null,
+        signOnQueued: Boolean(signedOn?.queued),
+        signOnBlocked,
+        signOnMessage: signOnBlocked
+          ? signedOn?.message ?? "Check saved, but duty sign-on was blocked."
+          : signedOn?.queued
+            ? signedOn?.message ?? "Check saved — sign-on will reach Command when connection returns."
+            : signedOn?.ok
+            ? signedOn.alreadySignedOn
+              ? "Already signed on for duty."
+              : signedOn.skipped
+                ? null
+                : "Signed on for duty — Home and Admin now show you on duty."
+            : signedOn?.message ?? null,
       });
       setStep("result");
       void flushPendingWalkaroundSubmissions(driver);

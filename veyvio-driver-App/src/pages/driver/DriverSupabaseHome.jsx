@@ -38,6 +38,7 @@ import { getDriverWorkingTimeSummary } from "@/services/working-time.service";
 import { getTachographReminders } from "@/services/tachograph-reminders.service";
 import { countUnread } from "@/services/notifications.service";
 import { getPendingJobOffers } from "@/services/job-offers.service";
+import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
 import {
   flushPendingWalkaroundSubmissions,
   getPendingSyncCount,
@@ -197,8 +198,9 @@ export default function DriverSupabaseHome({ driver }) {
   }, [sessionHomeSummary, sessionBootstrap]);
 
   useEffect(() => {
-    void flushPendingWalkaroundSubmissions(driver)
-      .then(({ synced }) => {
+    void Promise.all([flushPendingWalkaroundSubmissions(driver), flushOpsOutbox(driver, session)])
+      .then((results) => {
+        const synced = results.reduce((sum, row) => sum + (row?.synced ?? 0), 0);
         if (synced > 0) void reloadHomeData({ force: true });
       })
       .catch(() => {});

@@ -13,7 +13,7 @@ import DriverMobileAuthLayout, {
 import DriverSafeAreaRoot from "@/components/driver/mobile/DriverSafeAreaRoot";
 import DriverAuthDeepLinkListener from "@/components/driver/auth/DriverAuthDeepLinkListener";
 import NotificationProvider from "@/components/driver/NotificationProvider";
-import DriverMatchedTripLayer from "@/components/driver/phv-job/DriverMatchedTripLayer";
+import { isPhvModuleEnabled } from "@/lib/phv-module-enabled";
 import ExternalNavReturnLayer from "@/components/driver/navigation/ExternalNavReturnLayer";
 import FloatingBubbleLayer from "@/components/driver/navigation/FloatingBubbleLayer";
 import BiometricLockLayer from "@/features/auth/biometrics/BiometricLockLayer";
@@ -22,6 +22,12 @@ import { op } from "@/lib/driver-operational-theme";
 import DriverSupabaseHome from "./DriverSupabaseHome";
 import DriverJobsHub from "./DriverJobsHub";
 import DriverMorePage from "./DriverMorePage";
+
+const DriverMatchedTripLayer = lazy(() =>
+  isPhvModuleEnabled()
+    ? import("@/components/driver/phv-job/DriverMatchedTripLayer")
+    : import("@/components/driver/phv-job/DriverMatchedTripLayer.stub"),
+);
 
 function DriverBootLoader({ onRetry, onSignOut }) {
   const [showEscape, setShowEscape] = useState(false);
@@ -100,6 +106,9 @@ const DriverVehicleHub = lazy(() => import("./DriverVehicleHub"));
 const DriverVehicleEquipment = lazy(() => import("./DriverVehicleEquipment"));
 const DriverVehicleDocuments = lazy(() => import("./DriverVehicleDocuments"));
 const DriverVehicleHandback = lazy(() => import("./DriverVehicleHandback"));
+const DriverAdBlueRefill = lazy(() => import("./DriverAdBlueRefill"));
+const DriverFuelRefill = lazy(() => import("./DriverFuelRefill"));
+const DriverVehicleTimeline = lazy(() => import("./DriverVehicleTimeline"));
 const DriverCompletedVehicleChecks = lazy(() => import("./DriverCompletedVehicleChecks"));
 const DriverSchedule = lazy(() => import("./DriverSchedule"));
 const DriverTrainingCentre = lazy(() => import("./DriverTrainingCentre"));
@@ -316,7 +325,9 @@ function DriverSupabaseRouter() {
       <NotificationProvider>
         <ExternalNavReturnLayer />
         <FloatingBubbleLayer />
-        <DriverMatchedTripLayer />
+        <Suspense fallback={null}>
+          <DriverMatchedTripLayer />
+        </Suspense>
         <Routes>
         <Route element={<DriverOperationalShell />}>
           <Route path="/" element={<DriverSupabaseHome driver={driver} />} />
@@ -515,6 +526,9 @@ function DriverSupabaseRouter() {
           <Route path="/vehicle/equipment" element={<DriverVehicleEquipment driver={driver} />} />
           <Route path="/vehicle/documents" element={<DriverVehicleDocuments driver={driver} />} />
           <Route path="/vehicle/handback" element={<DriverVehicleHandback driver={driver} />} />
+          <Route path="/vehicle/adblue" element={<DriverAdBlueRefill driver={driver} />} />
+          <Route path="/vehicle/fuel" element={<DriverFuelRefill />} />
+          <Route path="/vehicle/timeline" element={<DriverVehicleTimeline driver={driver} />} />
           <Route
             path="/vehicle/checks"
             element={<DriverCompletedVehicleChecks driver={driver} />}

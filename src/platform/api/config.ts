@@ -2,8 +2,10 @@
  * Live API is the default. Mock is opt-in for isolated tests only (VITE_USE_MOCK_API=true).
  */
 import { getCommandApiUrl, getSupabaseAnonKey, isMockAuth } from "@/platform/auth/auth-config";
+import { assertProductionApiConfig } from "@/platform/api/production-guards";
 
 export function isMockApi(): boolean {
+  assertProductionApiConfig();
   if (import.meta.env.VITE_USE_MOCK_API === "true") return true;
   if (import.meta.env.VITE_USE_MOCK_API === "false") return false;
   if (!isMockAuth() && getCommandApiUrl() && getSupabaseAnonKey()) return false;

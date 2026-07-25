@@ -46,18 +46,5 @@ export async function reportDriverParkingLocation({
     fullyInsideBay,
   });
 
-  if (result?.ok && result.platformEvent && typeof localStorage !== "undefined") {
-    try {
-      const key = "veyvio.ops.platform.events.yard.v1";
-      const existing = JSON.parse(localStorage.getItem(key) ?? "[]");
-      const list = Array.isArray(existing) ? existing : [];
-      if (!list.some((e) => e?.eventId === result.platformEvent.eventId)) {
-        localStorage.setItem(key, JSON.stringify([result.platformEvent, ...list].slice(0, 100)));
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
   return result;
 }

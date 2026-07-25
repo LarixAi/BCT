@@ -7,6 +7,17 @@ export function handleHealthRequest(): Response {
 }
 
 export function handleBootstrapRequest(request: Request): Response {
+  if (import.meta.env.PROD) {
+    return Response.json(
+      {
+        message:
+          "Local yard bootstrap stub is disabled in production. Configure Command API (VITE_COMMAND_API_BASE_URL).",
+        code: "bootstrap_unavailable",
+      },
+      { status: 503 },
+    );
+  }
+
   const url = new URL(request.url);
   const companyId = url.searchParams.get("companyId") ?? "co_demo";
   const depotId = url.searchParams.get("depotId") ?? "depot_b3";
@@ -16,11 +27,21 @@ export function handleBootstrapRequest(request: Request): Response {
 }
 
 export async function handleMutationsRequest(request: Request): Promise<Response> {
+  if (import.meta.env.PROD) {
+    return Response.json(
+      {
+        message: "Local yard mutation stub is disabled in production. Use Command API.",
+        code: "mutation_unavailable",
+      },
+      { status: 503 },
+    );
+  }
+
   const mutation = await request.json() as OutboxMutation;
   const supported = [
     "inspection.start", "inspection.media", "inspection.complete", "inspection.approve",
     "damage.report", "damage.review", "repair.request", "vehicle.mark_vor",
-    "vehicle.move", "check.complete", "task.update",
+    "vehicle.move", "check.complete", "task.create", "task.update",
   ];
   if (supported.includes(mutation.type)) {
     return Response.json({ ok: true, serverId: `srv_${mutation.localOperationId}` });

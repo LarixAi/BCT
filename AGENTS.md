@@ -1,5 +1,9 @@
 # Agent and contributor notes
 
+## Product authority
+
+**Combined Blueprint** (`docs/blueprint/Veyvio_Combined_Blueprint_1.docx`, v1.0) is the sole product and architecture specification. Before cross-app or product work, read the relevant part and check [docs/plan/veyvio-blueprint-alignment-plan.md](docs/plan/veyvio-blueprint-alignment-plan.md). Execution tasks live in [docs/plan/veyvio-production-gates.md](docs/plan/veyvio-production-gates.md). Cursor rule: `.cursor/rules/veyvio-combined-blueprint.mdc`.
+
 ## Repository layout
 
 | App | Path | Stack |

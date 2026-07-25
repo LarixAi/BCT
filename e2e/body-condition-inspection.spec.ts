@@ -50,8 +50,10 @@ test.describe("Body condition inspection flow", () => {
 
   test("damage review queue is reachable", async ({ page }) => {
     await mainNav(page).getByRole("link", { name: "More", exact: true }).click();
-    await page.getByRole("link", { name: /Inspections Damage review/i }).click();
+    await page.getByRole("link", { name: /Body inspections/i }).click();
+    await expect(page).toHaveURL(/\/inspections/);
     await page.getByRole("link", { name: /Damage review queue/i }).click();
+    await expect(page).toHaveURL(/\/inspections\/damage-review/);
     await expect(page.getByRole("heading", { name: /Damage review/i })).toBeVisible();
   });
 

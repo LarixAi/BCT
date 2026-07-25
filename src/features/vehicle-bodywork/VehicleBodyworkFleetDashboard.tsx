@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Camera, Search, SlidersHorizontal, Truck } from "lucide-react";
 import { EmptyState } from "@/components/yard/primitives";
 import {
@@ -11,6 +11,7 @@ import {
   vehicleMatchesDamageFilter,
   vehicleMatchesSummaryFilter,
 } from "@/domain/vehicle-bodywork/fleet-helpers";
+import { DriverBodyworkReportsSection } from "@/features/vehicle-bodywork/DriverBodyworkReportsSection";
 import { VehicleBodyworkCard } from "@/features/vehicle-bodywork/VehicleBodyworkCard";
 import { DashboardSurface } from "@/features/home/HomeDashboardPrimitives";
 import { HubMetricCard, HubMetricStrip } from "@/features/hub/HubMetricCard";
@@ -47,6 +48,13 @@ export function VehicleBodyworkFleetDashboard() {
   const damageRecords = useYard(s => s.damageRecords);
   const inspections = useYard(s => s.inspections);
   const depotName = useTenancyStore(s => s.depotName);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#driver-reports") return;
+    const el = document.getElementById("driver-reports");
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const [query, setQuery] = useState("");
   const [damageFilter, setDamageFilter] = useState<FleetDamageFilter>("all");
@@ -163,6 +171,10 @@ export function VehicleBodyworkFleetDashboard() {
           onClick={() => selectSummaryFilter("repairs_in_progress")}
         />
       </HubMetricStrip>
+
+      <div id="driver-reports">
+        <DriverBodyworkReportsSection />
+      </div>
 
       <DashboardSurface className="space-y-4">
         <div className="grid grid-cols-[1fr_auto] gap-2">

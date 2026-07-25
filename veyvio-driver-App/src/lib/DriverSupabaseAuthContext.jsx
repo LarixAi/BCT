@@ -14,6 +14,8 @@ import {
   shouldRebindBiometricCredential,
 } from "@/features/auth/biometrics";
 import { enforceRemoteDeviceSecurity } from "@/features/auth/biometrics/biometric-security-sync";
+import { clearDriverSensitiveWorkspace } from "@/lib/driver-sensitive-storage";
+import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 
 const DriverSupabaseAuthContext = createContext(null);
 
@@ -21,6 +23,8 @@ const DriverSupabaseAuthContext = createContext(null);
 const DEVICE_SECURITY_TIMEOUT_MS = 5000;
 /** Full session refresh ceiling — show UI or an escape hatch after this. */
 const SESSION_REFRESH_TIMEOUT_MS = 20000;
+/** Sentinel so a slow refresh never wipes an already-good session. */
+const SESSION_REFRESH_TIMED_OUT = Symbol("session_refresh_timed_out");
 /** Hard escape if auth events keep superseding refresh and leave loading true. */
 const BOOT_ESCAPE_MS = 12000;
 
@@ -42,6 +46,8 @@ export function DriverSupabaseAuthProvider({ children }) {
   /** Bumped to ignore stale getDriverSessionContext results (e.g. SIGNED_IN vs login()). */
   const refreshGeneration = useRef(0);
   const hasBootedRef = useRef(false);
+  /** Password/biometric login already loads context — skip SIGNED_IN refresh race. */
+  const loginInFlightRef = useRef(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -56,9 +62,17 @@ export function DriverSupabaseAuthProvider({ children }) {
       const ctx = await withTimeout(
         getDriverSessionContext(),
         SESSION_REFRESH_TIMEOUT_MS,
-        null,
+        SESSION_REFRESH_TIMED_OUT,
       );
-      if (generation !== refreshGeneration.current) return ctx;
+      if (generation !== refreshGeneration.current) {
+        return ctx === SESSION_REFRESH_TIMED_OUT ? null : ctx;
+      }
+      // Timeout ≠ signed out. Keep prior session so a slow Command call cannot
+      // bounce the driver back to the password screen mid-sign-in.
+      if (ctx === SESSION_REFRESH_TIMED_OUT) {
+        console.log("[BIOMETRIC_DEBUG] getDriverSessionContext timed out — keeping prior session");
+        return null;
+      }
 
       const driverId = ctx?.driver?.id;
       if (driverId) {
@@ -137,6 +151,11 @@ export function DriverSupabaseAuthProvider({ children }) {
             }
           }
           if (["SIGNED_IN", "TOKEN_REFRESHED", "USER_UPDATED", "PASSWORD_RECOVERY"].includes(event)) {
+            // login()/loginWithBiometrics already call getDriverSessionContext — a parallel
+            // refresh can time out and clear session while Signing in… is still showing.
+            if (loginInFlightRef.current && event === "SIGNED_IN") {
+              return;
+            }
             const ctx = await refresh();
             const driverId = ctx?.driver?.id;
             if (driverId && shouldRebindBiometricCredential(event, hasBootedRef.current)) {
@@ -193,52 +212,69 @@ export function DriverSupabaseAuthProvider({ children }) {
     pendingCompanySelection,
     refresh,
     login: async (email, password) => {
-      const result = await signInDriver(email, password);
-      if (result.requiresCompanySelection) {
-        savePendingCompanySelection({
-          memberships: result.memberships ?? [],
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-        });
-        setPendingCompanySelection(true);
+      loginInFlightRef.current = true;
+      try {
+        const result = await signInDriver(email, password);
+        if (result.requiresCompanySelection) {
+          savePendingCompanySelection({
+            memberships: result.memberships ?? [],
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+          });
+          setPendingCompanySelection(true);
+          return result;
+        }
+        setPendingCompanySelection(false);
+        // Prefer the context already loaded during sign-in so we don't wait on a
+        // second session round-trip before leaving the auth shell.
+        if (result.ok && result.context) {
+          applyAuthenticatedContext(result.context);
+          const driverId = result.context?.driver?.id;
+          if (driverId) {
+            window.setTimeout(() => {
+              void rebindBiometricCredentialIfEnabled(driverId).catch(() => undefined);
+            }, 1500);
+          }
+        } else if (result.ok) {
+          const ctx = await refresh();
+          markBiometricUnlocked();
+          const driverId = ctx?.driver?.id;
+          if (driverId) {
+            window.setTimeout(() => {
+              void rebindBiometricCredentialIfEnabled(driverId).catch(() => undefined);
+            }, 1500);
+          }
+        }
         return result;
+      } finally {
+        loginInFlightRef.current = false;
       }
-      setPendingCompanySelection(false);
-      // Prefer the context already loaded during sign-in so we don't wait on a
-      // second session round-trip before leaving the auth shell.
-      if (result.ok && result.context) {
-        applyAuthenticatedContext(result.context);
-        const driverId = result.context?.driver?.id;
-        if (driverId) {
-          window.setTimeout(() => {
-            void rebindBiometricCredentialIfEnabled(driverId).catch(() => undefined);
-          }, 1500);
-        }
-      } else if (result.ok) {
-        const ctx = await refresh();
-        markBiometricUnlocked();
-        const driverId = ctx?.driver?.id;
-        if (driverId) {
-          window.setTimeout(() => {
-            void rebindBiometricCredentialIfEnabled(driverId).catch(() => undefined);
-          }, 1500);
-        }
-      }
-      return result;
     },
     loginWithBiometrics: async (driverId) => {
-      const result = await signInDriverWithBiometrics(driverId);
-      if (result.ok && result.context) {
-        applyAuthenticatedContext(result.context);
-      } else if (result.ok) {
-        await refresh();
-        markBiometricUnlocked();
+      loginInFlightRef.current = true;
+      try {
+        const result = await signInDriverWithBiometrics(driverId);
+        if (result.ok && result.context) {
+          applyAuthenticatedContext(result.context);
+        } else if (result.ok) {
+          await refresh();
+          markBiometricUnlocked();
+        }
+        return result;
+      } finally {
+        loginInFlightRef.current = false;
       }
-      return result;
     },
     logout: async () => {
       refreshGeneration.current += 1;
       resetBiometricLockOnSignOut();
+      const scope = resolveDriverWorkspaceScope(
+        { id: session?.driverId, organisation_id: session?.activeCompanyId ?? session?.companyId },
+        session,
+      );
+      if (scope.companyId && scope.membershipId) {
+        await clearDriverSensitiveWorkspace(scope.companyId, scope.membershipId).catch(() => undefined);
+      }
       setLoading(false);
       setSession(null);
       await signOutDriver().catch(() => undefined);

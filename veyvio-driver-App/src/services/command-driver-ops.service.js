@@ -1,6 +1,7 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
 import {
   commandAcknowledgeDuty,
+  commandCompleteJourney,
   commandListDocuments,
   commandListDriverMessages,
   commandListVehicleChecks,
@@ -10,10 +11,12 @@ import {
   commandReportIncident,
   commandSignOffDuty,
   commandSignOnDuty,
+  commandStartJourney,
   commandSubmitDocument,
   commandSubmitVehicleCheck,
 } from "@/lib/command-api";
 import { loadDriverBootstrap } from "@/services/driver-bootstrap.service";
+import { signOnDutyWithOutbox } from "@/services/driver-ops-outbox.service";
 
 async function accessToken() {
   const supabase = getSupabaseClient();
@@ -39,7 +42,12 @@ export async function signOnDuty(dutyId) {
  * After a successful walkaround, acknowledge (if needed) and sign the driver on
  * for the matching published Command duty so Home / My duty stay in sync.
  */
-export async function signOnDutyAfterVehicleCheck({ dutyId = null, depotId = null } = {}) {
+export async function signOnDutyAfterVehicleCheck({
+  driver = null,
+  session = null,
+  dutyId = null,
+  depotId = null,
+} = {}) {
   const boot = await loadDriverBootstrap({ depotId });
   if (!boot.ok) return { ok: false, message: boot.message ?? "Could not load duty." };
 
@@ -71,7 +79,9 @@ export async function signOnDutyAfterVehicleCheck({ dutyId = null, depotId = nul
     }
   }
 
-  const signed = await signOnDuty(duty.id);
+  const signed = driver
+    ? await signOnDutyWithOutbox(driver, session, duty.id)
+    : await signOnDuty(duty.id);
   if (!signed.ok) {
     return { ok: false, message: signed.message ?? "Walkaround saved, but duty sign-on failed." };
   }
@@ -79,8 +89,12 @@ export async function signOnDutyAfterVehicleCheck({ dutyId = null, depotId = nul
   return {
     ok: true,
     dutyId: duty.id,
+    queued: Boolean(signed.queued),
     signedOnAt: signed.signedOnAt ?? signed.duty?.actualSignOnAt ?? new Date().toISOString(),
-    autoSignedOn: true,
+    autoSignedOn: !signed.queued,
+    message: signed.queued
+      ? "Check saved — sign-on will reach Command when connection returns."
+      : undefined,
   };
 }
 
@@ -88,6 +102,19 @@ export async function signOffDuty(dutyId) {
   const token = await accessToken();
   if (!token) return { ok: false, message: "Not signed in." };
   return commandSignOffDuty(token, dutyId);
+}
+
+/** F-08 — server journey start (run id). Completing a journey never implies handback. */
+export async function startJourney(journeyId) {
+  const token = await accessToken();
+  if (!token) return { ok: false, message: "Not signed in." };
+  return commandStartJourney(token, journeyId);
+}
+
+export async function completeJourney(journeyId, input = {}) {
+  const token = await accessToken();
+  if (!token) return { ok: false, message: "Not signed in." };
+  return commandCompleteJourney(token, journeyId, input);
 }
 
 export async function listDriverMessagesViaCommand() {

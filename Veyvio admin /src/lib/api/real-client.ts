@@ -1339,21 +1339,36 @@ export class ApiClient {
 
   async getComplianceAutomationSettings() {
     try {
-      const raw = await this.fetch<Partial<ComplianceAutomationSettings>>('/compliance/automation-settings')
+      const raw = await this.fetch<Record<string, unknown>>('/compliance/automation-settings')
       return {
-        warnDaysBeforeExpiry: raw.warnDaysBeforeExpiry ?? 30,
-        blockAssignmentOnExpired: Boolean(raw.blockAssignmentOnExpired),
-        autoUnassignOnExpired: Boolean(raw.autoUnassignOnExpired),
-        notifyRoles: Array.isArray(raw.notifyRoles) ? raw.notifyRoles : [],
-      } satisfies ComplianceAutomationSettings
+        warnDaysBeforeExpiry: Number(raw.warnDaysBeforeExpiry ?? 30),
+        blockAssignmentOnExpired: Boolean(
+          raw.blockAssignmentOnExpired ?? raw.blockExpiredCpc ?? raw.blockExpiredLicence ?? true,
+        ),
+        autoUnassignOnExpired: Boolean(raw.autoUnassignOnExpired ?? false),
+        notifyRoles: Array.isArray(raw.notifyRoles) ? (raw.notifyRoles as string[]) : [],
+        blockExpiredCpc: Boolean(raw.blockExpiredCpc ?? true),
+        blockExpiredLicence: Boolean(raw.blockExpiredLicence ?? true),
+        blockExpiredMot: Boolean(raw.blockExpiredMot ?? true),
+        blockCriticalDefects: Boolean(raw.blockCriticalDefects ?? true),
+        blockVorVehicles: Boolean(raw.blockVorVehicles ?? true),
+        defectAutomationRules: Array.isArray(raw.defectAutomationRules) ? raw.defectAutomationRules : [],
+      }
     } catch {
       return {
         warnDaysBeforeExpiry: 30,
         blockAssignmentOnExpired: true,
         autoUnassignOnExpired: false,
-        notifyRoles: [],
-      } satisfies ComplianceAutomationSettings
+        notifyRoles: [] as string[],
+      }
     }
+  }
+
+  updateComplianceAutomationSettings(input: Record<string, unknown>) {
+    return this.fetch('/compliance/automation-settings', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
   }
 
   getMessages(params?: { folder?: 'inbox' | 'sent'; driverId?: string }) {
@@ -2820,5 +2835,12 @@ export class ApiClient {
   /** Typed escape hatch for route-backed Command modules added ahead of dedicated domain clients. */
   getCommandResource<T>(path: string) {
     return this.fetch<T>(path.startsWith('/') ? path : `/${path}`)
+  }
+
+  patchCommandResource<T>(path: string, body: unknown) {
+    return this.fetch<T>(path.startsWith('/') ? path : `/${path}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
   }
 }
