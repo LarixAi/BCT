@@ -49,6 +49,11 @@ blob-report/
 .env.*
 !.env.example
 
+# Local Firebase / keystore backups (never commit)
+**/google-services*.backup.json
+**/*.jks
+**/*.keystore
+
 # Nested app build / deps
 **/node_modules/
 **/dist/

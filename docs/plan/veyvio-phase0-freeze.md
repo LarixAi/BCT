@@ -31,10 +31,14 @@ v1 Combined Blueprint is **superseded** and must not be cited as sole authority.
 
 Phase 0 is complete when:
 
-- [ ] Intentional source for Yard, Command, Driver, Cost Control, Executive, Website, and docs is committed on `phase0/reproducibility`.
-- [ ] Generated artefacts (`**/supabase/.temp/`, `**/supabase/.branches/`) and secrets (`.env`, `.dev.vars`) are not in git.
-- [ ] [AGENTS.md](../../AGENTS.md) cites Blueprint v2.0.
-- [ ] A clean clone of the branch can install each app (`npm ci`) without missing intentional source trees.
+- [x] Intentional source for Yard, Command, Driver, Cost Control, Executive, Website, and docs is committed on `phase0/reproducibility`.
+- [x] Generated artefacts (`**/supabase/.temp/`, `**/supabase/.branches/`) and secrets (`.env`, `.dev.vars`) are not in git.
+- [x] [AGENTS.md](../../AGENTS.md) cites Blueprint v2.0.
+- [ ] A clean clone of the branch can install each app (`npm ci`) without missing intentional source trees (operator to confirm after push/fetch).
+
+**Branch tip (local):** commits from `Lock Phase 0 freeze…` through `Absorb Executive into the monorepo…`. Not pushed until explicitly requested.
+
+**Intentionally left untracked:** `veyvio-driver-App/android/app/google-services.core-support-fleet.backup.json` (backup config; gitignored). Nested Executive `.git` was removed (backed up under `/tmp`) so the app is a normal monorepo tree, not a submodule.
 
 Phase 0 does **not** require green Cost/Executive root CI (that is Phase 1 / P1-03) or fixing P0-01…P0-07.
 
