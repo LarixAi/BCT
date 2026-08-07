@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowUpDown, Filter, MoreHorizontal, Search } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
 import type { YardTask, YardTaskStatus } from "@/types/tasks";
 import { StatusPill, ThickProgressBar } from "./HomeDashboardPrimitives";
 
 type Props = {
   tasks: YardTask[];
 };
+
+type StatusFilter = "all" | "open" | "in_progress" | "completed";
+type SortKey = "title" | "assignee" | "project" | "status" | "progress" | "due";
+
+const FILTER_CYCLE: StatusFilter[] = ["all", "open", "in_progress", "completed"];
 
 function taskStatusLabel(status: YardTaskStatus): string {
   switch (status) {
@@ -63,39 +67,99 @@ function initials(name?: string): string {
     .toUpperCase();
 }
 
-function SortableHeader({ label }: { label: string }) {
+function filterLabel(filter: StatusFilter): string {
+  switch (filter) {
+    case "all": return "All";
+    case "open": return "To-do";
+    case "in_progress": return "In progress";
+    case "completed": return "Done";
+  }
+}
+
+function matchesFilter(task: YardTask, filter: StatusFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "open") return task.status === "open" || task.status === "assigned";
+  return task.status === filter;
+}
+
+function SortableHeader({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
     <th className="px-3 py-3 text-left text-xs font-medium text-[#667085]">
-      <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 ${active ? "text-ink" : ""}`}
+      >
         {label}
         <ArrowUpDown className="size-3 opacity-60" />
-      </span>
+      </button>
     </th>
   );
 }
 
 export function RecentTasksTable({ tasks }: Props) {
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("due");
+  const [sortAsc, setSortAsc] = useState(true);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return tasks;
-    return tasks.filter(
-      t =>
-        t.title.toLowerCase().includes(q) ||
-        (t.assigneeName?.toLowerCase().includes(q) ?? false) ||
-        taskProject(t).toLowerCase().includes(q),
-    );
-  }, [tasks, query]);
+    let rows = tasks.filter(t => matchesFilter(t, statusFilter));
+    if (q) {
+      rows = rows.filter(
+        t =>
+          t.title.toLowerCase().includes(q) ||
+          (t.assigneeName?.toLowerCase().includes(q) ?? false) ||
+          taskProject(t).toLowerCase().includes(q),
+      );
+    }
 
-  const toggleRow = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+    const sorted = [...rows].sort((a, b) => {
+      const dir = sortAsc ? 1 : -1;
+      switch (sortKey) {
+        case "title":
+          return a.title.localeCompare(b.title) * dir;
+        case "assignee":
+          return (a.assigneeName ?? "").localeCompare(b.assigneeName ?? "") * dir;
+        case "project":
+          return taskProject(a).localeCompare(taskProject(b)) * dir;
+        case "status":
+          return a.status.localeCompare(b.status) * dir;
+        case "progress":
+          return (taskProgress(a.status) - taskProgress(b.status)) * dir;
+        case "due":
+        default: {
+          const aDue = a.dueAt ? new Date(a.dueAt).getTime() : Number.POSITIVE_INFINITY;
+          const bDue = b.dueAt ? new Date(b.dueAt).getTime() : Number.POSITIVE_INFINITY;
+          return (aDue - bDue) * dir;
+        }
+      }
     });
+    return sorted;
+  }, [tasks, query, statusFilter, sortKey, sortAsc]);
+
+  const cycleFilter = () => {
+    setStatusFilter(prev => {
+      const idx = FILTER_CYCLE.indexOf(prev);
+      return FILTER_CYCLE[(idx + 1) % FILTER_CYCLE.length] ?? "all";
+    });
+  };
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortAsc(v => !v);
+    else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
   };
 
   return (
@@ -114,10 +178,12 @@ export function RecentTasksTable({ tasks }: Props) {
           </label>
           <button
             type="button"
+            onClick={cycleFilter}
             className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-[#e4e7ec] px-3 text-sm font-medium text-ink"
+            aria-label={`Filter tasks: ${filterLabel(statusFilter)}`}
           >
             <Filter className="size-4 text-[#667085]" />
-            <span className="hidden sm:inline">Filter</span>
+            <span className="hidden sm:inline">{filterLabel(statusFilter)}</span>
           </button>
         </div>
       </div>
@@ -159,68 +225,58 @@ export function RecentTasksTable({ tasks }: Props) {
         <table className="w-full min-w-[920px] text-sm">
           <thead className="border-b border-[#eaecf0] bg-[#fcfcfd]">
             <tr>
-              <th className="w-10 px-3 py-3" aria-label="Select" />
-              <SortableHeader label="Task" />
-              <SortableHeader label="Assigned to" />
-              <SortableHeader label="Project" />
-              <SortableHeader label="Status" />
-              <SortableHeader label="Progress" />
-              <SortableHeader label="Due date" />
+              <SortableHeader label="Task" active={sortKey === "title"} onClick={() => toggleSort("title")} />
+              <SortableHeader label="Assigned to" active={sortKey === "assignee"} onClick={() => toggleSort("assignee")} />
+              <SortableHeader label="Project" active={sortKey === "project"} onClick={() => toggleSort("project")} />
+              <SortableHeader label="Status" active={sortKey === "status"} onClick={() => toggleSort("status")} />
+              <SortableHeader label="Progress" active={sortKey === "progress"} onClick={() => toggleSort("progress")} />
+              <SortableHeader label="Due date" active={sortKey === "due"} onClick={() => toggleSort("due")} />
               <th className="w-10 px-3 py-3" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-5 py-10 text-center text-sm text-[#667085]">
+                <td colSpan={7} className="px-5 py-10 text-center text-sm text-[#667085]">
                   No tasks match this search.
                 </td>
               </tr>
             ) : (
-              filtered.map(task => {
-                const checked = selected.has(task.id);
-                return (
-                  <tr
-                    key={task.id}
-                    className={`border-b border-[#f2f4f7] last:border-0 ${checked ? "bg-[#f9fafb]" : "hover:bg-[#fcfcfd]"}`}
-                  >
-                    <td className="px-3 py-4">
-                      <Checkbox checked={checked} onCheckedChange={() => toggleRow(task.id)} />
-                    </td>
-                    <td className="px-3 py-4 font-medium text-ink">
-                      <Link to="/tasks/$taskId" params={{ taskId: task.id }} className="hover:underline">
-                        {task.title}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="grid size-7 place-items-center rounded-full bg-[#eef4ff] text-[10px] font-semibold text-[#3538cd]">
-                          {initials(task.assigneeName)}
-                        </span>
-                        <span className="text-[#475467]">{task.assigneeName ?? "Unassigned"}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-4 text-[#475467]">{taskProject(task)}</td>
-                    <td className="px-3 py-4">
-                      <StatusPill label={taskStatusLabel(task.status)} tone={taskStatusTone(task.status)} />
-                    </td>
-                    <td className="min-w-[150px] px-3 py-4">
-                      <ThickProgressBar value={taskProgress(task.status)} />
-                    </td>
-                    <td className="px-3 py-4 text-[#475467]">{formatDueDate(task.dueAt)}</td>
-                    <td className="px-3 py-4">
-                      <Link
-                        to="/tasks/$taskId"
-                        params={{ taskId: task.id }}
-                        className="grid size-8 place-items-center rounded-lg text-[#667085] hover:bg-[#f2f4f7]"
-                        aria-label={`Open ${task.title}`}
-                      >
-                        <MoreHorizontal className="size-4" />
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })
+              filtered.map(task => (
+                <tr key={task.id} className="border-b border-[#f2f4f7] last:border-0 hover:bg-[#fcfcfd]">
+                  <td className="px-3 py-4 font-medium text-ink">
+                    <Link to="/tasks/$taskId" params={{ taskId: task.id }} className="hover:underline">
+                      {task.title}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="grid size-7 place-items-center rounded-full bg-[#eef4ff] text-[10px] font-semibold text-[#3538cd]">
+                        {initials(task.assigneeName)}
+                      </span>
+                      <span className="text-[#475467]">{task.assigneeName ?? "Unassigned"}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-4 text-[#475467]">{taskProject(task)}</td>
+                  <td className="px-3 py-4">
+                    <StatusPill label={taskStatusLabel(task.status)} tone={taskStatusTone(task.status)} />
+                  </td>
+                  <td className="min-w-[150px] px-3 py-4">
+                    <ThickProgressBar value={taskProgress(task.status)} />
+                  </td>
+                  <td className="px-3 py-4 text-[#475467]">{formatDueDate(task.dueAt)}</td>
+                  <td className="px-3 py-4">
+                    <Link
+                      to="/tasks/$taskId"
+                      params={{ taskId: task.id }}
+                      className="grid size-8 place-items-center rounded-lg text-[#667085] hover:bg-[#f2f4f7]"
+                      aria-label={`Open ${task.title}`}
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </Link>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>

@@ -25,7 +25,7 @@ function AboutPage() {
             <BrandWordmark size="header" className="text-left" />
           </div>
           <p className="font-display text-lg font-extrabold text-ink">{BRAND_PRODUCT}</p>
-          <p className="text-sm text-[#667085]">Version 0.1.0</p>
+          <p className="text-sm text-[#667085]">Version 1.0</p>
           <p className="max-w-xs text-sm font-semibold text-[#175cd3]">{BRAND_CAMPAIGN}</p>
           <p className="text-sm italic text-[#667085]">{BRAND_PROMISE}</p>
           <p className="text-xs text-[#667085]">{BRAND_FOCUSED_PROMISE}</p>
@@ -39,8 +39,8 @@ function AboutPage() {
             <span className="text-sm font-semibold text-ink">© 2026 Veyvio Ltd</span>
           </div>
           <div className="flex items-center justify-between gap-3 px-4 py-3">
-            <span className="text-sm font-medium text-[#667085]">Environment</span>
-            <span className="text-sm font-semibold text-ink">Prototype</span>
+            <span className="text-sm font-medium text-[#667085]">Distribution</span>
+            <span className="text-sm font-semibold text-ink">MDM / operator devices</span>
           </div>
         </div>
       </DashboardSurface>

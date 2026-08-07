@@ -5,6 +5,7 @@ const mutations: OutboxMutation[] = [];
 
 vi.mock("@/platform/storage/local-db", () => ({
   listOutboxMutations: vi.fn(async () => [...mutations]),
+  listOutboxMutationsForCompany: vi.fn(async (companyId: string) => mutations.filter(m => m.companyId === companyId)),
   updateOutboxMutation: vi.fn(async (m: OutboxMutation) => {
     const i = mutations.findIndex(x => x.localOperationId === m.localOperationId);
     if (i >= 0) mutations[i] = m;
@@ -60,5 +61,24 @@ describe("releaseStuckSyncingMutations", () => {
     const result = await processOutbox();
     expect(result.processed).toBe(1);
     expect(mutations[0].status).toBe("synced");
+  });
+
+  it("never pushes a mutation queued for a different company than the active tenant", async () => {
+    mutations.push({
+      localOperationId: "op_other_company",
+      type: "equipment.assign",
+      companyId: "some-other-company",
+      depotId: "dep",
+      userId: "u",
+      deviceId: "d",
+      createdAt: new Date().toISOString(),
+      payload: {},
+      status: "pending",
+    });
+
+    const result = await processOutbox();
+    expect(result.processed).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(mutations[0].status).toBe("pending");
   });
 });

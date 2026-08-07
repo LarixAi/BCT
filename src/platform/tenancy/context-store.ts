@@ -32,7 +32,10 @@ export const useTenancyStore = create<TenancyStore>()(
         const previousCompanyId = get().companyId;
         if (previousCompanyId && previousCompanyId !== company.id) {
           clearYardState();
-          void clearOutboxMutations().then(() => useSyncStore.getState().hydrate());
+          // Scope to the outgoing tenant only — never wipe another company's
+          // legitimately queued mutations, and never leave this switch able
+          // to touch data outside the company being left.
+          void clearOutboxMutations(previousCompanyId).then(() => useSyncStore.getState().hydrate());
         }
         set({
           companyId: company.id,
@@ -64,8 +67,9 @@ export const useTenancyStore = create<TenancyStore>()(
         }),
 
       clearContext: () => {
+        const previousCompanyId = get().companyId;
         clearYardState();
-        void clearOutboxMutations().then(() => useSyncStore.getState().hydrate());
+        void clearOutboxMutations(previousCompanyId ?? undefined).then(() => useSyncStore.getState().hydrate());
         set({ ...EMPTY });
       },
 

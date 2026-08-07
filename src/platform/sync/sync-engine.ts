@@ -2,7 +2,7 @@ import { getYardApi, isMockApi, usesCommandYardApi } from "@/platform/api";
 import { commandApiUrl, getSupabaseAnonKey } from "@/platform/auth/auth-config";
 import { getSessionSnapshot } from "@/platform/auth/session-store";
 import type { YardRole } from "@/types/permissions";
-import { saveBootstrapCache, listOutboxMutations, updateOutboxMutation } from "@/platform/storage/local-db";
+import { saveBootstrapCache, listOutboxMutations, listOutboxMutationsForCompany, updateOutboxMutation } from "@/platform/storage/local-db";
 import { isOnline } from "@/platform/device/connectivity";
 import { applyBootstrapToYard, hydrateYardFromApi } from "@/platform/yard/hydrate-yard-store";
 import { getTenancySnapshot } from "@/platform/tenancy/context-store";
@@ -68,7 +68,11 @@ async function processOutboxInner(): Promise<{ processed: number; failed: number
 
   await releaseStuckSyncingMutations();
 
-  const mutations = await listOutboxMutations();
+  // Scope strictly to the active tenant: a mutation still queued for a
+  // previous company (e.g. mid-clear during a tenant switch) must never be
+  // pushed under the currently active session's auth/company context.
+  const activeCompanyId = getTenancySnapshot().companyId;
+  const mutations = activeCompanyId ? await listOutboxMutationsForCompany(activeCompanyId) : [];
   const pending = sortOutboxForUpload(mutations.filter(m => m.status === "pending"));
 
   if (pending.length === 0) {

@@ -75,6 +75,10 @@ export default defineConfig(({ command, mode }) => {
     server: { host: "::", port: 8080 },
     ...(isMobileBuild
       ? {
+          // Relative asset URLs — same as Driver Capacitor shell (./assets/...).
+          // Absolute /assets paths can break or feel like a website when the
+          // WebView origin drifts off https://localhost.
+          base: "./",
           build: {
             outDir: "dist/client",
             emptyOutDir: true,
