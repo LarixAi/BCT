@@ -1,9 +1,14 @@
 import { HttpError } from './http.ts'
 import { admin, type RequestContext } from './supabase.ts'
 import { recordSecurityEvent } from './tenant-auth.ts'
+import {
+  legacyApplicationsForRoles,
+  normalizeAppType,
+  type VeyvioAppType,
+} from './account-authority.ts'
 
 /** Blueprint Part F — application access scopes (deny-by-default). */
-export type ApplicationScope = 'COMMAND' | 'DRIVER' | 'YARD' | 'PLATFORM'
+export type ApplicationScope = VeyvioAppType | 'PLATFORM'
 
 const YARD_ROLE_KEYS = new Set(['yard_manager', 'yard_operative', 'contractor'])
 
@@ -11,6 +16,7 @@ const COMMAND_ROLE_KEYS = new Set([
   'company_owner',
   'company_administrator',
   'transport_manager',
+  'operations_manager',
   'dispatcher',
   'compliance_manager',
   'safeguarding_lead',
@@ -31,6 +37,22 @@ export function normalizeApiPath(path: string): string {
   return path.replace(/^\/+|\/+$/g, '')
 }
 
+/** Strip optional REST version prefix used by third-party docs (e.g. v1/interests). */
+export function stripApiVersionPrefix(path: string): string {
+  const p = normalizeApiPath(path)
+  return p.startsWith('v1/') ? p.slice(3) : p
+}
+
+/**
+ * Integration intake paths authenticate via X-Veyvio-API-Key inside the handler.
+ * Dispatch must route these before the JWT application-scope gate.
+ */
+export function isIntegrationIntakePath(path: string, method: string): boolean {
+  if (method.toUpperCase() !== 'POST') return false
+  const p = stripApiVersionPrefix(path)
+  return p === 'interests'
+}
+
 export function isPublicApiPath(path: string): boolean {
   const p = normalizeApiPath(path)
   if (!p || p === 'health') return true
@@ -42,10 +64,21 @@ export function isPublicApiPath(path: string): boolean {
  * Returns null when no application-scope gate applies.
  */
 export function requiredScopesForApiPath(path: string): ApplicationScope[] | null {
-  const p = normalizeApiPath(path)
+  const p = stripApiVersionPrefix(path)
 
-  if (isPublicApiPath(p)) return null
+  if (isPublicApiPath(normalizeApiPath(path))) return null
   if (p.startsWith('platform/')) return ['PLATFORM']
+  if (p.startsWith('executive/')) return ['EXECUTIVE']
+  if (p.startsWith('finance/')) return ['FINANCE']
+  if (p.startsWith('hr/')) return ['HR']
+
+  if (p.startsWith('settings/account-hierarchy')) return ['EXECUTIVE']
+
+  if (p === 'settings/invitations') {
+    // Executive creates department accounts; Command creates Driver/Yard.
+    // The account-authority policy performs the second, target-specific check.
+    return ['EXECUTIVE', 'COMMAND']
+  }
 
   if (p.startsWith('driver/')) {
     if (DRIVER_SCOPE_EXEMPT_PREFIXES.some((prefix) => p.startsWith(prefix))) return null
@@ -59,6 +92,10 @@ export function requiredScopesForApiPath(path: string): ApplicationScope[] | nul
 
   if (p === 'notifications' || p.startsWith('notifications/')) {
     return ['COMMAND', 'DRIVER']
+  }
+
+  if (p === 'interests' || p.startsWith('interests/')) {
+    return ['COMMAND']
   }
 
   // Licensed module paths and general Command API surface.
@@ -95,6 +132,24 @@ export async function resolveApplicationScopes(
 
   if (!context.companyId) return scopes
 
+  let explicitAccessFound = false
+  if (context.membershipId) {
+    const { data: accessRows, error: accessError } = await admin
+      .from('membership_application_access')
+      .select('app_type')
+      .eq('company_id', context.companyId)
+      .eq('membership_id', context.membershipId)
+      .eq('status', 'active')
+
+    if (!accessError && accessRows?.length) {
+      explicitAccessFound = true
+      for (const row of accessRows) {
+        const appType = normalizeAppType(String(row.app_type ?? ''))
+        if (appType) scopes.add(appType)
+      }
+    }
+  }
+
   const { data: driverAccount } = await admin
     .from('driver_app_accounts')
     .select('id')
@@ -106,16 +161,61 @@ export async function resolveApplicationScopes(
     scopes.add('DRIVER')
   }
 
-  if (context.membershipId && context.roleKey) {
-    if (roleGrantsCommandScope(context.roleKey)) {
-      scopes.add('COMMAND')
-    }
-    if (roleGrantsYardScope(context.roleKey)) {
-      scopes.add('YARD')
+  if (!explicitAccessFound) {
+    const roleKeys = context.roleKeys?.length ? context.roleKeys : [context.roleKey]
+    for (const scope of legacyApplicationsForRoles(roleKeys)) {
+      scopes.add(scope)
     }
   }
 
   return scopes
+}
+
+/**
+ * High-assurance applications must never use the role-based compatibility
+ * fallback. The active application grant is an independent database fact.
+ */
+export async function assertExplicitApplicationAccess(
+  context: RequestContext,
+  appType: VeyvioAppType,
+): Promise<void> {
+  if (!context.companyId || !context.membershipId || context.isSupportSession) {
+    throw new HttpError(
+      403,
+      `An active ${appType} application grant is required.`,
+      'explicit_application_access_required',
+    )
+  }
+
+  const { data, error } = await admin
+    .from('membership_application_access')
+    .select('id')
+    .eq('company_id', context.companyId)
+    .eq('membership_id', context.membershipId)
+    .eq('app_type', appType)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (!error && data?.id) return
+
+  await recordSecurityEvent({
+    companyId: context.companyId,
+    actorUserId: context.user.id,
+    eventType: 'auth.explicit_application_access_denied',
+    message: `Explicit ${appType} application access denied`,
+    severity: 'attention',
+    metadata: {
+      appType,
+      membershipId: context.membershipId,
+      roleKeys: context.roleKeys,
+    },
+  }).catch(() => undefined)
+
+  throw new HttpError(
+    403,
+    `An active ${appType} application grant is required.`,
+    'explicit_application_access_required',
+  )
 }
 
 export function scopesSatisfyRequirement(
@@ -151,6 +251,7 @@ export async function assertApplicationScope(
       required: requiredLabel,
       granted: [...granted],
       roleKey: context.roleKey,
+      roleKeys: context.roleKeys,
     },
   }).catch(() => undefined)
 

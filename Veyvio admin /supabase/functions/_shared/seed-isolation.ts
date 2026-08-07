@@ -324,6 +324,7 @@ async function seedOne(org: IsolationOrg) {
       .eq('company_id', companyId)
   }
 
+  const today = new Date().toISOString().slice(0, 10)
   let { data: duty } = await admin
     .from('duties')
     .select('id')
@@ -333,7 +334,6 @@ async function seedOne(org: IsolationOrg) {
     .maybeSingle()
 
   if (!duty) {
-    const today = new Date().toISOString().slice(0, 10)
     const { data: createdDuty, error } = await admin
       .from('duties')
       .insert({
@@ -353,10 +353,15 @@ async function seedOne(org: IsolationOrg) {
       .single()
     if (!error && createdDuty) duty = createdDuty
   } else {
+    // Keep service_date current — projectPublishedDutiesForDriver filters gte today.
     await admin
       .from('duties')
       .update({
         vehicle_id: vehicle.id,
+        depot_id: depot.id,
+        service_date: today,
+        planned_sign_on_at: `${today}T07:00:00.000Z`,
+        planned_sign_off_at: `${today}T16:00:00.000Z`,
         updated_by: userId,
         updated_at: new Date().toISOString(),
       })
@@ -373,6 +378,9 @@ async function seedOne(org: IsolationOrg) {
         published_at: publishedAt,
         driver_lifecycle_status: 'published',
         acknowledgement_required: true,
+        service_date: today,
+        planned_sign_on_at: `${today}T07:00:00.000Z`,
+        planned_sign_off_at: `${today}T16:00:00.000Z`,
         version: 1,
         updated_by: userId,
         updated_at: publishedAt,

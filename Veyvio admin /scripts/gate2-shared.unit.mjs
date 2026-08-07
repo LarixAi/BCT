@@ -85,4 +85,16 @@ assert.equal(isSupportGrantActive({ expiresAt: new Date(Date.now() + 60_000).toI
 assert.equal(isSupportGrantActive({ expiresAt: new Date(Date.now() - 60_000).toISOString() }), false)
 assert.equal(isSupportGrantActive({ expiresAt: new Date(Date.now() + 60_000).toISOString(), revokedAt: new Date().toISOString() }), false)
 
+// Vehicle document expiry (mirrors projections.vehicleDocumentExpiryFailures)
+function documentStatusFromExpiry(expiryIso) {
+  if (!expiryIso) return 'unknown'
+  const expiry = new Date(expiryIso)
+  if (Number.isNaN(expiry.getTime())) return 'unknown'
+  if (expiry.getTime() < Date.now()) return 'expired'
+  return 'valid'
+}
+assert.equal(documentStatusFromExpiry('2000-01-01'), 'expired')
+assert.equal(documentStatusFromExpiry('2099-01-01'), 'valid')
+assert.equal(documentStatusFromExpiry(null), 'unknown')
+
 console.log('gate2-shared.unit: ok')

@@ -17,6 +17,9 @@ export type ComplianceAutomationSettings = {
   blockExpiredMot: boolean
   blockExpiredInsurance: boolean
   blockExpiredTax: boolean
+  blockExpiredPmi: boolean
+  blockOverdueService: boolean
+  blockOverdueTyreRetorque: boolean
   blockCriticalDefects: boolean
   blockVorVehicles: boolean
   requireTodaysCheckOnSignOn: boolean
@@ -31,6 +34,9 @@ export const DEFAULT_COMPLIANCE_SETTINGS: ComplianceAutomationSettings = {
   blockExpiredMot: true,
   blockExpiredInsurance: true,
   blockExpiredTax: true,
+  blockExpiredPmi: true,
+  blockOverdueService: true,
+  blockOverdueTyreRetorque: true,
   blockCriticalDefects: true,
   blockVorVehicles: true,
   requireTodaysCheckOnSignOn: true,
@@ -136,6 +142,21 @@ export async function evaluateComplianceRules(input: {
         continue
       }
       if (lower.includes('tax') && !settings.blockExpiredTax) {
+        warnings.push(b)
+        continue
+      }
+      if (lower.includes('pmi') && !settings.blockExpiredPmi) {
+        warnings.push(b)
+        continue
+      }
+      if (lower.includes('service') && !settings.blockOverdueService) {
+        warnings.push(b)
+        continue
+      }
+      if (
+        (lower.includes('tyre') || lower.includes('re-torque') || lower.includes('retorque')) &&
+        !settings.blockOverdueTyreRetorque
+      ) {
         warnings.push(b)
         continue
       }

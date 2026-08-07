@@ -1,5 +1,6 @@
 /** Live Command hub projections from shared operational tables. */
 import { admin } from './supabase.ts'
+import { mapIncidentRegisterRow } from './incident-workflow.ts'
 
 type Row = Record<string, unknown>
 
@@ -168,64 +169,43 @@ export async function projectIncidentsHub(companyId: string) {
     admin.from('depots').select('id, name').eq('company_id', companyId),
   ])
 
-  const open = (incidents ?? []).filter((i) => i.status !== 'closed')
-  const critical = open.filter((i) => i.severity === 'critical' || i.severity === 'high')
   const monthPrefix = today().slice(0, 7)
 
-  const register = (incidents ?? []).map((row: Row) => {
-    const vehicle = (row.vehicles as Row | null) ?? {}
-    const driver = (row.drivers as Row | null) ?? {}
-    return {
-      id: row.id,
-      incidentRef: row.incident_reference,
-      title: row.incident_type ?? 'Incident',
-      shortDescription: row.description,
-      severity: row.severity === 'critical' ? 'critical' : row.severity === 'high' ? 'high' : row.severity === 'low' ? 'low' : 'medium',
-      status: row.status === 'closed' ? 'closed' : 'open',
-      category: row.incident_type ?? 'other',
-      reportingSource: row.source_app ?? 'command',
-      reportedAt: row.reported_at,
-      occurredAt: row.occurred_at,
-      location: typeof row.location === 'object' ? JSON.stringify(row.location) : row.location ?? null,
-      depotId: (depots ?? [])[0]?.id ?? '',
-      depotName: (depots ?? [])[0]?.name ?? 'Depot',
-      ownerName: null,
-      ownerId: null,
-      involvedSummary: Array.isArray(row.passenger_ids) && row.passenger_ids.length
-        ? `${row.passenger_ids.length} passenger(s)`
-        : 'No passengers linked',
-      journeyReference: row.trip_id ?? null,
-      vehicleRegistration: vehicle.registration ?? null,
-      vehicleId: row.vehicle_id ?? null,
-      driverName: driver.driver_number ?? null,
-      driverId: row.driver_id ?? null,
-      isSafeguarding: row.incident_type === 'safeguarding',
-      isAcknowledged: true,
-      acknowledgedAt: row.reported_at,
-      nextDeadline: null,
-    }
-  })
+  const register = (incidents ?? []).map((row: Row) =>
+    mapIncidentRegisterRow(row, (depots ?? [])[0] ?? null),
+  )
+
+  const openRows = register.filter((r) => r.status !== 'closed')
+  const critical = openRows.filter((r) => r.severity === 'critical' || r.severity === 'high')
+  const unacknowledged = openRows.filter((r) => !r.isAcknowledged)
 
   return {
     operationalDate: today(),
     summary: {
       openCritical: critical.length,
-      awaitingTriage: open.filter((i) => i.status === 'open').length,
-      overdueActions: 0,
+      awaitingTriage: unacknowledged.length,
+      overdueActions: unacknowledged.filter((r) => r.isOverdue).length,
       externalAssessmentRequired: 0,
-      openInvestigations: open.length,
+      openInvestigations: openRows.length,
       incidentsThisMonth: (incidents ?? []).filter((i) => String(i.occurred_at ?? '').startsWith(monthPrefix)).length,
       previousMonthCount: 0,
       nearMissThisMonth: (incidents ?? []).filter((i) => i.incident_type === 'near_miss').length,
     },
     register,
-    priorityAlerts: critical.slice(0, 5).map((i: Row) => ({
-      id: i.id,
-      title: i.description,
-      severity: 'danger',
-      incidentId: i.id,
-      message: String(i.description),
-      href: `/incidents/${i.id}`,
+    priorityAlerts: critical.slice(0, 5).map((r) => ({
+      id: String(r.id),
+      incidentId: String(r.id),
+      incidentRef: r.incidentRef,
+      title: r.title,
+      severity: r.severity,
+      summary: r.shortDescription,
+      reportedAt: r.reportedAt,
+      location: r.location ?? '',
+      ownerName: r.ownerName,
+      isSafeguarding: r.isSafeguarding,
+      requiresAcknowledgement: !r.isAcknowledged,
+      message: r.shortDescription,
+      href: `/incidents/${r.id}`,
     })),
     depots: (depots ?? []).map((d) => ({ id: d.id, name: d.name })),
     regulatory: register.filter((r) => r.isSafeguarding || r.severity === 'critical'),

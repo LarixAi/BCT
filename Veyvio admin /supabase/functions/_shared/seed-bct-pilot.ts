@@ -225,6 +225,7 @@ export async function seedBctPilotDriver() {
         staff_id: staffId,
         driver_number: 'BCT-PILOT-01',
         status: 'active',
+        operational_status: 'eligible',
         primary_depot_id: depotId,
         employment_type: 'employee',
         licence_country: 'GB',
@@ -239,9 +240,55 @@ export async function seedBctPilotDriver() {
       .single()
     if (error || !createdDriver) throw new Error(error?.message ?? 'BCT pilot driver seed failed')
     driver = createdDriver
+  } else {
+    // Existing pilot row — keep Gate 1 dispatchable (onboarding + Level 1 training).
+    await admin
+      .from('drivers')
+      .update({
+        status: 'active',
+        operational_status: 'eligible',
+        licence_expiry_date: '2030-12-31',
+        updated_by: userId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', driver.id)
+      .eq('company_id', companyId)
   }
 
   const driverId = String(driver.id)
+
+  // Level 1 mandatory catalog (projections.ts) — complete for pilot so sign-on is not blocked.
+  const mandatoryTraining = [
+    { key: 'company_induction', label: 'Company induction' },
+    { key: 'driver_app', label: 'Driver app training' },
+    { key: 'daily_vehicle_checks', label: 'Daily vehicle check training' },
+    { key: 'health_safety', label: 'Health and safety' },
+    { key: 'safeguarding', label: 'Safeguarding' },
+    { key: 'emergency_procedures', label: 'Emergency procedures' },
+    { key: 'data_protection_gdpr', label: 'Data protection (GDPR)' },
+    { key: 'driver_declaration', label: 'Driver declaration' },
+  ] as const
+  const completedAt = new Date().toISOString().slice(0, 10)
+  for (const course of mandatoryTraining) {
+    const { error: trainingError } = await admin.from('driver_training').upsert(
+      {
+        company_id: companyId,
+        driver_id: driverId,
+        training_key: course.key,
+        label: course.label,
+        required_for: 'All drivers — before first shift',
+        status: 'complete',
+        completed_at: completedAt,
+        expires_at: null,
+        trainer: 'BCT Gate 1 seed',
+        updated_by: userId,
+        updated_at: new Date().toISOString(),
+        source_app: 'COMMAND',
+      },
+      { onConflict: 'driver_id,training_key' },
+    )
+    if (trainingError) throw new Error(`pilot training ${course.key}: ${trainingError.message}`)
+  }
 
   await admin.from('driver_app_accounts').upsert(
     {

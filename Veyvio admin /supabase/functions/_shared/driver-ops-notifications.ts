@@ -1,9 +1,10 @@
 /**
  * Driver operational notifications — duty publish, compliance warnings, vehicle status.
- * In-app minimum for Gate 2; push delivery is Gate 3.
+ * In-app + best-effort FCM push (Gate 3). Push never creates business state (F-29).
  */
 import { admin } from './supabase.ts'
 import { notifyDriverAppUser, type NotificationSeverity } from './notifications.ts'
+import { sendFcmToDriver } from './fcm-send.ts'
 
 export const DRIVER_OPS_NOTIFICATION = {
   dutyPublished: 'driver.duty.published',
@@ -78,7 +79,7 @@ async function notifyDriverDeduped(input: {
   })
   if (duplicate) return { inserted: 0, deduped: true }
 
-  return notifyDriverAppUser({
+  const result = await notifyDriverAppUser({
     companyId: input.companyId,
     driverId: input.driverId,
     type: input.type,
@@ -89,6 +90,24 @@ async function notifyDriverDeduped(input: {
     sourceEntityType: input.sourceEntityType,
     sourceEntityId: input.sourceEntityId,
   })
+
+  if ((result.inserted ?? 0) > 0) {
+    try {
+      await sendFcmToDriver({
+        companyId: input.companyId,
+        driverId: input.driverId,
+        title: input.title,
+        body: input.body,
+        type: input.type,
+        dutyId: input.sourceEntityType === 'duty' ? input.sourceEntityId : null,
+        actionUrl: input.actionUrl ?? null,
+      })
+    } catch (error) {
+      console.error('fcm send after in-app notification failed', error)
+    }
+  }
+
+  return result
 }
 
 export async function notifyDriverDutyPublished(input: {

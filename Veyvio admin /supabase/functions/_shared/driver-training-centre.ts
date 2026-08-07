@@ -643,13 +643,13 @@ export async function listDriverTrainingCentre(request: Request) {
   assignments.sort((a, b) => urgencyRank(a) - urgencyRank(b))
 
   const open = assignments.filter((a) => !['completed', 'waived', 'superseded'].includes(String(a.status)))
-  const completed = assignments.filter((a) => String(a.status) === 'completed')
+  const mandatory = assignments.filter((a) => a.mandatory !== false)
+  const tracked = mandatory.length > 0 ? mandatory : assignments
   const overdue = open.filter((a) => String(a.warningStatus) === 'overdue')
   const dueSoon = open.filter((a) => ['due_soon', 'due_today'].includes(String(a.warningStatus)))
-  const totalTracked = assignments.filter((a) => a.mandatory !== false).length || assignments.length
-  const doneCount = completed.length
+  const doneCount = tracked.filter((a) => String(a.status) === 'completed').length
   const compliancePercent =
-    totalTracked === 0 ? 100 : Math.round((doneCount / Math.max(totalTracked, 1)) * 100)
+    tracked.length === 0 ? 100 : Math.min(100, Math.round((doneCount / tracked.length) * 100))
 
   const nextDue = open
     .map((a) => a.dueAt)

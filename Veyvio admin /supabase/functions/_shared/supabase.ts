@@ -34,6 +34,9 @@ export type RequestContext = {
   /** @deprecated alias for companyId — kept for gradual migration */
   tenantId: string
   membershipId: string
+  /** All active roles on the membership. Never authorise from array order. */
+  roleKeys: string[]
+  /** Primary display role retained for older clients. */
   roleKey: string
   permissions: string[]
   platformRole: string | null
@@ -102,6 +105,7 @@ export async function authenticate(request: Request, requireCompany = true): Pro
       companyId: '',
       tenantId: '',
       membershipId: '',
+      roleKeys: [],
       roleKey: '',
       permissions: [],
       platformRole,
@@ -155,11 +159,15 @@ export async function authenticate(request: Request, requireCompany = true): Pro
   }
 
   const roleIds = (membership?.role_ids as string[] | null) ?? []
-  let roleKey = supportGrant ? 'support' : 'member'
+  let roleKeys = supportGrant ? ['support'] : []
   if (roleIds.length) {
-    const { data: roles } = await admin.from('roles').select('id, name').in('id', roleIds).limit(1)
-    roleKey = roles?.[0]?.name ?? roleKey
+    const { data: roles } = await admin.from('roles').select('id, name').in('id', roleIds)
+    const roleNameById = new Map((roles ?? []).map((role) => [String(role.id), String(role.name)]))
+    roleKeys = roleIds
+      .map((roleId) => roleNameById.get(String(roleId)))
+      .filter((role): role is string => Boolean(role))
   }
+  const roleKey = roleKeys[0] ?? (supportGrant ? 'support' : 'member')
   const permissions = roleIds.length ? await resolvePermissions(roleIds) : []
 
   return {
@@ -167,6 +175,7 @@ export async function authenticate(request: Request, requireCompany = true): Pro
     companyId,
     tenantId: companyId,
     membershipId: membership?.id ?? '',
+    roleKeys,
     roleKey,
     permissions,
     platformRole,

@@ -2,7 +2,15 @@
  * Veyvio Command API — authorised Command projection over shared platform domains.
  * Writes reach shared tables (company-scoped). Driver/Yard APIs will project the same records later.
  */
-import { apiError, corsHeaders, json, readJson, toApiErrorResponse } from '../_shared/http.ts'
+import {
+  apiError,
+  corsHeaders,
+  HttpError,
+  json,
+  readJson,
+  toApiErrorResponse,
+  toCamelCase,
+} from '../_shared/http.ts'
 import {
   listAdBlueRecordsForVehicle,
   recordAdBlueRefill,
@@ -17,6 +25,9 @@ import {
   projectDutyTrack,
   projectOperationalTripByDuty,
   projectOperationalTrips,
+  projectOperationalTripsByBooking,
+  projectSchoolRouteList,
+  projectSchoolRouteSummary,
   projectVehicleProfile,
   recordDriverVehicleHandbackReport,
   summariseDrivers,
@@ -102,9 +113,36 @@ import {
 } from '../_shared/tenant-guards.ts'
 import {
   assertApplicationScope,
+  assertExplicitApplicationAccess,
+  isIntegrationIntakePath,
   isPublicApiPath,
+  resolveApplicationScopes,
   requiredScopesForApiPath,
+  stripApiVersionPrefix,
 } from '../_shared/application-scopes.ts'
+import {
+  createInterestSubmission,
+  getInterestSubmission,
+  listInterestSubmissions,
+  patchInterestSubmission,
+  acceptInterestSubmission,
+  rejectInterestSubmission,
+} from '../_shared/interest-submissions.ts'
+import type { VeyvioAppType } from '../_shared/account-authority.ts'
+import {
+  decideExecutiveAuthorisation,
+  executiveCapabilitiesForRoles,
+} from '../_shared/executive-authorisation.ts'
+import {
+  projectExecutivePage,
+  type ExecutivePageKey,
+} from '../_shared/executive-pages.ts'
+import {
+  createAnnualBudgetProposal,
+  createSensitiveActionRequest,
+  decideSensitiveActionRequest,
+  listSensitiveActionRequests,
+} from '../_shared/executive-sensitive-actions.ts'
 import {
   companyEntitlements,
   platformAudit,
@@ -162,6 +200,7 @@ import {
   startPasswordReset,
   submitCompanyVerification,
   userNeedsMfaChallenge,
+  validateExecutiveUserSession,
   verifyMfaLoginChallenge,
   verifySignupEmail,
 } from '../_shared/tenant-auth.ts'
@@ -186,7 +225,14 @@ import {
   notifyDriverVehicleOperationalAlert,
   syncDriverComplianceWarningNotifications,
 } from '../_shared/driver-ops-notifications.ts'
-import { startDriverJourney, completeDriverJourney } from '../_shared/journey-handlers.ts'
+import { nearestPlaceWithinRadius } from '../_shared/geofencing.mapping.ts'
+import {
+  startDriverJourney,
+  completeDriverJourney,
+  arriveDriverJourneyStop,
+  completeDriverJourneyStop,
+} from '../_shared/journey-handlers.ts'
+import { notifyExpiringDriverDocuments } from '../_shared/document-expiry-notifications.ts'
 import {
   getComplianceSettings,
   upsertComplianceSettings,
@@ -208,6 +254,23 @@ import {
 } from '../_shared/integration-keys.ts'
 import { templatesForAudience } from '../_shared/notification-rules.ts'
 import { recordOverride } from '../_shared/override-audit.ts'
+import {
+  acknowledgeIncident,
+  buildDriverIncidentMetadata,
+  escalateIncident,
+  getIncidentDetail,
+} from '../_shared/incident-workflow.ts'
+import {
+  createVehicleSwapRequest,
+  listDriverSwapRequests,
+  listVehicleSwapRequests,
+  resolveVehicleSwapRequest,
+} from '../_shared/vehicle-swap-workflow.ts'
+import { getDutyCloseout, submitDutyCloseout } from '../_shared/duty-closeout.ts'
+import {
+  getJobExecutionSnapshot,
+  recordDriverJobExecutionEvent,
+} from '../_shared/driver-job-execution.ts'
 
 type Row = Record<string, unknown>
 
@@ -297,49 +360,58 @@ async function bootstrapFirstCompany(userId: string, email: string, companyName:
       trading_name: companyName,
       created_by: userId,
       updated_by: userId,
-      source_app: 'COMMAND',
+      source_app: 'EXECUTIVE',
     })
     .select('id')
     .single()
   if (companyError || !company) throw new Error(companyError?.message ?? 'Company create failed')
 
-  const { data: role, error: roleError } = await admin
-    .from('roles')
+  const { data: ownerRoleId, error: roleError } = await admin.rpc('ensure_default_company_roles', {
+    p_company_id: company.id,
+    p_actor: userId,
+  })
+  if (roleError || !ownerRoleId) throw new Error(roleError?.message ?? 'Owner role create failed')
+
+  const acceptedAt = new Date().toISOString()
+  const { data: membership, error: membershipError } = await admin
+    .from('company_memberships')
     .insert({
+      user_id: userId,
       company_id: company.id,
-      name: 'transport_manager',
-      description: 'Full Command access for the company transport manager',
-      is_system_role: true,
+      role_ids: [ownerRoleId],
+      status: 'active',
+      accepted_at: acceptedAt,
       created_by: userId,
       updated_by: userId,
-      source_app: 'COMMAND',
+      source_app: 'EXECUTIVE',
     })
     .select('id')
     .single()
-  if (roleError || !role) throw new Error(roleError?.message ?? 'Role create failed')
-
-  const { data: permissions } = await admin.from('permissions').select('code')
-  if (permissions?.length) {
-    await admin.from('role_permissions').insert(
-      permissions.map((p: { code: string }) => ({
-        role_id: role.id,
-        permission_code: p.code,
-        effect: 'allow',
-      })),
-    )
+  if (membershipError || !membership) {
+    throw new Error(membershipError?.message ?? 'Owner membership create failed')
   }
 
-  const { error: membershipError } = await admin.from('company_memberships').insert({
-    user_id: userId,
-    company_id: company.id,
-    role_ids: [role.id],
-    status: 'active',
-    accepted_at: new Date().toISOString(),
-    created_by: userId,
-    updated_by: userId,
-    source_app: 'COMMAND',
-  })
-  if (membershipError) throw new Error(membershipError.message)
+  const { error: accessError } = await admin.from('membership_application_access').insert([
+    {
+      company_id: company.id,
+      membership_id: membership.id,
+      app_type: 'EXECUTIVE',
+      access_level: 'admin',
+      status: 'active',
+      granted_by: userId,
+      granted_at: acceptedAt,
+    },
+    {
+      company_id: company.id,
+      membership_id: membership.id,
+      app_type: 'COMMAND',
+      access_level: 'oversight',
+      status: 'active',
+      granted_by: userId,
+      granted_at: acceptedAt,
+    },
+  ])
+  if (accessError) throw new Error(accessError.message)
 
   await admin.from('audit_events').insert({
     company_id: company.id,
@@ -348,7 +420,7 @@ async function bootstrapFirstCompany(userId: string, email: string, companyName:
     action: 'company.bootstrapped',
     entity_type: 'company',
     entity_id: company.id,
-    source_app: 'COMMAND',
+    source_app: 'EXECUTIVE',
     after_snapshot: { email, tradingName: companyName },
   })
 
@@ -357,12 +429,46 @@ async function bootstrapFirstCompany(userId: string, email: string, companyName:
 }
 
 async function login(request: Request) {
-  const input = await readJson<{ email?: string; password?: string }>(request)
+  const input = await readJson<{ email?: string; password?: string; appType?: string }>(request)
   if (!input.email || !input.password) return apiError(400, 'Email and password are required', 'invalid_credentials')
 
   const client = publicClient()
-  const { data, error } = await client.auth.signInWithPassword({ email: input.email, password: input.password })
-  if (error || !data.session || !data.user) return apiError(401, 'Email or password is incorrect', 'invalid_credentials')
+  const ipAddress = request.headers.get('x-forwarded-for')
+  const userAgent = request.headers.get('user-agent')
+  const email = String(input.email).trim().toLowerCase()
+  const { data, error } = await client.auth.signInWithPassword({ email, password: input.password })
+  if (error || !data.session || !data.user) {
+    let companyId: string | null = null
+    const { data: profile } = await admin
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
+    if (profile?.id) {
+      const { data: membership } = await admin
+        .from('company_memberships')
+        .select('company_id')
+        .eq('user_id', profile.id)
+        .eq('status', 'active')
+        .limit(1)
+        .maybeSingle()
+      companyId = membership?.company_id ? String(membership.company_id) : null
+    }
+    await recordSecurityEvent({
+      companyId,
+      actorUserId: profile?.id ? String(profile.id) : null,
+      eventType: 'auth.login_failed',
+      message: 'Login failed — email or password incorrect',
+      severity: 'attention',
+      ipAddress,
+      userAgent,
+      metadata: {
+        emailDomain: email.includes('@') ? email.split('@')[1] : null,
+        appType: input.appType ?? null,
+      },
+    })
+    return apiError(401, 'Email or password is incorrect', 'invalid_credentials')
+  }
 
   await ensurePlatformUser(data.user)
 
@@ -384,6 +490,17 @@ async function login(request: Request) {
     }
   })
 
+  const primaryCompanyId = options.length === 1 ? String(options[0].tenantId) : null
+  await recordSecurityEvent({
+    companyId: primaryCompanyId,
+    actorUserId: data.user.id,
+    eventType: 'auth.login_succeeded',
+    message: 'Password authentication succeeded',
+    ipAddress,
+    userAgent,
+    metadata: { appType: input.appType ?? null },
+  })
+
   if (options.length === 0) {
     const { count: companyCount } = await admin.from('companies').select('*', { count: 'exact', head: true })
     if ((companyCount ?? 0) === 0) {
@@ -397,8 +514,14 @@ async function login(request: Request) {
     }
   }
 
-  const primaryCompanyId = options.length === 1 ? String(options[0].tenantId) : null
-  if (await userNeedsMfaChallenge(data.user.id, primaryCompanyId)) {
+  const forceExecutiveMfa = String(input.appType ?? '').toUpperCase() === 'EXECUTIVE'
+  const { data: profile } = await admin.from('users').select('mfa_enabled').eq('id', data.user.id).maybeSingle()
+  const mfaEnabled = Boolean(profile?.mfa_enabled)
+  const needsMfa =
+    (await userNeedsMfaChallenge(data.user.id, primaryCompanyId)) ||
+    (forceExecutiveMfa && mfaEnabled)
+
+  if (needsMfa) {
     try {
       // The password-verified session is not handed to the client yet — it's
       // held server-side against the challenge and only exchanged for a real
@@ -434,7 +557,13 @@ async function login(request: Request) {
   })
 }
 
-async function activateCompany(userId: string, companyId: string, refreshToken?: string | null, request?: Request) {
+async function activateCompany(
+  userId: string,
+  companyId: string,
+  refreshToken?: string | null,
+  request?: Request,
+  authStrength: 'password' | 'password_mfa' | 'passkey' | 'phishing_resistant_mfa' = 'password',
+) {
   const { data: membership } = await admin
     .from('company_memberships')
     .select('id')
@@ -486,13 +615,17 @@ async function activateCompany(userId: string, companyId: string, refreshToken?:
     return apiError(401, 'Sign in again to select this company', 'session_refresh_failed')
   }
 
-  await createUserSession({
+  const veyvioSession = await createUserSession({
     userId,
     companyId,
     membershipId: membership.id as string,
+    authStrength,
     ipAddress: request?.headers.get('x-forwarded-for'),
     userAgent: request?.headers.get('user-agent'),
   })
+  if (!veyvioSession) {
+    return apiError(500, 'The Veyvio session record could not be created', 'session_record_failed')
+  }
   await recordSecurityEvent({
     companyId,
     actorUserId: userId,
@@ -507,7 +640,34 @@ async function activateCompany(userId: string, companyId: string, refreshToken?:
     accessToken: refreshed.data.session.access_token,
     refreshToken: refreshed.data.session.refresh_token,
     user,
+    veyvioSession,
   })
+}
+
+async function executiveSessionStatus(request: Request) {
+  const context = await authenticate(request)
+  try {
+    await assertApplicationScope(context, 'executive/session-status')
+    await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  } catch (error) {
+    return toApiErrorResponse(error, 'Executive application access denied')
+  }
+  const sessionId = request.headers.get('x-veyvio-session-id') ?? ''
+  if (!isUuid(sessionId)) {
+    return apiError(401, 'A verified Executive session is required', 'executive_session_required')
+  }
+  try {
+    return json(
+      await validateExecutiveUserSession({
+        sessionId,
+        userId: context.user.id,
+        companyId: context.companyId,
+        membershipId: context.membershipId,
+      }),
+    )
+  } catch (error) {
+    return toApiErrorResponse(error, 'Executive session validation failed')
+  }
 }
 
 async function selectTenant(request: Request) {
@@ -558,11 +718,14 @@ async function authUser(
   ])
 
   const roleIds = (membership?.role_ids as string[] | null) ?? []
-  let roleName: string | null = null
+  let roleNames: string[] = []
   let permissions: string[] = []
   if (roleIds.length) {
-    const { data: roles } = await admin.from('roles').select('name').in('id', roleIds).limit(1)
-    roleName = roles?.[0]?.name ?? null
+    const { data: roles } = await admin.from('roles').select('id, name').in('id', roleIds)
+    const roleNameById = new Map((roles ?? []).map((role) => [String(role.id), String(role.name)]))
+    roleNames = roleIds
+      .map((roleId) => roleNameById.get(String(roleId)))
+      .filter((role): role is string => Boolean(role))
     const { data: rolePerms } = await admin
       .from('role_permissions')
       .select('permission_code')
@@ -584,7 +747,8 @@ async function authUser(
     tenantName: company?.trading_name ?? company?.legal_name ?? null,
     tenantStatus: entitlements.tenantStatus || company?.tenant_status || 'ACTIVE',
     mfaEnabled: Boolean(profile?.mfa_enabled),
-    role: roleName,
+    role: roleNames[0] ?? null,
+    roles: roleNames,
     permissions,
     planCode: entitlements.planCode,
     subscriptionStatus: entitlements.subscriptionStatus,
@@ -601,6 +765,689 @@ async function getMe(request: Request) {
       entitlements: context.entitlements,
     }),
   )
+}
+
+async function getApplicationAccess(request: Request) {
+  const context = await authenticate(request)
+  const scopes = await resolveApplicationScopes(context)
+  return json({
+    companyId: context.companyId,
+    membershipId: context.membershipId,
+    roles: context.roleKeys,
+    applications: [...scopes].filter((scope) => scope !== 'PLATFORM').sort(),
+  })
+}
+
+const EXECUTIVE_PAGE_ACTIONS: Record<ExecutivePageKey, string> = {
+  overview: 'executive.dashboard.read',
+  company: 'executive.company.read',
+  organisation: 'executive.accounts.read',
+  applications: 'executive.accounts.read',
+  security: 'executive.audit.read',
+  branches: 'executive.branch.read',
+  governance: 'executive.board.read',
+  decisions: 'executive.board.read',
+  policies: 'executive.policy.read',
+  records: 'executive.company.read',
+  budget: 'executive.budget.read',
+}
+
+const EXECUTIVE_PAGE_KEYS = new Set<ExecutivePageKey>(Object.keys(EXECUTIVE_PAGE_ACTIONS) as ExecutivePageKey[])
+
+async function buildExecutiveGatewayBundle(
+  context: Awaited<ReturnType<typeof authenticate>>,
+  request: Request,
+  action: string,
+) {
+  const sessionId = request.headers.get('x-veyvio-session-id') ?? ''
+  if (!isUuid(sessionId)) {
+    throw new HttpError(401, 'A verified Executive session is required', 'executive_session_required')
+  }
+
+  const decision = decideExecutiveAuthorisation({
+    actorUserId: context.user.id,
+    roleKeys: context.roleKeys,
+    action,
+    companyId: context.companyId,
+    resourceCompanyId: context.companyId,
+  })
+  if (!decision.allowed) {
+    await recordSecurityEvent({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      eventType: 'auth.executive_authorisation_denied',
+      message: `Executive authorisation denied for ${action || 'unregistered action'}`,
+      severity: 'attention',
+      metadata: {
+        action,
+        decisionCode: decision.code,
+        canonicalRoles: decision.canonicalRoles,
+        requestId: request.headers.get('x-veyvio-request-id'),
+      },
+    }).catch(() => undefined)
+    throw new HttpError(403, decision.message, decision.code)
+  }
+
+  const [user, scopes, security] = await Promise.all([
+    authUser(context.user, context.companyId, {
+      platformRole: context.platformRole,
+      entitlements: context.entitlements,
+    }),
+    resolveApplicationScopes(context),
+    validateExecutiveUserSession({
+      sessionId,
+      userId: context.user.id,
+      companyId: context.companyId,
+      membershipId: context.membershipId,
+    }),
+  ])
+
+  return {
+    user,
+    access: {
+      companyId: context.companyId,
+      membershipId: context.membershipId,
+      roles: context.roleKeys,
+      applications: [...scopes].filter((scope) => scope !== 'PLATFORM').sort(),
+    },
+    security,
+    authorisation: {
+      allowed: true as const,
+      companyId: context.companyId,
+      membershipId: context.membershipId,
+      roles: context.roleKeys,
+      canonicalRoles: decision.canonicalRoles,
+      capabilities: executiveCapabilitiesForRoles(context.roleKeys),
+      action,
+    },
+  }
+}
+
+async function getExecutiveAuthorisation(request: Request) {
+  const context = await authenticate(request)
+  try {
+    await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  } catch (error) {
+    return toApiErrorResponse(error, 'Executive application access denied')
+  }
+
+  const action = new URL(request.url).searchParams.get('action') ?? ''
+  const decision = decideExecutiveAuthorisation({
+    actorUserId: context.user.id,
+    roleKeys: context.roleKeys,
+    action,
+    companyId: context.companyId,
+    // Both values are server-derived. Future resource handlers must replace
+    // resourceCompanyId with the company ID loaded from the target record.
+    resourceCompanyId: context.companyId,
+  })
+
+  if (!decision.allowed) {
+    await recordSecurityEvent({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      eventType: 'auth.executive_authorisation_denied',
+      message: `Executive authorisation denied for ${action || 'unregistered action'}`,
+      severity: 'attention',
+      metadata: {
+        action,
+        decisionCode: decision.code,
+        canonicalRoles: decision.canonicalRoles,
+        requestId: request.headers.get('x-veyvio-request-id'),
+      },
+    }).catch(() => undefined)
+    return apiError(403, decision.message, decision.code)
+  }
+
+  return json({
+    allowed: true,
+    companyId: context.companyId,
+    membershipId: context.membershipId,
+    roles: context.roleKeys,
+    canonicalRoles: decision.canonicalRoles,
+    capabilities: executiveCapabilitiesForRoles(context.roleKeys),
+    action,
+  })
+}
+
+async function getExecutiveSessionContext(request: Request) {
+  const context = await authenticate(request)
+  try {
+    await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  } catch (error) {
+    return toApiErrorResponse(error, 'Executive application access denied')
+  }
+
+  const action = new URL(request.url).searchParams.get('action') ?? 'executive.session.read'
+  try {
+    return json(await buildExecutiveGatewayBundle(context, request, action))
+  } catch (error) {
+    return toApiErrorResponse(error, 'Executive session context failed')
+  }
+}
+
+async function getExecutivePage(request: Request, page: string) {
+  const context = await authenticate(request)
+  try {
+    await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  } catch (error) {
+    return toApiErrorResponse(error, 'Executive application access denied')
+  }
+  if (!EXECUTIVE_PAGE_KEYS.has(page as ExecutivePageKey)) {
+    return apiError(404, 'Executive page not found', 'executive_page_not_found')
+  }
+
+  const pageKey = page as ExecutivePageKey
+  const requestedAction = new URL(request.url).searchParams.get('action')
+  const action = requestedAction || EXECUTIVE_PAGE_ACTIONS[pageKey]
+  const includeGateway = isUuid(request.headers.get('x-veyvio-session-id') ?? '')
+
+  try {
+    // Always enforce deny-by-default page RBAC, even without a gateway session header.
+    const pageDecision = decideExecutiveAuthorisation({
+      actorUserId: context.user.id,
+      roleKeys: context.roleKeys,
+      action,
+      companyId: context.companyId,
+      resourceCompanyId: context.companyId,
+    })
+    if (!pageDecision.allowed) {
+      await recordSecurityEvent({
+        companyId: context.companyId,
+        actorUserId: context.user.id,
+        eventType: 'auth.executive_authorisation_denied',
+        message: `Executive page authorisation denied for ${action}`,
+        severity: 'attention',
+        metadata: {
+          action,
+          page: pageKey,
+          decisionCode: pageDecision.code,
+          canonicalRoles: pageDecision.canonicalRoles,
+          requestId: request.headers.get('x-veyvio-request-id'),
+        },
+      }).catch(() => undefined)
+      return apiError(403, pageDecision.message, pageDecision.code)
+    }
+
+    if (!includeGateway) {
+      const payload = await projectExecutivePage(context, pageKey)
+      return json(payload)
+    }
+
+    const [payload, gateway] = await Promise.all([
+      projectExecutivePage(context, pageKey),
+      buildExecutiveGatewayBundle(context, request, action),
+    ])
+    return json({ ...payload, gateway })
+  } catch (error) {
+    return toApiErrorResponse(
+      error,
+      error instanceof Error ? error.message : 'Executive page could not be loaded',
+    )
+  }
+}
+
+async function patchExecutivePolicy(request: Request, policyId: string) {
+  const context = await authenticate(request)
+  try {
+    await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  } catch (error) {
+    return toApiErrorResponse(error, 'Executive application access denied')
+  }
+  if (!isUuid(policyId)) return apiError(404, 'Policy not found', 'executive_policy_not_found')
+
+  const decision = decideExecutiveAuthorisation({
+    actorUserId: context.user.id,
+    roleKeys: context.roleKeys,
+    action: 'executive.policy.propose',
+    companyId: context.companyId,
+    resourceCompanyId: context.companyId,
+  })
+  if (!decision.allowed) return apiError(403, decision.message, decision.code)
+
+  const input = await readJson<Record<string, unknown>>(request)
+  const { data: existing, error: loadError } = await admin
+    .from('executive_policies')
+    .select('id, status, company_id')
+    .eq('id', policyId)
+    .eq('company_id', context.companyId)
+    .maybeSingle()
+  if (loadError) return apiError(500, 'Policy could not be loaded')
+  if (!existing) return apiError(404, 'Policy not found', 'executive_policy_not_found')
+  if (!['draft', 'in_review'].includes(String(existing.status))) {
+    return apiError(
+      409,
+      'Approved or retired policies are read-only. Propose a new version to edit.',
+      'executive_policy_read_only',
+    )
+  }
+
+  const patch: Record<string, unknown> = {
+    updated_by: context.user.id,
+    updated_at: new Date().toISOString(),
+  }
+  if (typeof input.title === 'string' && input.title.trim()) patch.title = input.title.trim()
+  if (typeof input.summary === 'string') patch.summary = input.summary
+  if (typeof input.bodyText === 'string') patch.body_text = input.bodyText
+  if (typeof input.versionLabel === 'string') patch.version_label = input.versionLabel
+
+  const { data, error } = await admin
+    .from('executive_policies')
+    .update(patch)
+    .eq('id', policyId)
+    .eq('company_id', context.companyId)
+    .select('*')
+    .maybeSingle()
+  if (error) return apiError(500, error.message)
+  return json({
+    ...toCamelCase(data as Record<string, unknown>),
+    editable: true,
+    bodyText: String((data as { body_text?: string } | null)?.body_text ?? ''),
+  })
+}
+
+async function patchExecutiveRecord(request: Request, recordId: string) {
+  const context = await authenticate(request)
+  try {
+    await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  } catch (error) {
+    return toApiErrorResponse(error, 'Executive application access denied')
+  }
+  if (String(recordId).startsWith('derived-')) {
+    return apiError(
+      409,
+      'This identifier is maintained in Company setup and cannot be edited here.',
+      'executive_record_derived',
+    )
+  }
+  if (!isUuid(recordId)) return apiError(404, 'Record not found', 'executive_record_not_found')
+
+  const decision = decideExecutiveAuthorisation({
+    actorUserId: context.user.id,
+    roleKeys: context.roleKeys,
+    action: 'executive.accounts.manage',
+    companyId: context.companyId,
+    resourceCompanyId: context.companyId,
+  })
+  if (!decision.allowed) return apiError(403, decision.message, decision.code)
+
+  const input = await readJson<Record<string, unknown>>(request)
+  const { data: existing, error: loadError } = await admin
+    .from('executive_company_records')
+    .select('id')
+    .eq('id', recordId)
+    .eq('company_id', context.companyId)
+    .maybeSingle()
+  if (loadError) return apiError(500, 'Record could not be loaded')
+  if (!existing) return apiError(404, 'Record not found', 'executive_record_not_found')
+
+  const patch: Record<string, unknown> = {
+    updated_by: context.user.id,
+    updated_at: new Date().toISOString(),
+  }
+  if (typeof input.title === 'string' && input.title.trim()) patch.title = input.title.trim()
+  if (typeof input.reference === 'string') patch.reference = input.reference
+  if (typeof input.notes === 'string') patch.notes = input.notes
+  if (typeof input.bodyText === 'string') patch.body_text = input.bodyText
+
+  const { data, error } = await admin
+    .from('executive_company_records')
+    .update(patch)
+    .eq('id', recordId)
+    .eq('company_id', context.companyId)
+    .select('*')
+    .maybeSingle()
+  if (error) return apiError(500, error.message)
+  return json({
+    ...toCamelCase(data as Record<string, unknown>),
+    editable: true,
+    bodyText: String((data as { body_text?: string } | null)?.body_text ?? ''),
+  })
+}
+
+async function executiveSensitiveActions(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+
+  if (request.method === 'GET') {
+    return json(await listSensitiveActionRequests(context, request))
+  }
+  const input = await readJson<Record<string, unknown>>(request)
+  return json(await createSensitiveActionRequest(context, request, input), 201)
+}
+
+async function executiveSensitiveActionDecision(
+  request: Request,
+  requestId: string,
+) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const input = await readJson<Record<string, unknown>>(request)
+  return json(
+    await decideSensitiveActionRequest(context, request, requestId, input),
+  )
+}
+
+async function executiveAnnualBudgetProposal(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const input = await readJson<Record<string, unknown>>(request)
+  return json(await createAnnualBudgetProposal(context, request, input), 201)
+}
+
+async function executiveAnnualBudgetDecision(
+  request: Request,
+  requestId: string,
+) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const input = await readJson<Record<string, unknown>>(request)
+  return json(
+    await decideSensitiveActionRequest(
+      context,
+      request,
+      requestId,
+      input,
+      'annual_budget_approval',
+    ),
+  )
+}
+
+async function parseExecutiveDocumentUpload(request: Request): Promise<{
+  bytes: Uint8Array
+  filename: string
+  claimedMime: string | null
+  entityType: string
+  entityId: string | null
+  classification: string | null
+  purpose: string | null
+  watermarkRequired: boolean
+  retentionCategory: string | null
+}> {
+  const contentType = request.headers.get('content-type') ?? ''
+  if (contentType.includes('multipart/form-data')) {
+    const form = await request.formData()
+    const file = form.get('file')
+    if (!(file instanceof File)) {
+      throw new HttpError(400, 'A file upload is required', 'file_required')
+    }
+    return {
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      filename: String(form.get('filename') ?? file.name ?? 'document.bin'),
+      claimedMime: file.type || String(form.get('mimeType') ?? '') || null,
+      entityType: String(form.get('entityType') ?? 'executive_other'),
+      entityId: form.get('entityId') ? String(form.get('entityId')) : null,
+      classification: form.get('classification')
+        ? String(form.get('classification'))
+        : 'executive_restricted',
+      purpose: form.get('purpose') ? String(form.get('purpose')) : null,
+      watermarkRequired: String(form.get('watermarkRequired') ?? '') === 'true',
+      retentionCategory: form.get('retentionCategory')
+        ? String(form.get('retentionCategory'))
+        : null,
+    }
+  }
+
+  const input = await readJson<Row>(request)
+  const base64 = String(input.contentBase64 ?? '')
+  if (!base64) {
+    throw new HttpError(400, 'A file upload is required', 'file_required')
+  }
+  const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+  return {
+    bytes: binary,
+    filename: String(input.filename ?? 'document.bin'),
+    claimedMime: input.mimeType ? String(input.mimeType) : null,
+    entityType: String(input.entityType ?? 'executive_other'),
+    entityId: input.entityId ? String(input.entityId) : null,
+    classification: input.classification
+      ? String(input.classification)
+      : 'executive_restricted',
+    purpose: input.purpose ? String(input.purpose) : null,
+    watermarkRequired: Boolean(input.watermarkRequired),
+    retentionCategory: input.retentionCategory
+      ? String(input.retentionCategory)
+      : null,
+  }
+}
+
+async function executiveDocumentsList(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    listExecutiveDocuments,
+  } = await import('../_shared/executive-documents.ts')
+  return json(await listExecutiveDocuments(context, request))
+}
+
+async function executiveDocumentsUpload(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    uploadExecutiveDocument,
+  } = await import('../_shared/executive-documents.ts')
+  const payload = await parseExecutiveDocumentUpload(request)
+  return json(await uploadExecutiveDocument(context, request, payload), 201)
+}
+
+async function executiveDocumentDownload(request: Request, documentId: string) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    createExecutiveDocumentDownloadUrl,
+  } = await import('../_shared/executive-documents.ts')
+  const input = await readJson<Record<string, unknown>>(request)
+  return json(
+    await createExecutiveDocumentDownloadUrl(context, request, documentId, {
+      purpose: input.purpose ? String(input.purpose) : undefined,
+      reason: input.reason ? String(input.reason) : undefined,
+    }),
+  )
+}
+
+async function executiveDocumentDelete(request: Request, documentId: string) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    softDeleteExecutiveDocument,
+  } = await import('../_shared/executive-documents.ts')
+  const input = await readJson<Record<string, unknown>>(request)
+  return json(
+    await softDeleteExecutiveDocument(context, request, documentId, {
+      reason: input.reason ? String(input.reason) : undefined,
+    }),
+  )
+}
+
+async function executiveDocumentScanClear(request: Request, documentId: string) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    markExecutiveDocumentScanClean,
+  } = await import('../_shared/executive-documents.ts')
+  return json(
+    await markExecutiveDocumentScanClean({
+      context,
+      request,
+      documentFileId: documentId,
+    }),
+  )
+}
+
+async function executiveLegalHoldCreate(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    placeExecutiveLegalHold,
+  } = await import('../_shared/executive-documents.ts')
+  const input = await readJson<Record<string, unknown>>(request)
+  return json(
+    await placeExecutiveLegalHold(context, request, {
+      title: String(input.title ?? ''),
+      reason: String(input.reason ?? ''),
+      retentionCategory: input.retentionCategory
+        ? String(input.retentionCategory)
+        : null,
+      entityType: input.entityType ? String(input.entityType) : null,
+      entityId: input.entityId ? String(input.entityId) : null,
+    }),
+    201,
+  )
+}
+
+async function executiveRetentionDryRun(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const { retentionDryRun } = await import('../_shared/executive-documents.ts')
+  return json(await retentionDryRun(context, request))
+}
+
+async function executiveExportFulfil(request: Request, exportJobId: string) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    fulfilAuthorisedExecutiveExport,
+  } = await import('../_shared/executive-documents.ts')
+  const input = await readJson<Record<string, unknown>>(request)
+  return json(
+    await fulfilAuthorisedExecutiveExport(context, request, exportJobId, {
+      reason: input.reason ? String(input.reason) : undefined,
+      purpose: input.purpose ? String(input.purpose) : undefined,
+    }),
+  )
+}
+
+async function executiveSecurityEvents(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    listExecutiveSecurityEvents,
+  } = await import('../_shared/executive-security-monitoring.ts')
+  return json(await listExecutiveSecurityEvents(context, request))
+}
+
+async function executiveSecurityAlerts(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    listExecutiveSecurityAlerts,
+  } = await import('../_shared/executive-security-monitoring.ts')
+  return json(await listExecutiveSecurityAlerts(context, request))
+}
+
+async function executiveContinuityObjectives(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    getExecutiveContinuityObjectives,
+  } = await import('../_shared/executive-continuity.ts')
+  return json(await getExecutiveContinuityObjectives(context, request))
+}
+
+async function executiveDocumentRestore(request: Request, documentId: string) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const {
+    softRestoreExecutiveDocument,
+  } = await import('../_shared/executive-continuity.ts')
+  const input = await readJson<{ reason?: string }>(request)
+  return json(await softRestoreExecutiveDocument(context, request, documentId, input))
+}
+
+async function executiveRetentionPurgeJobs(request: Request) {
+  const context = await authenticate(request)
+  await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  const { listRetentionPurgeJobs } = await import('../_shared/executive-continuity.ts')
+  return json(await listRetentionPurgeJobs(context, request))
+}
+
+async function platformContinuityStatus(request: Request) {
+  const {
+    getPlatformContinuityStatus,
+  } = await import('../_shared/executive-continuity.ts')
+  try {
+    return json(await getPlatformContinuityStatus(request))
+  } catch (error) {
+    return toApiErrorResponse(error, 'Platform continuity access denied')
+  }
+}
+
+async function getAccountHierarchy(request: Request) {
+  const context = await authenticate(request)
+  try {
+    await assertExplicitApplicationAccess(context, 'EXECUTIVE')
+  } catch (error) {
+    return toApiErrorResponse(error, 'Executive application access denied')
+  }
+
+  const [{ data: memberships, error: membershipError }, { data: accessRows, error: accessError }] =
+    await Promise.all([
+      admin
+        .from('company_memberships')
+        .select('id, user_id, role_ids, status, accepted_at, created_at')
+        .eq('company_id', context.companyId)
+        .order('created_at', { ascending: true }),
+      admin
+        .from('membership_application_access')
+        .select('membership_id, app_type, access_level, status, granted_at')
+        .eq('company_id', context.companyId)
+        .order('app_type', { ascending: true }),
+    ])
+
+  if (membershipError) return apiError(500, 'Company accounts could not be loaded')
+  if (accessError) return apiError(500, 'Application access could not be loaded')
+
+  const userIds = [...new Set((memberships ?? []).map((membership) => String(membership.user_id)))]
+  const roleIds = [...new Set(
+    (memberships ?? []).flatMap((membership) =>
+      ((membership.role_ids as string[] | null) ?? []).map(String)
+    ),
+  )]
+
+  const [{ data: users }, { data: roles }, invitations] = await Promise.all([
+    userIds.length
+      ? admin.from('users').select('id, email, first_name, last_name, last_login_at').in('id', userIds)
+      : Promise.resolve({ data: [] as Row[] }),
+    roleIds.length
+      ? admin.from('roles').select('id, name, description').in('id', roleIds)
+      : Promise.resolve({ data: [] as Row[] }),
+    listCompanyInvitations(context.companyId),
+  ])
+
+  const userById = new Map((users ?? []).map((user) => [String(user.id), user as Row]))
+  const roleById = new Map((roles ?? []).map((role) => [String(role.id), role as Row]))
+  const accessByMembership = new Map<string, Row[]>()
+  for (const access of accessRows ?? []) {
+    const membershipId = String(access.membership_id)
+    accessByMembership.set(membershipId, [...(accessByMembership.get(membershipId) ?? []), access as Row])
+  }
+
+  return json({
+    companyId: context.companyId,
+    members: (memberships ?? []).map((membership) => {
+      const user = userById.get(String(membership.user_id)) ?? {}
+      return {
+        membershipId: membership.id,
+        userId: membership.user_id,
+        email: user.email ?? null,
+        firstName: user.first_name ?? '',
+        lastName: user.last_name ?? '',
+        status: membership.status,
+        acceptedAt: membership.accepted_at,
+        lastLoginAt: user.last_login_at ?? null,
+        roles: ((membership.role_ids as string[] | null) ?? []).map((roleId) => {
+          const role = roleById.get(String(roleId)) ?? {}
+          return {
+            id: roleId,
+            key: role.name ?? 'unknown',
+            description: role.description ?? null,
+          }
+        }),
+        applications: accessByMembership.get(String(membership.id)) ?? [],
+      }
+    }),
+    invitations,
+  })
 }
 
 async function listAuthMemberships(request: Request) {
@@ -638,6 +1485,99 @@ async function listAuthMemberships(request: Request) {
       tenantName: company?.trading_name ?? company?.legal_name ?? 'Company',
       role: roleName,
     }
+  })
+
+  return json({ memberships: options })
+}
+
+const FINANCE_ROLE_NAMES = new Set([
+  'finance_director',
+  'finance_admin',
+  'finance_manager',
+  'finance_officer',
+  'cost_approver',
+  'payroll_cost_reviewer',
+  'auditor',
+  'board_reader',
+])
+
+function financeRoleForCommandRoles(roleNames: string[]): string | null {
+  const normalized = roleNames.map((name) => name.trim().toLowerCase())
+  for (const role of [
+    'finance_director',
+    'finance_admin',
+    'finance_manager',
+    'finance_officer',
+    'cost_approver',
+    'payroll_cost_reviewer',
+    'auditor',
+    'board_reader',
+  ]) {
+    if (normalized.includes(role) && FINANCE_ROLE_NAMES.has(role)) return role
+  }
+  // Company administrators own the tenant and may administer its finance
+  // workspace. No other operational role receives finance access implicitly.
+  if (
+    normalized.some((role) =>
+      ['company_owner', 'company_admin', 'company_administrator'].includes(role),
+    )
+  ) {
+    return 'finance_admin'
+  }
+  return null
+}
+
+async function listFinanceAuthMemberships(request: Request) {
+  const context = await authenticate(request, false)
+  const { data: memberships, error } = await admin
+    .from('company_memberships')
+    .select('id, company_id, status, role_ids, companies(trading_name, legal_name)')
+    .eq('user_id', context.user.id)
+    .eq('status', 'active')
+
+  if (error) return apiError(500, 'Finance company access could not be loaded')
+
+  const membershipIds = (memberships ?? []).map((membership) => String(membership.id))
+  const { data: financeAccess, error: accessError } = membershipIds.length
+    ? await admin
+      .from('membership_application_access')
+      .select('membership_id')
+      .in('membership_id', membershipIds)
+      .eq('app_type', 'FINANCE')
+      .eq('status', 'active')
+    : { data: [], error: null }
+  if (accessError) return apiError(500, 'Finance application access could not be loaded')
+  const financeMembershipIds = new Set((financeAccess ?? []).map((row) => String(row.membership_id)))
+
+  const allRoleIds = new Set<string>()
+  for (const membership of memberships ?? []) {
+    for (const roleId of (membership.role_ids as string[] | null) ?? []) {
+      allRoleIds.add(String(roleId))
+    }
+  }
+  const roleNameById = new Map<string, string>()
+  if (allRoleIds.size) {
+    const { data: roles } = await admin.from('roles').select('id, name').in('id', [...allRoleIds])
+    for (const role of roles ?? []) {
+      roleNameById.set(String(role.id), String(role.name))
+    }
+  }
+
+  const options = (memberships ?? []).flatMap((membership: Row) => {
+    const roleNames = ((membership.role_ids as string[] | null) ?? [])
+      .map((roleId) => roleNameById.get(String(roleId)))
+      .filter((name): name is string => Boolean(name))
+    const hasExplicitFinanceAccess = financeMembershipIds.has(String(membership.id))
+    const role = financeRoleForCommandRoles(roleNames)
+    if (!hasExplicitFinanceAccess) return []
+    if (!role) return []
+    const company = membership.companies as Row | null
+    return [{
+      tenantId: membership.company_id,
+      companyId: membership.company_id,
+      tenantName: company?.trading_name ?? company?.legal_name ?? 'Company',
+      role,
+    }]
   })
 
   return json({ memberships: options })
@@ -2169,6 +3109,31 @@ async function driverReportIncident(request: Request) {
   }
 
   const incidentReference = `INC-DRV-${Date.now().toString(36).toUpperCase()}`
+  const incidentTypeRaw = String(input.incidentType ?? input.type ?? 'general').toLowerCase()
+  const isSafeguarding =
+    input.isSafeguarding === true ||
+    incidentTypeRaw === 'safeguarding' ||
+    incidentTypeRaw.includes('safeguarding')
+  const incidentType = isSafeguarding ? 'safeguarding' : incidentTypeRaw
+  const effectiveSeverity =
+    isSafeguarding || severity === 'critical' ? 'critical' : severity
+
+  const { data: driverRow } = await admin
+    .from('drivers')
+    .select('id, staff_members(first_name, last_name)')
+    .eq('id', String(appAccount.driver_id))
+    .eq('company_id', context.companyId)
+    .maybeSingle()
+  const staff = (driverRow?.staff_members as Row | null) ?? null
+  const driverName =
+    [staff?.first_name, staff?.last_name].filter(Boolean).join(' ').trim() || 'Driver'
+
+  const metadata = buildDriverIncidentMetadata({
+    actorName: driverName,
+    reference: incidentReference,
+    submittedAt: now,
+    isSafeguarding,
+  })
 
   let incidentVehicleId: string | null = input.vehicleId ? String(input.vehicleId) : null
   if (incidentVehicleId) {
@@ -2190,9 +3155,9 @@ async function driverReportIncident(request: Request) {
     .insert({
       company_id: context.companyId,
       incident_reference: incidentReference,
-      incident_type: String(input.incidentType ?? input.type ?? 'general'),
-      severity,
-      status: 'open',
+      incident_type: incidentType,
+      severity: effectiveSeverity,
+      status: isSafeguarding || effectiveSeverity === 'critical' ? 'immediate_response' : 'open',
       occurred_at: input.occurredAt ? String(input.occurredAt) : now,
       reported_at: now,
       location: typeof input.location === 'object' && input.location ? input.location : {},
@@ -2200,6 +3165,7 @@ async function driverReportIncident(request: Request) {
       vehicle_id: incidentVehicleId,
       driver_id: String(appAccount.driver_id),
       description,
+      metadata,
       created_by: context.user.id,
       updated_by: context.user.id,
       source_app: 'DRIVER',
@@ -2220,7 +3186,29 @@ async function driverReportIncident(request: Request) {
     }
     return apiError(500, error.message, 'database_error')
   }
-  return json(data, 201)
+
+  if (isSafeguarding || effectiveSeverity === 'critical') {
+    await notifyCompanyAdmins({
+      companyId: context.companyId,
+      type: 'incident.driver_reported',
+      title: isSafeguarding ? 'Safeguarding concern reported' : 'Critical incident reported',
+      body: `${incidentReference}: ${description.slice(0, 180)}`,
+      severity: 'critical',
+      actionUrl: `/incidents/${data.id}`,
+      sourceEntityType: 'incident',
+      sourceEntityId: String(data.id),
+    })
+  }
+
+  return json(
+    {
+      ...data,
+      receiptReference: incidentReference,
+      acknowledgedByOps: false,
+      isSafeguarding,
+    },
+    201,
+  )
 }
 
 function mapDriverVehicleCheckRow(row: Row) {
@@ -3231,6 +4219,13 @@ async function driverGetMessageThread(request: Request, conversationId: string) 
             ? 'Yard'
             : 'Transport office',
       sourceApp: String(row.source_app ?? ''),
+      read_at: row.read_at ? String(row.read_at) : null,
+      deliveryStatus:
+        String(row.source_app) === 'DRIVER'
+          ? 'delivered'
+          : row.read_at
+            ? 'read'
+            : 'delivered',
     })),
   })
 }
@@ -3386,6 +4381,165 @@ async function driverMarkMessageRead(request: Request, conversationId: string) {
     .neq('sender_id', context.user.id)
   if (error) return apiError(500, error.message, 'database_error')
   return json({ ok: true, conversationId, readAt: now })
+}
+
+async function driverCreateVehicleSwapRequest(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const input = await readJson<Row>(request)
+  try {
+    const created = await createVehicleSwapRequest({
+      companyId: context.companyId,
+      driverId: String(resolved.appAccount!.driver_id),
+      dutyId: String(input.dutyId ?? ''),
+      currentVehicleId: String(input.currentVehicleId ?? ''),
+      requestedVehicleId: String(input.requestedVehicleId ?? ''),
+      reason: String(input.reason ?? ''),
+      clientGeneratedId: input.clientId ? String(input.clientId) : null,
+    })
+    return json(created, 201)
+  } catch (error) {
+    return apiError(400, error instanceof Error ? error.message : 'Swap request failed')
+  }
+}
+
+async function driverListVehicleSwapRequests(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  try {
+    return json(await listDriverSwapRequests(context.companyId, String(resolved.appAccount!.driver_id)))
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Swap requests failed')
+  }
+}
+
+async function driverSubmitDutyCloseout(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const input = await readJson<Row>(request)
+  try {
+    const result = await submitDutyCloseout({
+      companyId: context.companyId,
+      driverId: String(resolved.appAccount!.driver_id),
+      dutyId: input.dutyId ? String(input.dutyId) : null,
+      jobReference: input.jobId ? String(input.jobId) : input.jobReference ? String(input.jobReference) : null,
+      payload: (input.payload as Row) ?? input,
+      clientGeneratedId: input.clientId ? String(input.clientId) : null,
+    })
+    return json(result, result.alreadySubmitted ? 200 : 201)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Closeout failed')
+  }
+}
+
+async function driverGetDutyCloseout(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const url = new URL(request.url)
+  const dutyId = url.searchParams.get('dutyId')
+  const jobReference = url.searchParams.get('jobId') ?? url.searchParams.get('jobReference')
+  const guardDutyId = dutyId ?? jobReference
+  if (!guardDutyId) return apiError(400, 'dutyId or jobReference is required')
+  try {
+    await assertDriverAssignedDuty({
+      companyId: context.companyId,
+      driverId: String(resolved.appAccount!.driver_id),
+      dutyId: guardDutyId,
+    })
+    const row = await getDutyCloseout(context.companyId, {
+      dutyId: dutyId ?? undefined,
+      jobReference: jobReference ?? undefined,
+    })
+    if (!row) return apiError(404, 'Closeout not found')
+    return json(row)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Closeout lookup failed')
+  }
+}
+
+async function driverRecordJobExecution(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  const input = await readJson<Row>(request)
+  const eventType = String(input.eventType ?? input.action ?? '').trim()
+  if (!eventType) return apiError(400, 'eventType is required')
+  try {
+    const row = await recordDriverJobExecutionEvent({
+      companyId: context.companyId,
+      driverId: String(resolved.appAccount!.driver_id),
+      jobId: String(input.jobId ?? ''),
+      eventType,
+      dutyId: input.dutyId ? String(input.dutyId) : null,
+      journeyId: input.journeyId ? String(input.journeyId) : null,
+      stopId: input.stopId ? String(input.stopId) : null,
+      stopSequence: input.stopSequence != null ? Number(input.stopSequence) : null,
+      payload: (input.payload as Row) ?? {},
+      clientGeneratedId: input.clientId ? String(input.clientId) : null,
+    })
+    return json(row, 201)
+  } catch (error) {
+    return apiError(400, error instanceof Error ? error.message : 'Job execution event failed')
+  }
+}
+
+async function driverGetJobExecution(request: Request, jobId: string) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  try {
+    // The driver-facing job model currently maps 1:1 onto a duty (see
+    // job-execution-bridge.service.js resolveDutyContext) — reject reads for
+    // a job/duty not assigned to the requesting driver rather than trusting
+    // the client not to request someone else's jobId.
+    await assertDriverAssignedDuty({
+      companyId: context.companyId,
+      driverId: String(resolved.appAccount!.driver_id),
+      dutyId: jobId,
+    })
+    return json(await getJobExecutionSnapshot(context.companyId, jobId))
+  } catch (error) {
+    return toApiErrorResponse(error, 'Job execution lookup failed')
+  }
+}
+
+async function adminGetJobExecution(request: Request, jobId: string) {
+  const context = await authenticate(request)
+  try {
+    return json(await getJobExecutionSnapshot(context.companyId, jobId))
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Job execution lookup failed')
+  }
+}
+
+async function listPendingVehicleSwapRequests(request: Request) {
+  const context = await authenticate(request)
+  try {
+    return json(await listVehicleSwapRequests(context.companyId, 'pending'))
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Swap requests failed')
+  }
+}
+
+async function resolveVehicleSwapRequestRoute(request: Request, requestId: string, approve: boolean) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const row = await resolveVehicleSwapRequest({
+      companyId: context.companyId,
+      requestId,
+      actorUserId: context.user.id,
+      approve,
+      notes: input.notes ? String(input.notes) : null,
+    })
+    return json(row)
+  } catch (error) {
+    return apiError(400, error instanceof Error ? error.message : 'Could not resolve swap request')
+  }
 }
 
 async function listCompanyUsers(request: Request) {
@@ -4022,6 +5176,58 @@ async function resolveDriverIdForLocation(
   return null
 }
 
+/**
+ * Geofence proximity suggestion only — never mutates stop status. The
+ * driver still confirms arrival via the existing arrive/complete endpoints
+ * (journey-handlers.ts), so this can't create an audit-trail gap where a
+ * safety-relevant lifecycle transition has no human actor behind it.
+ * See docs/architecture/14-navigation-location-services.md Phase 1.
+ */
+async function findNearbyUnvisitedStop(
+  companyId: string,
+  dutyId: string,
+  point: { lat: number; lng: number },
+): Promise<{ stopId: string; label: string | null; distanceM: number } | null> {
+  // A duty can span multiple runs in sequence (duty_runs.sequence) — collect
+  // all of them, not just the first, or a later leg's stops would never
+  // surface a nearby-stop suggestion.
+  const { data: dutyRuns } = await admin
+    .from('duty_runs')
+    .select('run_id')
+    .eq('duty_id', dutyId)
+  const runIds = (dutyRuns ?? []).map((row) => String(row.run_id)).filter(Boolean)
+  if (runIds.length === 0) return null
+
+  const { data: stops } = await admin
+    .from('journey_stops')
+    .select('id, label, place_id, places(lat, lng, radius_m)')
+    .eq('company_id', companyId)
+    .in('run_id', runIds)
+    .not('place_id', 'is', null)
+    .not('status', 'eq', 'completed')
+  if (!stops || stops.length === 0) return null
+
+  const candidates = (stops as Row[])
+    .map((row) => {
+      const place = row.places as Row | null
+      if (!place || place.lat == null || place.lng == null) return null
+      return {
+        id: String(row.id),
+        label: row.label ? String(row.label) : null,
+        lat: Number(place.lat),
+        lng: Number(place.lng),
+        radiusM: Number(place.radius_m ?? 120),
+      }
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null)
+  if (candidates.length === 0) return null
+
+  const nearest = nearestPlaceWithinRadius(point, candidates)
+  if (!nearest) return null
+
+  return { stopId: nearest.place.id, label: nearest.place.label, distanceM: nearest.distanceM }
+}
+
 async function driverPostLocation(request: Request) {
   const context = await authenticate(request)
   const input = await readJson<{
@@ -4128,12 +5334,20 @@ async function driverPostLocation(request: Request) {
   )
   if (error) return apiError(400, error.message)
 
+  // Best-effort geofence suggestion — never let this fail the location ping
+  // itself, which is the safety-critical part of this write.
+  const nearbyStop = await findNearbyUnvisitedStop(context.companyId, dutyId, {
+    lat: latitude,
+    lng: longitude,
+  }).catch(() => null)
+
   return json({
     ok: true,
     dutyId,
     latitude,
     longitude,
     recordedAt,
+    nearbyStop,
   })
 }
 
@@ -6512,6 +7726,18 @@ async function bookingDetail(request: Request, bookingId: string) {
   }
 }
 
+async function bookingOperationalTrips(request: Request, bookingId: string) {
+  const context = await authenticate(request)
+  try {
+    const booking = await projectBookingDetail(context.companyId, bookingId)
+    if (!booking) return apiError(404, 'Booking not found', 'not_found')
+    const trips = await projectOperationalTripsByBooking(context.companyId, bookingId)
+    return json(trips)
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Booking trip projection failed')
+  }
+}
+
 async function dutiesList(request: Request, dutyId?: string) {
   const context = await authenticate(request)
   const date = new URL(request.url).searchParams.get('date')
@@ -6540,7 +7766,11 @@ async function dutyTrack(request: Request, dutyId: string) {
 async function operationalTrips(request: Request, tripId?: string) {
   const context = await authenticate(request)
   try {
-    const result = await projectOperationalTrips(context.companyId, tripId)
+    const url = new URL(request.url)
+    const serviceDate = url.searchParams.get('serviceDate')
+    const result = await projectOperationalTrips(context.companyId, tripId, {
+      serviceDate: tripId ? null : serviceDate,
+    })
     if (tripId && !result) return apiError(404, 'Trip not found', 'not_found')
     return json(result)
   } catch (error) {
@@ -7710,6 +8940,69 @@ async function recordDriverTraining(request: Request, driverId: string) {
   return json(await projectDriverProfile(context.companyId, driverId), 201)
 }
 
+function mapPlaceRow(row: Row) {
+  return {
+    id: String(row.id),
+    kind: String(row.kind ?? 'customer_site'),
+    name: String(row.name ?? ''),
+    address: row.address ? String(row.address) : null,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    radiusM: Number(row.radius_m ?? 120),
+    createdAt: row.created_at ? String(row.created_at) : null,
+  }
+}
+
+async function listPlaces(request: Request) {
+  const context = await authenticate(request)
+  const { data, error } = await admin
+    .from('places')
+    .select('*')
+    .eq('company_id', context.companyId)
+    .order('name')
+  if (error) return apiError(500, error.message)
+  return json((data ?? []).map((row) => mapPlaceRow(row as Row)))
+}
+
+async function createPlace(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+
+  const name = String(input.name ?? '').trim()
+  if (!name) return apiError(400, 'Place name is required')
+
+  const kind = ['depot', 'customer_site', 'waypoint'].includes(String(input.kind))
+    ? String(input.kind)
+    : 'customer_site'
+
+  const lat = Number(input.lat)
+  const lng = Number(input.lng)
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) return apiError(400, 'Valid lat is required')
+  if (!Number.isFinite(lng) || lng < -180 || lng > 180) return apiError(400, 'Valid lng is required')
+
+  const radiusM = Number(input.radiusM ?? 120)
+  if (!Number.isFinite(radiusM) || radiusM <= 0 || radiusM > 2000) {
+    return apiError(400, 'radiusM must be between 1 and 2000')
+  }
+
+  const { data, error } = await admin
+    .from('places')
+    .insert({
+      company_id: context.companyId,
+      kind,
+      name,
+      address: input.address ? String(input.address) : null,
+      lat,
+      lng,
+      radius_m: radiusM,
+      created_by: context.user.id,
+    })
+    .select('*')
+    .single()
+  if (error || !data) return apiError(400, error?.message ?? 'Place could not be saved')
+  return json(mapPlaceRow(data as Row), 201)
+}
+
 async function createVehicle(request: Request) {
   const context = await authenticate(request)
   const input = await readJson<Row>(request)
@@ -7875,16 +9168,20 @@ async function createInvitation(request: Request) {
       roleName: input.roleName ? String(input.roleName) : 'dispatcher',
       roleIds: Array.isArray(input.roleIds) ? input.roleIds.map(String) : undefined,
       depotIds: Array.isArray(input.depotIds) ? input.depotIds.map(String) : undefined,
-      appType: (input.appType as 'COMMAND' | 'DRIVER' | 'YARD' | undefined) ?? 'COMMAND',
+      appType: (input.appType as VeyvioAppType | undefined) ?? 'COMMAND',
+      sourceApp: input.sourceApp ? String(input.sourceApp) : null,
       expiresInDays: input.expiresInDays ? Number(input.expiresInDays) : 7,
     })
     return json({
       ...result,
       // Backward-compatible alias for Command invite UI
       devInvitationToken: result.invitationToken,
+      acceptUrl: result.acceptUrl ?? null,
+      emailDelivered: Boolean(result.emailDelivered),
+      emailError: result.emailError ?? null,
     }, 201)
   } catch (error) {
-    return apiError(400, error instanceof Error ? error.message : 'Invitation could not be created')
+    return toApiErrorResponse(error, 'Invitation could not be created')
   }
 }
 
@@ -7949,12 +9246,64 @@ async function resetPassword(request: Request) {
   }
 }
 
+async function notifyExecutiveFactorRegistered(
+  companyId: string,
+  actorUserId: string,
+) {
+  const { data: executiveAdmins } = await admin
+    .from('membership_application_access')
+    .select('membership_id')
+    .eq('company_id', companyId)
+    .eq('app_type', 'EXECUTIVE')
+    .eq('access_level', 'admin')
+    .eq('status', 'active')
+  const membershipIds = (executiveAdmins ?? []).map((row) =>
+    String(row.membership_id)
+  )
+  const { data: memberships } = membershipIds.length
+    ? await admin
+      .from('company_memberships')
+      .select('user_id')
+      .eq('company_id', companyId)
+      .eq('status', 'active')
+      .in('id', membershipIds)
+    : { data: [] as Row[] }
+
+  const recipients = new Set<string>([
+    actorUserId,
+    ...(memberships ?? []).map((membership) => String(membership.user_id)),
+  ])
+  const rows = [...recipients].map((recipientUserId) => ({
+    company_id: companyId,
+    recipient_user_id: recipientUserId,
+    notification_type: 'security.executive_factor_registered',
+    title:
+      recipientUserId === actorUserId
+        ? 'Executive MFA was enabled on your account'
+        : 'A new Executive MFA factor was registered',
+    body:
+      recipientUserId === actorUserId
+        ? 'If you did not make this change, contact the Security Owner immediately.'
+        : 'Review the security event and confirm the account holder expected this change.',
+    severity: 'attention',
+    source_entity_type: 'security_factor',
+    source_entity_id: actorUserId,
+    action_url: null,
+    status: 'unread',
+  }))
+  const { error } = await admin.from('notifications').insert(rows)
+  if (error) {
+    console.error('Executive MFA registration notification failed', error.message)
+  }
+}
+
 async function setupMfa(request: Request) {
   const context = await authenticate(request)
   try {
     const input = await readJson<{ code?: string }>(request).catch(() => ({} as { code?: string }))
     if (input.code?.trim()) {
       const result = await confirmMfaForUser(context.user.id, input.code.trim(), context.companyId)
+      await notifyExecutiveFactorRegistered(context.companyId, context.user.id)
       return json(result)
     }
     const result = await beginMfaForUser(context.user.id, context.companyId)
@@ -7975,7 +9324,7 @@ async function verifyMfa(request: Request) {
     const { userId, refreshToken } = await verifyMfaLoginChallenge(input.challengeId, input.code)
     const companyId = input.companyId
     if (companyId) {
-      return activateCompany(userId, companyId, refreshToken, request)
+      return activateCompany(userId, companyId, refreshToken, request, 'password_mfa')
     }
     const { data: memberships } = await admin
       .from('company_memberships')
@@ -7992,7 +9341,13 @@ async function verifyMfa(request: Request) {
       }
     })
     if (options.length === 1) {
-      return activateCompany(userId, options[0].tenantId as string, refreshToken, request)
+      return activateCompany(
+        userId,
+        options[0].tenantId as string,
+        refreshToken,
+        request,
+        'password_mfa',
+      )
     }
     // Multiple companies — MFA has passed, so refresh the verified session now
     // and let the client complete company selection with a real, scoped token.
@@ -8028,6 +9383,60 @@ async function incidentsHub(request: Request) {
     return json(await projectIncidentsHub(context.companyId))
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'Incidents hub failed')
+  }
+}
+
+async function incidentDetail(request: Request, incidentId: string) {
+  const context = await authenticate(request)
+  try {
+    const detail = await getIncidentDetail(context.companyId, incidentId)
+    if (!detail) return apiError(404, 'Incident not found')
+    return json(detail)
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Incident detail failed')
+  }
+}
+
+async function incidentAcknowledge(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  const incidentId = String(input.incidentId ?? '').trim()
+  if (!incidentId) return apiError(400, 'Incident id is required.')
+
+  try {
+    const detail = await acknowledgeIncident({
+      companyId: context.companyId,
+      incidentId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
+      notes: input.notes ? String(input.notes) : null,
+    })
+    return json(detail)
+  } catch (error) {
+    return apiError(400, error instanceof Error ? error.message : 'Acknowledgement failed')
+  }
+}
+
+async function incidentEscalate(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  const incidentId = String(input.incidentId ?? '').trim()
+  const reason = String(input.reason ?? '').trim()
+  if (!incidentId) return apiError(400, 'Incident id is required.')
+  if (!reason) return apiError(400, 'Reason for escalation is required.')
+
+  try {
+    const detail = await escalateIncident({
+      companyId: context.companyId,
+      incidentId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
+      severity: String(input.severity ?? 'high'),
+      reason,
+    })
+    return json(detail)
+  } catch (error) {
+    return apiError(400, error instanceof Error ? error.message : 'Escalation failed')
   }
 }
 
@@ -8106,6 +9515,7 @@ async function exportCreate(request: Request) {
     })
     return json(result, 201)
   } catch (error) {
+    if (error instanceof HttpError) return toApiErrorResponse(error)
     return apiError(400, error instanceof Error ? error.message : 'Export failed')
   }
 }
@@ -8141,6 +9551,7 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'platform/subscriptions' && request.method === 'GET') return platformSubscriptions(request)
   if (path === 'platform/audit' && request.method === 'GET') return platformAudit(request)
   if (path === 'platform/health' && request.method === 'GET') return platformHealth(request)
+  if (path === 'platform/continuity' && request.method === 'GET') return platformContinuityStatus(request)
   if (path === 'platform/feature-flags' && request.method === 'GET') return platformFeatureFlags(request)
   if (
     segments[0] === 'platform' &&
@@ -8170,8 +9581,15 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'system/seed-isolation' && request.method === 'POST') return platformSeedIsolation(request)
   if (path === 'system/seed-bct-pilot' && request.method === 'POST') return platformSeedBctPilot(request)
 
+  // Third-party Register Interest intake — API key auth inside handler (before JWT gate).
+  if (isIntegrationIntakePath(path, request.method)) {
+    return createInterestSubmission(request)
+  }
+
+  const scopedPath = stripApiVersionPrefix(path)
+
   // Entitlement + application-scope gates (skip auth/public/platform/system)
-  const moduleKey = moduleForApiPath(path)
+  const moduleKey = moduleForApiPath(scopedPath)
   const needsAppScope =
     !isPublicApiPath(path) &&
     !path.startsWith('platform/') &&
@@ -8215,6 +9633,7 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (path === 'settings/invitations' && request.method === 'GET') return invitationsList(request)
   if (path === 'settings/invitations' && request.method === 'POST') return createInvitation(request)
+  if (path === 'settings/account-hierarchy' && request.method === 'GET') return getAccountHierarchy(request)
   if (path === 'settings/support-access' && request.method === 'GET') return supportGrantsList(request)
   if (path === 'settings/support-access' && request.method === 'POST') return supportGrantCreate(request)
   if (path === 'settings/data-retention' && request.method === 'GET') return retentionList(request)
@@ -8222,6 +9641,11 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'settings/data-export' && request.method === 'POST') return exportCreate(request)
   if (path === 'defects/hub' && request.method === 'GET') return defectsHub(request)
   if (path === 'incidents/hub' && request.method === 'GET') return incidentsHub(request)
+  if (path === 'incidents/acknowledge' && request.method === 'POST') return incidentAcknowledge(request)
+  if (path === 'incidents/escalate' && request.method === 'POST') return incidentEscalate(request)
+  if (segments[0] === 'incidents' && segments[1] && !segments[2] && request.method === 'GET') {
+    return incidentDetail(request, segments[1])
+  }
   if (path === 'maintenance/hub' && request.method === 'GET') return maintenanceHub(request)
   if (path === 'inspections/hub' && request.method === 'GET') return inspectionsHub(request)
   if (path === 'fleet-resources/hub' && request.method === 'GET') return fleetResourcesHub(request)
@@ -8239,6 +9663,144 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'auth/select-tenant' && request.method === 'POST') return selectTenant(request)
   if (path === 'auth/select-company' && request.method === 'POST') return selectTenant(request)
   if (path === 'auth/memberships' && request.method === 'GET') return listAuthMemberships(request)
+  if (path === 'auth/application-access' && request.method === 'GET') return getApplicationAccess(request)
+  if (path === 'auth/executive-session' && request.method === 'GET') return executiveSessionStatus(request)
+  if (path === 'executive/session/context' && request.method === 'GET') {
+    return getExecutiveSessionContext(request)
+  }
+  if (path === 'executive/authorisation' && request.method === 'GET') {
+    return getExecutiveAuthorisation(request)
+  }
+  if (segments[0] === 'executive' && segments[1] === 'pages' && segments[2] && !segments[3] && request.method === 'GET') {
+    return getExecutivePage(request, segments[2])
+  }
+  if (
+    segments[0] === 'executive' &&
+    segments[1] === 'policies' &&
+    segments[2] &&
+    !segments[3] &&
+    request.method === 'PATCH'
+  ) {
+    return patchExecutivePolicy(request, segments[2])
+  }
+  if (
+    segments[0] === 'executive' &&
+    segments[1] === 'records' &&
+    segments[2] &&
+    !segments[3] &&
+    request.method === 'PATCH'
+  ) {
+    return patchExecutiveRecord(request, segments[2])
+  }
+  if (
+    path === 'executive/sensitive-actions' &&
+    (request.method === 'GET' || request.method === 'POST')
+  ) {
+    return executiveSensitiveActions(request)
+  }
+  if (
+    segments[0] === 'executive' &&
+    segments[1] === 'sensitive-actions' &&
+    segments[2] &&
+    segments[3] === 'decision' &&
+    !segments[4] &&
+    request.method === 'POST'
+  ) {
+    return executiveSensitiveActionDecision(request, segments[2])
+  }
+  if (
+    path === 'executive/annual-budgets/proposals' &&
+    request.method === 'POST'
+  ) {
+    return executiveAnnualBudgetProposal(request)
+  }
+  if (
+    segments[0] === 'executive' &&
+    segments[1] === 'annual-budgets' &&
+    segments[2] === 'proposals' &&
+    segments[3] &&
+    segments[4] === 'decision' &&
+    !segments[5] &&
+    request.method === 'POST'
+  ) {
+    return executiveAnnualBudgetDecision(request, segments[3])
+  }
+  if (path === 'executive/documents' && request.method === 'GET') {
+    return executiveDocumentsList(request)
+  }
+  if (path === 'executive/documents' && request.method === 'POST') {
+    return executiveDocumentsUpload(request)
+  }
+  if (path === 'executive/security-events' && request.method === 'GET') {
+    return executiveSecurityEvents(request)
+  }
+  if (path === 'executive/security-alerts' && request.method === 'GET') {
+    return executiveSecurityAlerts(request)
+  }
+  if (path === 'executive/continuity' && request.method === 'GET') {
+    return executiveContinuityObjectives(request)
+  }
+  if (path === 'executive/retention/purge-jobs' && request.method === 'GET') {
+    return executiveRetentionPurgeJobs(request)
+  }
+  if (
+    segments[0] === 'executive' &&
+    segments[1] === 'documents' &&
+    segments[2] &&
+    segments[3] === 'restore' &&
+    !segments[4] &&
+    request.method === 'POST'
+  ) {
+    return executiveDocumentRestore(request, segments[2])
+  }
+  if (
+    segments[0] === 'executive' &&
+    segments[1] === 'documents' &&
+    segments[2] &&
+    segments[3] === 'download' &&
+    !segments[4] &&
+    request.method === 'POST'
+  ) {
+    return executiveDocumentDownload(request, segments[2])
+  }
+  if (
+    segments[0] === 'executive' &&
+    segments[1] === 'documents' &&
+    segments[2] &&
+    segments[3] === 'scan-clear' &&
+    !segments[4] &&
+    request.method === 'POST'
+  ) {
+    return executiveDocumentScanClear(request, segments[2])
+  }
+  if (
+    segments[0] === 'executive' &&
+    segments[1] === 'documents' &&
+    segments[2] &&
+    !segments[3] &&
+    request.method === 'DELETE'
+  ) {
+    return executiveDocumentDelete(request, segments[2])
+  }
+  if (path === 'executive/legal-holds' && request.method === 'POST') {
+    return executiveLegalHoldCreate(request)
+  }
+  if (path === 'executive/retention/dry-run' && request.method === 'GET') {
+    return executiveRetentionDryRun(request)
+  }
+  if (
+    segments[0] === 'executive' &&
+    segments[1] === 'exports' &&
+    segments[2] &&
+    segments[3] === 'fulfil' &&
+    !segments[4] &&
+    request.method === 'POST'
+  ) {
+    return executiveExportFulfil(request, segments[2])
+  }
+  if (path === 'auth/finance-memberships' && request.method === 'GET') {
+    return listFinanceAuthMemberships(request)
+  }
   if (path === 'auth/me' && request.method === 'GET') return getMe(request)
   if (path === 'auth/driver-session' && request.method === 'GET') return driverSession(request)
   if (path === 'driver/bootstrap' && request.method === 'GET') return driverBootstrap(request)
@@ -8267,6 +9829,26 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
     request.method === 'POST'
   ) {
     return completeDriverJourney(await authenticate(request), segments[2], request)
+  }
+  if (
+    segments[0] === 'driver' &&
+    segments[1] === 'journeys' &&
+    segments[2] &&
+    segments[3] === 'stops' &&
+    segments[4] === 'arrive' &&
+    request.method === 'POST'
+  ) {
+    return arriveDriverJourneyStop(await authenticate(request), segments[2], request)
+  }
+  if (
+    segments[0] === 'driver' &&
+    segments[1] === 'journeys' &&
+    segments[2] &&
+    segments[3] === 'stops' &&
+    segments[4] === 'complete' &&
+    request.method === 'POST'
+  ) {
+    return completeDriverJourneyStop(await authenticate(request), segments[2], request)
   }
   if (path === 'driver/vehicle-equipment' && request.method === 'POST') {
     return driverVehicleEquipment(request)
@@ -8304,6 +9886,15 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
       defectAutomationRules: DEFAULT_DEFECT_AUTOMATION_RULES,
     })
   }
+  if (path === 'compliance/notify-expiring' && request.method === 'POST') {
+    const context = await authenticate(request)
+    try {
+      const result = await notifyExpiringDriverDocuments(context.companyId)
+      return json(result)
+    } catch (error) {
+      return apiError(500, error instanceof Error ? error.message : 'Document expiry notify failed')
+    }
+  }
   if (path === 'vehicle-reports/hub' && request.method === 'GET') {
     return vehicleReportsHub(await authenticate(request))
   }
@@ -8324,6 +9915,81 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (path === 'settings/integration-keys' && request.method === 'POST') {
     return createIntegrationKey(await authenticate(request), request)
+  }
+  if (scopedPath === 'interests' && request.method === 'GET') {
+    return listInterestSubmissions(await authenticate(request), request)
+  }
+  if (
+    segments[0] === 'interests' &&
+    segments[1] &&
+    !segments[2] &&
+    request.method === 'GET'
+  ) {
+    return getInterestSubmission(await authenticate(request), segments[1])
+  }
+  if (
+    segments[0] === 'v1' &&
+    segments[1] === 'interests' &&
+    segments[2] &&
+    !segments[3] &&
+    request.method === 'GET'
+  ) {
+    return getInterestSubmission(await authenticate(request), segments[2])
+  }
+  if (
+    segments[0] === 'interests' &&
+    segments[1] &&
+    !segments[2] &&
+    request.method === 'PATCH'
+  ) {
+    return patchInterestSubmission(await authenticate(request), request, segments[1])
+  }
+  if (
+    segments[0] === 'v1' &&
+    segments[1] === 'interests' &&
+    segments[2] &&
+    !segments[3] &&
+    request.method === 'PATCH'
+  ) {
+    return patchInterestSubmission(await authenticate(request), request, segments[2])
+  }
+  if (
+    segments[0] === 'interests' &&
+    segments[1] &&
+    segments[2] === 'accept' &&
+    !segments[3] &&
+    request.method === 'POST'
+  ) {
+    return acceptInterestSubmission(await authenticate(request), segments[1])
+  }
+  if (
+    segments[0] === 'v1' &&
+    segments[1] === 'interests' &&
+    segments[2] &&
+    segments[3] === 'accept' &&
+    !segments[4] &&
+    request.method === 'POST'
+  ) {
+    return acceptInterestSubmission(await authenticate(request), segments[2])
+  }
+  if (
+    segments[0] === 'interests' &&
+    segments[1] &&
+    segments[2] === 'reject' &&
+    !segments[3] &&
+    request.method === 'POST'
+  ) {
+    return rejectInterestSubmission(await authenticate(request), request, segments[1])
+  }
+  if (
+    segments[0] === 'v1' &&
+    segments[1] === 'interests' &&
+    segments[2] &&
+    segments[3] === 'reject' &&
+    !segments[4] &&
+    request.method === 'POST'
+  ) {
+    return rejectInterestSubmission(await authenticate(request), request, segments[2])
   }
   if (
     segments[0] === 'settings' &&
@@ -8565,6 +10231,8 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
       })),
     )
   }
+  if (path === 'places' && request.method === 'GET') return listPlaces(request)
+  if (path === 'places' && request.method === 'POST') return createPlace(request)
   if (path === 'vehicles/profiles' && request.method === 'GET') return vehicleProfiles(request)
   if (path === 'vehicles/summary' && request.method === 'GET') return vehicleSummary(request)
   if (segments[0] === 'vehicles' && segments[2] === 'profile' && request.method === 'GET') {
@@ -8592,6 +10260,15 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
 
   if (path === 'bookings' && request.method === 'GET') return bookingsList(request)
+  if (
+    segments[0] === 'bookings' &&
+    segments[1] &&
+    segments[2] === 'operational-trips' &&
+    !segments[3] &&
+    request.method === 'GET'
+  ) {
+    return bookingOperationalTrips(request, segments[1])
+  }
   if (segments[0] === 'bookings' && segments[1] && !segments[2] && request.method === 'GET') {
     return bookingDetail(request, segments[1])
   }
@@ -8684,6 +10361,58 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   ) {
     return driverGetMessageThread(request, segments[2])
   }
+  if (path === 'driver/vehicle-swap-requests' && request.method === 'GET') {
+    return driverListVehicleSwapRequests(request)
+  }
+  if (path === 'driver/vehicle-swap-requests' && request.method === 'POST') {
+    return driverCreateVehicleSwapRequest(request)
+  }
+  if (path === 'driver/duty-closeout' && request.method === 'POST') {
+    return driverSubmitDutyCloseout(request)
+  }
+  if (path === 'driver/duty-closeout' && request.method === 'GET') {
+    return driverGetDutyCloseout(request)
+  }
+  if (path === 'driver/jobs/execution' && request.method === 'POST') {
+    return driverRecordJobExecution(request)
+  }
+  if (
+    segments[0] === 'driver' &&
+    segments[1] === 'jobs' &&
+    segments[2] &&
+    segments[3] === 'execution' &&
+    request.method === 'GET'
+  ) {
+    return driverGetJobExecution(request, segments[2])
+  }
+  if (path === 'vehicle-swap-requests' && request.method === 'GET') {
+    return listPendingVehicleSwapRequests(request)
+  }
+  if (
+    segments[0] === 'jobs' &&
+    segments[1] &&
+    segments[2] === 'execution' &&
+    !segments[3] &&
+    request.method === 'GET'
+  ) {
+    return adminGetJobExecution(request, segments[1])
+  }
+  if (
+    segments[0] === 'vehicle-swap-requests' &&
+    segments[1] &&
+    segments[2] === 'approve' &&
+    request.method === 'POST'
+  ) {
+    return resolveVehicleSwapRequestRoute(request, segments[1], true)
+  }
+  if (
+    segments[0] === 'vehicle-swap-requests' &&
+    segments[1] &&
+    segments[2] === 'reject' &&
+    request.method === 'POST'
+  ) {
+    return resolveVehicleSwapRequestRoute(request, segments[1], false)
+  }
   if (path === 'yard/messages' && request.method === 'GET') return listYardDriverMessages(request)
   if (path === 'yard/messages' && request.method === 'POST') return replyYardDriverMessage(request)
   if (path === 'messages' && request.method === 'GET') return listOpsMessages(request)
@@ -8752,11 +10481,48 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
     return getCheckDetail(request, segments[1])
   }
 
+  // Dial-a-Ride / School Routes list + summary — return empty arrays/metrics, not commandPage hubs
+  // (hub objects crash Admin UI with `.map is not a function`).
+  if (request.method === 'GET' && path === 'dial-a-ride/requests') {
+    await authenticate(request)
+    return json([])
+  }
+  if (request.method === 'GET' && path === 'dial-a-ride/members') {
+    await authenticate(request)
+    return json([])
+  }
+  if (request.method === 'GET' && path === 'dial-a-ride/summary') {
+    await authenticate(request)
+    return json({
+      requestsToday: 0,
+      awaitingDecision: 0,
+      unscheduled: 0,
+      membersTravelling: 0,
+    })
+  }
+  if (request.method === 'GET' && path === 'school-routes') {
+    const context = await authenticate(request)
+    try {
+      return json(await projectSchoolRouteList(context.companyId))
+    } catch (error) {
+      return apiError(500, error instanceof Error ? error.message : 'School route projection failed')
+    }
+  }
+  if (request.method === 'GET' && path === 'school-routes/summary') {
+    const context = await authenticate(request)
+    try {
+      return json(await projectSchoolRouteSummary(context.companyId))
+    } catch (error) {
+      return apiError(500, error instanceof Error ? error.message : 'School route summary failed')
+    }
+  }
+
   if (request.method === 'GET' && (path === '' || path === 'overview' || path === 'live-operations')) {
     return commandPage(request, path === '' ? '/' : `/${path}`)
   }
 
-  if (request.method === 'GET' && LIST_RESOURCES[segments[0]] !== undefined) {
+  // Nested paths like /bookings/:id/operational-trips must not fall through to a full list dump.
+  if (request.method === 'GET' && segments.length <= 2 && LIST_RESOURCES[segments[0]] !== undefined) {
     return listResource(request, segments[0], segments.length === 2 ? segments[1] : undefined)
   }
 

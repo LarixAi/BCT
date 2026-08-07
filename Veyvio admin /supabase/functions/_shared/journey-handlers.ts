@@ -252,3 +252,234 @@ export async function completeDriverJourney(
     message: 'Journey completed. Vehicle handback is a separate step if custody is ending.',
   })
 }
+
+async function resolveJourneyStop(
+  context: RequestContext,
+  journeyId: string,
+  input: { stopId?: string; sequence?: number; label?: string },
+) {
+  const stopId = input.stopId ? String(input.stopId).trim() : ''
+  if (stopId) {
+    const { data, error } = await admin
+      .from('journey_stops')
+      .select('*')
+      .eq('company_id', context.companyId)
+      .eq('run_id', journeyId)
+      .eq('id', stopId)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    return data
+  }
+
+  const sequence = Number(input.sequence ?? 1)
+  if (!Number.isFinite(sequence) || sequence < 1) {
+    throw new Error('sequence must be a positive integer when stopId is omitted')
+  }
+
+  const { data: existing } = await admin
+    .from('journey_stops')
+    .select('*')
+    .eq('company_id', context.companyId)
+    .eq('run_id', journeyId)
+    .eq('sequence', sequence)
+    .maybeSingle()
+  if (existing) return existing
+
+  const { data: created, error: createError } = await admin
+    .from('journey_stops')
+    .insert({
+      company_id: context.companyId,
+      run_id: journeyId,
+      sequence,
+      label: input.label ? String(input.label).trim() : `Stop ${sequence}`,
+      status: 'planned',
+      created_by: context.user.id,
+    })
+    .select('*')
+    .single()
+  if (createError || !created) throw new Error(createError?.message ?? 'Stop could not be created')
+  return created
+}
+
+/** Arrive at a journey stop (creates stop by sequence when missing). */
+export async function arriveDriverJourneyStop(
+  context: RequestContext,
+  journeyId: string,
+  request: Request,
+) {
+  const input = await readJson<{ stopId?: string; sequence?: number; label?: string }>(request).catch(() => ({}))
+  const driver = await loadDriverForUser(context)
+  if (!driver) return apiError(403, 'No Driver account is linked to this login', 'forbidden')
+
+  let loaded: Awaited<ReturnType<typeof loadJourneyForDriver>>
+  try {
+    loaded = await loadJourneyForDriver(context, journeyId, String(driver.id))
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Journey load failed')
+  }
+  if (!loaded.run) return apiError(404, 'Journey not found', 'not_found')
+  if (loaded.forbidden) return apiError(403, 'This journey is not assigned to you', 'forbidden')
+
+  const status = normalizeJourneyStatus(loaded.run.lifecycle_status)
+  if (status !== 'in_progress') {
+    return apiError(409, 'Start the journey before arriving at a stop', 'not_in_progress')
+  }
+
+  let stop: Row
+  try {
+    stop = (await resolveJourneyStop(context, journeyId, input)) as Row
+  } catch (error) {
+    return apiError(400, error instanceof Error ? error.message : 'Invalid stop', 'invalid_input')
+  }
+  if (!stop) return apiError(404, 'Stop not found', 'not_found')
+
+  if (String(stop.status) === 'completed') {
+    return apiError(409, 'This stop is already completed', 'stop_completed')
+  }
+
+  const now = new Date().toISOString()
+  const { data: updated, error } = await admin
+    .from('journey_stops')
+    .update({
+      status: 'arrived',
+      arrived_at: stop.arrived_at ?? now,
+      updated_at: now,
+    })
+    .eq('id', stop.id)
+    .eq('company_id', context.companyId)
+    .select('*')
+    .single()
+  if (error || !updated) return apiError(500, error?.message ?? 'Stop arrive failed')
+
+  await writeImmutableAudit({
+    companyId: context.companyId,
+    actorUserId: context.user.id,
+    action: 'journey.stop_arrived',
+    entityType: 'journey_stop',
+    entityId: String(updated.id),
+    afterSnapshot: { journeyId, sequence: updated.sequence, status: updated.status },
+  }).catch(() => undefined)
+
+  await emitDomainEvent({
+    companyId: context.companyId,
+    eventType: 'journey.stop_arrived',
+    entityType: 'journey_stop',
+    entityId: String(updated.id),
+    actorUserId: context.user.id,
+    payload: { journeyId, sequence: updated.sequence },
+  }).catch(() => undefined)
+
+  return json({
+    stop: {
+      id: updated.id,
+      sequence: updated.sequence,
+      status: updated.status,
+      arrivedAt: updated.arrived_at,
+      label: updated.label,
+    },
+  })
+}
+
+/** Complete a journey stop after arrive (or arrive+complete in one step if never arrived). */
+export async function completeDriverJourneyStop(
+  context: RequestContext,
+  journeyId: string,
+  request: Request,
+) {
+  const input = await readJson<{
+    stopId?: string
+    sequence?: number
+    label?: string
+    outcome?: string
+    notes?: string
+  }>(request).catch(() => ({}))
+  const driver = await loadDriverForUser(context)
+  if (!driver) return apiError(403, 'No Driver account is linked to this login', 'forbidden')
+
+  let loaded: Awaited<ReturnType<typeof loadJourneyForDriver>>
+  try {
+    loaded = await loadJourneyForDriver(context, journeyId, String(driver.id))
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Journey load failed')
+  }
+  if (!loaded.run) return apiError(404, 'Journey not found', 'not_found')
+  if (loaded.forbidden) return apiError(403, 'This journey is not assigned to you', 'forbidden')
+
+  const status = normalizeJourneyStatus(loaded.run.lifecycle_status)
+  if (status !== 'in_progress') {
+    return apiError(409, 'Start the journey before completing a stop', 'not_in_progress')
+  }
+
+  let stop: Row
+  try {
+    stop = (await resolveJourneyStop(context, journeyId, input)) as Row
+  } catch (error) {
+    return apiError(400, error instanceof Error ? error.message : 'Invalid stop', 'invalid_input')
+  }
+  if (!stop) return apiError(404, 'Stop not found', 'not_found')
+
+  if (String(stop.status) === 'completed') {
+    return json({
+      stop: {
+        id: stop.id,
+        sequence: stop.sequence,
+        status: stop.status,
+        arrivedAt: stop.arrived_at,
+        completedAt: stop.completed_at,
+        outcome: stop.outcome,
+      },
+    })
+  }
+
+  const now = new Date().toISOString()
+  const { data: updated, error } = await admin
+    .from('journey_stops')
+    .update({
+      status: 'completed',
+      arrived_at: stop.arrived_at ?? now,
+      completed_at: now,
+      outcome: input.outcome ? String(input.outcome).trim() : stop.outcome ?? 'completed',
+      notes: input.notes != null ? String(input.notes) : stop.notes,
+      updated_at: now,
+    })
+    .eq('id', stop.id)
+    .eq('company_id', context.companyId)
+    .select('*')
+    .single()
+  if (error || !updated) return apiError(500, error?.message ?? 'Stop complete failed')
+
+  await writeImmutableAudit({
+    companyId: context.companyId,
+    actorUserId: context.user.id,
+    action: 'journey.stop_completed',
+    entityType: 'journey_stop',
+    entityId: String(updated.id),
+    afterSnapshot: {
+      journeyId,
+      sequence: updated.sequence,
+      status: updated.status,
+      outcome: updated.outcome,
+    },
+  }).catch(() => undefined)
+
+  await emitDomainEvent({
+    companyId: context.companyId,
+    eventType: 'journey.stop_completed',
+    entityType: 'journey_stop',
+    entityId: String(updated.id),
+    actorUserId: context.user.id,
+    payload: { journeyId, sequence: updated.sequence, outcome: updated.outcome },
+  }).catch(() => undefined)
+
+  return json({
+    stop: {
+      id: updated.id,
+      sequence: updated.sequence,
+      status: updated.status,
+      arrivedAt: updated.arrived_at,
+      completedAt: updated.completed_at,
+      outcome: updated.outcome,
+      label: updated.label,
+    },
+  })
+}

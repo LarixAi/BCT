@@ -600,8 +600,25 @@ export async function acknowledgePublishedDuty(
     )
   }
 
-  const revision = Number(existing.version ?? 1)
   const acknowledgedAt = new Date().toISOString()
+
+  // Update lifecycle first. `duties.version` auto-increments on UPDATE, so the
+  // acknowledgement revision must be written against the post-update version
+  // or sign-on will look for revision N+1 and miss the row stored at N.
+  const { data: updated, error } = await admin
+    .from('duties')
+    .update({
+      driver_lifecycle_status: 'acknowledged',
+      updated_at: acknowledgedAt,
+      updated_by: context.user.id,
+    })
+    .eq('id', dutyId)
+    .select('*')
+    .single()
+
+  if (error || !updated) return apiError(500, error?.message ?? 'Acknowledgement could not be saved')
+
+  const revision = Number(updated.version ?? existing.version ?? 1)
 
   const { error: ackError } = await admin.from('duty_acknowledgements').upsert(
     {
@@ -617,19 +634,6 @@ export async function acknowledgePublishedDuty(
     { onConflict: 'duty_id,driver_id,revision' },
   )
   if (ackError) return apiError(500, ackError.message)
-
-  const { data: updated, error } = await admin
-    .from('duties')
-    .update({
-      driver_lifecycle_status: 'acknowledged',
-      updated_at: acknowledgedAt,
-      updated_by: context.user.id,
-    })
-    .eq('id', dutyId)
-    .select('*')
-    .single()
-
-  if (error || !updated) return apiError(500, error?.message ?? 'Acknowledgement could not be saved')
 
   await recordDutyAssignmentEvent({
     companyId: context.companyId,

@@ -1033,21 +1033,31 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
     const op = mapVehicleOpStatus(row.operational_status)
     const counts = openByVehicle.get(String(row.id)) ?? { open: 0, critical: 0 }
     const vor = op === 'vor'
-    const releaseDecision = vor ? 'blocked' : counts.critical > 0 ? 'restricted_use' : 'released'
+    const regLabel = String(row.registration ?? '').trim()
+    const complianceFailures = vehicleDocumentExpiryFailures(row, regLabel)
+    const failures: Array<{ code: string; message: string; severity: string; category: string }> = []
+    if (vor) {
+      failures.push({ code: 'vor', message: 'Vehicle is VOR', severity: 'block', category: 'operational' })
+    }
+    failures.push(...complianceFailures)
+    const blocked = failures.some((f) => f.severity === 'block')
+    const releaseDecision = blocked ? 'blocked' : counts.critical > 0 ? 'restricted_use' : 'released'
     const conditionStatus =
       counts.critical > 0 ? 'safety_critical' : counts.open > 0 ? 'repair_required' : 'no_known_issues'
     const lifecycleStatus = row.operational_status === 'decommissioned' ? 'archived' : 'active'
-    const complianceStatus = 'compliant'
+    const complianceStatus = complianceFailures.length ? 'non_compliant' : 'compliant'
     const release = {
       releaseDecision,
-      failures: vor
-        ? [{ code: 'vor', message: 'Vehicle is VOR', severity: 'block', category: 'operational' }]
-        : [],
+      failures,
       warnings: [],
-      canAllocate: !vor && counts.critical === 0,
-      canLeaveYard: !vor,
-      canAcceptPassengers: !vor && counts.critical === 0,
-      summary: vor ? 'Blocked — VOR' : counts.critical > 0 ? 'Restricted use' : 'Released for service',
+      canAllocate: !blocked && counts.critical === 0,
+      canLeaveYard: !vor && !blocked,
+      canAcceptPassengers: !blocked && counts.critical === 0,
+      summary: blocked
+        ? `Blocked — ${failures[0]?.message ?? 'compliance'}`
+        : counts.critical > 0
+          ? 'Restricted use'
+          : 'Released for service',
       evaluatedAt: new Date().toISOString(),
     }
     const readiness = {
@@ -1096,15 +1106,19 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
       complianceStatus,
       conditionStatus,
       yardStatus: vor ? 'workshop' : 'in_yard',
-      readinessStatus: vor ? 'cleaning_required' : 'ready',
+      readinessStatus: blocked ? 'not_ready' : vor ? 'cleaning_required' : 'ready',
       releaseDecision,
       readiness,
       capabilities: [],
-      motExpiry: null,
-      insuranceExpiry: null,
-      taxExpiry: null,
-      tachographCalibrationExpiry: null,
-      wheelRetorqueDueAt: null,
+      motExpiry: row.mot_expiry ? iso(row.mot_expiry).slice(0, 10) : null,
+      insuranceExpiry: row.insurance_expiry ? iso(row.insurance_expiry).slice(0, 10) : null,
+      taxExpiry: row.tax_expiry ? iso(row.tax_expiry).slice(0, 10) : null,
+      tachographCalibrationExpiry: row.tachograph_calibration_expiry
+        ? iso(row.tachograph_calibration_expiry).slice(0, 10)
+        : null,
+      pmiDueAt: row.pmi_due_at ? iso(row.pmi_due_at).slice(0, 10) : null,
+      nextServiceDueAt: row.next_service_due_at ? iso(row.next_service_due_at).slice(0, 10) : null,
+      wheelRetorqueDueAt: row.wheel_retorque_due_at ? iso(row.wheel_retorque_due_at) : null,
       currentDriverId: null,
       currentDriverName: null,
       currentRunId: null,
@@ -1183,6 +1197,34 @@ function documentStatusFromExpiry(expiryIso: string | null | undefined): 'valid'
   return 'valid'
 }
 
+/** MOT / PMI / tax / insurance / tyres past due → hard block on allocate/dispatch. */
+function vehicleDocumentExpiryFailures(
+  row: Row,
+  registration: string,
+): Array<{ code: string; message: string; severity: string; category: string }> {
+  const prefix = registration ? `Vehicle ${registration}` : 'Vehicle'
+  const out: Array<{ code: string; message: string; severity: string; category: string }> = []
+  const pushExpired = (raw: unknown, code: string, label: string) => {
+    if (raw == null || raw === '') return
+    const status = documentStatusFromExpiry(String(raw))
+    if (status !== 'expired') return
+    out.push({
+      code,
+      message: `${prefix}: ${label} expired — cannot assign or dispatch.`,
+      severity: 'block',
+      category: 'compliance',
+    })
+  }
+  pushExpired(row.mot_expiry, 'mot_expired', 'MOT')
+  pushExpired(row.insurance_expiry, 'insurance_expired', 'Insurance')
+  pushExpired(row.tax_expiry, 'tax_expired', 'Road tax')
+  pushExpired(row.tachograph_calibration_expiry, 'tacho_cal_expired', 'Tachograph calibration')
+  pushExpired(row.pmi_due_at, 'pmi_overdue', 'PMI / safety inspection')
+  pushExpired(row.next_service_due_at, 'service_overdue', 'Next service')
+  pushExpired(row.wheel_retorque_due_at, 'tyre_retorque_overdue', 'Wheel re-torque')
+  return out
+}
+
 function formatUkExpiryLabel(expiryIso: string | null | undefined): string {
   if (!expiryIso) return 'Not on record in Command'
   const expiry = new Date(expiryIso)
@@ -1214,6 +1256,9 @@ export async function projectDriverVehicleReadiness(companyId: string, vehicleId
   pushDoc('insurance', 'Insurance', profile.insuranceExpiry)
   pushDoc('tax', 'Road tax', profile.taxExpiry)
   pushDoc('tachograph', 'Tachograph calibration', profile.tachographCalibrationExpiry)
+  pushDoc('pmi', 'PMI / safety inspection', profile.pmiDueAt)
+  pushDoc('service', 'Next service due', profile.nextServiceDueAt)
+  pushDoc('tyres', 'Wheel re-torque due', profile.wheelRetorqueDueAt)
 
   for (const doc of Array.isArray(profile.documents) ? (profile.documents as Row[]) : []) {
     const id = String(doc.id ?? doc.type ?? doc.label ?? 'document')
@@ -1247,6 +1292,9 @@ export async function projectDriverVehicleReadiness(companyId: string, vehicleId
     motExpiry: profile.motExpiry ? String(profile.motExpiry) : null,
     insuranceExpiry: profile.insuranceExpiry ? String(profile.insuranceExpiry) : null,
     taxExpiry: profile.taxExpiry ? String(profile.taxExpiry) : null,
+    pmiDueAt: profile.pmiDueAt ? String(profile.pmiDueAt) : null,
+    nextServiceDueAt: profile.nextServiceDueAt ? String(profile.nextServiceDueAt) : null,
+    wheelRetorqueDueAt: profile.wheelRetorqueDueAt ? String(profile.wheelRetorqueDueAt) : null,
     lastCheckAt: profile.lastCheckAt ? String(profile.lastCheckAt) : null,
     lastCheckType: profile.lastCheckType ? String(profile.lastCheckType) : null,
     documents,
@@ -1588,6 +1636,98 @@ export async function projectBookingList(companyId: string) {
       owner: null,
     }
   })
+}
+
+export async function projectSchoolRouteList(companyId: string) {
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: bookings, error } = await admin
+    .from('bookings')
+    .select('id, booking_reference, status, requested_date, passenger_ids, notes, customers(trading_name, legal_name)')
+    .eq('company_id', companyId)
+    .eq('booking_type', 'school_route')
+    .order('requested_date', { ascending: false })
+  if (error) throw new Error(error.message)
+
+  const bookingIds = (bookings ?? []).map((row: Row) => String(row.id))
+  const tripDatesByBooking = new Map<string, string[]>()
+  if (bookingIds.length) {
+    const { data: trips } = await admin
+      .from('trips')
+      .select('booking_id, service_date')
+      .eq('company_id', companyId)
+      .in('booking_id', bookingIds)
+    for (const trip of trips ?? []) {
+      const bookingId = String(trip.booking_id ?? '')
+      const serviceDate = trip.service_date ? String(trip.service_date).slice(0, 10) : ''
+      if (!bookingId || !serviceDate) continue
+      const list = tripDatesByBooking.get(bookingId) ?? []
+      list.push(serviceDate)
+      tripDatesByBooking.set(bookingId, list)
+    }
+  }
+
+  return (bookings ?? []).map((row: Row) => {
+    const customer = (row.customers as Row | null) ?? {}
+    const passengerIds = (row.passenger_ids as string[] | null) ?? []
+    const notes = String(row.notes ?? '')
+    const directionLabel = /pm|afternoon/i.test(notes)
+      ? 'PM'
+      : /am|morning/i.test(notes)
+        ? 'AM'
+        : 'AM'
+    const tripDates = [...(tripDatesByBooking.get(String(row.id)) ?? [])].sort()
+    const requestedDate = row.requested_date ? String(row.requested_date).slice(0, 10) : null
+    const nextService =
+      tripDates.find((date) => date >= today) ?? tripDates[0] ?? requestedDate
+
+    return {
+      id: row.id,
+      reference: row.booking_reference,
+      schoolName: customer.trading_name ?? customer.legal_name ?? 'School',
+      directionLabel,
+      pupilCount: passengerIds.length,
+      daysLabel: 'Term time',
+      vehicleRequirement: 'Section 19',
+      driverName: null,
+      assistantRequired: false,
+      nextService,
+      status: row.status === 'draft' ? 'draft' : 'published',
+      warningCount: 0,
+    }
+  })
+}
+
+export async function projectSchoolRouteSummary(companyId: string) {
+  const today = new Date().toISOString().slice(0, 10)
+  const routes = await projectSchoolRouteList(companyId)
+  const activeRoutes = routes.filter((route) => route.status !== 'draft' && route.status !== 'archived').length
+  const pupilsToday = routes
+    .filter((route) => route.nextService === today)
+    .reduce((sum, route) => sum + Number(route.pupilCount ?? 0), 0)
+
+  const routeBookingIds = routes.map((route) => String(route.id))
+  let unscheduledJobs = 0
+  if (routeBookingIds.length) {
+    const { data: trips } = await admin
+      .from('trips')
+      .select('id, booking_id')
+      .eq('company_id', companyId)
+      .eq('service_date', today)
+      .in('booking_id', routeBookingIds)
+    const tripIds = (trips ?? []).map((trip: Row) => String(trip.id))
+    if (tripIds.length) {
+      const { data: linked } = await admin.from('run_trips').select('trip_id').in('trip_id', tripIds)
+      const linkedTripIds = new Set((linked ?? []).map((row: Row) => String(row.trip_id)))
+      unscheduledJobs = tripIds.filter((tripId) => !linkedTripIds.has(tripId)).length
+    }
+  }
+
+  return {
+    activeRoutes,
+    pupilsToday,
+    unscheduledJobs,
+    exceptions: 0,
+  }
 }
 
 function mapBookingTypeToUi(raw: unknown): string {
@@ -2185,18 +2325,47 @@ export function toOperationalPosition(trip: Row): Row {
   }
 }
 
-export async function projectOperationalTrips(companyId: string, tripId?: string) {
+export async function projectOperationalTrips(
+  companyId: string,
+  tripId?: string,
+  options?: { serviceDate?: string | null; bookingId?: string | null },
+) {
   let query = admin
     .from('trips')
     .select('*')
     .eq('company_id', companyId)
     .order('planned_pickup_at', { ascending: true })
-  if (tripId) query = query.eq('id', tripId)
+  if (tripId) {
+    query = query.eq('id', tripId)
+  } else if (options?.bookingId) {
+    query = query.eq('booking_id', String(options.bookingId))
+  } else {
+    // Default list to one service day — otherwise historical assigned trips look like "today's" work.
+    const serviceDate = (options?.serviceDate && String(options.serviceDate).slice(0, 10)) ||
+      new Date().toISOString().slice(0, 10)
+    query = query.eq('service_date', serviceDate)
+  }
   const { data, error } = await query
   if (error) throw new Error(error.message)
 
   const rows = data ?? []
   const tripIds = rows.map((row: Row) => String(row.id))
+
+  const bookingIds = [...new Set(rows.map((row: Row) => String(row.booking_id ?? '')).filter(Boolean))]
+  const bookingMeta = new Map<string, { type: string; reference: string }>()
+  if (bookingIds.length) {
+    const { data: bookings } = await admin
+      .from('bookings')
+      .select('id, booking_type, booking_reference')
+      .eq('company_id', companyId)
+      .in('id', bookingIds)
+    for (const booking of bookings ?? []) {
+      bookingMeta.set(String(booking.id), {
+        type: String(booking.booking_type ?? 'single'),
+        reference: String(booking.booking_reference ?? ''),
+      })
+    }
+  }
 
   const [{ data: assignments }, { data: runLinks }] = await Promise.all([
     tripIds.length
@@ -2268,6 +2437,7 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
     const runLink = runByTrip.get(String(row.id))
     const run = (runLink?.runs as Row | null) ?? null
     const dutyIdForTrip = runLink ? dutyByRun.get(String(runLink.run_id)) ?? null : null
+    const booking = row.booking_id ? bookingMeta.get(String(row.booking_id)) : null
     const pickup = (row.pickup_location as Row | null) ?? {}
     const destination = (row.destination_location as Row | null) ?? {}
     const passengerIds = (row.passenger_ids as string[] | null) ?? []
@@ -2321,7 +2491,13 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
       gpsLat: live?.latitude != null ? Number(live.latitude) : null,
       gpsLng: live?.longitude != null ? Number(live.longitude) : null,
       driverOnline: Boolean(live),
-      routeName: run?.run_reference ?? null,
+      routeName:
+        run?.run_reference ??
+        (booking?.type === 'school_route'
+          ? `School route ${booking.reference}`
+          : booking?.type === 'dial_a_ride'
+            ? `Dial-a-Ride ${booking.reference}`
+            : null),
       bookingId: row.booking_id ?? null,
       serviceDate: row.service_date,
       plannedPickupAt: row.planned_pickup_at,
@@ -2332,11 +2508,20 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
   if (tripId) {
     const found = projected[0] ?? null
     if (found) return found
+    // Booking detail previously linked booking UUIDs into /live-operations/trips/:id.
+    const byBooking = (await projectOperationalTrips(companyId, undefined, {
+      bookingId: tripId,
+    })) as Row[]
+    if (byBooking.length > 0) return byBooking[0]!
     // Allow Manage Assignment to open against a duty id when no trip row exists.
     const duty = await projectDuties(companyId, null, tripId)
     return duty ? operationalTripFromDutyRow(duty as Row) : null
   }
   return projected
+}
+
+export async function projectOperationalTripsByBooking(companyId: string, bookingId: string) {
+  return projectOperationalTrips(companyId, undefined, { bookingId }) as Promise<Row[]>
 }
 
 export async function projectOperationalTripByDuty(companyId: string, dutyId: string) {

@@ -1,7 +1,7 @@
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
-    'authorization, content-type, x-client-info, apikey, x-supabase-client-platform, x-supabase-client-platform-version, prefer, x-requested-with',
+    'authorization, content-type, x-client-info, apikey, x-supabase-client-platform, x-supabase-client-platform-version, prefer, x-requested-with, x-veyvio-api-key, idempotency-key, x-idempotency-key, x-veyvio-organisation-id',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   'Access-Control-Max-Age': '86400',
 }
