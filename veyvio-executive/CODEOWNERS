@@ -1,0 +1,13 @@
+# SEC-1104 — code owners for auth, edge, session and cryptography.
+# Enable GitHub: Settings → Branches → Require review from Code Owners.
+# Replace @LarixAi/security-reviewers with the org team or named handles once created.
+
+* @LarixAi/security-reviewers
+
+app/security/ @LarixAi/security-reviewers
+app/api/auth/ @LarixAi/security-reviewers
+worker/ @LarixAi/security-reviewers
+scripts/scan-production-secrets.mjs @LarixAi/security-reviewers
+scripts/audit-dependencies.mjs @LarixAi/security-reviewers
+scripts/assert-production-build.mjs @LarixAi/security-reviewers
+.github/workflows/ci.yml @LarixAi/security-reviewers
