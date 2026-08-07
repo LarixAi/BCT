@@ -1,6 +1,4 @@
-import type { YardLayoutDefinition } from "./types";
-
-export type BayVehicleClass = "minibus" | "mpv";
+import type { BayVehicleClass, YardLayoutDefinition } from "./types";
 
 /** BCT Main Depot — traced from official BCT Depot Parking map (26 numbered bays). */
 export const BCT_MAIN_DEPOT_LAYOUT: YardLayoutDefinition = {

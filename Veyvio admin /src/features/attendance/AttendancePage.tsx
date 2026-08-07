@@ -19,7 +19,7 @@ import type {
   ManagerClassification,
 } from '@/lib/attendance/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { cn } from '@/lib/cn'
 import { PersonAttendancePanel } from './PersonAttendancePanel'
 import { tKey } from '@/lib/tenant/tenant-query-scope'

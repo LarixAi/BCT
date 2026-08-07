@@ -4,8 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { AUDIENCE_LABEL, REORGANISE_REASON_LABEL, REORGANISE_REASONS } from '@/lib/journey-sequence/constants'
 import { canReorderSequence, canSaveWithoutNotify, capabilityBanner } from '@/lib/journey-sequence/edit-rules'
+import {
+  isJourneySequenceWritable,
+  JOURNEY_SEQUENCE_LIVE_BLOCKED,
+  journeySequenceApi,
+} from '@/lib/journey-sequence/api'
 import { workspaceFromDuty } from '@/lib/journey-sequence/from-duty'
-import { mockJourneySequenceApi } from '@/lib/journey-sequence/mock-hub'
+import { isMockApi } from '@/lib/api/config'
 import type {
   DriverDeclineReason,
   LinkedReturnDecision,
@@ -15,7 +20,7 @@ import type {
 import { api } from '@/lib/api/client'
 import type { DutyDetailRecord } from '@/lib/api/types'
 import type { OperationalTrip } from '@/lib/transfers/types'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { cn } from '@/lib/cn'
 import { MoveJourneyPanel } from './MoveJourneyPanel'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
@@ -75,20 +80,23 @@ export function JourneySequencePanel({
     queryFn: async () => {
       const project = async (trip: OperationalTrip) => {
         if (!trip.jobs?.length && duty) {
-          const { dutyToSyntheticTrip } = await import('@/lib/journey-sequence/from-duty')
-          const { mockTransfersApi } = await import('@/lib/api/mock-transfers')
-          const synthetic = dutyToSyntheticTrip(duty)
-          mockTransfersApi.upsertTrip({
-            ...synthetic,
-            id: trip.id,
-            reference: trip.reference || synthetic.reference,
-            dutyId: trip.dutyId ?? duty.id,
-          })
-          return mockJourneySequenceApi.getWorkspace(trip.id)
+          if (isMockApi) {
+            const { dutyToSyntheticTrip } = await import('@/lib/journey-sequence/from-duty')
+            const { mockTransfersApi } = await import('@/lib/api/mock-transfers')
+            const synthetic = dutyToSyntheticTrip(duty)
+            mockTransfersApi.upsertTrip({
+              ...synthetic,
+              id: trip.id,
+              reference: trip.reference || synthetic.reference,
+              dutyId: trip.dutyId ?? duty.id,
+            })
+            return journeySequenceApi.getWorkspace(trip.id)
+          }
+          return workspaceFromDuty(duty)
         }
         const siblings = await api.getOperationalTrips().catch(() => [])
         const list = Array.isArray(siblings) ? siblings : []
-        return mockJourneySequenceApi.ensureWorkspaceFromTrips(trip, list)
+        return journeySequenceApi.ensureWorkspaceFromTrips(trip, list)
       }
 
       const dutyPickupCount = (duty?.route?.stops ?? []).filter((stop) => {
@@ -98,10 +106,12 @@ export function JourneySequencePanel({
 
       const fromDuty = async () => {
         if (!duty) throw new Error('No operational trip or duty stops available for this run')
-        const { dutyToSyntheticTrip } = await import('@/lib/journey-sequence/from-duty')
-        const { mockTransfersApi } = await import('@/lib/api/mock-transfers')
-        const trip = dutyToSyntheticTrip(duty)
-        mockTransfersApi.upsertTrip(trip)
+        if (isMockApi) {
+          const { dutyToSyntheticTrip } = await import('@/lib/journey-sequence/from-duty')
+          const { mockTransfersApi } = await import('@/lib/api/mock-transfers')
+          const trip = dutyToSyntheticTrip(duty)
+          mockTransfersApi.upsertTrip(trip)
+        }
         return workspaceFromDuty(duty)
       }
 
@@ -140,28 +150,29 @@ export function JourneySequencePanel({
 
   const { data: audit = [] } = useQuery({
     queryKey: tKey(['journey-sequence-audit', activeTripId]),
-    queryFn: () => mockJourneySequenceApi.listAudit(activeTripId),
-    enabled: !!activeTripId,
+    queryFn: () => journeySequenceApi.listAudit(activeTripId),
+    enabled: !!activeTripId && isJourneySequenceWritable(),
   })
 
+  const sequenceWritable = isJourneySequenceWritable()
   const order = draftOrder ?? workspace?.pickupJobIds ?? []
 
   const liveStops = useMemo(() => {
     if (!workspace || !activeTripId) return [] as SequenceStop[]
-    if ((mode === 'edit' || mode === 'confirm') && draftOrder?.length) {
+    if (sequenceWritable && (mode === 'edit' || mode === 'confirm') && draftOrder?.length) {
       try {
-        return mockJourneySequenceApi.previewStops(activeTripId, draftOrder)
+        return journeySequenceApi.previewStops(activeTripId, draftOrder)
       } catch {
         return workspace.stops
       }
     }
     return workspace.stops
-  }, [workspace, mode, draftOrder, activeTripId])
+  }, [workspace, mode, draftOrder, activeTripId, sequenceWritable])
 
   const previewQuery = useQuery({
     queryKey: tKey(['journey-sequence-preview', activeTripId, order, linkedDecision]),
-    queryFn: () => mockJourneySequenceApi.previewReorder(activeTripId, order, linkedDecision),
-    enabled: mode === 'confirm' && order.length > 0 && !!activeTripId,
+    queryFn: () => journeySequenceApi.previewReorder(activeTripId, order, linkedDecision),
+    enabled: sequenceWritable && mode === 'confirm' && order.length > 0 && !!activeTripId,
   })
 
   const invalidateAll = () => {
@@ -173,7 +184,7 @@ export function JourneySequencePanel({
 
   const commit = useMutation({
     mutationFn: async (sendNotifications: boolean) =>
-      mockJourneySequenceApi.commitReorder({
+      journeySequenceApi.commitReorder({
         tripId: activeTripId,
         orderedPickupJobIds: order,
         reason,
@@ -197,10 +208,10 @@ export function JourneySequencePanel({
 
   const ackMut = useMutation({
     mutationFn: async (next: 'viewed' | 'acknowledged' | 'declined') =>
-      mockJourneySequenceApi.advanceAcknowledgement(
+      journeySequenceApi.advanceAcknowledgement(
         activeTripId,
         next,
-        next === 'declined' ? declineReason : null,
+        next === 'declined' ? declineReason : undefined,
       ),
     onSuccess: () => invalidateAll(),
   })
@@ -208,7 +219,7 @@ export function JourneySequencePanel({
   const primarySelected = selectedJobIds[0] ?? null
   const linked = useMemo(() => {
     if (!primarySelected || !workspace || !activeTripId) return null
-    return mockJourneySequenceApi.findLinkedReturnForJob(activeTripId, primarySelected)
+    return journeySequenceApi.findLinkedReturnForJob(activeTripId, primarySelected)
   }, [primarySelected, activeTripId, workspace])
 
   if (isLoading) {
@@ -236,12 +247,16 @@ export function JourneySequencePanel({
   }
 
   const banner = capabilityBanner(workspace.capability)
-  const editable = canReorderSequence(workspace.capability)
+  const editable = sequenceWritable && canReorderSequence(workspace.capability)
   const stops: SequenceStop[] =
     mode === 'confirm' && previewQuery.data ? previewQuery.data.stops : liveStops
   const ack = workspace.acknowledgement
 
   const enterEdit = () => {
+    if (!sequenceWritable) {
+      setCommitMessage(JOURNEY_SEQUENCE_LIVE_BLOCKED)
+      return
+    }
     setDraftOrder([...workspace.pickupJobIds])
     setMode('edit')
     setCommitMessage(null)
@@ -257,7 +272,7 @@ export function JourneySequencePanel({
     setDraftOrder(next)
     if (focusJobId) {
       setSelectedJobIds((prev) => (prev.includes(focusJobId) ? prev : [focusJobId]))
-      const found = mockJourneySequenceApi.findLinkedReturnForJob(activeTripId, focusJobId)
+      const found = journeySequenceApi.findLinkedReturnForJob(activeTripId, focusJobId)
       if (found) setShowLinkedPrompt(true)
     }
   }
@@ -293,6 +308,13 @@ export function JourneySequencePanel({
 
   return (
     <div className="space-y-4">
+      {!sequenceWritable && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">Sequence is view-only</p>
+          <p className="mt-1">{JOURNEY_SEQUENCE_LIVE_BLOCKED}</p>
+        </div>
+      )}
+
       {commitMessage && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-950">
           {commitMessage}
@@ -326,7 +348,7 @@ export function JourneySequencePanel({
               ? ` · Declined: ${ack.declineReason.replace(/_/g, ' ')}`
               : ''}
           </p>
-          {ack.status !== 'declined' && (
+          {ack.status !== 'declined' && sequenceWritable && (
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <button
                 type="button"
@@ -560,6 +582,7 @@ export function JourneySequencePanel({
         </SectionCard>
 
         <div className="space-y-4">
+          {sequenceWritable ? (
           <MoveJourneyPanel
             tripId={activeTripId}
             selectedJobIds={selectedJobIds}
@@ -572,6 +595,11 @@ export function JourneySequencePanel({
               invalidateAll()
             }}
           />
+          ) : (
+            <SectionCard title="Move journey" description="Unavailable on live API">
+              <p className="text-sm text-muted">{JOURNEY_SEQUENCE_LIVE_BLOCKED}</p>
+            </SectionCard>
+          )}
 
           {linked && (
             <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">

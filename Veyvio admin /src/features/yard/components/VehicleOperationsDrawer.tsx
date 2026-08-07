@@ -7,7 +7,7 @@ import { ACTIVITY_LABELS, CUSTODY_LABELS, PRESENCE_LABELS, READINESS_LABELS } fr
 import { canMarkYardVor, canReleaseFromYard } from '@/lib/yard/permissions'
 import type { YardHubData, YardTask, YardVehicleRow } from '@/lib/yard/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

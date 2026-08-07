@@ -13,7 +13,7 @@ import {
 import { WORK_ORDER_STATUS_LABELS } from '@/lib/vehicles/maintenance'
 import type { FleetWorkOrderRow } from '@/lib/maintenance/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

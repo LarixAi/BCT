@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '@/lib/api/client'
 import type { PlatformCompanyDetail, PlatformPlanRow } from '@/lib/api/types'

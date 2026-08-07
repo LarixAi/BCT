@@ -5,7 +5,7 @@ import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import {
   FUEL_TYPE_LABELS,
   OWNERSHIP_TYPE_LABELS,

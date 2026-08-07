@@ -119,7 +119,7 @@ export function buildScheduleOptimisations(input: {
       .filter(
         (d) =>
           d.operationalEligibility === 'eligible' &&
-          (d.dutyStatus === 'available' || d.dutyStatus === 'on_duty'),
+          (d.dutyStatus === 'available' || d.dutyStatus === 'on_trip' || String(d.dutyStatus) === 'on_duty'),
       )
       .slice(0, 2)
 

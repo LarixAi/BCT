@@ -1672,7 +1672,7 @@ export class MockApiClient {
     return mockDriversApi.verifyDocument(id, documentId, actorName)
   }
 
-  async getDriverDocumentDownloadUrl(driverId: string, documentId: string) {
+  async getDriverDocumentDownloadUrl(_driverId: string, _documentId: string) {
     await delay(40)
     return {
       url: '#',

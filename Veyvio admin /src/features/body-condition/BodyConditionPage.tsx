@@ -17,12 +17,6 @@ const SUMMARY_CARDS = [
   { id: 'pendingAcknowledgements', label: 'Pending acknowledgements' },
 ] as const
 
-function severityTone(severity: string) {
-  if (severity.includes('critical') || severity.includes('safety')) return 'critical'
-  if (severity.includes('operational') || severity.includes('major')) return 'warning'
-  return 'neutral'
-}
-
 export function BodyConditionPage() {
   const [severityFilter, setSeverityFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -136,7 +130,7 @@ export function BodyConditionPage() {
                     </td>
                     <td className="py-2 pr-3">{row.zoneId.replace(/_/g, ' ')}</td>
                     <td className="py-2 pr-3">
-                      <StatusPill status={severityTone(row.severity)} label={row.severity.replace(/_/g, ' ')} />
+                      <StatusPill status={row.severity.replace(/_/g, ' ')} />
                     </td>
                     <td className="py-2 pr-3">{row.status.replace(/_/g, ' ')}</td>
                     <td className="py-2">
@@ -175,7 +169,7 @@ export function BodyConditionPage() {
                     Vehicle {row.vehicleId} · {new Date(row.startedAt).toLocaleString('en-GB')}
                   </p>
                 </div>
-                <StatusPill status={row.status.includes('review') ? 'warning' : row.status === 'approved' ? 'success' : 'neutral'} label={row.status.replace(/_/g, ' ')} />
+                <StatusPill status={row.status.replace(/_/g, ' ')} />
               </li>
             ))}
           </ul>

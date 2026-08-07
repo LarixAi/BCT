@@ -4,7 +4,7 @@ import { SectionCard } from '@/components/ui'
 import { CATEGORY_LABELS, INCIDENT_CATEGORIES } from '@/lib/incidents/constants'
 import type { IncidentCategory, IncidentSeverity } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

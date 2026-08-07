@@ -37,6 +37,16 @@ import {
   createWageAdjustment,
 } from '../domain/wage-period-workflow'
 
+/** Browser-local cost writes are demo-only. API mode must use durable finance commands. */
+function assertBrowserMutationAllowed(action: string) {
+  const config = readFinanceRepositoryConfig()
+  if (config.mode === 'api') {
+    throw new Error(
+      `Cost Control cannot apply "${action}" in the browser when VITE_FINANCE_DATA_MODE=api. Durable finance command APIs are required.`,
+    )
+  }
+}
+
 type StoreApi = CostControlStore & {
   workspaceStatus: 'idle' | 'loading' | 'ready' | 'error'
   workspaceError: string | null
@@ -228,6 +238,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const importCsv = useCallback((fileName: string, text: string) => {
+    assertBrowserMutationAllowed('importCsv')
     let summary = { accepted: 0, quarantined: 0, duplicatesSkipped: 0 }
     setStore((prev) => {
       const existing = new Set(prev.costs.map((c) => c.sourceKey))
@@ -302,6 +313,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const importPayrollSummary = useCallback((fileName: string, text: string) => {
+    assertBrowserMutationAllowed('importPayrollSummary')
     let result!: PayrollSummaryImportResult
     setStore((prev) => {
       const wageCost =
@@ -370,6 +382,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const resolveReviewDecision = useCallback((reviewId: string, decision: ReviewDecision) => {
+    assertBrowserMutationAllowed('resolveReviewDecision')
     let failure: Error | null = null
     setStore((prev) => {
       try {
@@ -429,6 +442,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
   }, [resolveReviewDecision])
 
   const clearDriverDayDispute = useCallback((driverDayId: string) => {
+    assertBrowserMutationAllowed('clearDriverDayDispute')
     setStore((prev) => {
       const driverDays = (prev.driverDays ?? []).map((d) =>
         d.id === driverDayId ? { ...d, disputed: false, notes: undefined } : d,
@@ -456,6 +470,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const advanceWageBatchStatus = useCallback((batchId: string) => {
+    assertBrowserMutationAllowed('advanceWageBatchStatus')
     let failure: Error | null = null
     setStore((prev) => {
       try {
@@ -479,6 +494,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       reason: string
       grossDeltaMinor: number
     }) => {
+      assertBrowserMutationAllowed('addWageAdjustment')
       let failure: Error | null = null
       setStore((prev) => {
         try {

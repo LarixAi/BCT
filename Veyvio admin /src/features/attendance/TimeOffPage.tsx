@@ -11,7 +11,7 @@ import {
 } from '@/lib/attendance/leave-workflow'
 import type { LeaveRequestRecord } from '@/lib/attendance/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { cn } from '@/lib/cn'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 

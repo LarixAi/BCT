@@ -6,7 +6,7 @@ import { FUEL_TYPE_LABELS, OWNERSHIP_TYPE_LABELS, VEHICLE_CATEGORY_LABELS } from
 import type { CreateVehicleInput, FuelType, OwnershipType, UpdateVehicleInput, VehicleCategory } from '@/lib/vehicles/types'
 import { VehicleBackLink } from './components/VehicleProfileHeader'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

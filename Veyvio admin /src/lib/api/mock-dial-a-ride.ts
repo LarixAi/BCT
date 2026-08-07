@@ -12,7 +12,6 @@ import {
   evaluateDialARideRequest,
   evaluateMemberEligibility,
 } from '@/lib/dial-a-ride/eligibility'
-import { buildJobsFromDialARideRequest } from '@/lib/dial-a-ride/job-generation'
 import { mockTransfersApi } from './mock-transfers'
 
 let requestSeq = 1002

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
-import { mockJourneySequenceApi } from '@/lib/journey-sequence/mock-hub'
+import { journeySequenceApi } from '@/lib/journey-sequence/api'
 import type { MoveJourneyAction } from '@/lib/journey-sequence/types'
 import { cn } from '@/lib/cn'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
@@ -32,13 +32,13 @@ export function MoveJourneyPanel({
 
   const { data: destinations = [] } = useQuery({
     queryKey: tKey(['journey-destinations', tripId]),
-    queryFn: () => mockJourneySequenceApi.listDestinationRuns(tripId),
+    queryFn: () => journeySequenceApi.listDestinationRuns(tripId),
   })
 
   const preview = useMemo(
     () =>
       selectedJobIds.length
-        ? mockJourneySequenceApi.previewMove({
+        ? journeySequenceApi.previewMove({
             sourceTripId: tripId,
             jobIds: selectedJobIds,
             action,
@@ -50,7 +50,7 @@ export function MoveJourneyPanel({
 
   const commit = useMutation({
     mutationFn: async () =>
-      mockJourneySequenceApi.commitMove({
+      journeySequenceApi.commitMove({
         sourceTripId: tripId,
         jobIds: selectedJobIds,
         action,

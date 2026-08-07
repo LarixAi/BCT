@@ -5,7 +5,7 @@ import { CHECK_TYPE_LABELS } from '@/lib/vehicles/checks'
 import type { VehicleCheckType } from '@/lib/vehicles/types'
 import type { ChecksHubData } from '@/lib/checks/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

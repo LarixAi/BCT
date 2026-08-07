@@ -35,7 +35,7 @@ import { StaffSessionsPanel } from './components/StaffSessionsPanel'
 import { temporaryDepotExpiringSoon } from '@/lib/staff/depot-access'
 import { canStartDutyWithTraining } from '@/lib/staff/training'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

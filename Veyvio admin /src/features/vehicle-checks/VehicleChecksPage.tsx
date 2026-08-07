@@ -16,7 +16,7 @@ import { ChecksTemplatesTab, ChecksIntelligenceTab } from './ChecksTemplatesTab'
 import { StartAdminCheckPanel } from './components/StartAdminCheckPanel'
 import { api } from '@/lib/api/client'
 import { safeChecksHub } from '@/lib/api/safe-hubs'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

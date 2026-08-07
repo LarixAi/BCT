@@ -9,7 +9,7 @@ import type { FleetWorkOrderRow } from '@/lib/maintenance/types'
 import { WORK_ORDER_STATUS_LABELS } from '@/lib/vehicles/maintenance'
 import type { VehicleProfile, WorkOrderStatus } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { DigitalPmiForm } from './DigitalPmiForm'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 

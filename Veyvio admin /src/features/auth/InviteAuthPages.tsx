@@ -5,7 +5,7 @@ import { AuthLayout, authInputClass, authLinkClass, authPrimaryButtonClass } fro
 import { SectionCard } from '@/components/ui'
 import { AuthenticatorQr } from '@/features/auth/AuthenticatorQr'
 import { api, isMockApi } from '@/lib/api'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 
@@ -240,9 +240,6 @@ export function AcceptInvitationPage() {
     enabled: Boolean(token),
     retry: false,
   })
-
-  const isDriverInvite = preview.data?.appType === 'DRIVER'
-  const isYardInvite = preview.data?.appType === 'YARD'
   const appType = preview.data?.appType ?? done?.appType
   const appLabel =
     appType === 'DRIVER'

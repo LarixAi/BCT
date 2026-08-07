@@ -19,7 +19,7 @@ import { MaintenanceTechnicianTab } from './MaintenanceTechnicianTab'
 import { CreateWorkOrderPanel, type CreateWorkOrderPrefill } from './CreateWorkOrderPanel'
 import { api } from '@/lib/api/client'
 import { safeMaintenanceHub } from '@/lib/api/safe-hubs'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 

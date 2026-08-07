@@ -3,4 +3,4 @@ export function isOperationsDemoLayerActive(): boolean {
   return false
 }
 
-export const OPERATIONS_DEMO_BANNER = null
+export const OPERATIONS_DEMO_BANNER: { title: string; body: string } | null = null

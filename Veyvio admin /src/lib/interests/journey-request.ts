@@ -110,7 +110,11 @@ function mergeJourneyFields(...parts: JourneyRequestFields[]): JourneyRequestFie
   return out
 }
 
-export function isJourneyInterest(data: Pick<InterestDetail, 'source' | 'sourceLabel' | 'message'>): boolean {
+export function isJourneyInterest(data: {
+  source?: string | null
+  sourceLabel?: string | null
+  message?: string | null
+}): boolean {
   const source = `${data.source ?? ''} ${data.sourceLabel ?? ''}`.toLowerCase()
   if (source.includes('journey')) return true
   return Boolean(data.message?.toLowerCase().includes('journey request'))

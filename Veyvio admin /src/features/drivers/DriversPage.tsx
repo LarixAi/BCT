@@ -10,7 +10,7 @@ import {
 import { canCreateDriver } from '@/lib/drivers/permissions'
 import type { DriverProfile } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

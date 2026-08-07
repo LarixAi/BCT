@@ -53,6 +53,7 @@ function baseDocs(
       verifiedAt: '2025-06-01T10:00:00Z',
       rejectionReason: null,
       notes: null,
+      fileObjectId: null,
       fileName: 'driving_licence.pdf',
     },
     {
@@ -68,6 +69,7 @@ function baseDocs(
       verifiedAt: '2025-06-01T10:00:00Z',
       rejectionReason: null,
       notes: null,
+      fileObjectId: null,
       fileName: 'cpc.pdf',
     },
     {
@@ -83,6 +85,7 @@ function baseDocs(
       verifiedAt: '2025-06-01T10:00:00Z',
       rejectionReason: null,
       notes: null,
+      fileObjectId: null,
       fileName: 'dbs.pdf',
     },
     ...(medicalExpiry
@@ -100,7 +103,8 @@ function baseDocs(
             verifiedAt: '2025-06-01T10:00:00Z',
             rejectionReason: null,
             notes: null,
-            fileName: 'medical.pdf',
+            fileObjectId: null,
+      fileName: 'medical.pdf',
           },
         ]
       : []),
@@ -1441,6 +1445,7 @@ export const mockDriversApi = {
       verifiedAt: null,
       rejectionReason: null,
       notes: input.notes ?? null,
+      fileObjectId: null,
       fileName: input.fileName,
     }
 
@@ -1630,7 +1635,8 @@ export const mockDriversApi = {
         verifiedAt: ts,
         rejectionReason: null,
         notes: input.notes ?? null,
-        fileName: `${requirementType}-certificate.pdf`,
+        fileObjectId: null,
+      fileName: `${requirementType}-certificate.pdf`,
       }
       documents = existing
         ? documents.map((d) => (d.id === existing.id ? newDoc : d))

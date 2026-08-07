@@ -2470,7 +2470,7 @@ export class ApiClient {
 
   getBooking(id: string) {
     return this.fetch<BookingRecord>(`/bookings/${id}`).then((raw) =>
-      normalizeBookingRecord(raw as Record<string, unknown>),
+      normalizeBookingRecord(raw as unknown as Record<string, unknown>),
     )
   }
 

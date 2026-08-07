@@ -103,7 +103,7 @@ export function MaintenanceOverviewTab({
                             <p className="mt-1 text-xs font-medium text-command-800">→ {item.recommendedAction}</p>
                           )}
                         </div>
-                    <StatusPill status={item.severity ?? item.status ?? 'open'} />
+                    <StatusPill status={item.severity ?? 'open'} />
                       </li>
                     ))}
                   </ul>

@@ -112,7 +112,7 @@ export function validateRunPublish(duty: DutyRecord, tripCount = 0): RunPublishV
   }
 }
 
-export function runDepotLabel(duty: DutyRecord, tripDepot?: string | null): string {
+export function runDepotLabel(_duty: DutyRecord, tripDepot?: string | null): string {
   return tripDepot ?? 'Wembley Depot'
 }
 

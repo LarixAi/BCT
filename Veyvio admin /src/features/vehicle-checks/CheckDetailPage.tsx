@@ -11,7 +11,7 @@ import {
   SuspiciousFlagsPanel,
 } from './components/CheckWorkflowPanels'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

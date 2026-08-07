@@ -12,12 +12,13 @@ import type { DutyRecord } from '@/lib/api/types'
 import { runDriverName } from '@/lib/ops/runs-trips-schedule'
 import { formatScheduleTimeRange, initialsForName } from './schedule-time-grid'
 
-const READINESS_RING: Record<DutyReadiness, string> = {
+const READINESS_RING: Partial<Record<DutyReadiness, string>> = {
   ready: 'ring-emerald-200',
   at_risk: 'ring-amber-200',
   cover_required: 'ring-red-200',
-  unassigned: 'ring-border',
-  unknown: 'ring-border',
+  preparing: 'ring-border',
+  waiting_for_driver: 'ring-amber-200',
+  waiting_for_vehicle: 'ring-amber-200',
 }
 
 export function ScheduleDutyCard({

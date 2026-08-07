@@ -4,7 +4,7 @@ import { SectionCard } from '@/components/ui'
 import type { DefectsHubData } from '@/lib/defects/types'
 import type { DefectSeverity } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

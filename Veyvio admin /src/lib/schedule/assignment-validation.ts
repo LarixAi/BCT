@@ -1,5 +1,6 @@
 import type { DutyRecord } from '@/lib/api/types'
-import type { DriverProfile, VehicleProfile } from '@/lib/drivers/types'
+import type { DriverProfile } from '@/lib/drivers/types'
+import type { VehicleProfile } from '@/lib/vehicles/types'
 import { evaluateDriverEligibility, jobContextFromBookingRequirements } from '@/lib/eligibility/engine'
 import type { OperationalJob, OperationalTrip } from '@/lib/transfers/types'
 import { evaluateVehicleRelease } from '@/lib/vehicles/release'
@@ -115,7 +116,7 @@ export function validatePlanningAssignment(input: {
   } else {
     const release = evaluateVehicleRelease(input.vehicle, {
       wheelchairRequired: ctx.wheelchairRequired,
-      passengerCount: input.jobs.length,
+      minSeatingCapacity: input.jobs.length,
     })
     for (const block of release.failures) {
       items.push({

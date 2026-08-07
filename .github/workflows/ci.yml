@@ -88,8 +88,6 @@ jobs:
           npm test
 
       - name: Typecheck
-        id: admin-typecheck
-        continue-on-error: true
         run: |
           cd "Veyvio admin "
           npm run typecheck
@@ -99,11 +97,7 @@ jobs:
           CI: "true"
         run: |
           cd "Veyvio admin "
-          npm run build:ci
-
-      - name: Typecheck debt notice
-        if: steps.admin-typecheck.outcome == 'failure'
-        run: echo "::warning::Admin typecheck still failing (P0-04). Vite build:ci remains the interim gate; clear tsc errors before flipping production build to tsc -b."
+          npm run build
 
   driver:
     name: Driver

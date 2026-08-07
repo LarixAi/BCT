@@ -3,8 +3,14 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { veyvioMapStyle } from '@/features/live-operations/map/veyvioMapStyle'
 
+type LineStringFeature = {
+  type: 'Feature'
+  properties: Record<string, unknown>
+  geometry: { type: 'LineString'; coordinates: [number, number][] }
+}
+
+
 const DEFAULT_HEIGHT_PX = 360
-const LONDON: [number, number] = [-0.1278, 51.5074]
 const ROUTE_SOURCE = 'stop-sequence-route'
 const ROUTE_LAYER = 'stop-sequence-route-line'
 const ROUTE_CASING = 'stop-sequence-route-casing'
@@ -145,7 +151,7 @@ function scheduleResize(map: maplibregl.Map) {
 }
 
 function setRouteOnMap(map: maplibregl.Map, coordinates: [number, number][]) {
-  const line: GeoJSON.Feature<GeoJSON.LineString> = {
+  const line: LineStringFeature = {
     type: 'Feature',
     properties: {},
     geometry: { type: 'LineString', coordinates },

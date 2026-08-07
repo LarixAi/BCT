@@ -12,7 +12,7 @@ import { daysRemainingLabel } from '@/lib/inspections/due'
 import { canSignOffInspection, inspectionSignOffBlockers } from '@/lib/inspections/sign-off'
 import type { InspectionStatus } from '@/lib/inspections/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { InspectionChecklistPanel } from './InspectionChecklistPanel'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 

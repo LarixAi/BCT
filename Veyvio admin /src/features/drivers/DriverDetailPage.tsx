@@ -28,7 +28,7 @@ import { DriverAccessSecurityTab } from './access/DriverAccessSecurityTab'
 import { SuspendDriverAccessDialog } from './components/SuspendDriverAccessDialog'
 import { DriverInviteLinkBanner } from './components/DriverInviteLinkBanner'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import type { SuspendDriverInput } from '@/lib/drivers/types'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 

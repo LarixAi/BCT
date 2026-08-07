@@ -100,7 +100,7 @@ export function TripOperationalDetailPage({ trip, tab: controlledTab, onTabChang
 
       <JobExecutionPanel
         jobId={trip.dutyId ?? trip.id}
-        live={trip.status === 'in_progress' || trip.status === 'onboard'}
+        live={trip.status === 'in_progress'}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">

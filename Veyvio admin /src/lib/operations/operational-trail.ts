@@ -116,7 +116,7 @@ function stepStatus(
 ): OperationalTrailStepStatus {
   if (step === current) return hasValue ? 'current' : 'warning'
   const order = ['source', 'job', 'trip', 'run', 'live'] as const
-  const stepIdx = order.indexOf(step)
+  const stepIdx = order.indexOf(step as (typeof order)[number])
   const currentIdx = order.indexOf(current)
   if (stepIdx < currentIdx && hasValue) return 'complete'
   if (hasValue) return 'complete'
@@ -136,7 +136,7 @@ export function buildTrailFromTrip(trip: OperationalTrip, duty?: DutyRecord | nu
     tripId: trip.id,
     runReference: trip.runReference ?? duty?.reference ?? null,
     runId: trip.dutyId ?? duty?.id ?? null,
-    current: trip.status === 'in_progress' || trip.status === 'passenger_boarded' ? 'live' : 'trip',
+    current: trip.status === 'in_progress' || String(trip.status) === 'passenger_boarded' ? 'live' : 'trip',
   })
 }
 

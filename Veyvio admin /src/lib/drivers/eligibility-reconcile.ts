@@ -1,4 +1,4 @@
-import { countDocumentsPendingAdminReview, isDocumentPendingAdminReview } from './compliance'
+import { countDocumentsPendingAdminReview } from './compliance'
 import type { DriverEligibilityResult, DriverProfile, OperationalEligibility } from './types'
 
 const ONBOARDING_OPS = new Set(['draft', 'onboarding', 'pending_compliance'])

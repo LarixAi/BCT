@@ -82,8 +82,8 @@ const findings = files.flatMap(scanFile)
 /** Tracked production fallbacks — remove as live APIs replace them. */
 const TRACKED_DEBT = new Map([
   ['src/lib/api/real-client.ts', 'fail-closed empty hubs — no mock fallbacks'],
-  ['src/features/journey-sequence/JourneySequencePanel.tsx', 'journey sequence still mock-backed — needs Command workspace API'],
-  ['src/features/journey-sequence/MoveJourneyPanel.tsx', 'journey move still mock-backed'],
+  ['src/features/journey-sequence/JourneySequencePanel.tsx', 'journey sequence live read-only until Command workspace API (mutations mock-gated)'],
+  ['src/features/journey-sequence/MoveJourneyPanel.tsx', 'journey move live-blocked until Command workspace API'],
   ['src/features/jobs/JobsPage.tsx', 'operations demo layer banner only'],
   ['src/features/schedule/SchedulePage.tsx', 'operations demo layer banner only'],
   ['src/lib/operations/operations-data-source.ts', 'demo layer toggle — fail-closed in production builds'],

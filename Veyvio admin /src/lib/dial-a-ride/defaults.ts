@@ -1,7 +1,6 @@
 import type { DialARideRequestDraft } from './types'
 import { DEFAULT_SERVICE_RULES } from './eligibility'
 
-const uid = () => `tmp-${Math.random().toString(36).slice(2, 9)}`
 
 const DAY_IDS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 

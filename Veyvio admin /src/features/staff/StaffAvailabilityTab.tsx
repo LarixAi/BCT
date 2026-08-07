@@ -7,7 +7,7 @@ import { DUTY_STATUS_LABELS } from '@/lib/staff/constants'
 import { canManageStaffDuty } from '@/lib/staff/permissions'
 import type { StaffHubData } from '@/lib/staff/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

@@ -5,8 +5,14 @@ import { veyvioMapStyle } from '@/features/live-operations/map/veyvioMapStyle'
 import type { JourneyRequestFields } from '@/lib/interests/journey-request'
 import { displayValue } from '@/lib/interests/journey-request'
 
+type LineStringFeature = {
+  type: 'Feature'
+  properties: Record<string, unknown>
+  geometry: { type: 'LineString'; coordinates: [number, number][] }
+}
+
+
 const MAP_HEIGHT_PX = 380
-const LONDON: [number, number] = [-0.1278, 51.5074]
 const ROUTE_SOURCE = 'interest-journey-route'
 const ROUTE_LAYER = 'interest-journey-route-line'
 const ROUTE_CASING = 'interest-journey-route-casing'
@@ -152,7 +158,7 @@ function scheduleResize(map: maplibregl.Map) {
 }
 
 function setRouteOnMap(map: maplibregl.Map, coordinates: [number, number][]) {
-  const line: GeoJSON.Feature<GeoJSON.LineString> = {
+  const line: LineStringFeature = {
     type: 'Feature',
     properties: {},
     geometry: { type: 'LineString', coordinates },

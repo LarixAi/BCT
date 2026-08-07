@@ -28,7 +28,7 @@ import type { AttendanceBoardRow, CoverCandidate, LeaveRequestRecord } from '@/l
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
 import type { DutyRecord } from '@/lib/api/types'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
 import { isOperationsDemoLayerActive, OPERATIONS_DEMO_BANNER } from '@/lib/operations/operations-data-source'
 import {
@@ -309,7 +309,7 @@ export function SchedulePage() {
         </div>
       )}
 
-      {isOperationsDemoLayerActive() && (
+      {isOperationsDemoLayerActive() && OPERATIONS_DEMO_BANNER && (
         <div className="rounded-xl border border-command-200 bg-command-50 px-4 py-3 text-sm text-command-950">
           <p className="font-semibold">{OPERATIONS_DEMO_BANNER.title}</p>
           <p className="mt-1 text-command-900">{OPERATIONS_DEMO_BANNER.body}</p>

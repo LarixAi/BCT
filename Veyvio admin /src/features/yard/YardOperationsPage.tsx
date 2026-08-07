@@ -19,7 +19,7 @@ import { CreateYardTaskPanel } from './components/CreateYardTaskPanel'
 import { VehicleOperationsDrawer } from './components/VehicleOperationsDrawer'
 import { api } from '@/lib/api/client'
 import { safeYardHub } from '@/lib/api/safe-hubs'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 
