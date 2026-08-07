@@ -1,7 +1,10 @@
 import type { CostControlStore } from '../data/seed'
+import type { AuditEvent, ReviewDecision } from '../domain/review-actions'
+import { applyReviewDecision } from '../domain/review-actions'
 import { requireOrganisationId } from '../domain/tenancy'
-import type { OrganisationId } from '../domain/types'
+import type { CostRecord, OrganisationId, ReviewItem } from '../domain/types'
 import { assertFinancePermission } from './finance-permissions'
+import { parseSimpleReviewDecision } from './finance-review-decision'
 
 export type FinanceRole =
   | 'finance_director'
@@ -28,6 +31,12 @@ export type FinanceAuthVerifier = {
   verifyBearerToken(token: string): Promise<AuthenticatedPrincipal | null>
 }
 
+export type ReviewDecisionCommandResult = {
+  review: ReviewItem
+  cost: CostRecord
+  audit: AuditEvent
+}
+
 /**
  * The concrete Postgres adapter must:
  * 1. begin a transaction;
@@ -46,6 +55,17 @@ export type FinanceDatabase = {
     operation: () => Promise<T>,
   ): Promise<T>
   loadWorkspace(organisationId: OrganisationId): Promise<CostControlStore>
+  loadReviewCostPair(
+    organisationId: OrganisationId,
+    reviewId: string,
+  ): Promise<{ review: ReviewItem; cost: CostRecord } | null>
+  persistReviewDecision(input: {
+    organisationId: OrganisationId
+    actorId: string
+    review: ReviewItem
+    cost: CostRecord
+    audit: AuditEvent
+  }): Promise<void>
 }
 
 function json(status: number, body: Record<string, unknown>): Response {
@@ -69,58 +89,154 @@ function organisationHeader(request: Request): OrganisationId | null {
   return value ? value : null
 }
 
+async function authenticate(
+  request: Request,
+  input: { auth: FinanceAuthVerifier; database: FinanceDatabase },
+  action: 'workspace:read' | 'cost:approve',
+): Promise<
+  | { principal: AuthenticatedPrincipal; organisationId: OrganisationId; membership: FinanceMembership }
+  | Response
+> {
+  const token = bearerToken(request)
+  if (!token) return json(401, { error: 'authentication_required' })
+
+  const principal = await input.auth.verifyBearerToken(token)
+  if (!principal?.userSubject.trim()) {
+    return json(401, { error: 'invalid_or_expired_token' })
+  }
+
+  const organisationId = organisationHeader(request)
+  if (!organisationId) {
+    return json(400, { error: 'active_organisation_required' })
+  }
+  requireOrganisationId(organisationId)
+
+  const membership = await input.database.findMembership(
+    principal.userSubject,
+    organisationId,
+  )
+  if (
+    !membership?.active ||
+    membership.userSubject !== principal.userSubject ||
+    membership.organisationId !== organisationId
+  ) {
+    return json(403, { error: 'organisation_access_denied' })
+  }
+  try {
+    assertFinancePermission(membership.role, action)
+  } catch {
+    return json(403, { error: 'finance_permission_denied' })
+  }
+  return { principal, organisationId, membership }
+}
+
 export function createFinanceApiHandler(input: {
   auth: FinanceAuthVerifier
   database: FinanceDatabase
 }) {
   return async function handleFinanceRequest(request: Request): Promise<Response> {
     const url = new URL(request.url)
-    if (url.pathname !== '/finance/workspace' || request.method !== 'GET') {
-      return json(404, { error: 'not_found' })
-    }
+    const path = url.pathname
 
-    const token = bearerToken(request)
-    if (!token) return json(401, { error: 'authentication_required' })
+    if (path === '/finance/workspace' && request.method === 'GET') {
+      const authz = await authenticate(request, input, 'workspace:read')
+      if (authz instanceof Response) return authz
 
-    const principal = await input.auth.verifyBearerToken(token)
-    if (!principal?.userSubject.trim()) {
-      return json(401, { error: 'invalid_or_expired_token' })
-    }
-
-    const organisationId = organisationHeader(request)
-    if (!organisationId) {
-      return json(400, { error: 'active_organisation_required' })
-    }
-    requireOrganisationId(organisationId)
-
-    const membership = await input.database.findMembership(
-      principal.userSubject,
-      organisationId,
-    )
-    if (
-      !membership?.active ||
-      membership.userSubject !== principal.userSubject ||
-      membership.organisationId !== organisationId
-    ) {
-      return json(403, { error: 'organisation_access_denied' })
-    }
-    try {
-      assertFinancePermission(membership.role, 'workspace:read')
-    } catch {
-      return json(403, { error: 'finance_permission_denied' })
-    }
-
-    try {
-      const workspace = await input.database.withOrganisationContext(
-        { userSubject: principal.userSubject, organisationId },
-        () => input.database.loadWorkspace(organisationId),
-      )
-      if (workspace.organisation.id !== organisationId) {
-        throw new Error('Finance database returned a cross-tenant workspace')
+      try {
+        const workspace = await input.database.withOrganisationContext(
+          { userSubject: authz.principal.userSubject, organisationId: authz.organisationId },
+          () => input.database.loadWorkspace(authz.organisationId),
+        )
+        if (workspace.organisation.id !== authz.organisationId) {
+          throw new Error('Finance database returned a cross-tenant workspace')
+        }
+        return json(200, workspace as unknown as Record<string, unknown>)
+      } catch {
+        return json(500, { error: 'finance_workspace_unavailable' })
       }
-      return json(200, workspace as unknown as Record<string, unknown>)
-    } catch {
-      return json(500, { error: 'finance_workspace_unavailable' })
     }
+
+    const reviewMatch = /^\/finance\/reviews\/([^/]+)\/decision$/.exec(path)
+    if (reviewMatch && request.method === 'POST') {
+      const authz = await authenticate(request, input, 'cost:approve')
+      if (authz instanceof Response) return authz
+      const reviewId = decodeURIComponent(reviewMatch[1]!)
+
+      let body: Record<string, unknown>
+      try {
+        body = (await request.json()) as Record<string, unknown>
+      } catch {
+        return json(400, { error: 'invalid_json' })
+      }
+
+      let decision: ReviewDecision
+      try {
+        if (
+          body.decision &&
+          typeof body.decision === 'object' &&
+          ('allocations' in (body.decision as object) ||
+            'evidenceLabel' in (body.decision as object))
+        ) {
+          throw new Error('allocations_or_evidence_not_supported_yet')
+        }
+        decision = parseSimpleReviewDecision(body.decision)
+      } catch (error) {
+        const code = error instanceof Error ? error.message : 'invalid_decision'
+        return json(400, { error: code })
+      }
+
+      try {
+        const result = await input.database.withOrganisationContext(
+          { userSubject: authz.principal.userSubject, organisationId: authz.organisationId },
+          async () => {
+            const pair = await input.database.loadReviewCostPair(authz.organisationId, reviewId)
+            if (!pair) throw Object.assign(new Error('review_not_found'), { status: 404 })
+
+            const expectedVersion =
+              body.expectedCostVersion != null ? Number(body.expectedCostVersion) : null
+            if (expectedVersion != null && pair.cost.version !== expectedVersion) {
+              throw Object.assign(new Error('cost_version_conflict'), { status: 409 })
+            }
+
+            const applied = applyReviewDecision({
+              organisationId: authz.organisationId,
+              review: pair.review,
+              cost: pair.cost,
+              decision,
+              actorId: authz.principal.userSubject,
+            })
+
+            await input.database.persistReviewDecision({
+              organisationId: authz.organisationId,
+              actorId: authz.principal.userSubject,
+              review: applied.review,
+              cost: applied.cost,
+              audit: applied.audit,
+            })
+
+            return {
+              review: applied.review,
+              cost: applied.cost,
+              audit: applied.audit,
+            } satisfies ReviewDecisionCommandResult
+          },
+        )
+        return json(200, result as unknown as Record<string, unknown>)
+      } catch (error) {
+        const status =
+          error && typeof error === 'object' && 'status' in error
+            ? Number((error as { status: number }).status)
+            : 400
+        const code = error instanceof Error ? error.message : 'decision_failed'
+        if (code === 'review_not_found') return json(404, { error: code })
+        if (code === 'cost_version_conflict') return json(409, { error: code })
+        if (code === 'Only open reviews can be decided (except evidence requests)') {
+          return json(409, { error: 'review_not_open' })
+        }
+        return json(status >= 400 && status < 600 ? status : 400, { error: code })
+      }
+    }
+
+    return json(404, { error: 'not_found' })
   }
 }

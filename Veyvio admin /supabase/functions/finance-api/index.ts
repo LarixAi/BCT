@@ -4,6 +4,10 @@
  */
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders, json } from '../_shared/http.ts'
+import {
+  applySimpleReviewDecision,
+  parseSimpleReviewDecision,
+} from '../_shared/finance-review-decision.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -69,6 +73,12 @@ Deno.serve(async (request) => {
 
     if (path === '/finance/workspace' && request.method === 'GET') {
       return await handleWorkspace(request)
+    }
+    {
+      const reviewMatch = /^\/finance\/reviews\/([^/]+)\/decision$/.exec(path)
+      if (reviewMatch && request.method === 'POST') {
+        return await handleReviewDecision(request, decodeURIComponent(reviewMatch[1]!))
+      }
     }
     if (path === '/bank/consent/start' && request.method === 'GET') {
       return await handleBankConsentStart(request, url)
@@ -265,6 +275,212 @@ async function handleWorkspace(request: Request): Promise<Response> {
     return json({ error: 'finance_workspace_unavailable' }, 500)
   }
   return json(workspace, 200)
+}
+
+function roleAllowsCostApprove(role: FinanceRole): boolean {
+  return [
+    'finance_director',
+    'finance_admin',
+    'finance_manager',
+    'finance_officer',
+    'cost_approver',
+  ].includes(role)
+}
+
+async function handleReviewDecision(request: Request, reviewId: string): Promise<Response> {
+  const auth = await verifyBearer(request)
+  if (auth instanceof Response) return auth
+
+  const organisationId = request.headers.get('X-Veyvio-Organisation-ID')?.trim()
+  if (!organisationId) return json({ error: 'active_organisation_required' }, 400)
+
+  const membership = await findFinanceMembership(auth.userId, organisationId)
+  if (!membership?.active) return json({ error: 'organisation_access_denied' }, 403)
+  if (!roleAllowsCostApprove(membership.role)) {
+    return json({ error: 'finance_permission_denied' }, 403)
+  }
+
+  await ensureOrganisationShell(organisationId)
+  await cc('organisation_memberships.upsert', admin.from('organisation_memberships').upsert(
+    {
+      id: `ccm_${organisationId}_${auth.userId}`,
+      organisation_id: organisationId,
+      user_subject: auth.userId,
+      role: membership.role,
+      active: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'organisation_id,user_subject' },
+  ))
+
+  let body: Record<string, unknown>
+  try {
+    body = (await request.json()) as Record<string, unknown>
+  } catch {
+    return json({ error: 'invalid_json' }, 400)
+  }
+
+  let decision
+  try {
+    decision = parseSimpleReviewDecision(body.decision)
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'invalid_decision'
+    return json({ error: code }, 400)
+  }
+
+  if (
+    body.decision &&
+    typeof body.decision === 'object' &&
+    ('allocations' in (body.decision as object) || 'evidenceLabel' in (body.decision as object))
+  ) {
+    return json({ error: 'allocations_or_evidence_not_supported_yet' }, 400)
+  }
+
+  const { data: reviewRow, error: reviewError } = await admin
+    .from('review_items')
+    .select('*')
+    .eq('organisation_id', organisationId)
+    .eq('id', reviewId)
+    .maybeSingle()
+  if (reviewError) return json({ error: 'review_lookup_failed' }, 500)
+  if (!reviewRow) return json({ error: 'review_not_found' }, 404)
+
+  const { data: costRow, error: costError } = await admin
+    .from('cost_records')
+    .select('*')
+    .eq('organisation_id', organisationId)
+    .eq('id', String(reviewRow.cost_id))
+    .maybeSingle()
+  if (costError) return json({ error: 'cost_lookup_failed' }, 500)
+  if (!costRow) return json({ error: 'cost_not_found' }, 404)
+
+  const expectedVersion =
+    body.expectedCostVersion != null ? Number(body.expectedCostVersion) : null
+  if (expectedVersion != null && Number(costRow.version) !== expectedVersion) {
+    return json({ error: 'cost_version_conflict', currentVersion: Number(costRow.version) }, 409)
+  }
+
+  let result
+  try {
+    result = applySimpleReviewDecision({
+      organisationId,
+      actorId: auth.userId,
+      decision,
+      review: {
+        id: String(reviewRow.id),
+        organisationId,
+        costId: String(reviewRow.cost_id),
+        signal: String(reviewRow.signal),
+        title: String(reviewRow.title),
+        detail: String(reviewRow.detail),
+        state: String(reviewRow.state) as 'open' | 'approved' | 'rejected' | 'snoozed',
+        resolutionNote: reviewRow.resolution_note != null ? String(reviewRow.resolution_note) : null,
+        version: Number(reviewRow.version ?? 1),
+        createdAt: String(reviewRow.created_at),
+      },
+      cost: {
+        id: String(costRow.id),
+        organisationId,
+        version: Number(costRow.version ?? 1),
+        reviewState: String(costRow.review_state ?? 'none') as
+          | 'none'
+          | 'open'
+          | 'approved'
+          | 'rejected'
+          | 'snoozed',
+        validationState: String(costRow.validation_state),
+        correctionReason: costRow.correction_reason != null ? String(costRow.correction_reason) : null,
+        updatedAt: String(costRow.updated_at),
+      },
+    })
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'decision_failed'
+    const status = code === 'review_not_open' ? 409 : 400
+    return json({ error: code }, status)
+  }
+
+  await cc(
+    'review_items.update',
+    admin
+      .from('review_items')
+      .update({
+        state: result.review.state,
+        detail: result.review.detail,
+        resolution_note: result.review.resolutionNote,
+        version: Number(reviewRow.version ?? 1) + 1,
+        updated_at: result.audit.createdAt,
+      })
+      .eq('organisation_id', organisationId)
+      .eq('id', reviewId),
+  )
+
+  await cc(
+    'cost_records.update',
+    admin
+      .from('cost_records')
+      .update({
+        review_state: result.cost.reviewState,
+        validation_state: result.cost.validationState,
+        correction_reason: result.cost.correctionReason,
+        version: result.cost.version,
+        updated_at: result.cost.updatedAt,
+      })
+      .eq('organisation_id', organisationId)
+      .eq('id', result.cost.id)
+      .eq('version', Number(costRow.version ?? 1)),
+  )
+
+  await cc(
+    'audit_events.insert',
+    admin.from('audit_events').insert({
+      id: result.audit.id,
+      organisation_id: organisationId,
+      actor_id: result.audit.actorId,
+      action: result.audit.action,
+      entity_type: result.audit.entityType,
+      entity_id: result.audit.entityId,
+      reason: result.audit.reason,
+      before_state: result.audit.beforeState,
+      after_state: result.audit.afterState,
+      created_at: result.audit.createdAt,
+    }),
+  )
+
+  const workspace = await loadWorkspace(organisationId)
+  const cost = workspace.costs.find((c: { id: string }) => c.id === result.cost.id)
+  const review = {
+    id: result.review.id,
+    organisationId,
+    costId: result.review.costId,
+    signal: result.review.signal,
+    title: result.review.title,
+    detail: result.review.detail,
+    state: result.review.state,
+    createdAt: result.review.createdAt,
+    resolutionNote: result.review.resolutionNote,
+    resolvedAt: result.review.resolvedAt,
+    resolvedBy: result.review.resolvedBy,
+  }
+
+  return json(
+    {
+      review,
+      cost: cost ?? null,
+      audit: {
+        id: result.audit.id,
+        organisationId: result.audit.organisationId,
+        actorId: result.audit.actorId,
+        action: result.audit.action,
+        entityType: result.audit.entityType,
+        entityId: result.audit.entityId,
+        reason: result.audit.reason,
+        beforeState: result.audit.beforeState,
+        afterState: result.audit.afterState,
+        createdAt: result.audit.createdAt,
+      },
+    },
+    200,
+  )
 }
 
 async function loadWorkspace(organisationId: string) {
@@ -524,6 +740,7 @@ async function loadWorkspace(organisationId: string) {
       detail: String(r.detail),
       state: String(r.state),
       createdAt: String(r.created_at),
+      resolutionNote: r.resolution_note != null ? String(r.resolution_note) : null,
     })),
     quarantine: (quarantineRows ?? []).map((q) => ({
       id: String(q.id),

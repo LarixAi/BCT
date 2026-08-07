@@ -74,5 +74,49 @@ describe('cost control repositories', () => {
     })
     await expect(repository.loadWorkspace(session)).rejects.toThrow(/cross-tenant/i)
   })
+
+  it('posts authenticated review decisions to the Finance API', async () => {
+    const workspace = createSeedStore()
+    const review = workspace.reviews.find((r) => r.state === 'open') ?? workspace.reviews[0]!
+    const cost = workspace.costs.find((c) => c.id === review.costId)!
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          review: { ...review, state: 'approved', organisationId: session.activeOrganisationId },
+          cost: { ...cost, reviewState: 'approved', organisationId: session.activeOrganisationId },
+          audit: {
+            id: 'audit-1',
+            organisationId: session.activeOrganisationId,
+            actorId: session.userSubject,
+            action: 'review.approve',
+            entityType: 'review_item',
+            entityId: review.id,
+            reason: 'Approved',
+            beforeState: {},
+            afterState: {},
+            createdAt: new Date().toISOString(),
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    const repository = createApiCostControlRepository({
+      apiBaseUrl: 'https://finance.example.test',
+      fetchImpl,
+    })
+
+    await repository.resolveReviewDecision(session, review.id, { type: 'approve' }, cost.version)
+
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    const [url, request] = fetchImpl.mock.calls[0] ?? []
+    expect(url).toBe(
+      `https://finance.example.test/finance/reviews/${encodeURIComponent(review.id)}/decision`,
+    )
+    expect(request?.method).toBe('POST')
+    expect(request?.headers).toMatchObject({
+      Authorization: 'Bearer test-token',
+      'X-Veyvio-Organisation-ID': 'org_demo_cec',
+    })
+  })
 })
 

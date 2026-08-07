@@ -6,20 +6,39 @@ import {
   type FinanceDatabase,
 } from './finance-api'
 
-function request(headers: Record<string, string> = {}) {
+function workspaceRequest(headers: Record<string, string> = {}) {
   return new Request('https://finance.example.test/finance/workspace', { headers })
+}
+
+function decisionRequest(
+  reviewId: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
+  return new Request(`https://finance.example.test/finance/reviews/${reviewId}/decision`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  })
 }
 
 function dependencies(input?: {
   validToken?: boolean
   membership?: boolean
   workspaceOrganisationId?: string
+  role?: 'finance_manager' | 'board_reader'
 }) {
   const workspace = createSeedStore()
   workspace.organisation = {
     ...workspace.organisation,
     id: input?.workspaceOrganisationId ?? 'org-1',
   }
+  const openReview = workspace.reviews.find((r) => r.state === 'open') ?? workspace.reviews[0]!
+  const openCost = workspace.costs.find((c) => c.id === openReview.costId)!
+
   const auth: FinanceAuthVerifier = {
     verifyBearerToken: vi.fn(async () =>
       input?.validToken === false ? null : { userSubject: 'user-1' },
@@ -32,25 +51,30 @@ function dependencies(input?: {
         : {
             organisationId: 'org-1',
             userSubject: 'user-1',
-            role: 'finance_manager',
+            role: input?.role ?? 'finance_manager',
             active: true,
           },
     ),
     withOrganisationContext: vi.fn(async (_context, operation) => operation()),
     loadWorkspace: vi.fn(async () => workspace),
+    loadReviewCostPair: vi.fn(async () => ({
+      review: { ...openReview, organisationId: 'org-1' },
+      cost: { ...openCost, organisationId: 'org-1' },
+    })),
+    persistReviewDecision: vi.fn(async () => undefined),
   }
-  return { auth, database }
+  return { auth, database, openReview, openCost }
 }
 
 describe('authenticated Finance API', () => {
   it('requires a bearer token and active organisation', async () => {
     const deps = dependencies()
     const handle = createFinanceApiHandler(deps)
-    expect((await handle(request())).status).toBe(401)
+    expect((await handle(workspaceRequest())).status).toBe(401)
     expect(
       (
         await handle(
-          request({
+          workspaceRequest({
             Authorization: 'Bearer token',
           }),
         )
@@ -63,7 +87,7 @@ describe('authenticated Finance API', () => {
     expect(
       (
         await invalid(
-          request({
+          workspaceRequest({
             Authorization: 'Bearer bad',
             'X-Veyvio-Organisation-ID': 'org-1',
           }),
@@ -75,7 +99,7 @@ describe('authenticated Finance API', () => {
     expect(
       (
         await denied(
-          request({
+          workspaceRequest({
             Authorization: 'Bearer token',
             'X-Veyvio-Organisation-ID': 'org-1',
           }),
@@ -88,7 +112,7 @@ describe('authenticated Finance API', () => {
     const deps = dependencies()
     const handle = createFinanceApiHandler(deps)
     const response = await handle(
-      request({
+      workspaceRequest({
         Authorization: 'Bearer token',
         'X-Veyvio-Organisation-ID': 'org-1',
       }),
@@ -106,7 +130,7 @@ describe('authenticated Finance API', () => {
       dependencies({ workspaceOrganisationId: 'org-other' }),
     )
     const response = await handle(
-      request({
+      workspaceRequest({
         Authorization: 'Bearer token',
         'X-Veyvio-Organisation-ID': 'org-1',
       }),
@@ -116,5 +140,40 @@ describe('authenticated Finance API', () => {
       error: 'finance_workspace_unavailable',
     })
   })
-})
 
+  it('persists an approve review decision', async () => {
+    const deps = dependencies()
+    const handle = createFinanceApiHandler(deps)
+    const response = await handle(
+      decisionRequest(
+        deps.openReview.id,
+        { decision: { type: 'approve' }, expectedCostVersion: deps.openCost.version },
+        {
+          Authorization: 'Bearer token',
+          'X-Veyvio-Organisation-ID': 'org-1',
+        },
+      ),
+    )
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.review.state).toBe('approved')
+    expect(deps.database.persistReviewDecision).toHaveBeenCalledOnce()
+  })
+
+  it('denies review decisions for read-only finance roles', async () => {
+    const deps = dependencies({ role: 'board_reader' })
+    const handle = createFinanceApiHandler(deps)
+    const response = await handle(
+      decisionRequest(
+        deps.openReview.id,
+        { decision: { type: 'approve' } },
+        {
+          Authorization: 'Bearer token',
+          'X-Veyvio-Organisation-ID': 'org-1',
+        },
+      ),
+    )
+    expect(response.status).toBe(403)
+    expect(deps.database.persistReviewDecision).not.toHaveBeenCalled()
+  })
+})

@@ -66,8 +66,8 @@ type StoreApi = CostControlStore & {
     quarantined: number
     exceptions: number
   }
-  resolveReview: (reviewId: string, state: ReviewItem['state']) => void
-  resolveReviewDecision: (reviewId: string, decision: ReviewDecision) => void
+  resolveReview: (reviewId: string, state: ReviewItem['state']) => void | Promise<void>
+  resolveReviewDecision: (reviewId: string, decision: ReviewDecision) => Promise<void>
   advanceWageBatchStatus: (batchId: string) => void
   clearDriverDayDispute: (driverDayId: string) => void
   addWageAdjustment: (input: {
@@ -381,22 +381,70 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const resolveReviewDecision = useCallback((reviewId: string, decision: ReviewDecision) => {
-    assertBrowserMutationAllowed('resolveReviewDecision')
+  const resolveReviewDecision = useCallback(async (reviewId: string, decision: ReviewDecision) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to decide reviews')
+      }
+      const cost = store.costs.find((c) =>
+        store.reviews.some((r) => r.id === reviewId && r.costId === c.id),
+      )
+      const result = await resolveCostControlRepository(financeConfig).resolveReviewDecision(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        reviewId,
+        decision,
+        cost?.version,
+      )
+      setStore((prev) => {
+        const nextCosts = result.cost
+          ? prev.costs.map((c) => (c.id === result.cost!.id ? result.cost! : c))
+          : prev.costs
+        let lastSnapshot = prev.lastSnapshot
+        let lastValidSnapshot = prev.lastValidSnapshot
+        try {
+          const snap = buildFinancialSnapshot({
+            organisationId: prev.organisation.id,
+            budget: prev.budget,
+            costs: nextCosts,
+          })
+          lastSnapshot = snap
+          lastValidSnapshot = snap
+        } catch {
+          // keep last valid
+        }
+        return {
+          ...prev,
+          costs: nextCosts,
+          reviews: prev.reviews.map((r) => (r.id === result.review.id ? result.review : r)),
+          auditEvents: [result.audit, ...(prev.auditEvents ?? [])],
+          lastSnapshot,
+          lastValidSnapshot,
+        }
+      })
+      return
+    }
+
     let failure: Error | null = null
     setStore((prev) => {
       try {
         const orgId = prev.organisation.id
         const review = filterByOrganisation(prev.reviews, orgId).find((r) => r.id === reviewId)
         if (!review) throw new Error('Review not found in this organisation')
-        const cost = prev.costs.find((c) => c.id === review.costId)
-        if (!cost) throw new Error('Cost not found for review')
-        assertSameOrganisation(orgId, cost.organisationId, 'cost')
+        const localCost = prev.costs.find((c) => c.id === review.costId)
+        if (!localCost) throw new Error('Cost not found for review')
+        assertSameOrganisation(orgId, localCost.organisationId, 'cost')
 
         const result = applyReviewDecision({
           organisationId: orgId,
           review,
-          cost,
+          cost: localCost,
           decision,
         })
 
@@ -429,7 +477,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       }
     })
     if (failure) throw failure
-  }, [])
+  }, [auth.activeMembership, auth.identity, store.costs, store.reviews])
 
   const resolveReview = useCallback((reviewId: string, state: ReviewItem['state']) => {
     const map: Record<Exclude<ReviewItem['state'], 'open'>, ReviewDecision> = {
@@ -438,7 +486,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       snoozed: { type: 'snooze' },
     }
     if (state === 'open') return
-    resolveReviewDecision(reviewId, map[state])
+    return resolveReviewDecision(reviewId, map[state])
   }, [resolveReviewDecision])
 
   const clearDriverDayDispute = useCallback((driverDayId: string) => {

@@ -1,7 +1,8 @@
 import type { CostControlStore } from '../data/seed'
 import { createSeedStore } from '../data/seed'
+import type { AuditEvent, ReviewDecision } from '../domain/review-actions'
 import { assertSameOrganisation, requireOrganisationId } from '../domain/tenancy'
-import type { OrganisationId } from '../domain/types'
+import type { CostRecord, OrganisationId, ReviewItem } from '../domain/types'
 
 export type FinanceSession = {
   accessToken: string
@@ -9,9 +10,21 @@ export type FinanceSession = {
   activeOrganisationId: OrganisationId
 }
 
+export type ReviewDecisionApiResult = {
+  review: ReviewItem
+  cost: CostRecord | null
+  audit: AuditEvent
+}
+
 export type CostControlRepository = {
   readonly mode: 'demo' | 'api'
   loadWorkspace(session: FinanceSession): Promise<CostControlStore>
+  resolveReviewDecision(
+    session: FinanceSession,
+    reviewId: string,
+    decision: ReviewDecision,
+    expectedCostVersion?: number,
+  ): Promise<ReviewDecisionApiResult>
 }
 
 export type FinanceRepositoryConfig = {
@@ -26,6 +39,10 @@ function requireSession(session: FinanceSession): FinanceSession {
   return session
 }
 
+function unsupportedDemoMutation(): never {
+  throw new Error('Demo repository does not persist review decisions; use CostStore local path')
+}
+
 export function createDemoCostControlRepository(): CostControlRepository {
   return {
     mode: 'demo',
@@ -38,6 +55,9 @@ export function createDemoCostControlRepository(): CostControlRepository {
         'finance workspace',
       )
       return workspace
+    },
+    async resolveReviewDecision() {
+      unsupportedDemoMutation()
     },
   }
 }
@@ -76,6 +96,64 @@ export function createApiCostControlRepository(input: {
       )
       return workspace
     },
+    async resolveReviewDecision(session, reviewId, decision, expectedCostVersion) {
+      requireSession(session)
+      if (
+        ('allocations' in decision && decision.allocations?.length) ||
+        ('evidenceLabel' in decision && decision.evidenceLabel)
+      ) {
+        throw new Error(
+          'Finance API does not yet persist reallocations or evidence attachments on review decisions',
+        )
+      }
+      if (decision.type === 'reallocate') {
+        throw new Error('Finance API does not yet persist reallocations on review decisions')
+      }
+
+      const response = await fetchImpl(
+        `${baseUrl}/finance/reviews/${encodeURIComponent(reviewId)}/decision`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.accessToken}`,
+            'X-Veyvio-Organisation-ID': session.activeOrganisationId,
+          },
+          body: JSON.stringify({
+            decision,
+            expectedCostVersion: expectedCostVersion ?? undefined,
+          }),
+        },
+      )
+      if (!response.ok) {
+        let detail = `Finance API review decision failed (${response.status})`
+        try {
+          const payload = (await response.json()) as { error?: string }
+          if (payload.error) detail = payload.error
+        } catch {
+          // keep status text
+        }
+        throw new Error(detail)
+      }
+      const result = (await response.json()) as ReviewDecisionApiResult
+      if (!result?.review?.id) {
+        throw new Error('Finance API returned an invalid review decision result')
+      }
+      assertSameOrganisation(
+        session.activeOrganisationId,
+        result.review.organisationId,
+        'review decision',
+      )
+      if (result.cost) {
+        assertSameOrganisation(
+          session.activeOrganisationId,
+          result.cost.organisationId,
+          'review decision cost',
+        )
+      }
+      return result
+    },
   }
 }
 
@@ -113,4 +191,3 @@ export function resolveCostControlRepository(
   }
   return createApiCostControlRepository({ apiBaseUrl: config.apiBaseUrl })
 }
-

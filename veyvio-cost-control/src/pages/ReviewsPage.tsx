@@ -64,8 +64,8 @@ export function ReviewsPage() {
                 `${active.title} ${active.detail}`,
                 employeeCostReferences ?? [],
               )}
-              onDecide={(decision) => {
-                resolveReviewDecision(active.id, decision)
+              onDecide={async (decision) => {
+                await resolveReviewDecision(active.id, decision)
                 setActiveId(null)
               }}
             />
@@ -157,7 +157,7 @@ function ReviewWorkbench({
   budgetId: string
   defaultCategory: CostCategory
   personHint: string | null
-  onDecide: (decision: ReviewDecision) => void
+  onDecide: (decision: ReviewDecision) => void | Promise<void>
 }) {
   const [reason, setReason] = useState('')
   const [evidenceLabel, setEvidenceLabel] = useState('')
@@ -177,10 +177,10 @@ function ReviewWorkbench({
     ]
   }
 
-  function run(decision: ReviewDecision) {
+  async function run(decision: ReviewDecision) {
     setError(null)
     try {
-      onDecide(decision)
+      await onDecide(decision)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Decision failed')
     }
