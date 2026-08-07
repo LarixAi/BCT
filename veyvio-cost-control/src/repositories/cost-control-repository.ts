@@ -50,6 +50,19 @@ export type EmployeeCostReferenceUpsertApiResult = {
   workspace: CostControlStore
 }
 
+export type DriverHoursImportApiResult = {
+  summary: {
+    accepted: number
+    ratesAccepted: number
+    quarantined: number
+    rowsRead: number
+    unmatchedExternalIds: string[]
+    fileName: string
+    batchStatus: string
+  }
+  workspace: CostControlStore
+}
+
 export type WageBatchMutationApiResult = {
   batch?: WageCostBatch
   workspace: CostControlStore
@@ -72,6 +85,10 @@ export type CostControlRepository = {
     session: FinanceSession,
     input: { fileName: string; text: string },
   ): Promise<PayrollSummaryImportApiResult>
+  importDriverHours(
+    session: FinanceSession,
+    input: { fileName: string; text: string },
+  ): Promise<DriverHoursImportApiResult>
   upsertEmployeeCostReferences(
     session: FinanceSession,
     employees: Array<Partial<EmployeeCostReference> & {
@@ -132,6 +149,9 @@ export function createDemoCostControlRepository(): CostControlRepository {
       unsupportedDemoMutation()
     },
     async importPayrollSummary() {
+      unsupportedDemoMutation()
+    },
+    async importDriverHours() {
       unsupportedDemoMutation()
     },
     async upsertEmployeeCostReferences() {
@@ -313,6 +333,42 @@ export function createApiCostControlRepository(input: {
         session.activeOrganisationId,
         result.workspace.organisation.id,
         'payroll import workspace',
+      )
+      return result
+    },
+    async importDriverHours(session, input) {
+      requireSession(session)
+      const response = await fetchImpl(`${baseUrl}/finance/imports/driver-hours`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Veyvio-Organisation-ID': session.activeOrganisationId,
+        },
+        body: JSON.stringify({
+          fileName: input.fileName,
+          text: input.text,
+        }),
+      })
+      if (!response.ok) {
+        let detail = `Finance API driver-hours import failed (${response.status})`
+        try {
+          const payload = (await response.json()) as { error?: string; detail?: string }
+          if (payload.error) detail = payload.detail ? `${payload.error}: ${payload.detail}` : payload.error
+        } catch {
+          // keep status text
+        }
+        throw new Error(detail)
+      }
+      const result = (await response.json()) as DriverHoursImportApiResult
+      if (!result?.workspace?.organisation?.id || !result.summary) {
+        throw new Error('Finance API returned an invalid driver-hours import result')
+      }
+      assertSameOrganisation(
+        session.activeOrganisationId,
+        result.workspace.organisation.id,
+        'driver-hours import workspace',
       )
       return result
     },

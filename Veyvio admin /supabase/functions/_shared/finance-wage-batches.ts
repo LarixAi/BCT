@@ -3,6 +3,13 @@
  * Employer wage-cost inputs only — not PAYE.
  */
 
+import {
+  computeProvisionalGross,
+  validateDriverDays,
+  type DriverDayRecord,
+  type EffectivePayRate,
+} from './finance-driver-wage-hours.ts'
+
 export type WageBatchLifecycle =
   | 'draft'
   | 'validated'
@@ -199,5 +206,89 @@ export function emptyWageBatch(input: {
     finalReturnedAt: null,
     postedToLedgerAt: null,
     totalProvisionalGrossMinor: 0,
+  }
+}
+
+export function isWageBatchLockedOrBeyond(status: WageBatchLifecycle): boolean {
+  return [
+    'locked',
+    'exported_to_provider',
+    'final_returned',
+    'posted_to_ledger',
+  ].includes(status)
+}
+
+/** Rebuild draft/exception batch snapshots from durable driver-days + rates. */
+export function buildWageCostBatchPayload(input: {
+  id: string
+  organisationId: string
+  payPeriodId: string
+  label: string
+  days: DriverDayRecord[]
+  rates: EffectivePayRate[]
+  people: Array<{
+    id: string
+    displayName: string
+    externalPayrollId: string
+    approvedAllowanceMinor?: number
+    holidayPayMinor?: number
+    holidayPayMode?: 'leave_when_taken' | 'rolled_up_separate'
+    rolledUpHolidayPayMinor?: number
+  }>
+}): WageCostBatch {
+  const issues = validateDriverDays({ days: input.days, rates: input.rates })
+  const critical = issues.some((i) => i.severity === 'critical')
+  const personSnapshots: WageCostBatch['personSnapshots'] = []
+
+  for (const person of input.people) {
+    const personDays = input.days.filter((d) => d.employeeCostReferenceId === person.id)
+    if (!personDays.length) continue
+    const provisional = computeProvisionalGross({
+      days: personDays,
+      rates: input.rates,
+      employeeCostReferenceId: person.id,
+      approvedAllowanceMinor: person.approvedAllowanceMinor,
+      holidayPayMinor: person.holidayPayMinor,
+      holidayPayMode: person.holidayPayMode,
+      rolledUpHolidayPayMinor: person.rolledUpHolidayPayMinor,
+    })
+    if (!provisional.nmwCheck.passed) {
+      issues.push({
+        code: 'below_nmw',
+        severity: 'critical',
+        title: `${person.displayName} below National Minimum Wage`,
+        detail: provisional.nmwCheck.detail,
+        employeeCostReferenceId: person.id,
+      })
+    }
+    personSnapshots.push({
+      employeeCostReferenceId: person.id,
+      displayName: person.displayName,
+      externalPayrollId: person.externalPayrollId,
+      provisional,
+    })
+  }
+
+  const totalProvisionalGrossMinor = personSnapshots.reduce(
+    (s, p) => s + Number(p.provisional.grossPayMinor ?? 0),
+    0,
+  )
+
+  return {
+    id: input.id,
+    organisationId: input.organisationId,
+    payPeriodId: input.payPeriodId,
+    label: input.label,
+    status: critical || issues.some((i) => i.severity === 'critical') ? 'exception' : issues.length ? 'draft' : 'validated',
+    driverDayIds: input.days.map((d) => d.id),
+    personSnapshots,
+    validationIssues: issues,
+    adjustments: [],
+    lockedAt: null,
+    exportedAt: null,
+    providerPackageRef: null,
+    finalReturnedAt: null,
+    postedToLedgerAt: null,
+    totalProvisionalGrossMinor,
   }
 }

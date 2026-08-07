@@ -36,7 +36,12 @@ import type { EmployeeCostReference } from '../domain/org-structure'
 import {
   advanceWageBatch,
   createWageAdjustment,
+  buildWageCostBatch,
 } from '../domain/wage-period-workflow'
+import {
+  importDriverHoursForPersist,
+} from '../server/finance-driver-hours-import'
+import { isWageBatchLockedOrBeyond } from '../server/finance-wage-batches'
 
 /** Browser-local cost writes are demo-only. API mode must use durable finance commands. */
 function assertBrowserMutationAllowed(action: string) {
@@ -66,6 +71,16 @@ type StoreApi = CostControlStore & {
     variance: number
     quarantined: number
     exceptions: number
+  }>
+  importDriverHours: (
+    fileName: string,
+    text: string,
+  ) => Promise<{
+    accepted: number
+    ratesAccepted: number
+    quarantined: number
+    unmatched: number
+    batchStatus: string
   }>
   resolveReview: (reviewId: string, state: ReviewItem['state']) => void | Promise<void>
   resolveReviewDecision: (reviewId: string, decision: ReviewDecision) => Promise<void>
@@ -436,6 +451,111 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       quarantined: result.quarantined.length,
       exceptions: result.exceptions.length,
     }
+  }, [auth.activeMembership, auth.identity])
+
+  const importDriverHours = useCallback(async (fileName: string, text: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to import driver hours')
+      }
+      const result = await resolveCostControlRepository(financeConfig).importDriverHours(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        { fileName, text },
+      )
+      setStore(withSeedDefaults(result.workspace))
+      return {
+        accepted: result.summary.accepted,
+        ratesAccepted: result.summary.ratesAccepted,
+        quarantined: result.summary.quarantined,
+        unmatched: result.summary.unmatchedExternalIds.length,
+        batchStatus: result.summary.batchStatus,
+      }
+    }
+
+    let summary = {
+      accepted: 0,
+      ratesAccepted: 0,
+      quarantined: 0,
+      unmatched: 0,
+      batchStatus: 'draft',
+    }
+    setStore((prev) => {
+      const primary = prev.wageBatches?.[0]
+      if (primary && isWageBatchLockedOrBeyond(primary.status)) {
+        throw new Error(
+          'Locked wage-cost batches cannot be rebuilt from hours import. Use post-lock adjustments.',
+        )
+      }
+      const payPeriodId = prev.payPeriods?.[0]?.id ?? 'pp_current'
+      const parsed = importDriverHoursForPersist({
+        organisationId: prev.organisation.id,
+        payPeriodId,
+        text,
+        employees: (prev.employeeCostReferences ?? []).map((e) => ({
+          id: e.id,
+          externalPayrollId: e.externalPayrollId,
+          displayName: e.displayName,
+        })),
+        idFactory: () => crypto.randomUUID(),
+      })
+      const dayById = new Map((prev.driverDays ?? []).map((d) => [d.id, d]))
+      for (const day of parsed.days) dayById.set(day.id, day)
+      const rateById = new Map((prev.payRates ?? []).map((r) => [r.id, r]))
+      for (const rate of parsed.rates) rateById.set(rate.id, rate)
+      const days = [...dayById.values()].filter((d) => d.payPeriodId === payPeriodId)
+      const rates = [...rateById.values()]
+      const peopleInDays = new Set(days.map((d) => d.employeeCostReferenceId))
+      const people = (prev.employeeCostReferences ?? [])
+        .filter((e) => peopleInDays.has(e.id))
+        .map((e) => ({
+          id: e.id,
+          displayName: e.displayName,
+          externalPayrollId: e.externalPayrollId,
+        }))
+      const batch = buildWageCostBatch({
+        id: primary?.id ?? `wb_${prev.organisation.id}_current`,
+        organisationId: prev.organisation.id,
+        payPeriodId,
+        label: primary?.label ?? 'Current wage-cost batch',
+        days,
+        rates,
+        people,
+      })
+      summary = {
+        accepted: parsed.days.length,
+        ratesAccepted: parsed.rates.length,
+        quarantined: parsed.quarantined.length,
+        unmatched: parsed.unmatchedExternalIds.length,
+        batchStatus: batch.status,
+      }
+      const run = {
+        id: crypto.randomUUID(),
+        organisationId: prev.organisation.id,
+        fileName: `[driver-hours] ${fileName}`,
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        rowsRead: parsed.rowsRead,
+        accepted: parsed.days.length,
+        quarantined: parsed.quarantined.length,
+        duplicatesSkipped: 0,
+      }
+      return {
+        ...prev,
+        driverDays: [...dayById.values()],
+        payRates: rates,
+        wageBatches: [batch, ...(prev.wageBatches ?? []).filter((b) => b.id !== batch.id)],
+        quarantine: [...parsed.quarantined, ...prev.quarantine],
+        imports: [run, ...prev.imports],
+      }
+    })
+    return summary
   }, [auth.activeMembership, auth.identity])
 
   const resolveReviewDecision = useCallback(async (reviewId: string, decision: ReviewDecision) => {
@@ -935,6 +1055,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       refreshSnapshot,
       importCsv,
       importPayrollSummary,
+      importDriverHours,
       resolveReview,
       resolveReviewDecision,
       advanceWageBatchStatus,
@@ -956,6 +1077,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
     refreshSnapshot,
     importCsv,
     importPayrollSummary,
+    importDriverHours,
     resolveReview,
     resolveReviewDecision,
     advanceWageBatchStatus,

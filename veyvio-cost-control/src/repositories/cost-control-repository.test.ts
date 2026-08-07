@@ -287,5 +287,40 @@ describe('cost control repositories', () => {
       'https://finance.example.test/finance/driver-days/dd_1/clear-dispute',
     ])
   })
+
+  it('posts authenticated driver-hours import', async () => {
+    const workspace = createSeedStore()
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          summary: {
+            accepted: 2,
+            ratesAccepted: 1,
+            quarantined: 0,
+            rowsRead: 2,
+            unmatchedExternalIds: [],
+            fileName: 'hours.csv',
+            batchStatus: 'validated',
+          },
+          workspace,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    const repository = createApiCostControlRepository({
+      apiBaseUrl: 'https://finance.example.test',
+      fetchImpl,
+    })
+
+    const result = await repository.importDriverHours(session, {
+      fileName: 'hours.csv',
+      text: 'external_payroll_id,work_date,basic_hours\nPRV-1,2026-07-01,8.00\n',
+    })
+
+    expect(result.summary.accepted).toBe(2)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://finance.example.test/finance/imports/driver-hours',
+    )
+  })
 })
 

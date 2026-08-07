@@ -13,11 +13,14 @@ import { importPayrollSummaryForPersist } from '../_shared/finance-payroll-summa
 import { parseEmployeeCostReferenceInputs } from '../_shared/finance-employee-cost-references.ts'
 import {
   advanceWageBatchPayload,
+  buildWageCostBatchPayload,
   clearDisputeOnBatch,
   createWageAdjustmentPayload,
   emptyWageBatch,
+  isWageBatchLockedOrBeyond,
   type WageCostBatch,
 } from '../_shared/finance-wage-batches.ts'
+import { importDriverHoursForPersist } from '../_shared/finance-driver-hours-import.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -95,6 +98,9 @@ Deno.serve(async (request) => {
     }
     if (path === '/finance/imports/payroll-summary' && request.method === 'POST') {
       return await handlePayrollSummaryImport(request)
+    }
+    if (path === '/finance/imports/driver-hours' && request.method === 'POST') {
+      return await handleDriverHoursImport(request)
     }
     if (path === '/finance/employee-cost-references/upsert' && request.method === 'POST') {
       return await handleEmployeeCostReferenceUpsert(request)
@@ -1225,6 +1231,232 @@ async function persistWageBatch(batch: WageCostBatch) {
       },
       { onConflict: 'id' },
     ),
+  )
+}
+
+async function persistDriverDay(day: {
+  id: string
+  organisationId: string
+  employeeCostReferenceId: string
+  payPeriodId: string
+  workDate: string
+  disputed: boolean
+  payload: unknown
+}) {
+  const now = new Date().toISOString()
+  await cc(
+    'driver_days.upsert',
+    admin.from('driver_days').upsert(
+      {
+        id: day.id,
+        organisation_id: day.organisationId,
+        employee_cost_reference_id: day.employeeCostReferenceId,
+        pay_period_id: day.payPeriodId,
+        work_date: day.workDate,
+        disputed: day.disputed,
+        payload: day.payload,
+        updated_at: now,
+        created_at: now,
+      },
+      { onConflict: 'id' },
+    ),
+  )
+}
+
+async function persistPayRate(rate: {
+  id: string
+  organisationId: string
+  employeeCostReferenceId: string
+  effectiveFrom: string
+  effectiveTo: string | null
+  payload: unknown
+}) {
+  const now = new Date().toISOString()
+  await cc(
+    'effective_pay_rates.upsert',
+    admin.from('effective_pay_rates').upsert(
+      {
+        id: rate.id,
+        organisation_id: rate.organisationId,
+        employee_cost_reference_id: rate.employeeCostReferenceId,
+        effective_from: rate.effectiveFrom,
+        effective_to: rate.effectiveTo,
+        payload: rate.payload,
+        updated_at: now,
+        created_at: now,
+      },
+      { onConflict: 'id' },
+    ),
+  )
+}
+
+async function handleDriverHoursImport(request: Request): Promise<Response> {
+  const ctx = await requirePayrollMembership(request)
+  if (ctx instanceof Response) return ctx
+
+  let body: Record<string, unknown>
+  try {
+    body = (await request.json()) as Record<string, unknown>
+  } catch {
+    return json({ error: 'invalid_json' }, 400)
+  }
+
+  const fileName = String(body.fileName ?? '').trim() || 'driver-hours.csv'
+  const text = typeof body.text === 'string' ? body.text : ''
+  if (!text.trim()) return json({ error: 'csv_text_required' }, 400)
+  if (text.length > 2_000_000) return json({ error: 'csv_too_large' }, 413)
+
+  const payPeriodId = await ensurePayPeriod(ctx.organisationId)
+  const { data: employeeRows } = await admin
+    .from('employee_cost_references')
+    .select('id, external_payroll_id, display_name')
+    .eq('organisation_id', ctx.organisationId)
+  const employees = (employeeRows ?? []).map((e) => ({
+    id: String(e.id),
+    externalPayrollId: String(e.external_payroll_id),
+    displayName: String(e.display_name),
+  }))
+  if (!employees.length) {
+    return json({ error: 'employee_cost_references_required' }, 400)
+  }
+
+  const { data: existingBatchRows } = await admin
+    .from('wage_cost_batches')
+    .select('id, payload')
+    .eq('organisation_id', ctx.organisationId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+  const existingBatch = (existingBatchRows?.[0]?.payload as WageCostBatch | undefined) ?? null
+  if (existingBatch && isWageBatchLockedOrBeyond(existingBatch.status)) {
+    return json(
+      {
+        error: 'wage_batch_locked',
+        detail: 'Locked wage-cost batches cannot be rebuilt from hours import. Use post-lock adjustments.',
+      },
+      409,
+    )
+  }
+
+  let parsed
+  try {
+    parsed = importDriverHoursForPersist({
+      organisationId: ctx.organisationId,
+      payPeriodId,
+      text,
+      employees,
+      idFactory: () => crypto.randomUUID(),
+    })
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : 'import_failed' }, 400)
+  }
+
+  for (const day of parsed.days) {
+    await persistDriverDay({
+      id: day.id,
+      organisationId: day.organisationId,
+      employeeCostReferenceId: day.employeeCostReferenceId,
+      payPeriodId: day.payPeriodId,
+      workDate: day.workDate,
+      disputed: day.disputed,
+      payload: day,
+    })
+  }
+  for (const rate of parsed.rates) {
+    await persistPayRate({
+      id: rate.id,
+      organisationId: rate.organisationId,
+      employeeCostReferenceId: rate.employeeCostReferenceId,
+      effectiveFrom: rate.effectiveFrom,
+      effectiveTo: rate.effectiveTo,
+      payload: rate,
+    })
+  }
+
+  // Load all org days/rates for rebuild (import may be partial).
+  const { data: allDayRows } = await admin
+    .from('driver_days')
+    .select('payload')
+    .eq('organisation_id', ctx.organisationId)
+    .eq('pay_period_id', payPeriodId)
+  const { data: allRateRows } = await admin
+    .from('effective_pay_rates')
+    .select('payload')
+    .eq('organisation_id', ctx.organisationId)
+  const days = (allDayRows ?? []).map((r) => r.payload as Parameters<typeof buildWageCostBatchPayload>[0]['days'][number])
+  const rates = (allRateRows ?? []).map((r) => r.payload as Parameters<typeof buildWageCostBatchPayload>[0]['rates'][number])
+  const peopleInDays = new Set(days.map((d) => d.employeeCostReferenceId))
+  const people = employees
+    .filter((e) => peopleInDays.has(e.id))
+    .map((e) => ({
+      id: e.id,
+      displayName: e.displayName,
+      externalPayrollId: e.externalPayrollId,
+    }))
+
+  const batchId = existingBatch?.id ?? `wagebatch_${ctx.organisationId}_current`
+  const batch = buildWageCostBatchPayload({
+    id: batchId,
+    organisationId: ctx.organisationId,
+    payPeriodId,
+    label: existingBatch?.label ?? 'Current wage-cost batch',
+    days,
+    rates,
+    people,
+  })
+  await persistWageBatch(batch)
+
+  const now = new Date().toISOString()
+  await cc(
+    'audit_events.insert',
+    admin.from('audit_events').insert({
+      id: crypto.randomUUID(),
+      organisation_id: ctx.organisationId,
+      actor_id: ctx.userId,
+      action: 'wage_hours.import',
+      entity_type: 'wage_cost_batch',
+      entity_id: batchId,
+      reason: fileName,
+      before_state: existingBatch ? { status: existingBatch.status } : null,
+      after_state: {
+        status: batch.status,
+        daysAccepted: parsed.days.length,
+        ratesAccepted: parsed.rates.length,
+        quarantined: parsed.quarantined.length,
+        unmatchedExternalIds: parsed.unmatchedExternalIds,
+      },
+      created_at: now,
+    }),
+  )
+  await cc(
+    'import_runs.insert',
+    admin.from('import_runs').insert({
+      id: crypto.randomUUID(),
+      organisation_id: ctx.organisationId,
+      file_name: `[driver-hours] ${fileName}`,
+      started_at: now,
+      finished_at: now,
+      rows_read: parsed.rowsRead,
+      accepted: parsed.days.length,
+      quarantined: parsed.quarantined.length,
+      duplicates_skipped: 0,
+    }),
+  )
+
+  return json(
+    {
+      summary: {
+        accepted: parsed.days.length,
+        ratesAccepted: parsed.rates.length,
+        quarantined: parsed.quarantined.length,
+        rowsRead: parsed.rowsRead,
+        unmatchedExternalIds: parsed.unmatchedExternalIds,
+        fileName,
+        batchStatus: batch.status,
+      },
+      batch,
+      workspace: await loadWorkspace(ctx.organisationId),
+    },
+    200,
   )
 }
 

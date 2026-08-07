@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { MoneyText, StatusPill } from '../components/Money'
 import { useCostStore } from '../data/CostStore'
 import { SAMPLE_PAYROLL_SUMMARY_CSV } from '../domain/payroll-summary-import'
+import { SAMPLE_DRIVER_HOURS_CSV } from '../server/finance-driver-hours-import'
 import { formatDate } from '../lib/labels'
 
 const SAMPLE = `date,supplier,description,reference,category,status,net,vat,gross,vehicle,evidence,source_key
@@ -12,8 +13,14 @@ const SAMPLE = `date,supplier,description,reference,category,status,net,vat,gros
 `
 
 export function ImportsPage() {
-  const { importCsv, importPayrollSummary, imports, quarantine, lastPayrollSummaryImport } =
-    useCostStore()
+  const {
+    importCsv,
+    importPayrollSummary,
+    importDriverHours,
+    imports,
+    quarantine,
+    lastPayrollSummaryImport,
+  } = useCostStore()
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -47,6 +54,21 @@ export function ImportsPage() {
     }
   }
 
+  async function onDriverHoursFile(file: File | null) {
+    if (!file) return
+    setError(null)
+    setMessage(null)
+    try {
+      const text = await file.text()
+      const summary = await importDriverHours(file.name, text)
+      setMessage(
+        `Driver hours ${file.name}: ${summary.accepted} days, ${summary.ratesAccepted} rates, ${summary.quarantined} quarantined, ${summary.unmatched} unmatched → batch ${summary.batchStatus}.`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Driver hours import failed')
+    }
+  }
+
   async function loadSample() {
     try {
       setError(null)
@@ -71,6 +93,18 @@ export function ImportsPage() {
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payroll summary import failed')
+    }
+  }
+
+  async function loadDriverHoursSample() {
+    try {
+      setError(null)
+      const summary = await importDriverHours('sample-driver-hours.csv', SAMPLE_DRIVER_HOURS_CSV)
+      setMessage(
+        `Sample driver hours: ${summary.accepted} days, ${summary.ratesAccepted} rates, batch ${summary.batchStatus} → open Driver hours / Wage approval.`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Driver hours import failed')
     }
   }
 
@@ -172,6 +206,36 @@ export function ImportsPage() {
             ))}
           </div>
         ) : null}
+      </section>
+
+      <section className="panel">
+        <h2>Driver hours (wage-cost batch)</h2>
+        <p className="muted small">
+          Match on <code>external_payroll_id</code> to Organisation wage-cost members. Rebuilds the
+          current draft wage-cost batch from durable driver-days and rates. Locked batches refuse
+          rebuild — use post-lock adjustments instead. Columns: external_payroll_id, work_date;
+          hour fields (basic_hours, overtime_hours, …); optional rate fields (basic_hourly, …).
+        </p>
+        <div className="row-actions">
+          <label className="btn file-btn">
+            Choose driver-hours CSV
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              hidden
+              onChange={(e) => void onDriverHoursFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          <button type="button" className="btn-secondary" onClick={() => void loadDriverHoursSample()}>
+            Run sample driver hours
+          </button>
+          <Link to="/wages/hours" className="btn-ghost">
+            Open driver hours
+          </Link>
+          <Link to="/wages/approval" className="btn-ghost">
+            Open wage approval
+          </Link>
+        </div>
       </section>
 
       {message ? <p className="callout healthy">{message}</p> : null}
