@@ -44,7 +44,39 @@ npm run build:ci
 
 Output: `Veyvio admin /dist/` — serve as static files (SPA fallback to `index.html`).
 
-## Hosting options
+## Hosting (production)
+
+**Live:** Cloudflare Pages project `veyvio-admin` → `https://veyvio-admin.pages.dev`
+
+Deploy from a production build:
+
+```bash
+cd "Veyvio admin "
+npm ci
+VALIDATE_PRODUCTION_ENV=true npm run validate:production-env
+npm run build:ci
+npx wrangler pages deploy dist --project-name=veyvio-admin --commit-dirty=true
+```
+
+Set `VITE_*` variables in the shell (or `.env.production`) before `build:ci` — Pages does not rebuild on deploy when uploading `dist/` directly.
+
+## Custom domain — `command.veyvio.co.uk`
+
+Canonical Command sign-in URL: `https://command.veyvio.co.uk/login` (marketing site links here).
+
+Full DNS runbook: `docs/deploy/veyvio-dns-setup.md`
+
+| Step | Action |
+|------|--------|
+| 1 | Cloudflare Pages → `veyvio-admin` → **Custom domains** → `command.veyvio.co.uk` (registered) |
+| 2 | Cloudflare DNS (zone `veyvio.co.uk`): **CNAME** `command` → `veyvio-admin.pages.dev` (auto when zone active) |
+| 3 | Verify: `curl -sI https://command.veyvio.co.uk/login` → `200` |
+
+Until the CNAME propagates, use **`https://veyvio-admin.pages.dev/login`** — same build, no separate app.
+
+Legacy `command.veyvio.com` registration can be removed from Pages if `.com` is not used.
+
+## Other hosting options
 
 Any static host works. Typical pattern:
 

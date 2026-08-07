@@ -4,6 +4,9 @@
 **Pilot company:** BCT (or chosen operator)  
 **Apps:** Driver (Android + iOS physical devices), Yard, Command Admin  
 
+**Operator walkthrough (phones):** [gate1-operator-physical-runbook.md](./gate1-operator-physical-runbook.md)  
+**After both platforms pass:** [gate3-store-readiness.md](./gate3-store-readiness.md)
+
 ---
 
 ## Automated pre-flight (CI / local)
