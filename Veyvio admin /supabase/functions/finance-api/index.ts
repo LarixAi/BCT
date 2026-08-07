@@ -11,6 +11,13 @@ import {
 import { importCostCsvForPersist } from '../_shared/finance-csv-import.ts'
 import { importPayrollSummaryForPersist } from '../_shared/finance-payroll-summary-import.ts'
 import { parseEmployeeCostReferenceInputs } from '../_shared/finance-employee-cost-references.ts'
+import {
+  advanceWageBatchPayload,
+  clearDisputeOnBatch,
+  createWageAdjustmentPayload,
+  emptyWageBatch,
+  type WageCostBatch,
+} from '../_shared/finance-wage-batches.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -91,6 +98,27 @@ Deno.serve(async (request) => {
     }
     if (path === '/finance/employee-cost-references/upsert' && request.method === 'POST') {
       return await handleEmployeeCostReferenceUpsert(request)
+    }
+    {
+      const advanceMatch = /^\/finance\/wage-batches\/([^/]+)\/advance$/.exec(path)
+      if (advanceMatch && request.method === 'POST') {
+        return await handleWageBatchAdvance(request, decodeURIComponent(advanceMatch[1]!))
+      }
+    }
+    {
+      const adjustMatch = /^\/finance\/wage-batches\/([^/]+)\/adjustments$/.exec(path)
+      if (adjustMatch && request.method === 'POST') {
+        return await handleWageBatchAdjustment(request, decodeURIComponent(adjustMatch[1]!))
+      }
+    }
+    {
+      const disputeMatch = /^\/finance\/driver-days\/([^/]+)\/clear-dispute$/.exec(path)
+      if (disputeMatch && request.method === 'POST') {
+        return await handleClearDriverDayDispute(request, decodeURIComponent(disputeMatch[1]!))
+      }
+    }
+    if (path === '/finance/wage-batches/ensure' && request.method === 'POST') {
+      return await handleEnsureWageBatch(request)
     }
     if (path === '/bank/consent/start' && request.method === 'GET') {
       return await handleBankConsentStart(request, url)
@@ -1180,6 +1208,262 @@ async function handleEmployeeCostReferenceUpsert(request: Request): Promise<Resp
   )
 }
 
+async function persistWageBatch(batch: WageCostBatch) {
+  const now = new Date().toISOString()
+  await cc(
+    'wage_cost_batches.upsert',
+    admin.from('wage_cost_batches').upsert(
+      {
+        id: batch.id,
+        organisation_id: batch.organisationId,
+        pay_period_id: batch.payPeriodId,
+        status: batch.status,
+        total_provisional_gross_minor: batch.totalProvisionalGrossMinor,
+        payload: batch,
+        updated_at: now,
+        created_at: now,
+      },
+      { onConflict: 'id' },
+    ),
+  )
+}
+
+async function loadWageBatch(
+  organisationId: string,
+  batchId: string,
+): Promise<WageCostBatch | null> {
+  const { data } = await admin
+    .from('wage_cost_batches')
+    .select('payload')
+    .eq('organisation_id', organisationId)
+    .eq('id', batchId)
+    .maybeSingle()
+  if (!data?.payload) return null
+  return data.payload as WageCostBatch
+}
+
+async function requirePayrollMembership(request: Request): Promise<
+  | { userId: string; organisationId: string; role: FinanceRole }
+  | Response
+> {
+  const auth = await verifyBearer(request)
+  if (auth instanceof Response) return auth
+  const organisationId = request.headers.get('X-Veyvio-Organisation-ID')?.trim()
+  if (!organisationId) return json({ error: 'active_organisation_required' }, 400)
+  const membership = await findFinanceMembership(auth.userId, organisationId)
+  if (!membership?.active) return json({ error: 'organisation_access_denied' }, 403)
+  if (!roleAllowsPayrollImport(membership.role)) {
+    return json({ error: 'finance_permission_denied' }, 403)
+  }
+  await ensureOrganisationShell(organisationId)
+  await cc('organisation_memberships.upsert', admin.from('organisation_memberships').upsert(
+    {
+      id: `ccm_${organisationId}_${auth.userId}`,
+      organisation_id: organisationId,
+      user_subject: auth.userId,
+      role: membership.role,
+      active: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'organisation_id,user_subject' },
+  ))
+  return { userId: auth.userId, organisationId, role: membership.role }
+}
+
+async function handleEnsureWageBatch(request: Request): Promise<Response> {
+  const ctx = await requirePayrollMembership(request)
+  if (ctx instanceof Response) return ctx
+
+  const payPeriodId = await ensurePayPeriod(ctx.organisationId)
+  const { data: existing } = await admin
+    .from('wage_cost_batches')
+    .select('id, payload')
+    .eq('organisation_id', ctx.organisationId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (existing?.payload) {
+    return json({ batch: existing.payload, workspace: await loadWorkspace(ctx.organisationId) }, 200)
+  }
+
+  const batch = emptyWageBatch({
+    id: `wagebatch_${ctx.organisationId}_current`,
+    organisationId: ctx.organisationId,
+    payPeriodId,
+    label: 'Current wage-cost batch',
+  })
+  await persistWageBatch(batch)
+  await cc(
+    'audit_events.insert',
+    admin.from('audit_events').insert({
+      id: crypto.randomUUID(),
+      organisation_id: ctx.organisationId,
+      actor_id: ctx.userId,
+      action: 'wage_batch.ensure',
+      entity_type: 'wage_cost_batch',
+      entity_id: batch.id,
+      reason: 'Ensured draft wage-cost batch',
+      before_state: null,
+      after_state: { status: batch.status },
+      created_at: new Date().toISOString(),
+    }),
+  )
+  return json({ batch, workspace: await loadWorkspace(ctx.organisationId) }, 200)
+}
+
+async function handleWageBatchAdvance(request: Request, batchId: string): Promise<Response> {
+  const ctx = await requirePayrollMembership(request)
+  if (ctx instanceof Response) return ctx
+
+  const current = await loadWageBatch(ctx.organisationId, batchId)
+  if (!current) return json({ error: 'wage_batch_not_found' }, 404)
+
+  let next: WageCostBatch
+  try {
+    next = advanceWageBatchPayload(current)
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : 'advance_failed' }, 400)
+  }
+
+  await persistWageBatch(next)
+  await cc(
+    'audit_events.insert',
+    admin.from('audit_events').insert({
+      id: crypto.randomUUID(),
+      organisation_id: ctx.organisationId,
+      actor_id: ctx.userId,
+      action: 'wage_batch.advance',
+      entity_type: 'wage_cost_batch',
+      entity_id: batchId,
+      reason: `${current.status} → ${next.status}`,
+      before_state: { status: current.status },
+      after_state: { status: next.status },
+      created_at: new Date().toISOString(),
+    }),
+  )
+  return json({ batch: next, workspace: await loadWorkspace(ctx.organisationId) }, 200)
+}
+
+async function handleWageBatchAdjustment(request: Request, batchId: string): Promise<Response> {
+  const ctx = await requirePayrollMembership(request)
+  if (ctx instanceof Response) return ctx
+
+  let body: Record<string, unknown>
+  try {
+    body = (await request.json()) as Record<string, unknown>
+  } catch {
+    return json({ error: 'invalid_json' }, 400)
+  }
+
+  const employeeCostReferenceId = String(body.employeeCostReferenceId ?? '').trim()
+  const reason = String(body.reason ?? '').trim()
+  const grossDeltaMinor = Number(body.grossDeltaMinor)
+  if (!employeeCostReferenceId) return json({ error: 'employee_cost_reference_id_required' }, 400)
+  if (!reason) return json({ error: 'reason_required' }, 400)
+  if (!Number.isInteger(grossDeltaMinor)) return json({ error: 'gross_delta_must_be_integer' }, 400)
+
+  const current = await loadWageBatch(ctx.organisationId, batchId)
+  if (!current) return json({ error: 'wage_batch_not_found' }, 404)
+
+  let next: WageCostBatch
+  try {
+    next = createWageAdjustmentPayload(current, {
+      id: crypto.randomUUID(),
+      employeeCostReferenceId,
+      reason,
+      grossDeltaMinor,
+      createdByRole: 'payroll_manager',
+    })
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : 'adjustment_failed' }, 400)
+  }
+
+  await persistWageBatch(next)
+  await cc(
+    'audit_events.insert',
+    admin.from('audit_events').insert({
+      id: crypto.randomUUID(),
+      organisation_id: ctx.organisationId,
+      actor_id: ctx.userId,
+      action: 'wage_batch.adjust',
+      entity_type: 'wage_cost_batch',
+      entity_id: batchId,
+      reason,
+      before_state: { total: current.totalProvisionalGrossMinor },
+      after_state: { total: next.totalProvisionalGrossMinor, grossDeltaMinor },
+      created_at: new Date().toISOString(),
+    }),
+  )
+  return json({ batch: next, workspace: await loadWorkspace(ctx.organisationId) }, 200)
+}
+
+async function handleClearDriverDayDispute(request: Request, driverDayId: string): Promise<Response> {
+  const ctx = await requirePayrollMembership(request)
+  if (ctx instanceof Response) return ctx
+
+  const { data: dayRow } = await admin
+    .from('driver_days')
+    .select('*')
+    .eq('organisation_id', ctx.organisationId)
+    .eq('id', driverDayId)
+    .maybeSingle()
+  if (!dayRow) return json({ error: 'driver_day_not_found' }, 404)
+
+  const now = new Date().toISOString()
+  const payload = {
+    ...(dayRow.payload as Record<string, unknown>),
+    disputed: false,
+    notes: undefined,
+  }
+  await cc(
+    'driver_days.update',
+    admin
+      .from('driver_days')
+      .update({ disputed: false, payload, updated_at: now })
+      .eq('organisation_id', ctx.organisationId)
+      .eq('id', driverDayId),
+  )
+
+  const { data: batchRows } = await admin
+    .from('wage_cost_batches')
+    .select('payload')
+    .eq('organisation_id', ctx.organisationId)
+  const updatedBatches: WageCostBatch[] = []
+  for (const row of batchRows ?? []) {
+    const batch = row.payload as WageCostBatch
+    if (!batch.driverDayIds?.includes(driverDayId)) continue
+    const next = clearDisputeOnBatch(batch, driverDayId)
+    await persistWageBatch(next)
+    updatedBatches.push(next)
+  }
+
+  await cc(
+    'audit_events.insert',
+    admin.from('audit_events').insert({
+      id: crypto.randomUUID(),
+      organisation_id: ctx.organisationId,
+      actor_id: ctx.userId,
+      action: 'wage_hours.clear_dispute',
+      entity_type: 'driver_day',
+      entity_id: driverDayId,
+      reason: 'Dispute cleared',
+      before_state: { disputed: true },
+      after_state: { disputed: false, batchesUpdated: updatedBatches.length },
+      created_at: now,
+    }),
+  )
+
+  return json(
+    {
+      driverDayId,
+      wageBatches: updatedBatches,
+      workspace: await loadWorkspace(ctx.organisationId),
+    },
+    200,
+  )
+}
+
 async function loadWorkspace(organisationId: string) {
   const { data: org } = await admin
     .from('organisations')
@@ -1244,6 +1528,19 @@ async function loadWorkspace(organisationId: string) {
     .select('*')
     .eq('organisation_id', organisationId)
     .order('sort_order', { ascending: true })
+  const { data: driverDayRows } = await admin
+    .from('driver_days')
+    .select('payload')
+    .eq('organisation_id', organisationId)
+  const { data: payRateRows } = await admin
+    .from('effective_pay_rates')
+    .select('payload')
+    .eq('organisation_id', organisationId)
+  const { data: wageBatchRows } = await admin
+    .from('wage_cost_batches')
+    .select('payload')
+    .eq('organisation_id', organisationId)
+    .order('updated_at', { ascending: false })
   const { data: snapRows } = await admin
     .from('financial_snapshots')
     .select('*')
@@ -1519,9 +1816,9 @@ async function loadWorkspace(organisationId: string) {
       allocationComplete: Boolean(e.allocation_complete),
       active: Boolean(e.active),
     })),
-    driverDays: [],
-    payRates: [],
-    wageBatches: [],
+    driverDays: (driverDayRows ?? []).map((r) => r.payload),
+    payRates: (payRateRows ?? []).map((r) => r.payload),
+    wageBatches: (wageBatchRows ?? []).map((r) => r.payload),
     bankAccounts: (bankAccounts ?? []).map((a) => ({
       id: String(a.id),
       organisationId,

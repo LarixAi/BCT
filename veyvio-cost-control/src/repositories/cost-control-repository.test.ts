@@ -228,5 +228,64 @@ describe('cost control repositories', () => {
       'https://finance.example.test/finance/employee-cost-references/upsert',
     )
   })
+
+  it('posts authenticated wage batch ensure / advance / adjust / clear-dispute', async () => {
+    const workspace = createSeedStore()
+    const batch = workspace.wageBatches?.[0] ?? {
+      id: 'wb_1',
+      organisationId: workspace.organisation.id,
+      status: 'draft',
+    }
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/finance/wage-batches/ensure')) {
+        return new Response(JSON.stringify({ batch, workspace }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/advance')) {
+        return new Response(
+          JSON.stringify({ batch: { ...batch, status: 'validated' }, workspace }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url.includes('/adjustments')) {
+        return new Response(JSON.stringify({ batch, workspace }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/clear-dispute')) {
+        return new Response(JSON.stringify({ workspace }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify({ error: 'unexpected' }), { status: 500 })
+    })
+    const repository = createApiCostControlRepository({
+      apiBaseUrl: 'https://finance.example.test',
+      fetchImpl,
+    })
+
+    await repository.ensureWageBatch(session)
+    await repository.advanceWageBatch(session, 'wb_1')
+    await repository.addWageAdjustment(session, {
+      batchId: 'wb_1',
+      employeeCostReferenceId: 'ecr_1',
+      reason: 'Correction',
+      grossDeltaMinor: -100,
+    })
+    await repository.clearDriverDayDispute(session, 'dd_1')
+
+    const urls = fetchImpl.mock.calls.map((call) => String(call[0]))
+    expect(urls).toEqual([
+      'https://finance.example.test/finance/wage-batches/ensure',
+      'https://finance.example.test/finance/wage-batches/wb_1/advance',
+      'https://finance.example.test/finance/wage-batches/wb_1/adjustments',
+      'https://finance.example.test/finance/driver-days/dd_1/clear-dispute',
+    ])
+  })
 })
 

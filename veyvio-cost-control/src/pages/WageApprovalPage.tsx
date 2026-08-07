@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { MoneyText, StatusPill } from '../components/Money'
 import { WageHubNav } from '../components/WageHubNav'
@@ -30,36 +30,91 @@ const FLOW: WageBatchLifecycle[] = [
 export function WageApprovalPage() {
   const store = useCostStore()
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [exportPreview, setExportPreview] = useState<string | null>(null)
+  const [ensuring, setEnsuring] = useState(false)
+  const ensureAttempted = useRef(false)
   const batches = store.wageBatches ?? []
   const primary = batches.find((b) => b.id === 'wb_2026_07') ?? batches[0]
   const period = store.payPeriods?.[0]
+
+  useEffect(() => {
+    if (primary || ensureAttempted.current) return
+    ensureAttempted.current = true
+    let cancelled = false
+    setEnsuring(true)
+    void store
+      .ensureWageBatch()
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Could not create wage-cost batch')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setEnsuring(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [primary, store])
 
   if (!primary) {
     return (
       <div className="page">
         <WageHubNav />
-        <p className="callout critical">No wage-cost batch loaded.</p>
+        {error ? <p className="callout critical">{error}</p> : null}
+        <p className="callout info">
+          {ensuring ? 'Creating wage-cost batch…' : 'No wage-cost batch loaded.'}
+        </p>
+        {!ensuring ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setError(null)
+              ensureAttempted.current = true
+              setEnsuring(true)
+              void store
+                .ensureWageBatch()
+                .catch((err) => {
+                  setError(err instanceof Error ? err.message : 'Could not create wage-cost batch')
+                })
+                .finally(() => setEnsuring(false))
+            }}
+          >
+            Create draft wage-cost batch
+          </button>
+        ) : null}
       </div>
     )
   }
 
   const advanceLabel = advanceButtonLabel(primary.status)
 
-  function onAdvance() {
+  async function onAdvance() {
     setError(null)
     setExportPreview(null)
+    setBusy(true)
     try {
-      store.advanceWageBatchStatus(primary!.id)
+      await store.advanceWageBatchStatus(primary!.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not advance')
+    } finally {
+      setBusy(false)
     }
   }
 
-  function onClearDisputes() {
+  async function onClearDisputes() {
     setError(null)
-    for (const day of store.driverDays ?? []) {
-      if (day.disputed) store.clearDriverDayDispute(day.id)
+    setBusy(true)
+    try {
+      for (const day of store.driverDays ?? []) {
+        if (day.disputed) await store.clearDriverDayDispute(day.id)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not clear disputes')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -76,12 +131,13 @@ export function WageApprovalPage() {
     }
   }
 
-  function onAdjustment() {
+  async function onAdjustment() {
     setError(null)
+    setBusy(true)
     try {
       const personId = primary!.personSnapshots[0]?.employeeCostReferenceId
       if (!personId) throw new Error('No person on batch')
-      store.addWageAdjustment({
+      await store.addWageAdjustment({
         batchId: primary!.id,
         employeeCostReferenceId: personId,
         reason: 'Post-lock overtime correction — original locked snapshot retained',
@@ -89,6 +145,8 @@ export function WageApprovalPage() {
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Adjustment failed')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -152,7 +210,7 @@ export function WageApprovalPage() {
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
           {primary.status === 'exception' ||
           primary.validationIssues.some((i) => i.code === 'disputed_hours') ? (
-            <button type="button" className="btn" onClick={onClearDisputes}>
+            <button type="button" className="btn" onClick={() => void onClearDisputes()} disabled={busy}>
               Clear disputed hours
             </button>
           ) : null}
@@ -160,16 +218,16 @@ export function WageApprovalPage() {
             <button
               type="button"
               className="btn"
-              onClick={onAdvance}
-              disabled={primary.status === 'exception'}
+              onClick={() => void onAdvance()}
+              disabled={busy || primary.status === 'exception'}
             >
               {advanceLabel}
             </button>
           ) : null}
-          <button type="button" className="btn-ghost" onClick={onPreviewExport}>
+          <button type="button" className="btn-ghost" onClick={onPreviewExport} disabled={busy}>
             Preview provider export
           </button>
-          <button type="button" className="btn-ghost" onClick={onAdjustment}>
+          <button type="button" className="btn-ghost" onClick={() => void onAdjustment()} disabled={busy}>
             Add post-lock adjustment
           </button>
           <Link className="btn-ghost" to="/wages/hours">

@@ -69,14 +69,15 @@ type StoreApi = CostControlStore & {
   }>
   resolveReview: (reviewId: string, state: ReviewItem['state']) => void | Promise<void>
   resolveReviewDecision: (reviewId: string, decision: ReviewDecision) => Promise<void>
-  advanceWageBatchStatus: (batchId: string) => void
-  clearDriverDayDispute: (driverDayId: string) => void
+  advanceWageBatchStatus: (batchId: string) => Promise<void>
+  clearDriverDayDispute: (driverDayId: string) => Promise<void>
   addWageAdjustment: (input: {
     batchId: string
     employeeCostReferenceId: string
     reason: string
     grossDeltaMinor: number
-  }) => void
+  }) => Promise<void>
+  ensureWageBatch: () => Promise<void>
   refreshBankFeed: (accountId?: string) => Promise<void>
   startBankConnect: (institutionHint?: string) => Promise<{ consentUrl: string }>
   completeBankConnect: (input: {
@@ -545,14 +546,30 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
     return resolveReviewDecision(reviewId, map[state])
   }, [resolveReviewDecision])
 
-  const clearDriverDayDispute = useCallback((driverDayId: string) => {
-    assertBrowserMutationAllowed('clearDriverDayDispute')
+  const clearDriverDayDispute = useCallback(async (driverDayId: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to clear disputes')
+      }
+      const result = await resolveCostControlRepository(financeConfig).clearDriverDayDispute(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        driverDayId,
+      )
+      setStore(withSeedDefaults(result.workspace))
+      return
+    }
+
     setStore((prev) => {
       const driverDays = (prev.driverDays ?? []).map((d) =>
         d.id === driverDayId ? { ...d, disputed: false, notes: undefined } : d,
       )
-      // Rebuild primary batch validation by clearing disputed flag on the day only;
-      // batch issues list is refreshed on next advance attempt via re-seed of issues.
       const wageBatches = (prev.wageBatches ?? []).map((batch) => {
         if (!batch.driverDayIds.includes(driverDayId)) return batch
         const remaining = batch.validationIssues.filter(
@@ -571,10 +588,28 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       })
       return { ...prev, driverDays, wageBatches }
     })
-  }, [])
+  }, [auth.activeMembership, auth.identity])
 
-  const advanceWageBatchStatus = useCallback((batchId: string) => {
-    assertBrowserMutationAllowed('advanceWageBatchStatus')
+  const advanceWageBatchStatus = useCallback(async (batchId: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to advance wage batches')
+      }
+      const result = await resolveCostControlRepository(financeConfig).advanceWageBatch(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        batchId,
+      )
+      setStore(withSeedDefaults(result.workspace))
+      return
+    }
+
     let failure: Error | null = null
     setStore((prev) => {
       try {
@@ -589,16 +624,34 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       }
     })
     if (failure) throw failure
-  }, [])
+  }, [auth.activeMembership, auth.identity])
 
   const addWageAdjustment = useCallback(
-    (input: {
+    async (input: {
       batchId: string
       employeeCostReferenceId: string
       reason: string
       grossDeltaMinor: number
     }) => {
-      assertBrowserMutationAllowed('addWageAdjustment')
+      const financeConfig = readFinanceRepositoryConfig()
+      if (financeConfig.mode === 'api') {
+        const membership = auth.activeMembership
+        const identity = auth.identity
+        if (!membership || !identity?.accessToken || !identity.userSubject) {
+          throw new Error('Signed-in finance membership is required to add wage adjustments')
+        }
+        const result = await resolveCostControlRepository(financeConfig).addWageAdjustment(
+          {
+            accessToken: identity.accessToken,
+            userSubject: identity.userSubject,
+            activeOrganisationId: membership.organisationId,
+          },
+          input,
+        )
+        setStore(withSeedDefaults(result.workspace))
+        return
+      }
+
       let failure: Error | null = null
       setStore((prev) => {
         try {
@@ -621,8 +674,23 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       })
       if (failure) throw failure
     },
-    [],
+    [auth.activeMembership, auth.identity],
   )
+
+  const ensureWageBatch = useCallback(async () => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode !== 'api') return
+    const membership = auth.activeMembership
+    const identity = auth.identity
+    if (!membership || !identity?.accessToken || !identity.userSubject) return
+    if ((store.wageBatches ?? []).length) return
+    const result = await resolveCostControlRepository(financeConfig).ensureWageBatch({
+      accessToken: identity.accessToken,
+      userSubject: identity.userSubject,
+      activeOrganisationId: membership.organisationId,
+    })
+    setStore(withSeedDefaults(result.workspace))
+  }, [auth.activeMembership, auth.identity, store.wageBatches])
 
   const startBankConnect = useCallback(async (institutionHint?: string) => {
     const config = {
@@ -872,6 +940,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       advanceWageBatchStatus,
       clearDriverDayDispute,
       addWageAdjustment,
+      ensureWageBatch,
       refreshBankFeed,
       startBankConnect,
       completeBankConnect,
@@ -892,6 +961,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
     advanceWageBatchStatus,
     clearDriverDayDispute,
     addWageAdjustment,
+    ensureWageBatch,
     refreshBankFeed,
     startBankConnect,
     completeBankConnect,

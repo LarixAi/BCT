@@ -3,6 +3,7 @@ import { createSeedStore } from '../data/seed'
 import type { AuditEvent, ReviewDecision } from '../domain/review-actions'
 import type { PayrollSummaryImportResult } from '../domain/payroll-summary-import'
 import type { EmployeeCostReference } from '../domain/org-structure'
+import type { WageCostBatch } from '../domain/wage-period-workflow'
 import { assertSameOrganisation, requireOrganisationId } from '../domain/tenancy'
 import type { CostRecord, OrganisationId, ReviewItem } from '../domain/types'
 
@@ -49,6 +50,11 @@ export type EmployeeCostReferenceUpsertApiResult = {
   workspace: CostControlStore
 }
 
+export type WageBatchMutationApiResult = {
+  batch?: WageCostBatch
+  workspace: CostControlStore
+}
+
 export type CostControlRepository = {
   readonly mode: 'demo' | 'api'
   loadWorkspace(session: FinanceSession): Promise<CostControlStore>
@@ -73,6 +79,21 @@ export type CostControlRepository = {
       displayName: string
     }>,
   ): Promise<EmployeeCostReferenceUpsertApiResult>
+  ensureWageBatch(session: FinanceSession): Promise<WageBatchMutationApiResult>
+  advanceWageBatch(session: FinanceSession, batchId: string): Promise<WageBatchMutationApiResult>
+  addWageAdjustment(
+    session: FinanceSession,
+    input: {
+      batchId: string
+      employeeCostReferenceId: string
+      reason: string
+      grossDeltaMinor: number
+    },
+  ): Promise<WageBatchMutationApiResult>
+  clearDriverDayDispute(
+    session: FinanceSession,
+    driverDayId: string,
+  ): Promise<{ workspace: CostControlStore }>
 }
 
 export type FinanceRepositoryConfig = {
@@ -114,6 +135,18 @@ export function createDemoCostControlRepository(): CostControlRepository {
       unsupportedDemoMutation()
     },
     async upsertEmployeeCostReferences() {
+      unsupportedDemoMutation()
+    },
+    async ensureWageBatch() {
+      unsupportedDemoMutation()
+    },
+    async advanceWageBatch() {
+      unsupportedDemoMutation()
+    },
+    async addWageAdjustment() {
+      unsupportedDemoMutation()
+    },
+    async clearDriverDayDispute() {
       unsupportedDemoMutation()
     },
   }
@@ -316,7 +349,85 @@ export function createApiCostControlRepository(input: {
       )
       return result
     },
+    async ensureWageBatch(session) {
+      requireSession(session)
+      return postWageMutation(fetchImpl, baseUrl, session, '/finance/wage-batches/ensure', {})
+    },
+    async advanceWageBatch(session, batchId) {
+      requireSession(session)
+      return postWageMutation(
+        fetchImpl,
+        baseUrl,
+        session,
+        `/finance/wage-batches/${encodeURIComponent(batchId)}/advance`,
+        {},
+      )
+    },
+    async addWageAdjustment(session, input) {
+      requireSession(session)
+      return postWageMutation(
+        fetchImpl,
+        baseUrl,
+        session,
+        `/finance/wage-batches/${encodeURIComponent(input.batchId)}/adjustments`,
+        {
+          employeeCostReferenceId: input.employeeCostReferenceId,
+          reason: input.reason,
+          grossDeltaMinor: input.grossDeltaMinor,
+        },
+      )
+    },
+    async clearDriverDayDispute(session, driverDayId) {
+      requireSession(session)
+      const result = await postWageMutation(
+        fetchImpl,
+        baseUrl,
+        session,
+        `/finance/driver-days/${encodeURIComponent(driverDayId)}/clear-dispute`,
+        {},
+      )
+      return { workspace: result.workspace }
+    },
   }
+}
+
+async function postWageMutation(
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+  session: FinanceSession,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<WageBatchMutationApiResult> {
+  const response = await fetchImpl(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.accessToken}`,
+      'X-Veyvio-Organisation-ID': session.activeOrganisationId,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    let detail = `Finance API wage mutation failed (${response.status})`
+    try {
+      const payload = (await response.json()) as { error?: string }
+      if (payload.error) detail = payload.error
+    } catch {
+      // keep status text
+    }
+    throw new Error(detail)
+  }
+  const result = (await response.json()) as WageBatchMutationApiResult
+  if (!result?.workspace?.organisation?.id) {
+    throw new Error('Finance API returned an invalid wage mutation result')
+  }
+  assertSameOrganisation(
+    session.activeOrganisationId,
+    result.workspace.organisation.id,
+    'wage mutation workspace',
+  )
+  return result
 }
 
 export function readFinanceRepositoryConfig(
