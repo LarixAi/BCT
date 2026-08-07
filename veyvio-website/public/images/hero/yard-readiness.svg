@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" role="img" aria-label="Veyvio Yard vehicle readiness">
+  <rect width="400" height="280" fill="#ffffff"/>
+  <rect width="400" height="32" fill="#12A89D"/>
+  <text x="16" y="21" fill="#ffffff" font-family="Inter, sans-serif" font-size="12" font-weight="600">Veyvio Yard</text>
+  <text x="16" y="52" fill="#475467" font-family="Inter, sans-serif" font-size="10" font-weight="600">VEHICLES NEEDING ATTENTION</text>
+  <rect x="16" y="64" width="368" height="56" rx="8" fill="#ffffff" stroke="#DCE2EA"/>
+  <text x="28" y="86" fill="#101828" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700">BX72 VYO</text>
+  <text x="28" y="104" fill="#475467" font-family="Inter, sans-serif" font-size="10">Bay 4 · Ready for dispatch</text>
+  <rect x="300" y="78" width="68" height="22" rx="4" fill="#DCFCE7"/>
+  <text x="312" y="93" fill="#166534" font-family="Inter, sans-serif" font-size="10" font-weight="600">Ready</text>
+  <rect x="16" y="128" width="368" height="56" rx="8" fill="#ffffff" stroke="#DCE2EA"/>
+  <text x="28" y="150" fill="#101828" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700">CK19 VYO</text>
+  <text x="28" y="168" fill="#475467" font-family="Inter, sans-serif" font-size="10">Bay 7 · Tyre check due</text>
+  <rect x="284" y="142" width="84" height="22" rx="4" fill="#FEF3C7"/>
+  <text x="294" y="157" fill="#92400E" font-family="Inter, sans-serif" font-size="10" font-weight="600">Attention</text>
+  <rect x="16" y="192" width="368" height="56" rx="8" fill="#ffffff" stroke="#DCE2EA"/>
+  <text x="28" y="214" fill="#101828" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700">LD68 VYO</text>
+  <text x="28" y="232" fill="#475467" font-family="Inter, sans-serif" font-size="10">VOR · Rear light defect open</text>
+  <rect x="284" y="206" width="84" height="22" rx="4" fill="#FEE2E2"/>
+  <text x="298" y="221" fill="#991B1B" font-family="Inter, sans-serif" font-size="10" font-weight="600">Not ready</text>
+</svg>
