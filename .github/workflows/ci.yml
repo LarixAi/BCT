@@ -209,7 +209,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Requires repo secrets against hosted Command API (see docs/plan/veyvio-multi-tenant-saas-roadmap.md).
-    # Fork PRs without secrets fail closed when CI=true and VEYVIO_ANON_KEY is unset.
+    # Fork PRs genuinely cannot access repo secrets (GitHub Actions restriction)
+    # and skip below. Every other trigger — push to main, same-repo PRs,
+    # workflow_dispatch — must have these secrets configured; missing them
+    # there is a CI misconfiguration and must FAIL, not silently pass.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -235,14 +238,57 @@ jobs:
           VEYVIO_PLATFORM_EMAIL: ${{ secrets.VEYVIO_PLATFORM_EMAIL }}
           VEYVIO_PLATFORM_PASSWORD: ${{ secrets.VEYVIO_PLATFORM_PASSWORD }}
           VEYVIO_ISOLATION_PASSWORD: ${{ secrets.VEYVIO_ISOLATION_PASSWORD }}
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           cd "Veyvio admin "
           if [ -z "${VEYVIO_ANON_KEY}" ]; then
-            echo "::warning::VEYVIO_ANON_KEY is not set — tenant isolation smoke skipped."
-            echo "Add VEYVIO_ANON_KEY and related secrets before merging tenant-isolation work to main."
-            exit 0
+            if [ "${IS_FORK_PR}" = "true" ]; then
+              echo "::warning::VEYVIO_ANON_KEY is not set — fork PRs cannot access repo secrets, skipping tenant isolation smoke."
+              exit 0
+            fi
+            echo "::error::VEYVIO_ANON_KEY is not set on a trusted trigger (push to main / same-repo PR / workflow_dispatch) — tenant isolation smoke MUST run here. Configure repo secrets before merging."
+            exit 1
           fi
+          npm run test:tenant-isolation
           npm run test:dispatch-gates-live
+
+  website:
+    name: Website
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: veyvio-website
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: veyvio-website/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Claims publish check
+        run: npm run verify:claims
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        env:
+          VITE_SITE_URL: https://veyvio.co.uk
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Accessibility smoke
+        run: npm run test:a11y
 
   gate1-preflight:
     name: Gate 1 preflight (F-17)

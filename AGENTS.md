@@ -2,7 +2,11 @@
 
 ## Product authority
 
-**Combined Blueprint** (`docs/blueprint/Veyvio_Combined_Blueprint_1.docx`, v1.0) is the sole product and architecture specification. Before cross-app or product work, read the relevant part and check [docs/plan/veyvio-blueprint-alignment-plan.md](docs/plan/veyvio-blueprint-alignment-plan.md). Execution tasks live in [docs/plan/veyvio-production-gates.md](docs/plan/veyvio-production-gates.md). Cursor rule: `.cursor/rules/veyvio-combined-blueprint.mdc`.
+**Combined Blueprint v2.0** ([`docs/blueprint/Veyvio_Combined_Blueprint_v2.0.docx`](docs/blueprint/Veyvio_Combined_Blueprint_v2.0.docx)) is the platform product and architecture authority. The v1 Combined Blueprint is superseded.
+
+Before cross-app or product work, read the relevant blueprint section and check [docs/plan/veyvio-blueprint-alignment-plan.md](docs/plan/veyvio-blueprint-alignment-plan.md). Execution tasks live in [docs/plan/veyvio-production-gates.md](docs/plan/veyvio-production-gates.md). Freeze / reproducibility: [docs/plan/veyvio-phase0-freeze.md](docs/plan/veyvio-phase0-freeze.md). Cursor rule: `.cursor/rules/veyvio-combined-blueprint.mdc`.
+
+App-level specs (Cost Control, Executive, Website) sit under `docs/blueprint/` and each app’s `docs/` and must not contradict Combined Blueprint v2.0 on tenancy, security, or Hard Rules.
 
 ## Repository layout
 
@@ -11,6 +15,9 @@
 | **Veyvio Yard** | repo root (`src/`) | TanStack Start + Vite + Nitro → Cloudflare Workers |
 | **Veyvio Admin (Command)** | `Veyvio admin /` | Vite SPA + Supabase `command-api` |
 | **Veyvio Driver** | `veyvio-driver-App/` | Vite SPA |
+| **Veyvio Cost Control** | `veyvio-cost-control/` | Vite SPA — cost-only CEC budget platform (separate product) |
+| **Veyvio Executive** | `veyvio-executive/` | Next.js BFF — executive governance / security surface |
+| **Veyvio Website** | `veyvio-website/` | Vite SPA (public marketing site) |
 | **Shared packages** | `shared/`, `packages/` | TypeScript libs |
 
 Backend: Supabase Postgres + Edge Function `command-api` under `Veyvio admin /supabase/`.
@@ -43,4 +50,9 @@ cd "Veyvio admin " && npm ci && npm run dev
 
 # Driver
 cd veyvio-driver-App && npm ci && npm run dev
+
+# Public website (veyvio.com)
+cd veyvio-website && npm ci && npm run dev
 ```
+
+Deploy: `docs/deploy/website-production.md`. Homepage spec: `docs/blueprint/veyvio-homepage-blueprint-v2.md`.

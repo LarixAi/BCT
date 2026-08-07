@@ -1,44 +1,50 @@
 ---
-description: Veyvio Combined Blueprint is the sole product and architecture authority — consult before scope, design, or implementation decisions
+description: Veyvio Combined Blueprint v2.0 is the sole product and architecture authority — consult before scope, design, or implementation decisions
 alwaysApply: true
 ---
 
-# Veyvio Combined Blueprint (mandatory)
+# Veyvio Combined Blueprint v2.0 (mandatory)
 
-**Canonical file:** `docs/blueprint/Veyvio_Combined_Blueprint_1.docx` (v1.0, 24 July 2026)
+**Canonical file:** `docs/blueprint/Veyvio_Combined_Blueprint_v2.0.docx` (v2.0, 25 July 2026)  
+**Legacy:** `docs/blueprint/Veyvio_Combined_Blueprint_1.docx` (v1.0 — superseded)
 
 This is the **only** product blueprint for Veyvio. Do not invent requirements, rename apps, or add scope that is not in the blueprint unless the user explicitly overrides it in the current task.
 
 ## Before any product, architecture, or cross-app work
 
-1. Read the relevant blueprint part (see index below).
+1. Read the relevant blueprint section (see index below).
 2. Check alignment status in `docs/plan/veyvio-blueprint-alignment-plan.md`.
-3. Check execution tasks in `docs/plan/veyvio-production-gates.md` (Gates 1–4).
+3. Check execution tasks in `docs/plan/veyvio-production-gates.md` (Gates 0–6).
 4. If blueprint and code conflict, **treat the blueprint as target state** and record the gap in the alignment plan debt register — do not silently follow legacy/mock behaviour.
 
-## Blueprint parts (what to read when)
+## Blueprint sections (v2.0 — what to read when)
 
-| Part | Use for |
-|------|---------|
-| **A** | Product vision, apps, roles, workflows, domain modules, data model |
-| **B** | 10 platform principles — read before changing auth, tenancy, or safety gates |
-| **C** | Future intelligence (digital twin, recommendations) — **not Gate 1–2 scope** |
-| **D** | Enterprise extensions (compliance passports, audit packs, sustainability) |
-| **E** | Technical spec — schema, APIs, permission matrix, state machines |
-| **F** | **17 hard rules** + stop-ship order — mandatory pre-production checklist |
+| § | Use for |
+|---|---------|
+| **1–2** | Vision, principles, release truth |
+| **3** | Tenancy, licensing, isolation |
+| **4–6** | Apps, roles/scopes, information architecture |
+| **7** | Core end-to-end workflows (booking→duty, driver duty, vehicle swap, offline replay) |
+| **8** | Domain specs (Command, Driver, Yard, Maintenance) |
+| **9–10** | Shared data model, technical architecture |
+| **11–12** | Security, offline/mobile |
+| **13–17** | Notifications, reporting, integrations, UX, NFRs |
+| **18** | **35 Hard Rules F-01 to F-35** — mandatory pre-production checklist |
+| **19–20** | Production gates (0–6), definition of done, release verdicts |
+| **21–22** | Open items, risk waivers, governance |
 
-## Non-negotiables from Part F (stop-ship)
+**Intelligence (Phase 8 / old Part C):** deferred until Gate 2 data quality exit — not Gate 1 scope.
 
-- Deny-by-default: login ≠ access to all apps (`app.command`, `app.driver`, `app.yard`, etc.).
-- Structural tenant isolation at API, DB, storage, cache, search, notifications.
-- No mock or fallback data presented as live operational truth in production.
-- Safety rules are **hard gates** (eligibility + vehicle readiness), not yellow warnings only.
-- Offline writes revalidated on reconnect; never silent success.
-- Production release blocked when Part F §17 stop-ship tests fail.
+## Non-negotiables from §18 Hard Rules (stop-ship)
+
+- **F-01–F-04, F-06, F-15, F-17–F-23, F-27, F-30, F-32** — Red class: deny-by-default, tenant isolation, no production mocks, credentials, safety gates, offline revalidation, stop-ship tests, one operational truth, tenant ownership, safety beats convenience, no prod DB edits, client is untrusted.
+- **F-18:** Each operational fact has **one authoritative write path**; mirrors are never co-authoritative (TD-010: retire PHV `jobs`/`job_stops` direct writes).
+- **F-29:** Notifications never create business state.
+- No percentage completion as release evidence — use Designed → Implemented → Integrated → Tested → Deployed → Verified → Device verified → Accepted.
 
 ## Execution order
 
-Follow Part F recommended implementation order (credentials → mocks → tenant_id → scopes → permissions → … → CI stop-ship tests). Map work to **Gate 1 before Gate 2** in `veyvio-production-gates.md`. Do not start store launch (Gate 3) or intelligence (Part C) until Gate 1 exit tests pass.
+Follow §19 production gates. **Gate 1 before Gate 2** before store launch (Gate 3) and pilot acceptance (Gate 4). Map work to `veyvio-production-gates.md`. Do not start intelligence or commercial SaaS (Gate 6) until prior gates pass.
 
 ## Preserve proven work
 

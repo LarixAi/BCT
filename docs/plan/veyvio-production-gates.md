@@ -9,8 +9,10 @@
 
 | Document | Role |
 |----------|------|
-| [`Veyvio_Combined_Blueprint_1.docx`](../blueprint/Veyvio_Combined_Blueprint_1.docx) | **Product authority** (Parts A–F) |
+| [`Veyvio_Combined_Blueprint_v2.0.docx`](../blueprint/Veyvio_Combined_Blueprint_v2.0.docx) | **Product authority** (v2.0; supersedes v1.0) |
+| [`Veyvio_Combined_Blueprint_1.docx`](../blueprint/Veyvio_Combined_Blueprint_1.docx) | Superseded — do not use as sole authority |
 | [veyvio-blueprint-alignment-plan.md](./veyvio-blueprint-alignment-plan.md) | Blueprint → gates gap tracker and phase index |
+| [veyvio-phase0-freeze.md](./veyvio-phase0-freeze.md) | Phase 0 freeze and reproducibility recovery |
 | [veyvio-driver-full-remediation-plan.md](./veyvio-driver-full-remediation-plan.md) | P0–P3 technical remediation detail |
 | [veyvio-multi-tenant-saas-roadmap.md](./veyvio-multi-tenant-saas-roadmap.md) | SaaS tenancy and entitlements |
 | [veyvio-yard-roadmap.md](./veyvio-yard-roadmap.md) | Yard prototype → production sync |
@@ -100,11 +102,18 @@ Gate 4 — Production launch
 | **F-12** | Driver API write boundaries | Done (code) | `driver-write-guards.ts`; AdBlue, parking/handback, messages, location + defects/incidents/checks |
 | **TD-009** | Yard mutation handlers (26/26 types) | Done (code) | `yard-mutation-handlers.ts`; inventory in `yard-mutation-inventory.ts` |
 | **F-07** | Override audit | Done (prod) | `override_audit_events` + assignDuty override reason; `GET /overrides` |
-| **F-08 / TD-005** | Journey lifecycle on Command | Done (prod) | `POST driver/journeys/:id/start\|complete` |
-| **F-05** | Compliance automation settings | Done (prod) | `GET/PATCH /compliance/automation-settings` |
-| **G2** | Vehicle reports Command API | Done (prod) | `/vehicle-reports*` live; Admin real-client |
+| **F-08 / TD-005** | Journey lifecycle on Command | Done (prod) | `POST driver/journeys/:id/start\|complete` + `stops/arrive\|complete` |
+| **F-05** | Compliance automation settings | Done (prod) | automation-settings + vehicle MOT/PMI/service/tyre gates + `POST compliance/notify-expiring` |
+| **G2** | Vehicle reports Command API | Done (prod) | `/vehicle-reports*` live; Admin hub has no empty mock fallback |
+| **F-07 UI** | Override audit visible in Command | Done (prod) | Admin Audit Log → Safety overrides panel |
 | **G2** | Fuel refill + equipment → Command | Done (prod) | `fuel_records`, `vehicle_equipment_checks`, Driver `/vehicle/fuel` |
 | **F-09 / F-10 / F-14** | Events, audit helper, integration keys | Done (prod) | `domain_events`, `audit-service`, `integration_api_keys` |
+| **G2** | FCM push delivery (Android) | Verified (prod) | `fcm-send.ts`, migration `202607280001`, handset shade 28 Jul 2026 |
+| **G2** | Job execution + duty closeout + vehicle swap | Verified (prod) | `test:gate2-live` + tenant-isolation 28 Jul; [gate2-wip-triage.md](./gate2-wip-triage.md) |
+| **G2** | Gate 2 RLS migration | Verified (deployed) | `202607270001` applied; tenant-isolation PASS |
+| **F-02** | Tenant isolation depth | Partial | Isolation smoke includes job execution / closeout / swap; extend as hubs ship |
+| **F-03** | Journey-sequence mock in Admin | Partial | Fail-closed hubs done; journey preview mock remains |
+| **Yard** | Bodywork report wizard (steps 1–5) | Done (slice) | `ReportDamageWizard` + `damage.report` outbox — [gate2-wip-triage.md](./gate2-wip-triage.md) |
 
 _Update this table as Gate 1/2 items ship._
 
@@ -116,11 +125,16 @@ _Update this table as Gate 1/2 items ship._
 
 ### 3.1 Exit test (pilot)
 
-**Automated (25 Jul 2026):** `gate1:rotate-credentials` + service-role confirmed + CI secrets pushed + `gate1:device-exit` (8/8) + preflight **16/16** + Yard e2e **22/22**. Android handset: APK install + airplane on/off on `R5GL13DVHCH`.
+**Automated (25 Jul 2026):** `gate1:rotate-credentials` + service-role confirmed + CI secrets pushed + `gate1:device-exit` (10/10) + preflight **16/16** + Yard e2e **22/22**.
 
-**Still manual:** iOS physical checklist; on-device UI rows (sync queue proof, defect→Yard, handback, native push tap).
+**Android handset (25 Jul 2026 — PASS):** Samsung `R5GL13DVHCH`, BCT pilot `pilot-driver@veyvio.test`, BX62 BCT. Rows 1–9 and 11 signed in `docs/plan/.gate1-handset-android.local.md` (sync queue, offline drain, duty ack/sign-on, bodywork→Yard, handback VR-00001, in-app notifications, production APK). Row 10 N/A (single tenant). Biometric unlock required on device for operator sessions. FCM duty-published tap → Driver foreground verified 28 Jul 2026.
 
-1. BCT (or chosen pilot) driver on physical Android + iOS device.
+**Android-only supervised pilot (allowed):** When ops lead marks **PASS** on the Android sign-off block after one live shift ([bct-pilot-live-shift-runbook.md](./bct-pilot-live-shift-runbook.md)), BCT may run a small Android fleet with Command + Yard as the only record. This does **not** satisfy Gate 3 store submit.
+
+**Still manual for full Gate 1 / store:** Full **iOS** physical checklist ([gate1-ios-xcode-runbook.md](./gate1-ios-xcode-runbook.md)).  
+**Operator runbook:** [gate1-operator-physical-runbook.md](./gate1-operator-physical-runbook.md) · **Store scaffold:** [gate3-store-readiness.md](./gate3-store-readiness.md)
+
+1. BCT (or chosen pilot) driver on physical Android (+ iOS before store submit).
 2. Airplane mode mid-walkaround → queue grows → reconnect → server receives check with evidence.
 3. Sync centre shows real pending count (never hardcoded `0`).
 4. Damage report appears in Yard hub within 60s without ops copy-paste.
@@ -142,7 +156,7 @@ Maps to [veyvio-driver-full-remediation-plan.md](./veyvio-driver-full-remediatio
 | P0-04 | Truthful sync states | Done | Unified queue reader; capability matrix from live probes |
 | P0-05 | Encrypted message persistence | Done | IndexedDB drafts + ops outbox; native encryption is Gate 2 |
 | P0-06 | Server lifecycle enforcement | Done | Sign-on/check/duty transitions rejected server-side |
-| P0-07 | Incident/safeguarding delivery | Partial | Ops outbox wired; ack/escalation proof still open |
+| P0-07 | Incident/safeguarding delivery | Done (prod) | migration `008` deployed; ack/escalate/detail routes live; driver receipt reference |
 | P0-08 | Durable media outbox | Done | Walkaround photos survive process death via IndexedDB |
 | P0-09 | Operations event delivery | Done | Driver no longer mirrors parking events to localStorage; Yard hub loads from Command |
 | P0-10 | Mandatory CI | Done | Driver production guards + Android APK artifact |
@@ -235,12 +249,12 @@ UI copy must never show "synced" without server acknowledgement timestamp.
 | Documents | Driver ✓, vehicle stub | Vehicle docs from Command projection | `DriverVehicleDocuments.jsx` (replace stub) |
 | Sign-on | ✓ | Server rejects invalid transitions (ack required, check gate) | `duty-lifecycle-gates.ts`, `command-driver-ops.service.js`, `command-api` duty handlers |
 | Live tracking | Partial | Truthful sync + tenant-scoped queue | `useFleetTracking.js`, `driver-location-ping.service.js` |
-| Messages | Partial | No false "sent" without ack | `messages.service.js`, `DriverSupabaseMessages.jsx` |
+| Messages | Done (code/prod) | No false "sent" — queued replies show pending; Command read receipts | `messages.service.js`, `DriverMessageThread.jsx`, `MessagesPage.tsx` |
 | Defects / incidents | ✓ | + outbox + Yard side-effect | `DriverDefectReport.jsx`, `DriverSupabaseIncidentReport.jsx` |
-| Vehicle swap | ~35% | Ops-approved swap workflow (minimum: block unverified swap) | `DriverChangeVehicle.jsx` |
-| Job execution | ~60% | Stop state machine server-enforced | `DriverSupabaseJobView.jsx`, `jobs.service.js` |
-| Handback / parking | Partial | Handback → Command, not localStorage only | `DriverVehicleHandback.jsx`, `yard-parking.service.js` |
-| Sign-off / hours | Partial | End-of-duty signed closeout | `DriverDutyCloseout.jsx`, `DriverWorkingTime.jsx`, `end-of-duty-template-engine.js` |
+| Vehicle swap | ~80% | Ops-approved request/approve on Command | `vehicle-swap-workflow.ts`, `VehicleSwapApprovalPanel.tsx`, `DriverChangeVehicle.jsx` |
+| Job execution | ~80% | PHV steps mirrored to Command | `driver-job-execution.ts`, `job-execution-bridge.service.js`, `jobs.service.js` |
+| Handback / parking | ~80% | Handback → Command + offline outbox | `vehicle-handback.service.js`, `DriverVehicleHandback.jsx` |
+| Sign-off / hours | ~80% | Duty closeout on Command | `duty-closeout.ts`, `duty-closeout.service.js`, `DriverDutyCloseout.jsx` |
 
 **Note:** Full journey state machine from [veyvio-driver-audit-delivery.md](./veyvio-driver-audit-delivery.md) (`activeJourneyId`, `canCompleteDuty`) is not in `veyvio-driver-App` today — Gate 1 needs minimum server-enforced duty sign-on/off; full S1–S5 journey machine may span Gate 1 + early Gate 2.
 
@@ -386,6 +400,8 @@ Role-based templates (minimum in-app; push in Gate 3):
 
 **Prerequisite:** Gate 1 exit tests passed for pilot fleet. Gate 2 compliance minimum for your market (PSV/school/specialist).
 
+**Working checklist:** [gate3-store-readiness.md](./gate3-store-readiness.md) (inventory + tick-boxes). Started 25 Jul 2026: iOS bundle unified to `uk.veyvio.driver`, display name **Veyvio Driver**, camera/location usage strings, `PrivacyInfo.xcprivacy` scaffold. Signing keys, push, and store assets remain operator/CI.
+
 ### 5.1 Identity and branding
 
 | Task | Files |
@@ -432,10 +448,12 @@ Screenshots, feature graphic, descriptions, age rating, export compliance questi
 
 ## 6. Gate 4 — Production launch
 
+**Second operator / SaaS:** Parked until entry criteria in [gate4-second-tenant-entry.md](./gate4-second-tenant-entry.md) are met (BCT live-shift accepted, tenant-isolation green, no production mock hubs). Do not start second-tenant product work in Gate 1–3.
+
 ### 6.1 Pilot deployment
 
-- One real transport operator (e.g. BCT).
-- Physical device matrix: mid-range Android, recent iPhone, poor-signal routes.
+- One real transport operator (e.g. BCT) — Android-only supervised pilot allowed after ops lead live-shift PASS ([bct-pilot-live-shift-runbook.md](./bct-pilot-live-shift-runbook.md)).
+- Physical device matrix: mid-range Android, recent iPhone (iOS before store / multi-platform acceptance), poor-signal routes.
 - Ops staff trained on Admin + Yard workflows tied to Driver events.
 
 ### 6.2 Security and assurance
@@ -468,7 +486,7 @@ Single-page reference for product and QA. **Gate** column indicates minimum gate
 | Documents checked | 55% | 1–2 | `DriverSupabaseDocuments.jsx`, `DriverVehicleDocuments.jsx` |
 | Duty begins (sign-on) | 70% | 1 | `DriverMyDuty.jsx`, `command-driver-ops.service.js` |
 | Live tracking | 65% | 1 | `driver-location-ping.service.js` |
-| Messages | 70% | 1 | `messages.service.js` |
+| Messages | 85% | 1 | Delivery + read ack on thread |
 | Defect reported | 70% | 1 | `DriverDefectReport.jsx` |
 | Swap vehicle | 35% | 1–2 | `DriverChangeVehicle.jsx` |
 | Continue duty / jobs | 60% | 1 | `DriverSupabaseJobView.jsx` |

@@ -17,6 +17,7 @@ dist-ssr
 *.local
 .gate1-secrets.local.env
 docs/plan/.gate1-handset-*.local.md
+docs/plan/.gate1-handset-shots/
 .jdk
 android/.gradle
 android/app/build
@@ -60,3 +61,7 @@ blob-report/
 *.apk
 
 **/.tanstack/
+
+# Supabase CLI local state (never commit)
+**/supabase/.temp/
+**/supabase/.branches/

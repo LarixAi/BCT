@@ -1,0 +1,16 @@
+# SEC-1104 — sensitive paths require Security Owner / Technical Owner review.
+# Enable "Require review from Code Owners" on main for this repository.
+# Replace @LarixAi/security-reviewers with the real org team or user handles.
+
+**/supabase/migrations/ @LarixAi/security-reviewers
+**/supabase/functions/_shared/tenant-auth.ts @LarixAi/security-reviewers
+**/supabase/functions/_shared/executive-*.ts @LarixAi/security-reviewers
+**/supabase/functions/_shared/security-*.ts @LarixAi/security-reviewers
+**/supabase/functions/_shared/application-scopes.ts @LarixAi/security-reviewers
+**/supabase/functions/command-api/ @LarixAi/security-reviewers
+veyvio-executive/app/security/ @LarixAi/security-reviewers
+veyvio-executive/app/api/auth/ @LarixAi/security-reviewers
+veyvio-executive/worker/ @LarixAi/security-reviewers
+docs/plan/veyvio-executive-security-blueprint.md @LarixAi/security-reviewers
+docs/plan/veyvio-executive-threat-model.md @LarixAi/security-reviewers
+docs/plan/veyvio-executive-risk-acceptance.md @LarixAi/security-reviewers

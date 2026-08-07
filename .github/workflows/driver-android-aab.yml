@@ -1,0 +1,99 @@
+# Gate 3 scaffold — signed Android AAB for Play internal track.
+# Requires CI secrets; fails clearly when they are missing.
+# Manual: Actions → Driver Android AAB → Run workflow
+
+name: Driver Android AAB
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "driver-v*"
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  bundle-release:
+    name: bundleRelease AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: veyvio-driver-App
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require upload signing secrets
+        env:
+          VEYVIO_UPLOAD_STORE_PASSWORD: ${{ secrets.VEYVIO_UPLOAD_STORE_PASSWORD }}
+          VEYVIO_UPLOAD_KEY_ALIAS: ${{ secrets.VEYVIO_UPLOAD_KEY_ALIAS }}
+          VEYVIO_UPLOAD_KEY_PASSWORD: ${{ secrets.VEYVIO_UPLOAD_KEY_PASSWORD }}
+          VEYVIO_UPLOAD_KEYSTORE_BASE64: ${{ secrets.VEYVIO_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          missing=0
+          for name in VEYVIO_UPLOAD_STORE_PASSWORD VEYVIO_UPLOAD_KEY_ALIAS VEYVIO_UPLOAD_KEY_PASSWORD VEYVIO_UPLOAD_KEYSTORE_BASE64; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing secret $name — add upload keystore secrets before signed AAB builds."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: veyvio-driver-App/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install
+        run: npm ci
+
+      - name: Production build scan
+        run: npm run verify:production-build
+        env:
+          VERIFY_SKIP_BUILD: "1"
+
+      - name: Build web + sync Capacitor (release flags)
+        env:
+          VITE_ENABLE_PUSH: "false"
+          VITE_MOCK_API: "false"
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: Decode upload keystore
+        env:
+          VEYVIO_UPLOAD_KEYSTORE_BASE64: ${{ secrets.VEYVIO_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/veyvio-signing"
+          echo "$VEYVIO_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/veyvio-signing/upload.jks"
+          echo "VEYVIO_UPLOAD_STORE_FILE=$RUNNER_TEMP/veyvio-signing/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Assemble signed AAB
+        env:
+          VEYVIO_UPLOAD_STORE_PASSWORD: ${{ secrets.VEYVIO_UPLOAD_STORE_PASSWORD }}
+          VEYVIO_UPLOAD_KEY_ALIAS: ${{ secrets.VEYVIO_UPLOAD_KEY_ALIAS }}
+          VEYVIO_UPLOAD_KEY_PASSWORD: ${{ secrets.VEYVIO_UPLOAD_KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew bundleRelease --no-daemon
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veyvio-driver-release-aab
+          path: veyvio-driver-App/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+      # Operator TODO: wire Play Developer API upload to internal track after secrets exist.
