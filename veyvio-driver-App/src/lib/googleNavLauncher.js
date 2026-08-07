@@ -16,6 +16,7 @@ import { toast } from "@/components/ui/use-toast";
 import { startExternalNavSession, loadExternalNavSession, clearExternalNavSession } from "@/lib/navigation/externalNavSession";
 import { prepareNavOverlayForExternalMaps, hideFloatingBubble } from "@/lib/navigation/floatingBubble";
 import { syncInCarActiveTrip } from "@/lib/navigation/activeTripInCar";
+import { confirmExternalNavigation } from "@/lib/navigation/externalNavConfirm";
 
 const UTM_SOURCE = "phfs_driver";
 const UTM_CAMPAIGN = "driver_navigation";
@@ -241,6 +242,9 @@ export async function openGoogleNavigation({
     if (showToast) showNavigationFailureToast(err);
     throw err;
   }
+
+  const proceed = await confirmExternalNavigation({ confirmLabel: "Open Google Maps" });
+  if (!proceed) return { ok: false, launchMethod: "cancelled" };
 
   const { lat, lng } = target;
   const platform = Capacitor.getPlatform();

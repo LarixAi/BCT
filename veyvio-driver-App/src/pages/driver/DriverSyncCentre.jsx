@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { OperationalPage, InfoRow, DriverSectionTitle } from "./DriverOperationalPageParts";
 import CommandBackendNotice from "@/components/driver/operational/CommandBackendNotice";
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
@@ -12,6 +12,13 @@ import {
 import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
 import { probeDriverTrainingConnection } from "@/services/training.service";
 import { formatUkDateTime } from "@/lib/uk-locale";
+import { withTimeout } from "@/lib/withTimeout";
+
+const PROBE_TIMEOUT_MS = 12000;
+
+function emptyQueue() {
+  return { total: 0, walkaroundChecks: 0, locationPings: 0, opsCommands: 0 };
+}
 
 export default function DriverSyncCentre() {
   const { session, driver } = useDriverSupabaseAuth();
@@ -20,32 +27,86 @@ export default function DriverSyncCentre() {
   const [trainingProbe, setTrainingProbe] = useState(null);
   const [capabilityProbe, setCapabilityProbe] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [flushMsg, setFlushMsg] = useState("");
+  const [offlineQueue, setOfflineQueue] = useState(emptyQueue);
+  const [syncing, setSyncing] = useState(false);
 
   const workspace = useMemo(
     () => resolveDriverWorkspaceScope(driver, session),
     [driver, session],
   );
 
-  const offlineQueue = useMemo(
-    () =>
-      driver?.id
-        ? describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId)
-        : { total: 0, walkaroundChecks: 0, locationPings: 0 },
-    [driver?.id, workspace.companyId, workspace.membershipId],
-  );
+  const refreshQueue = useCallback(() => {
+    if (!driver?.id) {
+      setOfflineQueue(emptyQueue());
+      return emptyQueue();
+    }
+    const next = describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId);
+    setOfflineQueue(next);
+    return next;
+  }, [driver?.id, workspace.companyId, workspace.membershipId]);
+
+  const runFlush = useCallback(async () => {
+    if (!driver?.id) return { remaining: 0 };
+    setSyncing(true);
+    setFlushMsg("");
+    try {
+      const result = await flushOpsOutbox(driver, session);
+      const remaining = refreshQueue();
+      if (result.synced > 0) {
+        setFlushMsg(
+          remaining.total === 0
+            ? `Synced ${result.synced} item${result.synced === 1 ? "" : "s"} to Command.`
+            : `Synced ${result.synced}; ${remaining.total} still waiting.`,
+        );
+      } else if (result.blocked > 0) {
+        setFlushMsg(result.blockedItems?.[0]?.message ?? "Command rejected a queued report.");
+      } else if (remaining.total > 0 && typeof navigator !== "undefined" && navigator.onLine === false) {
+        setFlushMsg("Still offline — queued items will sync when connection returns.");
+      } else if (remaining.total > 0) {
+        setFlushMsg("Could not sync yet — check connection and try again.");
+      }
+      return remaining;
+    } finally {
+      setSyncing(false);
+    }
+  }, [driver, session, refreshQueue]);
 
   useEffect(() => {
+    refreshQueue();
+  }, [refreshQueue]);
+
+  useEffect(() => {
+    let cancelled = false;
     void (async () => {
       setLoading(true);
+      // Flush first — never block queue drain behind slow capability probes.
+      if (driver?.id && typeof navigator !== "undefined" && navigator.onLine !== false) {
+        await runFlush().catch(() => {});
+      } else {
+        refreshQueue();
+      }
+      if (cancelled) return;
+
       const depotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
       const [result, training, capabilities] = await Promise.all([
-        refreshCommandBootstrap(depotId),
-        probeDriverTrainingConnection(session ?? {}),
-        probeDriverCommandCapabilities(session ?? {}, { depotId }),
+        withTimeout(refreshCommandBootstrap(depotId), PROBE_TIMEOUT_MS, {
+          ok: false,
+          message: "Bootstrap timed out. Pull Sync again.",
+        }),
+        withTimeout(probeDriverTrainingConnection(session ?? {}), PROBE_TIMEOUT_MS, {
+          ok: false,
+          message: "Training probe timed out",
+        }),
+        withTimeout(probeDriverCommandCapabilities(session ?? {}, { depotId }), PROBE_TIMEOUT_MS, {
+          ok: false,
+          configured: true,
+          capabilities: [],
+        }),
       ]);
-      if (driver?.id) {
-        await flushOpsOutbox(driver, session).catch(() => {});
-      }
+      if (cancelled) return;
+
+      refreshQueue();
       if (!result.ok) {
         setError(result.message ?? "Sync failed");
         setTrainingProbe(training);
@@ -59,12 +120,30 @@ export default function DriverSyncCentre() {
       setError("");
       setLoading(false);
     })();
-  }, [session?.activeDepotId, session?.depots, session?.accessToken, session?.driverId, session, driver?.id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.activeDepotId, session?.depots, session?.accessToken, session?.driverId, session, driver?.id, runFlush, refreshQueue]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      void runFlush();
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [runFlush]);
 
   const serverTime = bootstrap?.serverTime;
   const dutyCount = bootstrap?.duties?.length ?? 0;
   const capabilities = capabilityProbe?.capabilities ?? [];
-  const connectionStatus = error ? "Error" : loading ? "Checking…" : "Online";
+  const connectionStatus =
+    typeof navigator !== "undefined" && navigator.onLine === false
+      ? "Offline"
+      : error
+        ? "Error"
+        : loading
+          ? "Checking…"
+          : "Online";
   const pendingLabel =
     offlineQueue.total === 0
       ? "Pending offline queue · none"
@@ -102,6 +181,20 @@ export default function DriverSyncCentre() {
         <InfoRow label={`Published duties cached · ${dutyCount}`} to="/jobs" />
         <InfoRow label={pendingLabel} to={offlineQueue.total > 0 ? "/check" : "/contact"} />
       </div>
+
+      {offlineQueue.total > 0 || flushMsg ? (
+        <div className="mt-4 space-y-2 px-1">
+          {flushMsg ? <p className="text-sm text-muted-foreground">{flushMsg}</p> : null}
+          <button
+            type="button"
+            disabled={syncing || (typeof navigator !== "undefined" && navigator.onLine === false)}
+            onClick={() => void runFlush()}
+            className={`h-11 w-full rounded-xl text-sm font-semibold ${op.primaryBtn} disabled:opacity-45`}
+          >
+            {syncing ? "Syncing…" : "Sync now"}
+          </button>
+        </div>
+      ) : null}
 
       <DriverSectionTitle>Admin readiness</DriverSectionTitle>
       <div className={op.listCard}>

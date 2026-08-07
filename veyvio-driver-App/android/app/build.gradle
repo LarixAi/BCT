@@ -1,5 +1,15 @@
 apply plugin: 'com.android.application'
 
+def veyvioUploadStoreFile = System.getenv("VEYVIO_UPLOAD_STORE_FILE")
+def veyvioUploadStorePassword = System.getenv("VEYVIO_UPLOAD_STORE_PASSWORD")
+def veyvioUploadKeyAlias = System.getenv("VEYVIO_UPLOAD_KEY_ALIAS")
+def veyvioUploadKeyPassword = System.getenv("VEYVIO_UPLOAD_KEY_PASSWORD")
+def hasUploadSigning = veyvioUploadStoreFile &&
+    veyvioUploadStorePassword &&
+    veyvioUploadKeyAlias &&
+    veyvioUploadKeyPassword &&
+    file(veyvioUploadStoreFile).exists()
+
 android {
     namespace = "uk.veyvio.driver"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,10 +26,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // Env-injected upload keystore — never commit the .jks / passwords.
+        if (hasUploadSigning) {
+            release {
+                storeFile file(veyvioUploadStoreFile)
+                storePassword veyvioUploadStorePassword
+                keyAlias veyvioUploadKeyAlias
+                keyPassword veyvioUploadKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasUploadSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

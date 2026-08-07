@@ -80,3 +80,14 @@ export function hasPendingDutyOps(driverId, dutyId, companyId, membershipId) {
       String(item.payload?.dutyId ?? "") === dutyKey,
   );
 }
+
+export function listPendingMessageOps(driverId, companyId, membershipId, conversationId = null) {
+  return loadOpsOutbox(driverId, companyId, membershipId).filter((item) => {
+    if (item.type !== "message_start" && item.type !== "message_reply") return false;
+    if (!conversationId) return true;
+    if (item.type === "message_reply") {
+      return String(item.payload?.conversationId ?? "") === String(conversationId);
+    }
+    return false;
+  });
+}

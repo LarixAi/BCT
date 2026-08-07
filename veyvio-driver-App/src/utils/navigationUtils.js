@@ -98,15 +98,28 @@ export function formatDuration(duration) {
   return `${Math.round(sec / 60)} min`;
 }
 
-export function getNearestStepIndex(currentLocation, steps) {
+/**
+ * Nearest step ahead of (or equal to) `currentStepIndex` — never behind it.
+ * A global "nearest endpoint across all steps" search regresses constantly
+ * in normal driving: a step's end a block behind the driver, or across a
+ * junction, is often geometrically closer than the current/next step's end
+ * a long straight ahead. Every regression fired a step-change, which fired
+ * a fresh spoken instruction — the app would repeat itself every few
+ * seconds as ordinary GPS noise flipped the "nearest" step back and forth.
+ * Turn-by-turn navigation only ever advances forward; a genuine wrong-turn
+ * is handled separately by the off-route detector's reroute, not by
+ * silently jumping the step index backward.
+ */
+export function getNearestStepIndex(currentLocation, steps, currentStepIndex = 0) {
   if (!currentLocation || !steps?.length) return 0;
 
-  let nearestIndex = 0;
+  const startIndex = Math.min(Math.max(currentStepIndex, 0), steps.length - 1);
+  let nearestIndex = startIndex;
   let nearestDistance = Number.MAX_SAFE_INTEGER;
 
-  steps.forEach((step, index) => {
-    const endLatLng = step?.endLocation?.latLng;
-    if (!endLatLng) return;
+  for (let index = startIndex; index < steps.length; index += 1) {
+    const endLatLng = steps[index]?.endLocation?.latLng;
+    if (!endLatLng) continue;
 
     const distance = getDistanceMeters(currentLocation, {
       latitude: endLatLng.latitude,
@@ -117,7 +130,7 @@ export function getNearestStepIndex(currentLocation, steps) {
       nearestDistance = distance;
       nearestIndex = index;
     }
-  });
+  }
 
   return nearestIndex;
 }

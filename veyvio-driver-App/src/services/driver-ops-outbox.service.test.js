@@ -4,11 +4,13 @@ const reportDefectViaCommand = vi.fn();
 const reportIncidentViaCommand = vi.fn();
 const commandSignOnDuty = vi.fn();
 const commandSignOffDuty = vi.fn();
+const refreshSession = vi.fn();
 
 vi.mock("@/lib/supabase/client", () => ({
   getSupabaseClient: () => ({
     auth: {
       getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: "tok" } } }),
+      refreshSession: (...args) => refreshSession(...args),
     },
   }),
 }));
@@ -46,6 +48,7 @@ describe("driver-ops-outbox.service", () => {
     reportIncidentViaCommand.mockReset();
     commandSignOnDuty.mockReset();
     commandSignOffDuty.mockReset();
+    refreshSession.mockReset();
   });
 
   it("drops permanently rejected queue items during flush", async () => {
@@ -133,5 +136,43 @@ describe("driver-ops-outbox.service", () => {
     expect(result.blocked).toBe(1);
     expect(result.remaining).toBe(0);
     expect(loadOpsOutbox("drv-4", "co-1", "mem-1")).toEqual([]);
+  });
+
+  it("retries a 401 after refreshing the session instead of dropping the report", async () => {
+    const { enqueueDutyOpsCommand, loadOpsOutbox } = await import("@/lib/driver-ops-outbox.storage");
+    const { flushOpsOutbox } = await import("@/services/driver-ops-outbox.service");
+
+    enqueueDutyOpsCommand("drv-5", "duty_sign_on", "duty-11", "co-1", "mem-1");
+
+    commandSignOnDuty
+      .mockResolvedValueOnce({ ok: false, status: 401, message: "Not signed in." })
+      .mockResolvedValueOnce({ ok: true, dutyId: "duty-11", signedOnAt: "2026-07-24T06:00:00.000Z" });
+    refreshSession.mockResolvedValue({ data: { session: { access_token: "new-tok" } }, error: null });
+
+    const result = await flushOpsOutbox({ id: "drv-5" }, { companyId: "co-1", membershipId: "mem-1" });
+
+    expect(refreshSession).toHaveBeenCalledTimes(1);
+    expect(commandSignOnDuty).toHaveBeenNthCalledWith(2, "new-tok", "duty-11");
+    expect(result.synced).toBe(1);
+    expect(result.blocked).toBe(0);
+    expect(result.remaining).toBe(0);
+    expect(loadOpsOutbox("drv-5", "co-1", "mem-1")).toEqual([]);
+  });
+
+  it("keeps the report queued (never drops it) when a 401 cannot be refreshed", async () => {
+    const { enqueueDutyOpsCommand, loadOpsOutbox } = await import("@/lib/driver-ops-outbox.storage");
+    const { flushOpsOutbox } = await import("@/services/driver-ops-outbox.service");
+
+    enqueueDutyOpsCommand("drv-6", "duty_sign_on", "duty-12", "co-1", "mem-1");
+
+    commandSignOnDuty.mockResolvedValue({ ok: false, status: 401, message: "Not signed in." });
+    refreshSession.mockResolvedValue({ data: { session: null }, error: { message: "refresh token expired" } });
+
+    const result = await flushOpsOutbox({ id: "drv-6" }, { companyId: "co-1", membershipId: "mem-1" });
+
+    expect(result.synced).toBe(0);
+    expect(result.blocked).toBe(0);
+    expect(result.remaining).toBe(1);
+    expect(loadOpsOutbox("drv-6", "co-1", "mem-1")).toHaveLength(1);
   });
 });

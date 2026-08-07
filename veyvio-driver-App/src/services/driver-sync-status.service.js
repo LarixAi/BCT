@@ -34,7 +34,13 @@ export function describeOfflineQueue(driverId, companyId, membershipId) {
   const dutyOps = opsQueue.filter(
     (item) => item.type === "duty_sign_on" || item.type === "duty_sign_off",
   ).length;
-  const opsCommands = defects + incidents + messages + dutyOps;
+  const journeySteps = opsQueue.filter((item) => String(item.type ?? "").startsWith("journey_")).length;
+  const handbacks = opsQueue.filter((item) => item.type === "handback").length;
+  const dutyCloseouts = opsQueue.filter((item) => item.type === "duty_closeout").length;
+  const vehicleSwapRequests = opsQueue.filter((item) => item.type === "vehicle_swap_request").length;
+  const jobExecution = opsQueue.filter((item) => item.type === "job_execution").length;
+  const opsCommands =
+    defects + incidents + messages + dutyOps + journeySteps + handbacks + dutyCloseouts + vehicleSwapRequests + jobExecution;
   return {
     total: walkaroundChecks + locationPings + opsCommands,
     walkaroundChecks,
@@ -44,6 +50,11 @@ export function describeOfflineQueue(driverId, companyId, membershipId) {
     incidents,
     messages,
     dutyOps,
+    journeySteps,
+    handbacks,
+    dutyCloseouts,
+    vehicleSwapRequests,
+    jobExecution,
   };
 }
 

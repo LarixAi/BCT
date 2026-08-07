@@ -80,6 +80,9 @@ export default function WalkaroundSafetyBanner({ safety, loading }) {
               View today&apos;s check
             </Link>
           ) : null}
+          <Link to="/check" className="text-[#1eaeae]">
+            Start another check / report damage
+          </Link>
           <Link to="/check/history" className="text-[#1eaeae]">
             All check history
           </Link>

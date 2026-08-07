@@ -16,8 +16,13 @@ export default function DriverLaunchGate({ children }) {
   // Install splash/welcome only on the native shell — not desktop browser / mobile emulation.
   const showLaunch =
     Capacitor.isNativePlatform() && shouldShowLaunchExperience(APP_DELIVERY);
-  const [skipLaunch, setSkipLaunch] = useState(shouldSkipLaunchInitially);
-  const [phase, setPhase] = useState(showLaunch && !skipLaunch ? "splash" : "done");
+  const initialSkip = shouldSkipLaunchInitially();
+  const returningUser = hasSeenDriverWelcome();
+  const [skipLaunch, setSkipLaunch] = useState(initialSkip);
+  const [phase, setPhase] = useState(() => {
+    if (!showLaunch || initialSkip || returningUser) return "done";
+    return "splash";
+  });
 
   useEffect(() => {
     if (!showLaunch || skipLaunch) return;
@@ -41,6 +46,13 @@ export default function DriverLaunchGate({ children }) {
       setPhase(hasSeenDriverWelcome() ? "done" : "welcome");
     }, SPLASH_DURATION_MS);
     return () => window.clearTimeout(timer);
+  }, [phase, showLaunch, skipLaunch]);
+
+  // Never leave the native shell on a black splash if timers or plugins stall.
+  useEffect(() => {
+    if (!showLaunch || skipLaunch || phase === "done") return undefined;
+    const bailout = window.setTimeout(() => setPhase("done"), 3500);
+    return () => window.clearTimeout(bailout);
   }, [phase, showLaunch, skipLaunch]);
 
   if (!showLaunch || skipLaunch || phase === "done") return children;

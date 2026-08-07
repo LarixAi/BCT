@@ -8,6 +8,7 @@ import {
   Clock,
   FileText,
   GraduationCap,
+  KeyRound,
   MessageSquare,
   Package,
   Send,
@@ -36,7 +37,7 @@ import { getPrimaryComplianceFix, loadDriverComplianceReadiness } from "@/servic
 import { loadDriverTrainingCentre, formatTrainingDue, eligibilityRestrictionCopy } from "@/services/training.service";
 import { getDriverWorkingTimeSummary } from "@/services/working-time.service";
 import { getTachographReminders } from "@/services/tachograph-reminders.service";
-import { countUnread } from "@/services/notifications.service";
+import { useDriverUnreadNotificationCount } from "@/hooks/useDriverUnreadNotificationCount";
 import { getPendingJobOffers } from "@/services/job-offers.service";
 import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
 import {
@@ -66,7 +67,10 @@ export default function DriverSupabaseHome({ driver }) {
   const [sosOpen, setSosOpen] = useState(false);
   const [complianceFix, setComplianceFix] = useState(null);
   const [tachoReminders, setTachoReminders] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const unreadNotificationCount = useDriverUnreadNotificationCount(session?.userId);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(
+    () => sessionBootstrap?.messages?.unreadTotal ?? 0,
+  );
   const [walkaroundSafety, setWalkaroundSafety] = useState(() =>
     walkaroundSafetyFromHomeSummary(sessionHomeSummary),
   );
@@ -147,7 +151,7 @@ export default function DriverSupabaseHome({ driver }) {
 
     const unreadFromBootstrap = activeBootstrap?.messages?.unreadTotal;
     if (typeof unreadFromBootstrap === "number") {
-      setUnreadCount(unreadFromBootstrap);
+      setUnreadMessageCount(unreadFromBootstrap);
     }
 
     // Soft enrichment — missing Ridova tables must never block tab paint.
@@ -184,6 +188,13 @@ export default function DriverSupabaseHome({ driver }) {
   }, [driver, workspace.companyId, workspace.membershipId]);
 
   useEffect(() => {
+    const fromBootstrap = sessionBootstrap?.messages?.unreadTotal;
+    if (typeof fromBootstrap === "number") {
+      setUnreadMessageCount(fromBootstrap);
+    }
+  }, [sessionBootstrap?.messages?.unreadTotal]);
+
+  useEffect(() => {
     setHomeSummary(sessionHomeSummary);
     setBootstrap(sessionBootstrap);
     const fromSession = commandDutyStateFromBootstrap(sessionBootstrap, sessionHomeSummary);
@@ -211,22 +222,6 @@ export default function DriverSupabaseHome({ driver }) {
     };
     document.addEventListener("visibilitychange", refreshOnReturn);
     window.addEventListener("pageshow", refreshOnReturn);
-
-    void (async () => {
-      try {
-        const { getSupabaseClient } = await import("@/lib/supabase/client");
-        const supabase = getSupabaseClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          const n = await countUnread(user.id).catch(() => 0);
-          setUnreadCount(n);
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
 
     return () => {
       document.removeEventListener("visibilitychange", refreshOnReturn);
@@ -330,6 +325,25 @@ export default function DriverSupabaseHome({ driver }) {
           dispatchBlocked={dispatchBlocked}
           vehicleRegistration={walkaroundSafety?.registration}
         />
+
+        {dutyState?.isSignedOn && !dutyState?.isShiftEnded ? (
+          <div className={`p-4 ${op.card}`}>
+            <p className="text-sm font-semibold text-foreground">Finishing your duty?</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Confirm {walkaroundSafety?.registration || "the vehicle"} is in good condition, park it,
+              and return keys before you sign off.
+            </p>
+            <Button asChild className={`mt-3 h-11 min-h-[44px] w-full ${op.primaryBtn}`}>
+              <Link to="/vehicle/handback">
+                <KeyRound className="mr-2 h-4 w-4" />
+                Hand back vehicle
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="mt-2 h-10 w-full">
+              <Link to="/duty">Open My duty</Link>
+            </Button>
+          </div>
+        ) : null}
 
         {nextDutyCard ? (
           <div className={`p-4 ${op.card}`}>
@@ -495,12 +509,28 @@ export default function DriverSupabaseHome({ driver }) {
           to="/notifications"
           icon={Bell}
           title="Notifications"
-          subtitle={unreadCount > 0 ? `${unreadCount} unread from Command` : "Training and compliance alerts"}
-          badge={unreadCount > 0 ? unreadCount : null}
+          subtitle={
+            unreadNotificationCount > 0
+              ? `${unreadNotificationCount} unread from Command`
+              : "Training and compliance alerts"
+          }
+          badge={unreadNotificationCount > 0 ? unreadNotificationCount : null}
           compact
           inList
         />
-        <DriverActionCard to="/messages" icon={MessageSquare} title="Messages" subtitle="Dispatch and yard conversations" compact inList />
+        <DriverActionCard
+          to="/messages"
+          icon={MessageSquare}
+          title="Messages"
+          subtitle={
+            unreadMessageCount > 0
+              ? `${unreadMessageCount} unread from Command`
+              : "Dispatch and yard conversations"
+          }
+          badge={unreadMessageCount > 0 ? unreadMessageCount : null}
+          compact
+          inList
+        />
         <DriverActionCard to="/contact" icon={Send} title="Contact admin" subtitle="Reach dispatch or compliance" compact inList />
       </div>
 

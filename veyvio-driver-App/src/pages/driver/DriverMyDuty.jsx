@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Clock3, Navigation } from "lucide-react";
+import { CheckCircle2, Clock3, KeyRound, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DriverOperationalHeader from "@/components/driver/operational/DriverOperationalHeader";
 import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
@@ -20,6 +20,7 @@ import {
   hasPendingDutyOps,
 } from "@/services/driver-ops-outbox.service";
 import { canSignOnForDuty, getDutySignOnBlockers } from "@/lib/driver-sign-on-gate";
+import { loadCommandHandbackStatus } from "@/services/vehicle-handback.service";
 
 export default function DriverMyDuty({ driver }) {
   const { session, bootstrap: sessionBootstrap, refresh } = useDriverSupabaseAuth();
@@ -29,6 +30,8 @@ export default function DriverMyDuty({ driver }) {
   const [busyId, setBusyId] = useState(null);
   const [actionMsg, setActionMsg] = useState("");
   const [actionBlocked, setActionBlocked] = useState(false);
+  const [handbackRecorded, setHandbackRecorded] = useState(false);
+  const [handbackLoading, setHandbackLoading] = useState(false);
   const depotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
 
   const reload = useCallback(async ({ force = false } = {}) => {
@@ -84,6 +87,34 @@ export default function DriverMyDuty({ driver }) {
     next?.id && driver?.id
       ? hasPendingDutyOps(driver.id, next.id, workspace.companyId, workspace.membershipId)
       : false;
+
+  useEffect(() => {
+    const vehicle = next?.vehicle;
+    const vehicleId = vehicle?.id || vehicle?.vehicleId;
+    if (!signedOn || signedOff || !vehicleId) {
+      setHandbackRecorded(false);
+      return;
+    }
+    let cancelled = false;
+    setHandbackLoading(true);
+    void loadCommandHandbackStatus({
+      bootstrap,
+      vehicle: {
+        id: vehicleId,
+        vehicleId,
+        registrationNumber: vehicle?.registrationNumber || vehicle?.registration,
+      },
+    })
+      .then((result) => {
+        if (!cancelled) setHandbackRecorded(Boolean(result.recorded));
+      })
+      .finally(() => {
+        if (!cancelled) setHandbackLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrap, next?.vehicle, signedOn, signedOff]);
 
   async function handleAcknowledge(dutyId) {
     setBusyId(dutyId);
@@ -254,8 +285,32 @@ export default function DriverMyDuty({ driver }) {
                   <CheckCircle2 className="h-4 w-4" />
                   On duty — Admin can see you signed on
                 </div>
+                <div className={`mt-3 p-4 ${op.card}`}>
+                  <p className="text-sm font-semibold text-foreground">End of duty</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Hand the vehicle back before you sign off. Confirm condition, parking, keys and
+                    mileage on the handback screen.
+                  </p>
+                  {handbackLoading ? (
+                    <p className="mt-2 text-xs text-muted-foreground">Checking handback status…</p>
+                  ) : handbackRecorded ? (
+                    <p className="mt-2 text-sm font-medium text-emerald-800">
+                      Handback recorded — you can sign off below.
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-sm font-medium text-amber-900">
+                      Vehicle handback still needed.
+                    </p>
+                  )}
+                  <Button asChild className={`mt-3 h-11 w-full ${op.primaryBtn}`}>
+                    <Link to="/vehicle/handback">
+                      <KeyRound className="mr-2 h-4 w-4" />
+                      {handbackRecorded ? "View handback" : "Hand back vehicle"}
+                    </Link>
+                  </Button>
+                </div>
                 {dutyHasNavigableStops(next) ? (
-                  <Button asChild className={`mt-2 h-11 w-full ${op.primaryBtn}`}>
+                  <Button asChild variant="outline" className="mt-2 h-11 w-full">
                     <Link to={`/duty/${next.id}/navigate`}>
                       <Navigation className="mr-2 h-4 w-4" />
                       Start navigation
@@ -264,13 +319,18 @@ export default function DriverMyDuty({ driver }) {
                 ) : null}
                 <Button
                   type="button"
-                  disabled={busyId === next.id}
+                  disabled={busyId === next.id || (!handbackRecorded && !handbackLoading)}
                   variant="outline"
                   className="mt-2 h-11 w-full"
                   onClick={() => void handleSignOff(next.id)}
                 >
                   {busyId === next.id ? "Signing off…" : "Sign off duty"}
                 </Button>
+                {!handbackRecorded && !handbackLoading ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Complete vehicle handback first — Yard needs your condition confirmation.
+                  </p>
+                ) : null}
               </>
             ) : null}
 

@@ -83,27 +83,45 @@ export default function DriverAuthEntry({ onLogin, onBiometricLogin }) {
     setLoading(true);
     setError("");
 
-    const result = await onLogin(trimmed, password);
+    try {
+      // Hard ceiling so a hung native bridge can never leave "Signing in…" forever.
+      const result = await Promise.race([
+        onLogin(trimmed, password),
+        new Promise((resolve) => {
+          window.setTimeout(
+            () =>
+              resolve({
+                ok: false,
+                message: "Sign-in is taking too long. Check your connection and try again.",
+              }),
+            28000,
+          );
+        }),
+      ]);
 
-    if (!result.ok) {
-      const message = formatAuthError(result.message);
-      if (isRateLimitError(result.message ?? message)) {
-        const until = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-        rememberRateLimitUntil(until);
-        setCooldownUntil(until);
+      if (!result?.ok) {
+        const message = formatAuthError(result?.message);
+        if (isRateLimitError(result?.message ?? message)) {
+          const until = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+          rememberRateLimitUntil(until);
+          setCooldownUntil(until);
+        }
+        setError(message);
+        return;
       }
-      setError(message);
+
+      clearRateLimitStorage();
+      // Do not navigate here — DriverApp switches trees from session `screen`
+      // (onboarding / app / …). Navigating while AuthRoutes is still mounted
+      // used to trap drivers on a loader or bounce them back to /auth.
+    } catch (err) {
+      setError(
+        formatAuthError(err instanceof Error ? err.message : "Sign-in failed. Try again."),
+      );
+    } finally {
       setLoading(false);
       submitLock.current = false;
-      return;
     }
-
-    clearRateLimitStorage();
-    setLoading(false);
-    submitLock.current = false;
-    // Do not navigate here — DriverApp switches trees from session `screen`
-    // (onboarding / app / …). Navigating while AuthRoutes is still mounted
-    // used to trap drivers on a loader or bounce them back to /auth.
   }
 
   const biometricBlock =

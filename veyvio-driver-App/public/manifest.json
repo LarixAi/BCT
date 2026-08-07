@@ -1,0 +1,23 @@
+{
+  "name": "Veyvio Driver",
+  "short_name": "Veyvio",
+  "description": "PSV driver app for vehicle checks, jobs, and compliance.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9F9F9",
+  "theme_color": "#F9F9F9",
+  "icons": [
+    {
+      "src": "/veyvio-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/veyvio-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

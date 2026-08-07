@@ -1,5 +1,5 @@
 import { countPendingOfflineCommands } from "@/services/driver-sync-status.service";
-import { getCommandApiBaseUrl } from "@/lib/command-api";
+import { commandCreateSignedUrl, getCommandApiBaseUrl } from "@/lib/command-api";
 import {
   externalizeWalkaroundPayloadMedia,
   hydrateWalkaroundPayloadMedia,
@@ -35,6 +35,7 @@ import {
   loadDriverBootstrap,
   walkaroundSafetyFromHomeSummary,
 } from "@/services/driver-bootstrap.service";
+import { validateVehicleSelection } from "@/lib/vehicle-swap-gate";
 
 export {
   CHECK_TYPES,
@@ -576,6 +577,11 @@ export async function selectVehicleForCheck(driver, vehicleId) {
   const options = await listAssignableVehicles(driver);
   const match = options.find((o) => o.vehicleId === vehicleId);
   if (!match) return { ok: false, message: "That vehicle is not assigned to you today." };
+
+  const boot = await loadDriverBootstrap().catch(() => null);
+  const swapGate = validateVehicleSelection(boot?.ok ? boot.bootstrap : null, vehicleId);
+  if (!swapGate.ok) return swapGate;
+
   setSelectedVehicleId(driver.id, vehicleId);
   return { ok: true, vehicle: match.vehicle, job: match.job };
 }
@@ -1398,6 +1404,21 @@ function formatCheckResultLabel(result) {
 
 async function signDriverPhotoPath(supabase, path) {
   if (!path) return null;
+  // F-13 — prefer Command tenant-scoped signed URL; fall back to Supabase only if Command unavailable.
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (token && getCommandApiBaseUrl()) {
+      const signed = await commandCreateSignedUrl(token, {
+        bucket: "defect-photos",
+        storageKey: path,
+        expiresInSeconds: 3600,
+      });
+      if (signed.ok && signed.url) return signed.url;
+    }
+  } catch {
+    // fall through
+  }
   const { data, error } = await supabase.storage.from("defect-photos").createSignedUrl(path, 3600);
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;

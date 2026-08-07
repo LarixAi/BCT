@@ -5,6 +5,10 @@
   "server": {
     "androidScheme": "https"
   },
+  "ios": {
+    "webContentsDebuggingEnabled": true,
+    "backgroundColor": "#F9F9F9"
+  },
   "android": {
     "allowMixedContent": true
   },

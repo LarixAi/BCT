@@ -71,18 +71,24 @@ export async function loadDriverTrainingCentre(session) {
   if (!result.ok) return { ...result, wired: true, driverId };
 
   const assignments = (result.assignments ?? []).map((a) => enrichAssignment(a, driverId));
+  const summary = result.summary
+    ? {
+        ...result.summary,
+        compliancePercent: Math.max(0, Math.min(100, Math.round(Number(result.summary.compliancePercent) || 0))),
+      }
+    : {
+        compliancePercent: 100,
+        requiredOpen: 0,
+        dueSoon: 0,
+        overdue: 0,
+        nextDeadline: null,
+        statusLabel: "Up to date",
+      };
   return {
     ok: true,
     wired: true,
     driverId: result.driverId ?? driverId,
-    summary: result.summary ?? {
-      compliancePercent: 100,
-      requiredOpen: 0,
-      dueSoon: 0,
-      overdue: 0,
-      nextDeadline: null,
-      statusLabel: "Up to date",
-    },
+    summary,
     urgent: result.urgent
       ? enrichAssignment(result.urgent, driverId)
       : assignments.find((a) => a.warningStatus === "overdue") ?? null,

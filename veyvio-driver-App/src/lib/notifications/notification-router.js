@@ -38,6 +38,7 @@ export function routeFromNotificationData(data, navigate) {
     case "duty_published":
     case "duty_assigned":
     case "duty_updated":
+    case "driver.duty.published":
       navigate("/jobs");
       break;
     case "Documents":

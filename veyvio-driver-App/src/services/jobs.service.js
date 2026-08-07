@@ -6,6 +6,20 @@ import { getPendingJobOffers } from "@/services/job-offers.service";
 import { checkDriverLicenceEligibilityForJob } from "@/services/licence-compliance.service";
 import { loadDriverJobManifest } from "@/services/job-manifest.service";
 import { formatUkTime } from "@/lib/uk-locale";
+import {
+  assignmentFromExecutionSnapshot,
+  fetchJobExecutionSnapshot,
+  isCommandJobExecutionAuthoritative,
+  jobStatusFromExecutionSnapshot,
+  mergeStopsWithCommandExecution,
+  recordJobExecutionAuthoritative,
+  enrichJobRowsWithExecution,
+} from "@/services/job-execution-bridge.service";
+import {
+  hasDutyCloseoutOnCommand,
+  submitDutyCloseoutViaCommand,
+} from "@/services/duty-closeout.service";
+import { getCommandApiBaseUrl } from "@/lib/command-api";
 
 function formatJobTime(iso) {
   return formatUkTime(iso);
@@ -74,6 +88,21 @@ async function insertJobStopEvent({
   }
 
   return null;
+}
+
+/** TD-010 / F-18 — skip legacy execution tables when Command accepted the step online. */
+function shouldSkipLegacyExecutionEvents(commandResult) {
+  return commandResult?.authoritative && commandResult.ok && !commandResult.queued;
+}
+
+/** Legacy Supabase execution cache only when Command is off, or while a step is queued offline. */
+function shouldWriteLegacyExecutionCache(commandResult) {
+  if (!isCommandJobExecutionAuthoritative()) return true;
+  return Boolean(commandResult?.queued);
+}
+
+async function recordAuthoritativeJobStep(driver, session, input) {
+  return recordJobExecutionAuthoritative(driver, session, input);
 }
 
 const HUB_TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
@@ -154,6 +183,8 @@ async function loadDriverAssignedJobRows(driverId) {
         !HUB_TERMINAL_STATUSES.has(row.status),
     )
     .sort((a, b) => String(a.scheduled_start_at).localeCompare(String(b.scheduled_start_at)));
+
+  return enrichJobRowsWithExecution(rows);
 }
 
 export async function getDriverJobsToday() {
@@ -393,6 +424,34 @@ export async function getDriverJobDetail(jobId, driverId) {
   const stopStatusById = new Map((stops ?? []).map((s) => [s.id, s.status]));
   const { rows: manifest } = await loadDriverJobManifest(jobId, stopStatusById);
 
+  const executionSnapshot = await fetchJobExecutionSnapshot(jobId);
+  const mappedStops = (stops ?? []).map((s) => ({
+    id: s.id,
+    label: s.label,
+    address: s.address,
+    postcode: s.postcode,
+    latitude: s.latitude != null ? Number(s.latitude) : null,
+    longitude: s.longitude != null ? Number(s.longitude) : null,
+    sequence: s.stop_order,
+    stopOrder: s.stop_order,
+    stopType: s.stop_type ?? "stop",
+    arrivalTime: formatJobTime(s.planned_time),
+    status: s.status,
+  }));
+
+  const mergedStops = mergeStopsWithCommandExecution(mappedStops, executionSnapshot);
+  const mergedAssignment = assignmentFromExecutionSnapshot(
+    executionSnapshot,
+    assignment
+      ? {
+          id: assignment.id,
+          status: assignment.status,
+          acceptedAt: assignment.accepted_at,
+          startedAt: assignment.started_at,
+        }
+      : null,
+  );
+
   return {
     id: job.id,
     organisationId: job.organisation_id,
@@ -407,31 +466,13 @@ export async function getDriverJobDetail(jobId, driverId) {
     serviceDate: job.service_date,
     startTime: formatJobTime(job.scheduled_start_at),
     endTime: formatJobTime(job.scheduled_end_at),
-    status: job.status,
+    status: jobStatusFromExecutionSnapshot(executionSnapshot, job.status),
     brief,
-    assignment: assignment
-      ? {
-          id: assignment.id,
-          status: assignment.status,
-          acceptedAt: assignment.accepted_at,
-          startedAt: assignment.started_at,
-        }
-      : null,
-    needsAccept: Boolean(assignment && !assignment.accepted_at),
-    stops: (stops ?? []).map((s) => ({
-      id: s.id,
-      label: s.label,
-      address: s.address,
-      postcode: s.postcode,
-      latitude: s.latitude != null ? Number(s.latitude) : null,
-      longitude: s.longitude != null ? Number(s.longitude) : null,
-      sequence: s.stop_order,
-      stopOrder: s.stop_order,
-      stopType: s.stop_type ?? "stop",
-      arrivalTime: formatJobTime(s.planned_time),
-      status: s.status,
-    })),
+    assignment: mergedAssignment,
+    needsAccept: Boolean(mergedAssignment && !mergedAssignment.acceptedAt),
+    stops: mergedStops,
     manifest,
+    executionSource: executionSnapshot ? "command" : isCommandJobExecutionAuthoritative() ? "command_pending" : "supabase",
   };
 }
 
@@ -444,29 +485,47 @@ export async function acceptJobAssignment(driver, jobId) {
 
   const assignment = await loadDriverAssignment(jobId, driver.id);
   if (!assignment) return { ok: false, message: "You are not assigned to this job." };
+
   if (assignment.accepted_at) return { ok: false, message: "Job already accepted." };
+  if (isCommandJobExecutionAuthoritative()) {
+    const snapshot = await fetchJobExecutionSnapshot(jobId);
+    if (snapshot?.acceptedAt) return { ok: false, message: "Job already accepted." };
+  }
+
+  const commandStep = await recordAuthoritativeJobStep(driver, null, {
+    jobId,
+    eventType: "job_accepted",
+    clientId: `accept-${assignment.id}`,
+  });
+  if (commandStep.authoritative && !commandStep.ok) {
+    return { ok: false, message: commandStep.message ?? "Job could not be accepted on Command." };
+  }
 
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
 
-  const { error: updateError } = await supabase
-    .from("job_assignments")
-    .update({ accepted_at: now, status: "accepted" })
-    .eq("id", assignment.id);
+  if (shouldWriteLegacyExecutionCache(commandStep)) {
+    const { error: updateError } = await supabase
+      .from("job_assignments")
+      .update({ accepted_at: now, status: "accepted" })
+      .eq("id", assignment.id);
 
-  if (updateError) return { ok: false, message: updateError.message };
+    if (updateError) return { ok: false, message: updateError.message };
+  }
 
-  const { error: eventError } = await supabase.from("job_status_events").insert({
-    organisation_id: job.organisation_id,
-    job_id: jobId,
-    job_assignment_id: assignment.id,
-    driver_id: driver.id,
-    event_type: "job_accepted",
-    event_time: now,
-    notes: job.route_name,
-  });
+  if (!shouldSkipLegacyExecutionEvents(commandStep)) {
+    const { error: eventError } = await supabase.from("job_status_events").insert({
+      organisation_id: job.organisation_id,
+      job_id: jobId,
+      job_assignment_id: assignment.id,
+      driver_id: driver.id,
+      event_type: "job_accepted",
+      event_time: now,
+      notes: job.route_name,
+    });
 
-  if (eventError) return { ok: false, message: eventError.message };
+    if (eventError) return { ok: false, message: eventError.message };
+  }
 
   await logDriverAudit({
     organisation_id: job.organisation_id,
@@ -507,49 +566,69 @@ export async function startJob(driver, jobId) {
   let assignment = await loadDriverAssignment(jobId, driver.id);
   if (!assignment) return { ok: false, message: "You are not assigned to this job." };
 
-  if (!assignment.accepted_at) {
+  const executionSnapshot = isCommandJobExecutionAuthoritative()
+    ? await fetchJobExecutionSnapshot(jobId)
+    : null;
+
+  if (!assignment.accepted_at && !executionSnapshot?.acceptedAt) {
     const accepted = await acceptJobAssignment(driver, jobId);
     if (!accepted.ok) return accepted;
     assignment = await loadDriverAssignment(jobId, driver.id);
     if (!assignment) return { ok: false, message: "Assignment not found after accept." };
   }
 
-  if (assignment.started_at && job.status === "in_progress") {
+  if (
+    (assignment.started_at || executionSnapshot?.startedAt) &&
+    (job.status === "in_progress" || executionSnapshot?.startedAt)
+  ) {
     return { ok: true, message: "Job already started." };
+  }
+
+  const commandStep = await recordAuthoritativeJobStep(driver, null, {
+    jobId,
+    eventType: "job_started",
+    clientId: `start-${assignment.id}`,
+  });
+  if (commandStep.authoritative && !commandStep.ok) {
+    return { ok: false, message: commandStep.message ?? "Job could not be started on Command." };
   }
 
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
 
-  const { error: assignError, data: updatedAssignment } = await supabase
-    .from("job_assignments")
-    .update({ started_at: now, status: "in_progress" })
-    .eq("id", assignment.id)
-    .select("id, started_at")
-    .maybeSingle();
+  if (shouldWriteLegacyExecutionCache(commandStep)) {
+    const { error: assignError, data: updatedAssignment } = await supabase
+      .from("job_assignments")
+      .update({ started_at: now, status: "in_progress" })
+      .eq("id", assignment.id)
+      .select("id, started_at")
+      .maybeSingle();
 
-  if (assignError) return { ok: false, message: assignError.message };
-  if (!updatedAssignment?.started_at) {
-    return {
-      ok: false,
-      message: "Could not start job — assignment was not updated. Sign in with the driver account linked to this job.",
-    };
+    if (assignError) return { ok: false, message: assignError.message };
+    if (!updatedAssignment?.started_at) {
+      return {
+        ok: false,
+        message: "Could not start job — assignment was not updated. Sign in with the driver account linked to this job.",
+      };
+    }
+
+    const { error: jobError } = await supabase.from("jobs").update({ status: "in_progress" }).eq("id", jobId);
+    if (jobError) return { ok: false, message: jobError.message };
   }
 
-  const { error: jobError } = await supabase.from("jobs").update({ status: "in_progress" }).eq("id", jobId);
-  if (jobError) return { ok: false, message: jobError.message };
+  if (!shouldSkipLegacyExecutionEvents(commandStep)) {
+    const { error: eventError } = await supabase.from("job_status_events").insert({
+      organisation_id: job.organisation_id,
+      job_id: jobId,
+      job_assignment_id: assignment.id,
+      driver_id: driver.id,
+      event_type: "job_started",
+      event_time: now,
+      notes: job.route_name,
+    });
 
-  const { error: eventError } = await supabase.from("job_status_events").insert({
-    organisation_id: job.organisation_id,
-    job_id: jobId,
-    job_assignment_id: assignment.id,
-    driver_id: driver.id,
-    event_type: "job_started",
-    event_time: now,
-    notes: job.route_name,
-  });
-
-  if (eventError) return { ok: false, message: eventError.message };
+    if (eventError) return { ok: false, message: eventError.message };
+  }
 
   try {
     const { startDrivingSegment } = await import("@/services/duty-timeline.service");
@@ -634,37 +713,61 @@ export async function arriveAtStop(driver, jobId, stopId) {
   const supabase = getSupabaseClient();
   const { data: stop, error: stopError } = await supabase
     .from("job_stops")
-    .select("id, status, label")
+    .select("id, status, label, stop_order")
     .eq("id", stopId)
     .eq("job_id", jobId)
     .maybeSingle();
 
   if (stopError || !stop) return { ok: false, message: "Stop not found." };
-  if (stop.status !== "planned") {
-    return { ok: false, message: `Stop is already ${stop.status.replace(/_/g, " ")}.` };
+
+  const executionSnapshot = await fetchJobExecutionSnapshot(jobId);
+  const [mergedStop] = mergeStopsWithCommandExecution(
+    [{ id: stop.id, status: stop.status, stopOrder: stop.stop_order }],
+    executionSnapshot,
+  );
+  const effectiveStatus = mergedStop?.status ?? stop.status;
+
+  if (effectiveStatus !== "planned") {
+    return { ok: false, message: `Stop is already ${String(effectiveStatus).replace(/_/g, " ")}.` };
+  }
+
+  const commandStep = await recordAuthoritativeJobStep(driver, null, {
+    jobId,
+    eventType: "arrived_stop",
+    stopId,
+    stopSequence: stop.stop_order,
+    clientId: `arrive-${stopId}`,
+  });
+  if (commandStep.authoritative && !commandStep.ok) {
+    return { ok: false, message: commandStep.message ?? "Arrival could not be recorded on Command." };
   }
 
   const now = new Date().toISOString();
-  const { error: updateError } = await supabase
-    .from("job_stops")
-    .update({ status: "arrived", actual_arrival_at: now })
-    .eq("id", stopId);
 
-  if (updateError) return { ok: false, message: updateError.message };
+  if (shouldWriteLegacyExecutionCache(commandStep)) {
+    const { error: updateError } = await supabase
+      .from("job_stops")
+      .update({ status: "arrived", actual_arrival_at: now })
+      .eq("id", stopId);
 
-  if (ACTIVE_JOB_STATUSES.has(job.status)) {
-    await supabase.from("jobs").update({ status: "in_progress" }).eq("id", jobId);
+    if (updateError) return { ok: false, message: updateError.message };
+
+    if (ACTIVE_JOB_STATUSES.has(job.status)) {
+      await supabase.from("jobs").update({ status: "in_progress" }).eq("id", jobId);
+    }
   }
 
-  const eventError = await insertJobStopEvent({
-    organisationId: job.organisation_id,
-    jobId,
-    jobStopId: stopId,
-    driverId: driver.id,
-    eventType: "arrived_stop",
-    notes: stop.label,
-  });
-  if (eventError) return { ok: false, message: eventError };
+  if (!shouldSkipLegacyExecutionEvents(commandStep)) {
+    const eventError = await insertJobStopEvent({
+      organisationId: job.organisation_id,
+      jobId,
+      jobStopId: stopId,
+      driverId: driver.id,
+      eventType: "arrived_stop",
+      notes: stop.label,
+    });
+    if (eventError) return { ok: false, message: eventError };
+  }
 
   await logDriverAudit({
     organisation_id: job.organisation_id,
@@ -689,33 +792,57 @@ export async function completeStop(driver, jobId, stopId) {
   const supabase = getSupabaseClient();
   const { data: stop, error: stopError } = await supabase
     .from("job_stops")
-    .select("id, status, label")
+    .select("id, status, label, stop_order")
     .eq("id", stopId)
     .eq("job_id", jobId)
     .maybeSingle();
 
   if (stopError || !stop) return { ok: false, message: "Stop not found." };
-  if (stop.status !== "arrived") {
+
+  const executionSnapshot = await fetchJobExecutionSnapshot(jobId);
+  const [mergedStop] = mergeStopsWithCommandExecution(
+    [{ id: stop.id, status: stop.status, stopOrder: stop.stop_order }],
+    executionSnapshot,
+  );
+  const effectiveStatus = mergedStop?.status ?? stop.status;
+
+  if (effectiveStatus !== "arrived") {
     return { ok: false, message: "Arrive at the stop before completing it." };
   }
 
-  const now = new Date().toISOString();
-  const { error: updateError } = await supabase
-    .from("job_stops")
-    .update({ status: "completed", actual_departure_at: now })
-    .eq("id", stopId);
-
-  if (updateError) return { ok: false, message: updateError.message };
-
-  const eventError = await insertJobStopEvent({
-    organisationId: job.organisation_id,
+  const commandStep = await recordAuthoritativeJobStep(driver, null, {
     jobId,
-    jobStopId: stopId,
-    driverId: driver.id,
     eventType: "completed_stop",
-    notes: stop.label,
+    stopId,
+    stopSequence: stop.stop_order,
+    clientId: `complete-stop-${stopId}`,
   });
-  if (eventError) return { ok: false, message: eventError };
+  if (commandStep.authoritative && !commandStep.ok) {
+    return { ok: false, message: commandStep.message ?? "Stop completion could not be recorded on Command." };
+  }
+
+  const now = new Date().toISOString();
+
+  if (shouldWriteLegacyExecutionCache(commandStep)) {
+    const { error: updateError } = await supabase
+      .from("job_stops")
+      .update({ status: "completed", actual_departure_at: now })
+      .eq("id", stopId);
+
+    if (updateError) return { ok: false, message: updateError.message };
+  }
+
+  if (!shouldSkipLegacyExecutionEvents(commandStep)) {
+    const eventError = await insertJobStopEvent({
+      organisationId: job.organisation_id,
+      jobId,
+      jobStopId: stopId,
+      driverId: driver.id,
+      eventType: "completed_stop",
+      notes: stop.label,
+    });
+    if (eventError) return { ok: false, message: eventError };
+  }
 
   return { ok: true, message: `Completed stop: ${stop.label}.` };
 }
@@ -724,29 +851,52 @@ export async function completeJob(driver, jobId, { confirmIncomplete = false } =
   const job = await loadJobContext(jobId);
   if (!job) return { ok: false, message: "Job not found." };
   if (job.status === "cancelled") return { ok: false, message: "Cancelled jobs cannot be completed." };
-  if (job.status === "completed") return { ok: false, message: "Job is already completed." };
+
+  const executionSnapshot = await fetchJobExecutionSnapshot(jobId);
+  if (job.status === "completed" || executionSnapshot?.completedAt) {
+    return { ok: false, message: "Job is already completed." };
+  }
 
   const supabase = getSupabaseClient();
-  const { data: stops } = await supabase.from("job_stops").select("id, status").eq("job_id", jobId);
+  const { data: stops } = await supabase.from("job_stops").select("id, status, stop_order").eq("job_id", jobId);
 
-  const incompleteStops = (stops ?? []).filter((s) => !["completed", "skipped", "cancelled"].includes(s.status));
+  const mergedStops = mergeStopsWithCommandExecution(
+    (stops ?? []).map((s) => ({ id: s.id, status: s.status, stopOrder: s.stop_order })),
+    executionSnapshot,
+  );
+
+  const incompleteStops = mergedStops.filter((s) => !["completed", "skipped", "cancelled"].includes(s.status));
   const issues = incompleteStops.length > 0 ? [`${incompleteStops.length} stop(s) not completed`] : [];
 
   if (issues.length > 0 && !confirmIncomplete) {
     return { ok: false, message: `Job still has open items: ${issues.join(", ")}.`, needsConfirm: true };
   }
 
-  const { error: updateError } = await supabase.from("jobs").update({ status: "completed" }).eq("id", jobId);
-  if (updateError) return { ok: false, message: updateError.message };
-
-  const eventError = await insertJobStopEvent({
-    organisationId: job.organisation_id,
+  const commandStep = await recordAuthoritativeJobStep(driver, null, {
     jobId,
-    driverId: driver.id,
     eventType: "job_completed",
-    metadata: issues.length > 0 ? { incomplete_confirmed: true, issues } : null,
+    clientId: `complete-${jobId}`,
+    payload: issues.length > 0 ? { incomplete_confirmed: true, issues } : {},
   });
-  if (eventError) return { ok: false, message: eventError };
+  if (commandStep.authoritative && !commandStep.ok) {
+    return { ok: false, message: commandStep.message ?? "Job completion could not be recorded on Command." };
+  }
+
+  if (shouldWriteLegacyExecutionCache(commandStep)) {
+    const { error: updateError } = await supabase.from("jobs").update({ status: "completed" }).eq("id", jobId);
+    if (updateError) return { ok: false, message: updateError.message };
+  }
+
+  if (!shouldSkipLegacyExecutionEvents(commandStep)) {
+    const eventError = await insertJobStopEvent({
+      organisationId: job.organisation_id,
+      jobId,
+      driverId: driver.id,
+      eventType: "job_completed",
+      metadata: issues.length > 0 ? { incomplete_confirmed: true, issues } : null,
+    });
+    if (eventError) return { ok: false, message: eventError };
+  }
 
   try {
     const { endDrivingSegmentForJob } = await import("@/services/duty-timeline.service");
@@ -785,6 +935,10 @@ export async function completeJob(driver, jobId, { confirmIncomplete = false } =
 }
 
 export async function hasJobDutyCloseout(driverId, jobId) {
+  const onCommand = await hasDutyCloseoutOnCommand(jobId);
+  if (onCommand === true) return true;
+  if (getCommandApiBaseUrl() && onCommand === false) return false;
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("job_stop_events")
@@ -798,7 +952,7 @@ export async function hasJobDutyCloseout(driverId, jobId) {
   return (data ?? []).length > 0;
 }
 
-export async function submitJobDutyCloseout(driver, jobId, payload) {
+export async function submitJobDutyCloseout(driver, jobId, payload, session = null) {
   const job = await loadJobContext(jobId);
   if (!job) return { ok: false, message: "Job not found." };
 
@@ -823,6 +977,44 @@ export async function submitJobDutyCloseout(driver, jobId, payload) {
     lng: payload.lng ?? null,
     submittedAt: new Date().toISOString(),
   };
+
+  if (getCommandApiBaseUrl()) {
+    const commandResult = await submitDutyCloseoutViaCommand(driver, session, jobId, metadata);
+    if (commandResult.ok) {
+      if (metadata.hadIncident) {
+        await notifyDispatcher({
+          organisationId: job.organisation_id,
+          notificationType: "incident_reported",
+          entityType: "jobs",
+          entityId: jobId,
+          title: "Incident reported at duty closeout",
+          message: `${driver.fullName ?? "Driver"} reported an incident on ${job.route_name}`,
+          severity: "warning",
+        });
+      }
+      if (metadata.hadLostProperty) {
+        await notifyDispatcher({
+          organisationId: job.organisation_id,
+          notificationType: "lost_property",
+          entityType: "jobs",
+          entityId: jobId,
+          title: "Lost property at duty closeout",
+          message: `${driver.fullName ?? "Driver"} reported lost property on ${job.route_name}`,
+          severity: "info",
+        });
+      }
+      return {
+        ok: true,
+        message: commandResult.queued
+          ? commandResult.message
+          : "Duty closeout saved.",
+        queued: Boolean(commandResult.queued),
+      };
+    }
+    if (!commandResult.skipped) {
+      return { ok: false, message: commandResult.message ?? "Closeout could not be saved." };
+    }
+  }
 
   const eventError = await insertJobStopEvent({
     organisationId: job.organisation_id,
@@ -882,18 +1074,30 @@ export async function reportJobIssue(driver, jobId, { description }) {
   const assignment = await loadDriverAssignment(jobId, driver.id);
   const now = new Date().toISOString();
 
-  const { error } = await supabase.from("job_status_events").insert({
-    organisation_id: job.organisation_id,
-    job_id: jobId,
-    job_assignment_id: assignment?.id ?? null,
-    driver_id: driver.id,
-    event_type: "issue_reported",
-    event_time: now,
-    notes: trimmed,
-    metadata: { source: "driver_mobile" },
+  const commandStep = await recordAuthoritativeJobStep(driver, null, {
+    jobId,
+    eventType: "issue_reported",
+    clientId: `issue-${jobId}-${now}`,
+    payload: { description: trimmed },
   });
+  if (commandStep.authoritative && !commandStep.ok) {
+    return { ok: false, message: commandStep.message ?? "Issue could not be reported on Command." };
+  }
 
-  if (error) return { ok: false, message: error.message };
+  if (!shouldSkipLegacyExecutionEvents(commandStep)) {
+    const { error } = await supabase.from("job_status_events").insert({
+      organisation_id: job.organisation_id,
+      job_id: jobId,
+      job_assignment_id: assignment?.id ?? null,
+      driver_id: driver.id,
+      event_type: "issue_reported",
+      event_time: now,
+      notes: trimmed,
+      metadata: { source: "driver_mobile" },
+    });
+
+    if (error) return { ok: false, message: error.message };
+  }
 
   await logDriverAudit({
     organisation_id: job.organisation_id,

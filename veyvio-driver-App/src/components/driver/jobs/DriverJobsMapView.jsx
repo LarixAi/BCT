@@ -94,11 +94,19 @@ export default function DriverJobsMapView({
     return formatThenStep(next);
   }, [navigation.route?.steps, navigation.currentStepIndex]);
 
-  const displayLat = navigationEnabled && navigation.driverLocation
-    ? navigation.driverLocation.latitude
+  // While navigating, always use the location engine's output — never fall
+  // back to useDriverMapPosition's independently-smoothed value. The two are
+  // fed by separate GPS watchers through different filters and are never in
+  // exact agreement, so falling back between them produced a visible jump
+  // every time navigation started, every stop-to-stop transition, and every
+  // navigationEnabled toggle. null here means "engine hasn't produced a fix
+  // yet" — every consumer of displayLat/displayLng already null-guards for
+  // this (NavigationMapCamera, JobNavigationRouteLayer, SmoothDriverMarker).
+  const displayLat = navigationEnabled
+    ? navigation.driverLocation?.latitude ?? null
     : driverLat;
-  const displayLng = navigationEnabled && navigation.driverLocation
-    ? navigation.driverLocation.longitude
+  const displayLng = navigationEnabled
+    ? navigation.driverLocation?.longitude ?? null
     : driverLng;
 
   const fusedHeading = useFusedHeading({
@@ -294,6 +302,7 @@ export default function DriverJobsMapView({
               lng={displayLng}
               icon={driverIcon}
               zIndexOffset={900}
+              smooth={!navigationEnabled}
             />
           </MapContainer>
         )}

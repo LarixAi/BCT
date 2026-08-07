@@ -7,6 +7,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Keep the display awake while Driver is foreground (matches Android).
+        application.isIdleTimerDisabled = true
         return true
     }
 
@@ -25,12 +27,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
+        application.isIdleTimerDisabled = false
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
+        application.isIdleTimerDisabled = true
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
+        application.isIdleTimerDisabled = true
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

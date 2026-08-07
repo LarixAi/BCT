@@ -13,7 +13,7 @@ import {
   markDriverMessageReadViaCommand,
   replyDriverMessageViaCommand,
 } from "@/services/command-driver-ops.service";
-import { enqueueOpsCommand } from "@/lib/driver-ops-outbox.storage";
+import { enqueueOpsCommand, listPendingMessageOps } from "@/lib/driver-ops-outbox.storage";
 import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
 
 async function accessToken() {
@@ -39,8 +39,23 @@ export async function getDriverMessageThread(threadId) {
       createdAt: m.created_at,
       fromDriver: Boolean(m.from_driver),
       senderName: m.sender_name ?? (m.from_driver ? "You" : "Transport office"),
+      deliveryStatus: m.deliveryStatus ?? (m.from_driver ? "delivered" : m.read_at ? "read" : "delivered"),
+      readAt: m.read_at ?? null,
     })),
   };
+}
+
+export function listQueuedThreadMessages(driver, session, threadId) {
+  const { companyId, membershipId } = resolveDriverWorkspaceScope(driver, session);
+  return listPendingMessageOps(driver?.id, companyId, membershipId, threadId).map((item) => ({
+    id: item.id,
+    body: String(item.payload?.body ?? ""),
+    createdAt: item.createdAt,
+    fromDriver: true,
+    senderName: "You",
+    deliveryStatus: "pending",
+    readAt: null,
+  }));
 }
 
 export async function loadComposeDraft(driver, session) {
@@ -133,6 +148,14 @@ export async function replyToThread(driver, threadId, body, session = null) {
       ok: true,
       queued: true,
       message: "Reply saved on this device — will reach Command when connection returns.",
+      pendingMessage: {
+        id: `pending-${Date.now()}`,
+        body: trimmed,
+        createdAt: new Date().toISOString(),
+        fromDriver: true,
+        senderName: "You",
+        deliveryStatus: "pending",
+      },
     };
   }
 

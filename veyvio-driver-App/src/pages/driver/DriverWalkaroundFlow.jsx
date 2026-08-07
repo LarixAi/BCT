@@ -7,6 +7,7 @@ import {
   declarationForCheckType,
   discardWalkaroundDraft,
   flushPendingWalkaroundSubmissions,
+  getDriverCheckHistory,
   getPendingSyncCount,
   loadWalkaroundSession,
   persistWalkaroundDraft,
@@ -20,7 +21,9 @@ import { getSectionLabel } from "@/lib/walkaround-template-engine";
 import { getEndOfDutySectionLabel } from "@/lib/end-of-duty-template-engine";
 import { isChecklistFullyAnswered, normalizeChecklistProgress } from "@/lib/walkaround-progress";
 import DriverOperationalHeader from "@/components/driver/operational/DriverOperationalHeader";
-import CommandBackendNotice from "@/components/driver/operational/CommandBackendNotice";
+import DriverPageContainer from "@/components/driver/operational/DriverPageContainer";
+import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
+import CheckPageHeader from "@/components/driver/walkaround/CheckPageHeader";
 import WalkaroundStepper from "@/components/driver/walkaround/WalkaroundStepper";
 import WalkaroundFailSheet from "@/components/driver/walkaround/WalkaroundFailSheet";
 import WalkaroundAdvisorySheet from "@/components/driver/walkaround/WalkaroundAdvisorySheet";
@@ -32,6 +35,7 @@ import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { DRIVER_SAFE_BOTTOM } from "@/lib/driverSafeArea";
 import { useDriverChrome } from "@/lib/driverChromeContext";
 import { compressImageToDataUrl } from "@/lib/walkaround-image";
+import { op } from "@/lib/driver-operational-theme";
 import { Loader2, MinusCircle, XCircle, CheckCircle2, AlertTriangle } from "lucide-react";
 
 function applyDraftToFlow(data, setters) {
@@ -98,6 +102,9 @@ export default function DriverWalkaroundFlow({ driver }) {
   const [syncHint, setSyncHint] = useState(null);
   const [pendingSync, setPendingSync] = useState(0);
   const [conditionAcknowledged, setConditionAcknowledged] = useState(false);
+  const [recentChecks, setRecentChecks] = useState([]);
+  const [recentChecksLoading, setRecentChecksLoading] = useState(true);
+  const [refreshingAssignment, setRefreshingAssignment] = useState(false);
 
   const flowInProgressRef = useRef(false);
   const submittedRef = useRef(false);
@@ -105,15 +112,44 @@ export default function DriverWalkaroundFlow({ driver }) {
 
   const workspace = resolveDriverWorkspaceScope(driver, authSession);
 
+  const vehicleReadiness = bootstrap?.assignedVehicleReadiness ?? null;
+  const expiringDocumentCount = (bootstrap?.eligibility?.warnings ?? []).filter((warning) =>
+    /document|licence|cpc|dbs|expir/i.test(String(warning)),
+  ).length;
+
   useEffect(() => {
     void flushPendingWalkaroundSubmissions(driver);
     setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
   }, [driver, authSession, workspace.companyId, workspace.membershipId]);
 
   useEffect(() => {
-    setHideBottomNav(true);
+    let cancelled = false;
+    setRecentChecksLoading(true);
+    void getDriverCheckHistory(driver, { limit: 5 }).then((res) => {
+      if (cancelled) return;
+      const checks = Array.isArray(res.checks) ? res.checks : [];
+      setRecentChecks(
+        checks
+          .filter((c) => {
+            const r = String(c.result ?? "");
+            return r && r !== "draft" && r !== "in_progress";
+          })
+          .slice(0, 3),
+      );
+      setRecentChecksLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [driver]);
+
+  useEffect(() => {
+    // Keep bottom nav on the hub / empty states so Checks feels part of the app.
+    // Hide it only once the driver is inside the walkaround wizard.
+    const hideNav = step === "checklist" || step === "review" || step === "result";
+    setHideBottomNav(hideNav);
     return () => setHideBottomNav(false);
-  }, [setHideBottomNav]);
+  }, [setHideBottomNav, step]);
 
   useEffect(() => {
     let cancelled = false;
@@ -529,10 +565,43 @@ export default function DriverWalkaroundFlow({ driver }) {
     }
   };
 
+  const refreshAssignment = async () => {
+    setRefreshingAssignment(true);
+    setError("");
+    try {
+      await refreshAuth();
+      const data = await loadWalkaroundSession(driver, { checkType, bootstrap: null });
+      setSession(data);
+      if (!data.ok) {
+        setError(data.message || "No vehicle assigned yet.");
+      } else {
+        setError("");
+        setOdometer(String(data.vehicle?.odometer ?? odometer ?? ""));
+      }
+      setStep("confirm");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not refresh your vehicle assignment.");
+      setStep("confirm");
+    } finally {
+      setRefreshingAssignment(false);
+    }
+  };
+
   if (step === "loading") {
     return (
-      <div className={`${op.pageBg} flex items-center justify-center min-h-[60vh] gap-2 text-muted-foreground`}>
-        <Loader2 className="w-5 h-5 animate-spin" /> Loading walkaround…
+      <div className={op.pageBg}>
+        <DriverPageContainer>
+          <CheckPageHeader
+            title="Vehicle check"
+            subtitle="Loading your vehicle assignment…"
+          />
+          <div className="mt-4 space-y-4 pb-4">
+            <div className="h-40 animate-pulse rounded-[1.25rem] bg-muted/60" />
+            <div className="h-36 animate-pulse rounded-[1.25rem] bg-muted/40" />
+            <div className="h-14 animate-pulse rounded-full bg-muted/50" />
+            <DriverPageLoader label="Loading your vehicle assignment…" />
+          </div>
+        </DriverPageContainer>
       </div>
     );
   }
@@ -577,16 +646,6 @@ export default function DriverWalkaroundFlow({ driver }) {
 
   if (step === "confirm") {
     return (
-      <div>
-        {!session?.ok ? (
-          <div className="px-4 pt-4">
-            <CommandBackendNotice
-              status="missing"
-              title="Vehicle checks are not on Command yet"
-              description="Admin cannot receive walkaround submissions until the Command vehicle-check API is added. Acknowledge duties and report defects/incidents from Home in the meantime."
-            />
-          </div>
-        ) : null}
       <WalkaroundVehicleConfirm
         driver={driver}
         session={session}
@@ -662,8 +721,13 @@ export default function DriverWalkaroundFlow({ driver }) {
           setSyncHint("Condition acknowledgement recorded");
           setError("");
         }}
+        recentChecks={recentChecks}
+        recentChecksLoading={recentChecksLoading}
+        onRefreshAssignment={refreshAssignment}
+        refreshing={refreshingAssignment}
+        vehicleReadiness={vehicleReadiness}
+        expiringDocumentCount={expiringDocumentCount}
       />
-      </div>
     );
   }
 

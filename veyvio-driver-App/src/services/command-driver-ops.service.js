@@ -1,7 +1,9 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
 import {
   commandAcknowledgeDuty,
+  commandArriveJourneyStop,
   commandCompleteJourney,
+  commandCompleteJourneyStop,
   commandListDocuments,
   commandListDriverMessages,
   commandListVehicleChecks,
@@ -115,6 +117,18 @@ export async function completeJourney(journeyId, input = {}) {
   const token = await accessToken();
   if (!token) return { ok: false, message: "Not signed in." };
   return commandCompleteJourney(token, journeyId, input);
+}
+
+export async function arriveJourneyStop(journeyId, input = {}) {
+  const token = await accessToken();
+  if (!token) return { ok: false, message: "Not signed in." };
+  return commandArriveJourneyStop(token, journeyId, input);
+}
+
+export async function completeJourneyStop(journeyId, input = {}) {
+  const token = await accessToken();
+  if (!token) return { ok: false, message: "Not signed in." };
+  return commandCompleteJourneyStop(token, journeyId, input);
 }
 
 export async function listDriverMessagesViaCommand() {

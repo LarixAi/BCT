@@ -17,6 +17,7 @@ export default function DriverSupabaseIncidentReport({ driver }) {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [queued, setQueued] = useState(false);
+  const [receiptReference, setReceiptReference] = useState("");
 
   const handleSubmit = async (form) => {
     setSubmitting(true);
@@ -33,10 +34,16 @@ export default function DriverSupabaseIncidentReport({ driver }) {
       [sosContext?.sosLabel, form?.incidentType].filter(Boolean).join(" — ") ||
       "Driver incident report";
 
+    const isSafeguarding =
+      Boolean(form?.isSafeguarding) ||
+      String(form?.incidentType ?? "").toLowerCase().includes("safeguarding") ||
+      String(sosContext?.sosType ?? "").toLowerCase().includes("safeguarding");
+
     const commandResult = await submitIncidentWithOutbox(driver, session, {
       description,
       incidentType: form?.incidentType || sosContext?.sosType || "general",
-      severity: form?.severity || "medium",
+      severity: form?.severity || (isSafeguarding ? "critical" : "medium"),
+      isSafeguarding,
       occurredAt: form?.occurredAt || new Date().toISOString(),
       location: form?.location || {},
       vehicleId: form?.vehicleId,
@@ -47,6 +54,14 @@ export default function DriverSupabaseIncidentReport({ driver }) {
       setError(commandResult.message ?? "Incident could not be submitted.");
       return { ok: false };
     }
+
+    const incident = commandResult.incident ?? {};
+    setReceiptReference(
+      incident.receiptReference ||
+        incident.incident_reference ||
+        incident.incidentReference ||
+        "",
+    );
 
     setQueued(Boolean(commandResult.queued));
     setDone(true);
@@ -62,6 +77,11 @@ export default function DriverSupabaseIncidentReport({ driver }) {
             ? "Incident saved on this device — will reach Command when connection returns."
             : "Your transport manager has been notified. Your submission is locked and cannot be edited."}
         </p>
+        {receiptReference ? (
+          <p className="mt-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-foreground">
+            Reference: <span className="font-semibold tabular-nums">{receiptReference}</span>
+          </p>
+        ) : null}
         <Button type="button" className={`mt-8 w-full max-w-xs ${op.primaryBtn}`} onClick={() => navigate("/")}>
           Back to home
         </Button>

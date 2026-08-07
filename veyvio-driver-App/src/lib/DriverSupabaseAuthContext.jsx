@@ -39,6 +39,12 @@ const BOOT_ESCAPE_MS = 12000;
  */
 const HAS_BOOTED_MS = 4000;
 
+function isReachabilitySessionError(ctx) {
+  if (!ctx || ctx.routeTarget !== "session_error") return false;
+  const msg = String(ctx.linkError ?? "");
+  return /timed out|check your connection|could not reach|could not restore/i.test(msg);
+}
+
 export function DriverSupabaseAuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [pendingCompanySelection, setPendingCompanySelection] = useState(false);
@@ -48,6 +54,9 @@ export function DriverSupabaseAuthProvider({ children }) {
   const hasBootedRef = useRef(false);
   /** Password/biometric login already loads context — skip SIGNED_IN refresh race. */
   const loginInFlightRef = useRef(false);
+  /** Latest session for offline keep-alive (refresh must not clobber mid-flight). */
+  const sessionRef = useRef(null);
+  sessionRef.current = session;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -71,7 +80,18 @@ export function DriverSupabaseAuthProvider({ children }) {
       // bounce the driver back to the password screen mid-sign-in.
       if (ctx === SESSION_REFRESH_TIMED_OUT) {
         console.log("[BIOMETRIC_DEBUG] getDriverSessionContext timed out — keeping prior session");
-        return null;
+        return sessionRef.current;
+      }
+
+      // Airplane / patchy 4G: Command timed out inside getDriverSessionContext and
+      // returned session_error. That must NOT replace an already-good operational
+      // session — otherwise walkaround offline drops to "Sign-in could not finish".
+      if (isReachabilitySessionError(ctx)) {
+        const prior = sessionRef.current;
+        if (prior?.driver && prior.routeTarget !== "session_error" && prior.routeTarget !== "not_driver") {
+          console.log("[BIOMETRIC_DEBUG] Command unreachable — keeping prior operational session");
+          return prior;
+        }
       }
 
       const driverId = ctx?.driver?.id;
@@ -165,6 +185,15 @@ export function DriverSupabaseAuthProvider({ children }) {
             }
           }
           if (event === "SIGNED_OUT") {
+            // Token refresh fails hard while airplane is on; Supabase emits SIGNED_OUT.
+            // Keep the in-memory operational session so offline queue / walkaround continue.
+            const offline =
+              typeof navigator !== "undefined" && navigator.onLine === false;
+            if (offline && sessionRef.current?.driver) {
+              console.log("[BIOMETRIC_DEBUG] SIGNED_OUT while offline — keeping operational session");
+              setLoading(false);
+              return;
+            }
             refreshGeneration.current += 1;
             resetBiometricLockOnSignOut();
             setSession(null);

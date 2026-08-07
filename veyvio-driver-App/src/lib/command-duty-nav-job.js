@@ -153,6 +153,7 @@ export function commandDutyToNavJob(duty, opts = {}) {
     const stopType = mapStopType(stop);
     return {
       id: String(stop.id),
+      runId: stop.runId ? String(stop.runId) : null,
       label,
       shortLabel: label,
       address: stop.address || stop.name || "",
@@ -209,34 +210,52 @@ function currentStopFromJob(job) {
   );
 }
 
-export function applyDutyNavAction(duty, action) {
+/** Resolve the Command run/journey id for a duty stop. */
+export function resolveDutyJourneyId(duty, stop = null) {
+  if (stop?.runId) return String(stop.runId);
+  const runs = Array.isArray(duty?.runs) ? duty.runs : [];
+  if (stop?.id) {
+    for (const run of runs) {
+      const match = (run.stops ?? []).some((row) => String(row.id) === String(stop.id));
+      if (match) return String(run.journeyId ?? run.id);
+    }
+  }
+  if (duty?.primaryJourneyId) return String(duty.primaryJourneyId);
+  const first = runs[0];
+  return first ? String(first.journeyId ?? first.id ?? "") : null;
+}
+
+/**
+ * Validate a duty navigation action without persisting progress.
+ * Used before server-backed journey transitions (F-08).
+ */
+export function validateDutyNavAction(duty, action) {
   const job = commandDutyToNavJob(duty, { autoStart: true });
   if (!job) return { ok: false, message: "Duty not found.", job: null };
 
   const progress = { ...emptyProgress(), ...(loadDutyNavProgress(duty.id) ?? {}) };
-  progress.stops = { ...(progress.stops ?? {}) };
-  progress.pickups = { ...(progress.pickups ?? {}) };
-  progress.dropoffs = { ...(progress.dropoffs ?? {}) };
+  const current = currentStopFromJob(job);
 
   if (action === "start") {
-    progress.startedAt = progress.startedAt ?? new Date().toISOString();
-    saveDutyNavProgress(duty.id, progress);
-    return { ok: true, message: "Navigation started.", job: commandDutyToNavJob(duty) };
+    return {
+      ok: true,
+      message: "Navigation started.",
+      job,
+      journeyId: resolveDutyJourneyId(duty, current),
+      currentStop: current,
+    };
   }
-
-  const current = currentStopFromJob(job);
 
   if (action === "arrive") {
     if (!current || current.status === "arrived") {
       return { ok: false, message: "No stop to arrive at.", job };
     }
-    progress.startedAt = progress.startedAt ?? new Date().toISOString();
-    progress.stops[current.id] = "arrived";
-    saveDutyNavProgress(duty.id, progress);
     return {
       ok: true,
       message: `Arrived at ${current.label}.`,
-      job: commandDutyToNavJob(duty),
+      job,
+      journeyId: resolveDutyJourneyId(duty, current),
+      currentStop: current,
       phase: "arrived",
     };
   }
@@ -248,13 +267,13 @@ export function applyDutyNavAction(duty, action) {
     if (current.stopType !== "pickup") {
       return { ok: false, message: "This stop is not a pickup.", job };
     }
-    progress.pickups[current.id] = true;
-    saveDutyNavProgress(duty.id, progress);
     const name = current.passengerLabel || "Passenger";
     return {
       ok: true,
       message: `${name} on board.`,
-      job: commandDutyToNavJob(duty),
+      job,
+      journeyId: resolveDutyJourneyId(duty, current),
+      currentStop: current,
       phase: "pickup_confirmed",
     };
   }
@@ -266,12 +285,12 @@ export function applyDutyNavAction(duty, action) {
     if (current.stopType !== "dropoff") {
       return { ok: false, message: "This stop is not a drop-off.", job };
     }
-    progress.dropoffs[current.id] = true;
-    saveDutyNavProgress(duty.id, progress);
     return {
       ok: true,
       message: "Passengers handed to school staff.",
-      job: commandDutyToNavJob(duty),
+      job,
+      journeyId: resolveDutyJourneyId(duty, current),
+      currentStop: current,
       phase: "dropoff_confirmed",
     };
   }
@@ -284,34 +303,79 @@ export function applyDutyNavAction(duty, action) {
     if (!target) return { ok: false, message: "No stop to complete.", job };
 
     if (target.stopType === "pickup" && !target.pickupConfirmed) {
-      return {
-        ok: false,
-        message: "Confirm pickup before leaving this stop.",
-        job,
-      };
+      return { ok: false, message: "Confirm pickup before leaving this stop.", job };
     }
     if (target.stopType === "dropoff" && !target.dropoffConfirmed) {
-      return {
-        ok: false,
-        message: "Confirm drop-off before completing.",
-        job,
-      };
+      return { ok: false, message: "Confirm drop-off before completing.", job };
     }
 
-    progress.stops[target.id] = "completed";
-    saveDutyNavProgress(duty.id, progress);
-    const nextJob = commandDutyToNavJob(duty);
-    const remaining = nextJob.stops?.filter((s) => s.status !== "completed").length ?? 0;
+    const simulatedStops = { ...(progress.stops ?? {}), [target.id]: "completed" };
+    const remaining =
+      (job.stops ?? []).filter((stop) => simulatedStops[stop.id] !== "completed").length ?? 0;
+
     return {
       ok: true,
-      message: remaining === 0 ? "Duty complete — all stops finished." : `Left ${target.label}.`,
-      job: nextJob,
-      allDone: remaining === 0,
+      message:
+        remaining === 0 ? "Duty complete — all stops finished." : `Left ${target.label}.`,
+      job,
+      journeyId: resolveDutyJourneyId(duty, target),
+      currentStop: target,
+      allDoneAfter: remaining === 0,
       phase: remaining === 0 ? "duty_complete" : "stop_completed",
     };
   }
 
   return { ok: false, message: "Unknown action.", job };
+}
+
+export function applyDutyNavAction(duty, action) {
+  const validation = validateDutyNavAction(duty, action);
+  if (!validation.ok) return validation;
+
+  const progress = { ...emptyProgress(), ...(loadDutyNavProgress(duty.id) ?? {}) };
+  progress.stops = { ...(progress.stops ?? {}) };
+  progress.pickups = { ...(progress.pickups ?? {}) };
+  progress.dropoffs = { ...(progress.dropoffs ?? {}) };
+
+  if (action === "start") {
+    progress.startedAt = progress.startedAt ?? new Date().toISOString();
+    saveDutyNavProgress(duty.id, progress);
+    return { ...validation, job: commandDutyToNavJob(duty) };
+  }
+
+  const current = validation.currentStop;
+
+  if (action === "arrive") {
+    progress.startedAt = progress.startedAt ?? new Date().toISOString();
+    progress.stops[current.id] = "arrived";
+    saveDutyNavProgress(duty.id, progress);
+    return { ...validation, job: commandDutyToNavJob(duty) };
+  }
+
+  if (action === "confirm_pickup") {
+    progress.pickups[current.id] = true;
+    saveDutyNavProgress(duty.id, progress);
+    return { ...validation, job: commandDutyToNavJob(duty) };
+  }
+
+  if (action === "confirm_dropoff") {
+    progress.dropoffs[current.id] = true;
+    saveDutyNavProgress(duty.id, progress);
+    return { ...validation, job: commandDutyToNavJob(duty) };
+  }
+
+  if (action === "complete_stop" || action === "complete_job") {
+    progress.stops[current.id] = "completed";
+    saveDutyNavProgress(duty.id, progress);
+    const nextJob = commandDutyToNavJob(duty);
+    return {
+      ...validation,
+      job: nextJob,
+      allDone: validation.allDoneAfter,
+    };
+  }
+
+  return validation;
 }
 
 /**

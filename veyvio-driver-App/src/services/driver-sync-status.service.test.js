@@ -28,6 +28,11 @@ describe("driver-sync-status.service", () => {
       incidents: 0,
       messages: 0,
       dutyOps: 0,
+      journeySteps: 0,
+      handbacks: 0,
+      dutyCloseouts: 0,
+      vehicleSwapRequests: 0,
+      jobExecution: 0,
     });
   });
 });

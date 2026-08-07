@@ -1,4 +1,4 @@
-import { getCommandApiBaseUrl, commandStartDriverMessage, commandSignOffDuty, commandSignOnDuty } from "@/lib/command-api";
+import { getCommandApiBaseUrl, commandStartDriverMessage, commandSignOffDuty, commandSignOnDuty, commandPostDriverVehicleParked, commandSubmitDutyCloseout, commandCreateVehicleSwapRequest, commandRecordJobExecution } from "@/lib/command-api";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import {
@@ -9,17 +9,24 @@ import {
   loadOpsOutbox,
 } from "@/lib/driver-ops-outbox.storage";
 import {
+  arriveJourneyStop,
+  completeJourney,
+  completeJourneyStop,
   reportDefectViaCommand,
   reportIncidentViaCommand,
   replyDriverMessageViaCommand,
+  startJourney,
 } from "@/services/command-driver-ops.service";
 
-async function accessToken() {
+async function accessToken(session) {
+  if (session?.accessToken || session?.access_token) {
+    return session.accessToken ?? session.access_token;
+  }
   const supabase = getSupabaseClient();
   const {
-    data: { session },
+    data: { session: authSession },
   } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
+  return authSession?.access_token ?? null;
 }
 
 function isOffline() {
@@ -44,9 +51,24 @@ function shouldQueueOnFailure(result) {
 function isPermanentOpsFailure(result) {
   if (result?.ok) return false;
   if (typeof result?.status === "number") {
+    // 401 means the session expired mid-shift, not that Command rejected the
+    // report — never treat it as permanent. Dropping a defect/incident here
+    // would silently lose a safety report instead of retrying after refresh.
+    if (result.status === 401) return false;
     return result.status >= 400 && result.status < 500 && result.status !== 429;
   }
   return false;
+}
+
+async function tryRefreshSession(session) {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data?.session?.access_token) return null;
+    return { ...(session ?? {}), accessToken: data.session.access_token, access_token: data.session.access_token };
+  } catch {
+    return null;
+  }
 }
 
 function withClientId(input, clientId) {
@@ -60,14 +82,14 @@ function workspaceFrom(driver, session) {
   return resolveDriverWorkspaceScope(driver, session);
 }
 
-async function signOnDutyViaCommand(dutyId) {
-  const token = await accessToken();
+async function signOnDutyViaCommand(dutyId, session) {
+  const token = await accessToken(session);
   if (!token) return { ok: false, message: "Not signed in.", status: 401 };
   return commandSignOnDuty(token, dutyId);
 }
 
-async function signOffDutyViaCommand(dutyId) {
-  const token = await accessToken();
+async function signOffDutyViaCommand(dutyId, session) {
+  const token = await accessToken(session);
   if (!token) return { ok: false, message: "Not signed in.", status: 401 };
   return commandSignOffDuty(token, dutyId);
 }
@@ -85,6 +107,11 @@ export function describeOpsOutbox(driverId, companyId, membershipId) {
     messages: queue.filter((item) => item.type === "message_start" || item.type === "message_reply").length,
     dutySignOn: queue.filter((item) => item.type === "duty_sign_on").length,
     dutySignOff: queue.filter((item) => item.type === "duty_sign_off").length,
+    journeySteps: queue.filter((item) => String(item.type ?? "").startsWith("journey_")).length,
+    handbacks: queue.filter((item) => item.type === "handback").length,
+    dutyCloseouts: queue.filter((item) => item.type === "duty_closeout").length,
+    vehicleSwapRequests: queue.filter((item) => item.type === "vehicle_swap_request").length,
+    jobExecution: queue.filter((item) => item.type === "job_execution").length,
   };
 }
 
@@ -230,6 +257,98 @@ export async function submitIncidentWithOutbox(driver, session, input) {
   return result;
 }
 
+async function flushJourneyOpsItem(item) {
+  const payload = item.payload ?? {};
+  const journeyId = payload.journeyId;
+  if (!journeyId) return { ok: false, message: "Journey id missing from queued step.", status: 400 };
+
+  if (item.type === "journey_start") {
+    return startJourney(journeyId);
+  }
+
+  const stopInput = payload.stopInput ?? {};
+
+  if (item.type === "journey_stop_arrive") {
+    const started = await startJourney(journeyId);
+    if (!started.ok) {
+      const message = String(started.message ?? "").toLowerCase();
+      if (!message.includes("already") && !message.includes("in_progress")) return started;
+    }
+    return arriveJourneyStop(journeyId, stopInput);
+  }
+
+  if (item.type === "journey_stop_complete") {
+    const started = await startJourney(journeyId);
+    if (!started.ok) {
+      const message = String(started.message ?? "").toLowerCase();
+      if (!message.includes("already") && !message.includes("in_progress")) return started;
+    }
+    const completeStop = await completeJourneyStop(journeyId, {
+      ...stopInput,
+      outcome: payload.outcome ?? "stop_complete",
+    });
+    if (!completeStop.ok) return completeStop;
+    if (payload.completeJourney) {
+      return completeJourney(journeyId, { outcome: "duty_stops_complete" });
+    }
+    return completeStop;
+  }
+
+  return { ok: false, message: "Unknown journey queue type.", status: 400 };
+}
+
+async function runOpsItem(item, session) {
+  if (item.type === "incident") {
+    return reportIncidentViaCommand(item.payload);
+  }
+  if (item.type === "defect") {
+    return reportDefectViaCommand(item.payload);
+  }
+  if (item.type === "message_start") {
+    const token = await accessToken(session);
+    return token
+      ? commandStartDriverMessage(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (item.type === "message_reply") {
+    return replyDriverMessageViaCommand(item.payload);
+  }
+  if (item.type === "handback") {
+    const token = await accessToken(session);
+    return token
+      ? commandPostDriverVehicleParked(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (item.type === "duty_sign_on") {
+    return signOnDutyViaCommand(item.payload?.dutyId, session);
+  }
+  if (item.type === "duty_sign_off") {
+    return signOffDutyViaCommand(item.payload?.dutyId, session);
+  }
+  if (item.type === "duty_closeout") {
+    const token = await accessToken(session);
+    return token
+      ? commandSubmitDutyCloseout(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (item.type === "vehicle_swap_request") {
+    const token = await accessToken(session);
+    return token
+      ? commandCreateVehicleSwapRequest(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (item.type === "job_execution") {
+    const token = await accessToken(session);
+    return token
+      ? commandRecordJobExecution(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (String(item.type ?? "").startsWith("journey_")) {
+    return flushJourneyOpsItem(item);
+  }
+  return null;
+}
+
 export async function flushOpsOutbox(driver, session) {
   const { companyId, membershipId } = workspaceFrom(driver, session);
   const driverId = driver?.id;
@@ -241,28 +360,21 @@ export async function flushOpsOutbox(driver, session) {
   let synced = 0;
   let blocked = 0;
   const blockedItems = [];
+  let refreshedSession = null;
+  let refreshAttempted = false;
 
   for (const item of queue) {
     if (item.companyId && companyId && item.companyId !== companyId) continue;
 
-    let result;
-    if (item.type === "incident") {
-      result = await reportIncidentViaCommand(item.payload);
-    } else if (item.type === "defect") {
-      result = await reportDefectViaCommand(item.payload);
-    } else if (item.type === "message_start") {
-      const token = await accessToken();
-      result = token
-        ? await commandStartDriverMessage(token, item.payload)
-        : { ok: false, message: "Not signed in.", status: 401 };
-    } else if (item.type === "message_reply") {
-      result = await replyDriverMessageViaCommand(item.payload);
-    } else if (item.type === "duty_sign_on") {
-      result = await signOnDutyViaCommand(item.payload?.dutyId);
-    } else if (item.type === "duty_sign_off") {
-      result = await signOffDutyViaCommand(item.payload?.dutyId);
-    } else {
-      continue;
+    let result = await runOpsItem(item, refreshedSession ?? session);
+    if (result === null) continue;
+
+    if (!result.ok && result.status === 401 && !refreshAttempted) {
+      refreshAttempted = true;
+      refreshedSession = await tryRefreshSession(refreshedSession ?? session);
+      if (refreshedSession) {
+        result = await runOpsItem(item, refreshedSession);
+      }
     }
 
     if (!result.ok) {

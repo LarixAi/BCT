@@ -17,8 +17,17 @@ const UNLOCK_WATCHDOG_MS = 22_000;
 /**
  * Covers the signed-in app with a biometric lock after cold start or long background.
  * Does not interrupt active external navigation.
+ *
+ * @param {(info: { coldStart: boolean }) => void} [onUnlocked]
+ *   Fired after a successful unlock. `coldStart: true` when this lock was shown
+ *   for process start — callers should land on Home unless a real deep link opened the app.
  */
-export default function BiometricLockLayer({ driverId, active, onUsePassword: onUsePasswordProp }) {
+export default function BiometricLockLayer({
+  driverId,
+  active,
+  onUsePassword: onUsePasswordProp,
+  onUnlocked,
+}) {
   const [locked, setLocked] = useState(false);
   const [label, setLabel] = useState("Face ID");
   const [busy, setBusy] = useState(false);
@@ -29,6 +38,8 @@ export default function BiometricLockLayer({ driverId, active, onUsePassword: on
   const [lockEpoch, setLockEpoch] = useState(0);
   const backgroundedAtRef = useRef(null);
   const evaluatedColdStartRef = useRef(false);
+  /** True while the visible lock was raised for cold start (not a long-background resume). */
+  const coldStartLockRef = useRef(false);
   const unlockGenerationRef = useRef(0);
   const unlockStartedAtRef = useRef(0);
   const unlockingRef = useRef(false);
@@ -92,6 +103,7 @@ export default function BiometricLockLayer({ driverId, active, onUsePassword: on
           navigating: isExternalNavActive(),
         })
       ) {
+        coldStartLockRef.current = true;
         setLabel(prefs.label || availability.label);
         setLocked(true);
       }
@@ -143,6 +155,7 @@ export default function BiometricLockLayer({ driverId, active, onUsePassword: on
       if (requireLock) {
         void checkBiometricAvailability().then((availability) => {
           if (!availability.available) return;
+          coldStartLockRef.current = false;
           setLabel(prefs.label || availability.label);
           setError("");
           setLocked(true);
@@ -221,7 +234,10 @@ export default function BiometricLockLayer({ driverId, active, onUsePassword: on
         );
         return;
       }
+      const wasColdStart = coldStartLockRef.current;
+      coldStartLockRef.current = false;
       setLocked(false);
+      onUnlocked?.({ coldStart: wasColdStart });
     } catch {
       if (generation !== unlockGenerationRef.current) return;
       setError("Fingerprint check did not finish. Use password instead, or try again.");
@@ -232,19 +248,21 @@ export default function BiometricLockLayer({ driverId, active, onUsePassword: on
         setBusy(false);
       }
     }
-  }, [driverId, prepareForInteraction, resetUnlockAttempt]);
+  }, [driverId, onUnlocked, prepareForInteraction, resetUnlockAttempt]);
 
   const onUsePassword = useCallback(() => {
     prepareForInteraction();
     resetUnlockAttempt();
+    coldStartLockRef.current = false;
     setLocked(false);
     onUsePasswordProp?.();
   }, [onUsePasswordProp, prepareForInteraction, resetUnlockAttempt]);
 
   if (!locked) return null;
 
-  // While the OS prompt is active, do not render a blocking WebView overlay.
-  if (nativePromptActive) return null;
+  // Android only: hide the WebView overlay so BiometricPrompt can sit above it.
+  // On iOS this caused a blank black screen while Face ID was opening.
+  if (nativePromptActive && Capacitor.getPlatform() === "android") return null;
 
   return (
     <BiometricLockScreen
