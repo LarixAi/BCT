@@ -16,6 +16,18 @@ export type ReviewDecisionApiResult = {
   audit: AuditEvent
 }
 
+export type CostCsvImportApiResult = {
+  summary: {
+    accepted: number
+    quarantined: number
+    duplicatesSkipped: number
+    rowsRead: number
+    importRunId: string
+    fileName: string
+  }
+  workspace: CostControlStore
+}
+
 export type CostControlRepository = {
   readonly mode: 'demo' | 'api'
   loadWorkspace(session: FinanceSession): Promise<CostControlStore>
@@ -25,6 +37,10 @@ export type CostControlRepository = {
     decision: ReviewDecision,
     expectedCostVersion?: number,
   ): Promise<ReviewDecisionApiResult>
+  importCostCsv(
+    session: FinanceSession,
+    input: { fileName: string; text: string },
+  ): Promise<CostCsvImportApiResult>
 }
 
 export type FinanceRepositoryConfig = {
@@ -57,6 +73,9 @@ export function createDemoCostControlRepository(): CostControlRepository {
       return workspace
     },
     async resolveReviewDecision() {
+      unsupportedDemoMutation()
+    },
+    async importCostCsv() {
       unsupportedDemoMutation()
     },
   }
@@ -152,6 +171,42 @@ export function createApiCostControlRepository(input: {
           'review decision cost',
         )
       }
+      return result
+    },
+    async importCostCsv(session, input) {
+      requireSession(session)
+      const response = await fetchImpl(`${baseUrl}/finance/imports/costs`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Veyvio-Organisation-ID': session.activeOrganisationId,
+        },
+        body: JSON.stringify({
+          fileName: input.fileName,
+          text: input.text,
+        }),
+      })
+      if (!response.ok) {
+        let detail = `Finance API cost import failed (${response.status})`
+        try {
+          const payload = (await response.json()) as { error?: string }
+          if (payload.error) detail = payload.error
+        } catch {
+          // keep status text
+        }
+        throw new Error(detail)
+      }
+      const result = (await response.json()) as CostCsvImportApiResult
+      if (!result?.workspace?.organisation?.id || !result.summary) {
+        throw new Error('Finance API returned an invalid cost import result')
+      }
+      assertSameOrganisation(
+        session.activeOrganisationId,
+        result.workspace.organisation.id,
+        'cost import workspace',
+      )
       return result
     },
   }

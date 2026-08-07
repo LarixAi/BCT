@@ -8,6 +8,7 @@ import {
   applySimpleReviewDecision,
   parseSimpleReviewDecision,
 } from '../_shared/finance-review-decision.ts'
+import { importCostCsvForPersist } from '../_shared/finance-csv-import.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -79,6 +80,9 @@ Deno.serve(async (request) => {
       if (reviewMatch && request.method === 'POST') {
         return await handleReviewDecision(request, decodeURIComponent(reviewMatch[1]!))
       }
+    }
+    if (path === '/finance/imports/costs' && request.method === 'POST') {
+      return await handleCostCsvImport(request)
     }
     if (path === '/bank/consent/start' && request.method === 'GET') {
       return await handleBankConsentStart(request, url)
@@ -478,6 +482,239 @@ async function handleReviewDecision(request: Request, reviewId: string): Promise
         afterState: result.audit.afterState,
         createdAt: result.audit.createdAt,
       },
+    },
+    200,
+  )
+}
+
+function roleAllowsCostImport(role: FinanceRole): boolean {
+  return [
+    'finance_director',
+    'finance_admin',
+    'finance_manager',
+    'finance_officer',
+  ].includes(role)
+}
+
+async function handleCostCsvImport(request: Request): Promise<Response> {
+  const auth = await verifyBearer(request)
+  if (auth instanceof Response) return auth
+
+  const organisationId = request.headers.get('X-Veyvio-Organisation-ID')?.trim()
+  if (!organisationId) return json({ error: 'active_organisation_required' }, 400)
+
+  const membership = await findFinanceMembership(auth.userId, organisationId)
+  if (!membership?.active) return json({ error: 'organisation_access_denied' }, 403)
+  if (!roleAllowsCostImport(membership.role)) {
+    return json({ error: 'finance_permission_denied' }, 403)
+  }
+
+  await ensureOrganisationShell(organisationId)
+  await cc('organisation_memberships.upsert', admin.from('organisation_memberships').upsert(
+    {
+      id: `ccm_${organisationId}_${auth.userId}`,
+      organisation_id: organisationId,
+      user_subject: auth.userId,
+      role: membership.role,
+      active: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'organisation_id,user_subject' },
+  ))
+
+  let body: Record<string, unknown>
+  try {
+    body = (await request.json()) as Record<string, unknown>
+  } catch {
+    return json({ error: 'invalid_json' }, 400)
+  }
+
+  const fileName = String(body.fileName ?? '').trim() || 'costs.csv'
+  const text = typeof body.text === 'string' ? body.text : ''
+  if (!text.trim()) return json({ error: 'csv_text_required' }, 400)
+  if (text.length > 2_000_000) return json({ error: 'csv_too_large' }, 413)
+
+  const { data: budgetRow } = await admin
+    .from('budgets')
+    .select('id, version')
+    .eq('organisation_id', organisationId)
+    .eq('status', 'approved')
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const budgetId = budgetRow?.id ?? `bud_${organisationId}_current`
+
+  const { data: existingCosts } = await admin
+    .from('cost_records')
+    .select('source_key')
+    .eq('organisation_id', organisationId)
+  const existingSourceKeys = new Set(
+    (existingCosts ?? []).map((row) => String(row.source_key)),
+  )
+
+  const startedAt = new Date().toISOString()
+  const parsed = importCostCsvForPersist({
+    organisationId,
+    text,
+    budgetId,
+    existingSourceKeys,
+    nowIso: startedAt,
+  })
+  if (parsed.rowsRead > 5000) {
+    return json({ error: 'csv_too_many_rows' }, 413)
+  }
+
+  const runId = crypto.randomUUID()
+  const finishedAt = new Date().toISOString()
+
+  if (parsed.accepted.length) {
+    await cc(
+      'cost_records.insert',
+      admin.from('cost_records').insert(
+        parsed.accepted.map((c) => ({
+          id: c.id,
+          organisation_id: organisationId,
+          version: c.version,
+          supplier_name: c.supplierName,
+          description: c.description,
+          reference: c.reference,
+          transaction_date: c.transactionDate,
+          accounting_period: c.accountingPeriod,
+          net_minor: c.netMinor,
+          vat_minor: c.vatMinor,
+          gross_minor: c.grossMinor,
+          currency: 'GBP',
+          status: c.status,
+          category: c.category,
+          validation_state: c.validationState,
+          review_state: c.reviewState,
+          source_key: c.sourceKey,
+          linked_commitment_id: null,
+          correction_reason: null,
+          created_at: c.createdAt,
+          updated_at: c.updatedAt,
+        })),
+      ),
+    )
+
+    await cc(
+      'cost_allocations.insert',
+      admin.from('cost_allocations').insert(
+        parsed.accepted.map((c) => ({
+          id: crypto.randomUUID(),
+          organisation_id: organisationId,
+          cost_id: c.id,
+          budget_id: budgetId,
+          category: c.category,
+          cost_centre_id: null,
+          vehicle_id: c.vehicleId,
+          supplier_id: null,
+          amount_minor: c.grossMinor,
+          created_at: c.createdAt,
+        })),
+      ),
+    )
+
+    const evidenceRows = parsed.accepted
+      .filter((c) => c.evidenceLabel)
+      .map((c) => ({
+        id: crypto.randomUUID(),
+        organisation_id: organisationId,
+        cost_id: c.id,
+        label: c.evidenceLabel!,
+        source_type: 'csv',
+        checksum: null,
+        storage_key: null,
+        created_at: c.createdAt,
+      }))
+    if (evidenceRows.length) {
+      await cc('cost_evidence.insert', admin.from('cost_evidence').insert(evidenceRows))
+    }
+
+    const reviewRows = parsed.accepted
+      .filter((c) => c.reviewState === 'open')
+      .map((c) => ({
+        id: crypto.randomUUID(),
+        organisation_id: organisationId,
+        cost_id: c.id,
+        signal: c.evidenceLabel ? 'allocation_issue' : 'missing_evidence',
+        title: c.evidenceLabel ? 'Imported cost needs review' : 'Imported cost missing evidence',
+        detail: `${c.supplierName} · ${c.reference}`,
+        state: 'open',
+        resolution_note: null,
+        version: 1,
+        created_at: finishedAt,
+        updated_at: finishedAt,
+      }))
+    if (reviewRows.length) {
+      await cc('review_items.insert', admin.from('review_items').insert(reviewRows))
+    }
+  }
+
+  if (parsed.quarantined.length) {
+    await cc(
+      'quarantine_items.insert',
+      admin.from('quarantine_items').insert(
+        parsed.quarantined.map((q) => ({
+          id: q.id,
+          organisation_id: organisationId,
+          source_key: q.sourceKey,
+          reason: q.reason,
+          raw: q.raw,
+          created_at: q.createdAt,
+        })),
+      ),
+    )
+  }
+
+  await cc(
+    'import_runs.insert',
+    admin.from('import_runs').insert({
+      id: runId,
+      organisation_id: organisationId,
+      file_name: fileName,
+      started_at: startedAt,
+      finished_at: finishedAt,
+      rows_read: parsed.rowsRead,
+      accepted: parsed.accepted.length,
+      quarantined: parsed.quarantined.length,
+      duplicates_skipped: parsed.duplicatesSkipped,
+    }),
+  )
+
+  await cc(
+    'audit_events.insert',
+    admin.from('audit_events').insert({
+      id: crypto.randomUUID(),
+      organisation_id: organisationId,
+      actor_id: auth.userId,
+      action: 'cost.import_csv',
+      entity_type: 'import_run',
+      entity_id: runId,
+      reason: fileName,
+      before_state: { existingSourceKeys: existingSourceKeys.size },
+      after_state: {
+        accepted: parsed.accepted.length,
+        quarantined: parsed.quarantined.length,
+        duplicatesSkipped: parsed.duplicatesSkipped,
+        rowsRead: parsed.rowsRead,
+      },
+      created_at: finishedAt,
+    }),
+  )
+
+  const workspace = await loadWorkspace(organisationId)
+  return json(
+    {
+      summary: {
+        accepted: parsed.accepted.length,
+        quarantined: parsed.quarantined.length,
+        duplicatesSkipped: parsed.duplicatesSkipped,
+        rowsRead: parsed.rowsRead,
+        importRunId: runId,
+        fileName,
+      },
+      workspace,
     },
     200,
   )

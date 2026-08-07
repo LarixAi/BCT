@@ -118,5 +118,40 @@ describe('cost control repositories', () => {
       'X-Veyvio-Organisation-ID': 'org_demo_cec',
     })
   })
+
+  it('posts authenticated cost CSV imports to the Finance API', async () => {
+    const workspace = createSeedStore()
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          summary: {
+            accepted: 1,
+            quarantined: 0,
+            duplicatesSkipped: 0,
+            rowsRead: 1,
+            importRunId: 'run-1',
+            fileName: 'costs.csv',
+          },
+          workspace,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    const repository = createApiCostControlRepository({
+      apiBaseUrl: 'https://finance.example.test',
+      fetchImpl,
+    })
+
+    const result = await repository.importCostCsv(session, {
+      fileName: 'costs.csv',
+      text: 'date,supplier,description,category,net\n2026-08-07,A,B,fuel,1.00',
+    })
+
+    expect(result.summary.accepted).toBe(1)
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    const [url, request] = fetchImpl.mock.calls[0] ?? []
+    expect(url).toBe('https://finance.example.test/finance/imports/costs')
+    expect(request?.method).toBe('POST')
+  })
 })
 

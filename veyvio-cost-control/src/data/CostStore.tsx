@@ -51,11 +51,11 @@ type StoreApi = CostControlStore & {
   workspaceStatus: 'idle' | 'loading' | 'ready' | 'error'
   workspaceError: string | null
   refreshSnapshot: () => void
-  importCsv: (fileName: string, text: string) => {
+  importCsv: (fileName: string, text: string) => Promise<{
     accepted: number
     quarantined: number
     duplicatesSkipped: number
-  }
+  }>
   importPayrollSummary: (
     fileName: string,
     text: string,
@@ -237,8 +237,30 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const importCsv = useCallback((fileName: string, text: string) => {
-    assertBrowserMutationAllowed('importCsv')
+  const importCsv = useCallback(async (fileName: string, text: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to import costs')
+      }
+      const result = await resolveCostControlRepository(financeConfig).importCostCsv(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        { fileName, text },
+      )
+      setStore(withSeedDefaults(result.workspace))
+      return {
+        accepted: result.summary.accepted,
+        quarantined: result.summary.quarantined,
+        duplicatesSkipped: result.summary.duplicatesSkipped,
+      }
+    }
+
     let summary = { accepted: 0, quarantined: 0, duplicatesSkipped: 0 }
     setStore((prev) => {
       const existing = new Set(prev.costs.map((c) => c.sourceKey))
@@ -310,7 +332,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       }
     })
     return summary
-  }, [])
+  }, [auth.activeMembership, auth.identity])
 
   const importPayrollSummary = useCallback((fileName: string, text: string) => {
     assertBrowserMutationAllowed('importPayrollSummary')

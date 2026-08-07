@@ -62,8 +62,11 @@ function dependencies(input?: {
       cost: { ...openCost, organisationId: 'org-1' },
     })),
     persistReviewDecision: vi.fn(async () => undefined),
+    listCostSourceKeys: vi.fn(async () => workspace.costs.map((c) => c.sourceKey)),
+    getApprovedBudgetId: vi.fn(async () => workspace.budget.id),
+    persistCostCsvImport: vi.fn(async () => undefined),
   }
-  return { auth, database, openReview, openCost }
+  return { auth, database, openReview, openCost, workspace }
 }
 
 describe('authenticated Finance API', () => {
@@ -175,5 +178,31 @@ describe('authenticated Finance API', () => {
     )
     expect(response.status).toBe(403)
     expect(deps.database.persistReviewDecision).not.toHaveBeenCalled()
+  })
+
+  it('persists a cost CSV import and returns the refreshed workspace', async () => {
+    const deps = dependencies()
+    const handle = createFinanceApiHandler(deps)
+    const csv = `date,supplier,description,reference,category,status,net,vat,gross,evidence,source_key
+2026-08-07,Shell,Fuel,SH-100,fuel,actual,10.00,2.00,12.00,receipt.pdf,shell|SH-100
+2026-08-07,Bad,,,fuel,actual,1.00,0.20,1.20,,bad|row
+`
+    const response = await handle(
+      new Request('https://finance.example.test/finance/imports/costs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer token',
+          'X-Veyvio-Organisation-ID': 'org-1',
+        },
+        body: JSON.stringify({ fileName: 'costs.csv', text: csv }),
+      }),
+    )
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.summary.accepted).toBe(1)
+    expect(body.summary.quarantined).toBe(1)
+    expect(deps.database.persistCostCsvImport).toHaveBeenCalledOnce()
+    expect(body.workspace.organisation.id).toBe('org-1')
   })
 })

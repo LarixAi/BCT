@@ -23,7 +23,7 @@ export function ImportsPage() {
     setMessage(null)
     try {
       const text = await file.text()
-      const summary = importCsv(file.name, text)
+      const summary = await importCsv(file.name, text)
       setMessage(
         `Imported ${file.name}: ${summary.accepted} accepted, ${summary.quarantined} quarantined, ${summary.duplicatesSkipped} duplicates skipped.`,
       )
@@ -47,11 +47,16 @@ export function ImportsPage() {
     }
   }
 
-  function loadSample() {
-    const summary = importCsv('sample-costs.csv', SAMPLE)
-    setMessage(
-      `Sample import: ${summary.accepted} accepted, ${summary.quarantined} quarantined, ${summary.duplicatesSkipped} duplicates skipped.`,
-    )
+  async function loadSample() {
+    try {
+      setError(null)
+      const summary = await importCsv('sample-costs.csv', SAMPLE)
+      setMessage(
+        `Sample import: ${summary.accepted} accepted, ${summary.quarantined} quarantined, ${summary.duplicatesSkipped} duplicates skipped.`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed')
+    }
   }
 
   function loadPayrollSample() {
