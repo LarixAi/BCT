@@ -12,15 +12,12 @@ export function getOrCreateDeviceKey() {
   try {
     const existing = localStorage.getItem(DEVICE_KEY);
     if (existing) {
-      console.log("[BIOMETRIC_DEBUG] getOrCreateDeviceKey found existing=" + existing);
       return existing;
     }
     const next = randomId();
     localStorage.setItem(DEVICE_KEY, next);
-    console.log("[BIOMETRIC_DEBUG] getOrCreateDeviceKey generated NEW=" + next);
     return next;
-  } catch (err) {
-    console.log("[BIOMETRIC_DEBUG] getOrCreateDeviceKey localStorage threw: " + (err instanceof Error ? err.message : String(err)));
+  } catch {
     return randomId();
   }
 }

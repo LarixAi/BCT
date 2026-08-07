@@ -5,7 +5,7 @@ import { savePendingCompanySelection } from "@/pages/driver/DriverAuthSelectComp
 import { linkDriverAccountIfNeeded } from "@/services/link-driver.service";
 import { buildAccessContext } from "@/lib/driver-access-mode";
 import { withTimeout } from "@/lib/withTimeout";
-import { rebindBiometricCredentialIfEnabled } from "@/features/auth/biometrics/biometric-enrollment";
+import { rebindBiometricCredentialIfEnabled, invalidateBiometricAccess } from "@/features/auth/biometrics/biometric-enrollment";
 import { signInDriverWithBiometrics } from "@/features/auth/biometrics/biometric-login";
 import {
   markBiometricUnlocked,
@@ -79,7 +79,6 @@ export function DriverSupabaseAuthProvider({ children }) {
       // Timeout ≠ signed out. Keep prior session so a slow Command call cannot
       // bounce the driver back to the password screen mid-sign-in.
       if (ctx === SESSION_REFRESH_TIMED_OUT) {
-        console.log("[BIOMETRIC_DEBUG] getDriverSessionContext timed out — keeping prior session");
         return sessionRef.current;
       }
 
@@ -89,7 +88,6 @@ export function DriverSupabaseAuthProvider({ children }) {
       if (isReachabilitySessionError(ctx)) {
         const prior = sessionRef.current;
         if (prior?.driver && prior.routeTarget !== "session_error" && prior.routeTarget !== "not_driver") {
-          console.log("[BIOMETRIC_DEBUG] Command unreachable — keeping prior operational session");
           return prior;
         }
       }
@@ -98,21 +96,23 @@ export function DriverSupabaseAuthProvider({ children }) {
       if (driverId) {
         const security = await withTimeout(
           enforceRemoteDeviceSecurity(driverId)
-            .catch((err) => {
-              console.log("[BIOMETRIC_DEBUG] enforceRemoteDeviceSecurity threw: " + (err instanceof Error ? err.message : String(err)));
-              return { revoked: false, requirePassword: false };
+            .catch(() => {
+              // Fail closed for biometrics; keep operational session below.
+              return { revoked: false, requirePassword: true };
             }),
           DEVICE_SECURITY_TIMEOUT_MS,
-          { revoked: false, requirePassword: false },
+          { revoked: false, requirePassword: true },
         );
-        console.log("[BIOMETRIC_DEBUG] security result: " + JSON.stringify(security));
-        if (security.revoked || security.requirePassword) {
-          console.log("[BIOMETRIC_DEBUG] forcing sign-out due to device security check");
+        if (security.revoked) {
           refreshGeneration.current += 1;
           resetBiometricLockOnSignOut();
           await signOutDriver().catch(() => undefined);
           setSession(null);
           return null;
+        }
+        if (security.requirePassword) {
+          // Network / status failure: wipe biometric unlock, keep duty session.
+          await invalidateBiometricAccess(driverId).catch(() => undefined);
         }
       }
 
@@ -153,11 +153,6 @@ export function DriverSupabaseAuthProvider({ children }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, sessionArg) => {
-      const rt = sessionArg?.refresh_token;
-      console.log(
-        "[BIOMETRIC_DEBUG] onAuthStateChange event=" + event + " refresh " +
-          (typeof rt === "string" && rt ? "len=" + rt.length + " prefix=" + rt.slice(0, 6) : "null"),
-      );
       window.setTimeout(() => {
         void (async () => {
           if (event === "SIGNED_IN" && window.location.pathname === "/auth/verify") {
@@ -190,7 +185,6 @@ export function DriverSupabaseAuthProvider({ children }) {
             const offline =
               typeof navigator !== "undefined" && navigator.onLine === false;
             if (offline && sessionRef.current?.driver) {
-              console.log("[BIOMETRIC_DEBUG] SIGNED_OUT while offline — keeping operational session");
               setLoading(false);
               return;
             }

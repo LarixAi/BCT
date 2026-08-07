@@ -86,13 +86,39 @@ export function createOpenBankingAdapter(
       }
 
       if (config.tokenProxyBaseUrl) {
+        if (!config.accessToken?.trim()) {
+          throw new Error('Sign in is required before connecting a bank account.')
+        }
         const url = new URL('/bank/consent/start', config.tokenProxyBaseUrl)
         url.searchParams.set('organisation_id', input.organisationId)
         url.searchParams.set('redirect_uri', input.redirectUri)
         url.searchParams.set('state', state)
         if (config.clientIdPublic) url.searchParams.set('client_id', config.clientIdPublic)
         if (input.institutionHint) url.searchParams.set('institution', input.institutionHint)
-        return { connection, consentUrl: url.toString(), state }
+        const res = await fetch(url.toString(), {
+          method: 'GET',
+          headers: proxyHeaders(config),
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(`Bank consent could not start (${res.status}): ${text.slice(0, 200)}`)
+        }
+        const body = (await res.json()) as {
+          consentUrl?: string
+          state?: string
+          connection_id?: string
+        }
+        if (!body.consentUrl) {
+          throw new Error('Bank consent proxy did not return a consent URL.')
+        }
+        return {
+          connection: {
+            ...connection,
+            id: body.connection_id?.trim() || connection.id,
+          },
+          consentUrl: body.consentUrl,
+          state: body.state?.trim() || state,
+        }
       }
 
       const sandboxUrl = new URL(input.redirectUri)

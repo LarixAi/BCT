@@ -643,30 +643,59 @@ async function loadWorkspace(organisationId: string) {
 
 async function assertOrgAccess(request: Request, organisationId: string) {
   const auth = await verifyBearer(request)
-  if (!(auth instanceof Response)) {
-    const membership = await findFinanceMembership(auth.userId, organisationId)
-    if (!membership?.active) return { error: json({ error: 'organisation_access_denied' }, 403) }
-    return { userId: auth.userId, membership }
+  if (auth instanceof Response) return { error: auth }
+  const membership = await findFinanceMembership(auth.userId, organisationId)
+  if (!membership?.active) return { error: json({ error: 'organisation_access_denied' }, 403) }
+  return { userId: auth.userId, membership }
+}
+
+function isAllowedBankRedirectUri(redirectUri: string): boolean {
+  const exact = Deno.env.get('BANK_REDIRECT_URI')?.trim()
+  if (exact && redirectUri === exact) return true
+  const allowlist = (Deno.env.get('BANK_REDIRECT_URI_ALLOWLIST') ?? '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+  if (allowlist.includes(redirectUri)) return true
+  // Local Cost Control defaults (never treat as production allow-all).
+  try {
+    const parsed = new URL(redirectUri)
+    if (
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
+      (parsed.pathname === '/settings' || parsed.pathname.startsWith('/settings'))
+    ) {
+      return true
+    }
+  } catch {
+    return false
   }
-  // Sandbox proxy without JWT: only when partner secret is not configured.
-  if (!Deno.env.get('BANK_CLIENT_SECRET')?.trim()) {
-    return { userId: 'sandbox', membership: null }
-  }
-  return { error: auth }
+  return false
 }
 
 async function handleBankConsentStart(request: Request, url: URL): Promise<Response> {
   const organisationId = url.searchParams.get('organisation_id')?.trim()
   if (!organisationId) return json({ error: 'organisation_id_required' }, 400)
-  // Browser navigates here during OAuth — JWT is optional. Org must exist or be creatable.
+
+  const access = await assertOrgAccess(request, organisationId)
+  if ('error' in access && access.error) return access.error
 
   const state = url.searchParams.get('state')?.trim() || crypto.randomUUID()
   const redirectUri = url.searchParams.get('redirect_uri')?.trim()
   if (!redirectUri) return json({ error: 'redirect_uri_required' }, 400)
+  if (!isAllowedBankRedirectUri(redirectUri)) {
+    return json({ error: 'redirect_uri_not_allowed' }, 400)
+  }
+
+  const clientSecret = Deno.env.get('BANK_CLIENT_SECRET')?.trim()
+  if (!clientSecret) {
+    // Missing partner secret must fail closed — never invent a sandbox caller.
+    return json({ error: 'bank_credentials_not_configured' }, 503)
+  }
+
   const institution = url.searchParams.get('institution')?.trim() || 'NatWest Business'
   const providerId = Deno.env.get('BANK_PROVIDER')?.trim() || 'truelayer_sandbox'
-  const clientSecret = Deno.env.get('BANK_CLIENT_SECRET')?.trim()
   const clientId = url.searchParams.get('client_id')?.trim() || Deno.env.get('BANK_CLIENT_ID')?.trim()
+  if (!clientId) return json({ error: 'bank_client_id_required' }, 503)
 
   const connectionId = crypto.randomUUID()
   await ensureOrganisationShell(organisationId)
@@ -678,31 +707,27 @@ async function handleBankConsentStart(request: Request, url: URL): Promise<Respo
     external_connection_id: null,
     institution_name: institution,
     scopes: ['accounts', 'balance', 'transactions'],
-    secret_reference: clientSecret ? `vault:${organisationId}:${connectionId}` : `sandbox:${organisationId}`,
+    secret_reference: `vault:${organisationId}:${connectionId}`,
     updated_at: new Date().toISOString(),
   }))
 
-  if (clientSecret && clientId) {
-    const authBase = providerId.includes('sandbox')
-      ? 'https://auth.truelayer-sandbox.com'
-      : 'https://auth.truelayer.com'
-    const consent = new URL('/', authBase)
-    consent.searchParams.set('response_type', 'code')
-    consent.searchParams.set('client_id', clientId)
-    consent.searchParams.set('scope', 'info accounts balance transactions offline_access')
-    consent.searchParams.set('redirect_uri', redirectUri)
-    consent.searchParams.set('providers', 'uk-cs-mock uk-ob-all')
-    consent.searchParams.set('state', state)
-    return Response.redirect(consent.toString(), 302)
-  }
+  const authBase = providerId.includes('sandbox')
+    ? 'https://auth.truelayer-sandbox.com'
+    : 'https://auth.truelayer.com'
+  const consent = new URL('/', authBase)
+  consent.searchParams.set('response_type', 'code')
+  consent.searchParams.set('client_id', clientId)
+  consent.searchParams.set('scope', 'info accounts balance transactions offline_access')
+  consent.searchParams.set('redirect_uri', redirectUri)
+  consent.searchParams.set('providers', 'uk-cs-mock uk-ob-all')
+  consent.searchParams.set('state', state)
 
-  const sandbox = new URL(redirectUri)
-  sandbox.searchParams.set('bank_callback', '1')
-  sandbox.searchParams.set('bank_sandbox', '1')
-  sandbox.searchParams.set('state', state)
-  sandbox.searchParams.set('provider', providerId)
-  sandbox.searchParams.set('connection_id', connectionId)
-  return Response.redirect(sandbox.toString(), 302)
+  return json({
+    consentUrl: consent.toString(),
+    state,
+    connection_id: connectionId,
+    provider: providerId,
+  })
 }
 
 async function handleBankConsentComplete(request: Request): Promise<Response> {

@@ -177,10 +177,6 @@ async function ensureCompanyOnSession(supabase, accessToken, refreshToken) {
       );
       if (!selected.ok || !selected.accessToken) continue;
 
-      console.log(
-        "[BIOMETRIC_DEBUG] ensureCompanyOnSession rotated refresh via select-tenant " +
-          tokenTag(selected.refreshToken ?? refreshToken),
-      );
       await withTimeout(
         supabase.auth.setSession({
           access_token: selected.accessToken,
@@ -444,13 +440,7 @@ export async function getDriverSessionContext() {
   };
 }
 
-function tokenTag(token) {
-  if (typeof token !== "string" || !token) return "null";
-  return "len=" + token.length + " prefix=" + token.slice(0, 6);
-}
-
 export async function applyCommandTokens(supabase, accessToken, refreshToken) {
-  console.log("[BIOMETRIC_DEBUG] applyCommandTokens setSession refresh " + tokenTag(refreshToken));
   const applied = await withTimeout(
     supabase.auth.setSession({
       access_token: accessToken,
