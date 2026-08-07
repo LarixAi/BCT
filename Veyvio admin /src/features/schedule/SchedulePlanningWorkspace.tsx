@@ -190,8 +190,8 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
   const [actionMessage, setActionMessage] = useState<string | null>(null)
 
   const { data: trips = [], isLoading: tripsLoading } = useQuery({
-    queryKey: tKey(['operational-trips']),
-    queryFn: () => api.getOperationalTrips(),
+    queryKey: tKey(['operational-trips', serviceDate]),
+    queryFn: () => api.getOperationalTrips({ serviceDate }),
   })
 
   const { data: duties = [], isLoading: dutiesLoading } = useQuery({
@@ -210,6 +210,24 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
   })
 
   const unscheduledJobs = useMemo(() => listUnscheduledPlanningJobs(trips), [trips])
+  const safeguardingJobCount = useMemo(
+    () => unscheduledJobs.filter((job) => job.requirements.includes('Safeguarding')).length,
+    [unscheduledJobs],
+  )
+  const unpublishedDutyCount = useMemo(
+    () =>
+      duties.filter(
+        (duty) =>
+          duty.publicationStatus !== 'published' &&
+          duty.publicationStatus !== 'cancelled' &&
+          Boolean(duty.driver),
+      ).length,
+    [duties],
+  )
+  const unassignedTripCount = useMemo(
+    () => trips.filter((trip) => trip.assignmentStatus === 'unassigned' || !trip.driverId || !trip.vehicleId).length,
+    [trips],
+  )
 
   const filteredJobs = useMemo(() => {
     let list = unscheduledJobs
@@ -334,6 +352,25 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
           {actionMessage}
         </div>
       )}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">Unscheduled jobs</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-ink">{unscheduledJobs.length}</p>
+        </div>
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-violet-900">Safeguarding</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-violet-950">{safeguardingJobCount}</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-amber-900">Unpublished runs</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-amber-950">{unpublishedDutyCount}</p>
+        </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-red-900">Unassigned trips</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-red-950">{unassignedTripCount}</p>
+        </div>
+      </div>
 
       <div className="grid min-h-[32rem] gap-4 lg:grid-cols-[minmax(240px,280px)_1fr_minmax(260px,300px)]">
         <SectionCard title="Unscheduled jobs" className="flex flex-col">

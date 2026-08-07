@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, MapPin, Route } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { JourneySequencePanel } from '@/features/journey-sequence/JourneySequencePanel'
@@ -9,6 +9,8 @@ import { AssignmentHistoryPanel } from '@/features/transfers/AssignmentHistoryPa
 import { ManageAssignmentDrawer } from '@/features/transfers/ManageAssignmentDrawer'
 import { TransferNotificationPanel } from '@/features/transfers/TransferNotificationPanel'
 import { OperationalTrail } from '@/components/operations/OperationalTrail'
+import { JobExecutionPanel } from '@/components/operations/JobExecutionPanel'
+import { StopSequenceRouteMap } from '@/components/map/StopSequenceRouteMap'
 import { api } from '@/lib/api/client'
 import { cn } from '@/lib/cn'
 import { buildTrailFromTrip } from '@/lib/operations/operational-trail'
@@ -95,6 +97,11 @@ export function TripOperationalDetailPage({ trip, tab: controlledTab, onTabChang
       </div>
 
       <OperationalTrail steps={trail} />
+
+      <JobExecutionPanel
+        jobId={trip.dutyId ?? trip.id}
+        live={trip.status === 'in_progress' || trip.status === 'onboard'}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Info label="Driver" value={trip.driverName ?? 'Unassigned'} />
@@ -234,28 +241,27 @@ export function TripOperationalDetailPage({ trip, tab: controlledTab, onTabChang
       {tab === 'route' && (
         <div className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-            <SectionCard title="Route map" description="Stop sequence preview">
-              <div className="relative min-h-[220px] overflow-hidden rounded-xl border border-dashed border-border bg-gradient-to-br from-sky-50 via-surface to-emerald-50">
-                <div className="absolute inset-0 flex items-center justify-center p-6">
-                  <div className="w-full max-w-md space-y-2">
-                    {stops.slice(0, 6).map((stop, index) => (
-                      <div key={stop.id} className="flex items-center gap-2 text-sm">
-                        <MapPin className="h-4 w-4 shrink-0 text-command-600" />
-                        <span className="truncate text-ink">{stop.label}</span>
-                        <span className="ml-auto tabular-nums text-xs text-ink-soft">
-                          {stop.plannedTime ?? '—'}
-                        </span>
-                        {index < Math.min(stops.length, 6) - 1 && (
-                          <Route className="absolute left-3 hidden h-full w-px bg-border lg:block" />
-                        )}
-                      </div>
-                    ))}
-                    {stops.length > 6 && (
-                      <p className="text-xs text-ink-soft">+{stops.length - 6} more stops</p>
-                    )}
-                  </div>
-                </div>
-              </div>
+            <SectionCard title="Route map" description="Road route through the stop sequence">
+              <StopSequenceRouteMap
+                title="Trip route"
+                heightPx={380}
+                stops={stops.map((stop) => {
+                  const job = stop.jobId ? trip.jobs.find((j) => j.id === stop.jobId) : undefined
+                  const address =
+                    stop.address ||
+                    (stop.kind === 'pickup' ? job?.pickupAddress : null) ||
+                    (stop.kind === 'dropoff' ? job?.dropoffAddress : null) ||
+                    null
+                  return {
+                    id: stop.id,
+                    label: stop.label,
+                    address,
+                    kind:
+                      stop.kind === 'pickup' || stop.kind === 'dropoff' ? stop.kind : ('other' as const),
+                    plannedTime: stop.plannedTime,
+                  }
+                })}
+              />
             </SectionCard>
             <SectionCard title="Route metrics">
               <dl className="space-y-3 text-sm">

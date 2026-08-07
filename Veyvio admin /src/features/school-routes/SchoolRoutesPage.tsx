@@ -18,7 +18,10 @@ export function SchoolRoutesPage() {
 
   const { data: routes = [], isLoading } = useQuery({
     queryKey: tKey(['school-routes', tab]),
-    queryFn: () => api.getSchoolRoutes({ view: tab === 'routes' ? undefined : tab }),
+    queryFn: async () => {
+      const rows = await api.getSchoolRoutes({ view: tab === 'routes' ? undefined : tab })
+      return Array.isArray(rows) ? rows : []
+    },
     enabled: tab !== 'attendance',
   })
 

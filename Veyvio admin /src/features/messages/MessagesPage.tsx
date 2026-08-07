@@ -53,6 +53,7 @@ function conversationsFromMessages(rows: MessageRecord[]): Conversation[] {
         senderRole: m.sourceApp === 'DRIVER' ? 'Driver' : 'Admin',
         body: m.body,
         createdAt: m.createdAt,
+        readAt: m.readAt ?? null,
         mine: m.sourceApp !== 'DRIVER',
       })),
       context: {
@@ -383,6 +384,7 @@ export function MessagesPage() {
                     <p className="mt-0.5 whitespace-pre-wrap">{m.body}</p>
                     <p className={cn('mt-1 text-[10px]', m.mine && m.kind === 'user' ? 'text-command-100' : 'text-muted')}>
                       {new Date(m.createdAt).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                      {m.mine && m.kind === 'user' && m.readAt ? ' · Read by driver' : ''}
                     </p>
                   </div>
                 ))}

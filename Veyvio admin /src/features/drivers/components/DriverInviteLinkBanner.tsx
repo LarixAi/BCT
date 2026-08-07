@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom'
 
 function driverInviteUrl(token: string): { href: string; opensDriverApp: boolean } {
   const path = `/accept-invitation?token=${encodeURIComponent(token)}`
-  const driverOrigin = (import.meta.env.VITE_DRIVER_APP_URL as string | undefined)?.replace(/\/$/, '')
-  if (driverOrigin) {
-    return { href: `${driverOrigin}${path}`, opensDriverApp: true }
-  }
+  // Accept UI is hosted on Command (Admin). Prefer current Admin origin over Driver URL.
   if (typeof window !== 'undefined') {
     return { href: `${window.location.origin}${path}`, opensDriverApp: false }
+  }
+  const adminOrigin = (import.meta.env.VITE_ADMIN_APP_URL as string | undefined)?.replace(/\/$/, '')
+  if (adminOrigin) {
+    return { href: `${adminOrigin}${path}`, opensDriverApp: false }
   }
   return { href: path, opensDriverApp: false }
 }
@@ -56,8 +57,8 @@ export function DriverInviteLinkBanner({
             Invitation emailed{email ? ` to ${email}` : ''}.
           </p>
           <p className="mt-1">
-            Prefer the secure link below for first-login setup. Some mail apps (including Outlook) can invalidate the
-            Supabase “Accept invitation” button before the driver taps it.
+            Prefer the secure link below if the email button is hard to tap. The driver chooses their own password —
+            administrators never see it.
           </p>
         </>
       ) : manual ? (
@@ -81,8 +82,7 @@ export function DriverInviteLinkBanner({
       )}
       {!opensDriverApp ? (
         <p className="mt-2 text-xs opacity-80">
-          Tip: set <code className="rounded bg-surface/70 px-1">VITE_DRIVER_APP_URL</code> in Admin (for example{' '}
-          <code className="rounded bg-surface/70 px-1">http://192.168.1.136:8081</code>) so this link opens the Driver app.
+          This link opens the Command accept page where the driver sets their own password.
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -19,6 +19,7 @@ import {
   type DispatchControlAction,
 } from '@/features/dispatch/DispatchControlsPanel'
 import { DispatchSidePanels } from '@/features/dispatch/DispatchSidePanels'
+import { VehicleSwapApprovalPanel } from '@/features/dispatch/VehicleSwapApprovalPanel'
 import {
   listActiveRuns,
   listDispatchExceptions,
@@ -297,6 +298,16 @@ export function DispatchPage() {
 
   const liveVehicles = liveData?.vehicles ?? []
   const unassignedCount = dutiesForColumn(duties, 'unassigned').length
+  const blockedDutyCount = useMemo(() => {
+    return duties.filter((duty) => {
+      const { blocks } = complianceForDuty(duty)
+      return blocks.length > 0
+    }).length
+  }, [duties, drivers, vehicles])
+  const safeguardingJobCount = useMemo(
+    () => urgentJobs.filter((job) => job.reason.toLowerCase().includes('safeguarding')).length,
+    [urgentJobs],
+  )
 
   return (
     <div className="space-y-6">
@@ -341,9 +352,30 @@ export function DispatchPage() {
         ))}
       </div>
 
-      {unassignedCount > 0 && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-          {unassignedCount} {unassignedCount === 1 ? 'duty' : 'duties'} still unassigned for this date.
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-amber-900">Unassigned duties</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-amber-950">{unassignedCount}</p>
+        </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-red-900">Blocked assignments</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-red-950">{blockedDutyCount}</p>
+        </div>
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-violet-900">Safeguarding jobs</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-violet-950">{safeguardingJobCount}</p>
+        </div>
+        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-orange-900">Late jobs</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-orange-950">{lateJobs.length}</p>
+        </div>
+      </div>
+
+      <VehicleSwapApprovalPanel duties={duties} drivers={drivers} vehicles={vehicles} />
+
+      {dispatchExceptions.length > 0 && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-900">
+          {dispatchExceptions.length} critical dispatch {dispatchExceptions.length === 1 ? 'exception' : 'exceptions'} need attention.
         </p>
       )}
 

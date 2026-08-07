@@ -29,6 +29,7 @@ const ROUTE_MODULE_RULES: Array<{ prefix: string; module: PlatformModule }> = [
   { prefix: '/bookings', module: 'operations' },
   { prefix: '/jobs', module: 'operations' },
   { prefix: '/dial-a-ride', module: 'operations' },
+  { prefix: '/interests', module: 'operations' },
   { prefix: '/school-routes', module: 'operations' },
   { prefix: '/dispatch', module: 'operations' },
   { prefix: '/trips', module: 'operations' },
@@ -49,7 +50,8 @@ const ROUTE_MODULE_RULES: Array<{ prefix: string; module: PlatformModule }> = [
   { prefix: '/reports', module: 'reporting' },
   { prefix: '/performance', module: 'reporting' },
   { prefix: '/audit', module: 'audit' },
-  { prefix: '/settings/integrations', module: 'integrations' },
+  // Integration API keys are core Command admin (Register Interest partners, etc.) —
+  // do not hide behind the optional "integrations" entitlement module.
 ]
 
 export function moduleForPath(pathname: string): PlatformModule | null {

@@ -34,6 +34,10 @@ import { CreateDialARideRequestPage } from '@/features/dial-a-ride/CreateDialARi
 import { DialARideRequestDetailPage } from '@/features/dial-a-ride/DialARideRequestDetailPage'
 import { DialARideMembersPage } from '@/features/dial-a-ride/DialARideMembersPage'
 import { DialARideMemberDetailPage } from '@/features/dial-a-ride/DialARideMemberDetailPage'
+import {
+  IncomingInterestsPage,
+  InterestDetailPage,
+} from '@/features/interests/IncomingInterestsPage'
 import { SchoolRoutesPage } from '@/features/school-routes/SchoolRoutesPage'
 import { CreateSchoolRoutePage } from '@/features/school-routes/CreateSchoolRoutePage'
 import { SchoolRouteDetailPage } from '@/features/school-routes/SchoolRouteDetailPage'
@@ -81,6 +85,7 @@ import { AnnouncementsPage } from '@/features/announcements/AnnouncementsPage'
 import { DepotsPage } from '@/features/depots/DepotsPage'
 import { DepotDetailPage } from '@/features/depots/DepotDetailPage'
 import { DepotOnboardingWizard } from '@/features/depots/onboarding/DepotOnboardingWizard'
+import { PlacesPage } from '@/features/places/PlacesPage'
 import { CompanySettingsPage } from '@/features/settings/CompanySettingsPage'
 import { SecuritySettingsPage } from '@/features/settings/SecuritySettingsPage'
 import { UsersPage } from '@/features/settings/UsersPage'
@@ -201,6 +206,8 @@ function App() {
                 <Route path="dial-a-ride/members" element={<DialARideMembersPage />} />
                 <Route path="dial-a-ride/members/:memberId" element={<DialARideMemberDetailPage />} />
                 <Route path="dial-a-ride/requests/:requestId" element={<DialARideRequestDetailPage />} />
+                <Route path="interests" element={<IncomingInterestsPage />} />
+                <Route path="interests/:interestId" element={<InterestDetailPage />} />
                 <Route path="school-routes" element={<SchoolRoutesPage />} />
                 <Route path="school-routes/new" element={<CreateSchoolRoutePage />} />
                 <Route path="school-routes/:routeId/attendance" element={<SchoolRouteAttendancePage />} />
@@ -245,6 +252,7 @@ function App() {
                 <Route path="depots/new" element={<DepotOnboardingWizard />} />
                 <Route path="depots/:id/onboarding" element={<DepotOnboardingWizard />} />
                 <Route path="depots/:id" element={<DepotDetailPage />} />
+                <Route path="places" element={<PlacesPage />} />
                 <Route path="yard" element={<YardOperationsPage />} />
                 <Route path="maintenance" element={<MaintenancePage />} />
                 <Route path="maintenance/work-orders" element={<MaintenanceWorkOrdersRedirect />} />

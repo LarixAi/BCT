@@ -13,6 +13,7 @@ import type {
   DutyTrackResponse,
   DriverRecord,
   VehicleRecord,
+  VehicleSwapRequestRecord,
   RouteRecord,
   CustomerRecord,
   VehicleCheckRecord,
@@ -32,6 +33,7 @@ import type {
   InspectionRecord,
   MessageTemplateRecord,
   IntegrationRecord,
+  IntegrationApiKeyRecord,
   AuditLogRecord,
   PerformanceMetrics,
   YardSummary,
@@ -71,6 +73,25 @@ function apiErrorMessage(err: { message?: string | string[] }, fallback: string)
   return err.message ?? fallback
 }
 
+/** Command sometimes returns page hubs `{ items: [] }` for unimplemented lists — never treat as array. */
+function asRecordList<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw as T[]
+  if (raw && typeof raw === 'object' && Array.isArray((raw as { items?: unknown }).items)) {
+    return (raw as { items: T[] }).items
+  }
+  return []
+}
+
+function isCommandPageHub(raw: unknown): boolean {
+  return Boolean(
+    raw &&
+      typeof raw === 'object' &&
+      !Array.isArray(raw) &&
+      'path' in (raw as object) &&
+      'items' in (raw as object),
+  )
+}
+
 /** Live API payloads sometimes omit nested jobs; keep the UI board resilient. */
 function normalizeOperationalTrip(
   trip: import('@/lib/transfers/types').OperationalTrip,
@@ -103,6 +124,10 @@ function normalizeOperationalTrip(
     gpsLng: trip.gpsLng ?? null,
     driverOnline: trip.driverOnline ?? false,
     routeName: trip.routeName ?? null,
+    serviceDate:
+      trip.serviceDate ??
+      (trip as { plannedPickupAt?: string }).plannedPickupAt?.slice(0, 10) ??
+      null,
   }
 }
 
@@ -170,6 +195,11 @@ export class ApiClient {
 
   setPendingMemberships(memberships: TenantMembershipOption[]) {
     sessionStorage.setItem(MEMBERSHIPS_KEY, JSON.stringify(memberships))
+  }
+
+  clearPendingMemberships() {
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem(MEMBERSHIPS_KEY)
   }
 
   getPendingMemberships(): TenantMembershipOption[] {
@@ -297,6 +327,9 @@ export class ApiClient {
     // Drop any previous session so a new sign-in cannot inherit stale tokens.
     if (typeof window !== 'undefined') {
       localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(REFRESH_TOKEN_KEY)
+      sessionStorage.removeItem(MEMBERSHIPS_KEY)
+      sessionStorage.removeItem('has_tenant')
       this.accessToken = null
     }
 
@@ -1108,20 +1141,8 @@ export class ApiClient {
   }
 
   getVehicleReportsHub() {
-    return this.fetch<import('@/lib/vehicle-reports/types').VehicleReportsHubData>('/vehicle-reports/hub').catch(() => ({
-      operationalDate: new Date().toISOString().slice(0, 10),
-      summary: {
-        openReports: 0,
-        criticalReports: 0,
-        vehiclesVor: 0,
-        awaitingReview: 0,
-        awaitingVerification: 0,
-        overdueActions: 0,
-        repeatDefects: 0,
-        submittedToday: 0,
-      },
-      reports: [],
-    }))
+    // Live hub only — never fall back to empty mock summary in production Command.
+    return this.fetch<import('@/lib/vehicle-reports/types').VehicleReportsHubData>('/vehicle-reports/hub')
   }
 
   async getBodyConditionHub(depotId?: string) {
@@ -1129,8 +1150,8 @@ export class ApiClient {
     try {
       return await this.fetch<import('@/lib/body-condition/types').BodyConditionHubData>(`/body-condition/hub${q}`)
     } catch {
-      const { mockBodyConditionHub } = await import('@/lib/api/mock-body-condition')
-      return mockBodyConditionHub()
+      const { emptyBodyConditionHub } = await import('@/lib/body-condition/empty-hub')
+      return emptyBodyConditionHub()
     }
   }
 
@@ -1364,8 +1385,8 @@ export class ApiClient {
     }
   }
 
-  updateComplianceAutomationSettings(input: Record<string, unknown>) {
-    return this.fetch('/compliance/automation-settings', {
+  updateComplianceAutomationSettings(input: Partial<ComplianceAutomationSettings>) {
+    return this.fetch<ComplianceAutomationSettings>('/compliance/automation-settings', {
       method: 'PATCH',
       body: JSON.stringify(input),
     })
@@ -1651,55 +1672,46 @@ export class ApiClient {
     return this.fetch<import('@/lib/fleet-resources/types').FleetResourcesHubData>('/fleet-resources/hub')
   }
 
-  /** Attendance hub — live Command API (duties + leave). Mock only if the gateway is unavailable. */
+  /** Attendance hub — live Command API only; fail-closed empty hub when unavailable. */
   async getAttendanceHub() {
-    const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
+    const { emptyAttendanceHub, emptyAttendanceTrends } = await import('@/lib/attendance/empty-hub')
     try {
       const data = await this.fetch<import('@/lib/attendance/types').AttendanceHubData>(
         '/attendance/hub',
       )
-      // Reject generic commandPage shells / incomplete payloads.
       if (
         !data?.summary ||
         typeof data.summary.operationalDate !== 'string' ||
         !Array.isArray(data.board) ||
         !Array.isArray(data.leaveRequests)
       ) {
-        return mockAttendanceApi.getHub()
+        return emptyAttendanceHub()
       }
       return {
         ...data,
-        trends: data.trends ?? mockAttendanceApi.getHub().trends,
+        trends: data.trends ?? emptyAttendanceTrends(),
       }
     } catch {
-      return mockAttendanceApi.getHub()
+      return emptyAttendanceHub()
     }
   }
 
   async getLeaveRequests() {
-    const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
     try {
       const data = await this.fetch<import('@/lib/attendance/types').LeaveRequestRecord[]>(
         '/attendance/leave',
       )
-      // Empty array is a valid live response — do not replace with demo leave.
-      if (!Array.isArray(data)) return mockAttendanceApi.listLeave()
-      return data
+      return Array.isArray(data) ? data : []
     } catch {
-      return mockAttendanceApi.listLeave()
+      return []
     }
   }
 
   async updateLeaveRequest(row: import('@/lib/attendance/types').LeaveRequestRecord) {
-    try {
-      return await this.fetch<import('@/lib/attendance/types').LeaveRequestRecord>('/attendance/leave', {
-        method: 'PUT',
-        body: JSON.stringify(row),
-      })
-    } catch {
-      const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-      return mockAttendanceApi.updateLeave(row)
-    }
+    return this.fetch<import('@/lib/attendance/types').LeaveRequestRecord>('/attendance/leave', {
+      method: 'PUT',
+      body: JSON.stringify(row),
+    })
   }
 
   async getDriverHoliday(driverId: string) {
@@ -1751,30 +1763,24 @@ export class ApiClient {
   }
 
   async getAttendancePersonProfile(input: { personId?: string | null; personName?: string | null }) {
-    const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-    try {
-      const q = new URLSearchParams()
-      if (input.personId) q.set('personId', input.personId)
-      if (input.personName) q.set('personName', input.personName)
-      const data = await this.fetch<import('@/lib/attendance/types').AttendancePersonProfile | null>(
-        `/attendance/profile?${q}`,
-      )
-      // Gateway may return a generic page shell for unknown routes — require a real score payload.
-      if (!data || typeof data !== 'object' || !data.score || typeof data.score.score !== 'number') {
-        return mockAttendanceApi.getPersonProfile(input)
-      }
-      return {
-        ...data,
-        scoreContributors: Array.isArray(data.scoreContributors) ? data.scoreContributors : [],
-        upcomingLeave: Array.isArray(data.upcomingLeave) ? data.upcomingLeave : [],
-        recentEvents: Array.isArray(data.recentEvents) ? data.recentEvents : [],
-        returnToWork: Array.isArray(data.returnToWork) ? data.returnToWork : [],
-        managerNotes: Array.isArray(data.managerNotes) ? data.managerNotes : [],
-        adjustments: Array.isArray(data.adjustments) ? data.adjustments : [],
-        calendarMonth: data.calendarMonth ?? { year: new Date().getFullYear(), month: new Date().getMonth() + 1, days: [] },
-      }
-    } catch {
-      return mockAttendanceApi.getPersonProfile(input)
+    const q = new URLSearchParams()
+    if (input.personId) q.set('personId', input.personId)
+    if (input.personName) q.set('personName', input.personName)
+    const data = await this.fetch<import('@/lib/attendance/types').AttendancePersonProfile | null>(
+      `/attendance/profile?${q}`,
+    )
+    if (!data || typeof data !== 'object' || !data.score || typeof data.score.score !== 'number') {
+      return null
+    }
+    return {
+      ...data,
+      scoreContributors: Array.isArray(data.scoreContributors) ? data.scoreContributors : [],
+      upcomingLeave: Array.isArray(data.upcomingLeave) ? data.upcomingLeave : [],
+      recentEvents: Array.isArray(data.recentEvents) ? data.recentEvents : [],
+      returnToWork: Array.isArray(data.returnToWork) ? data.returnToWork : [],
+      managerNotes: Array.isArray(data.managerNotes) ? data.managerNotes : [],
+      adjustments: Array.isArray(data.adjustments) ? data.adjustments : [],
+      calendarMonth: data.calendarMonth ?? { year: new Date().getFullYear(), month: new Date().getMonth() + 1, days: [] },
     }
   }
 
@@ -1785,26 +1791,21 @@ export class ApiClient {
     note?: string
     actorName: string
   }) {
-    try {
-      return await this.fetch<import('@/lib/attendance/types').AttendanceBoardRow | null>(
-        '/attendance/classify',
-        { method: 'POST', body: JSON.stringify(input) },
-      )
-    } catch {
-      const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-      return mockAttendanceApi.classifyBoardRow(input)
-    }
+    return this.fetch<import('@/lib/attendance/types').AttendanceBoardRow | null>(
+      '/attendance/classify',
+      { method: 'POST', body: JSON.stringify(input) },
+    )
   }
 
   async getAttendanceCoverCandidates(dutyLabel?: string | null) {
+    const q = dutyLabel ? `?duty=${encodeURIComponent(dutyLabel)}` : ''
     try {
-      const q = dutyLabel ? `?duty=${encodeURIComponent(dutyLabel)}` : ''
-      return await this.fetch<import('@/lib/attendance/types').CoverCandidate[]>(
+      const data = await this.fetch<import('@/lib/attendance/types').CoverCandidate[]>(
         `/attendance/cover-candidates${q}`,
       )
+      return Array.isArray(data) ? data : []
     } catch {
-      const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-      return mockAttendanceApi.listCoverCandidates(dutyLabel)
+      return []
     }
   }
 
@@ -1816,15 +1817,10 @@ export class ApiClient {
     actorName: string
     overrideReason?: string
   }) {
-    try {
-      return await this.fetch<{ ok: true; message: string; actorName: string }>('/attendance/assign-cover', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      })
-    } catch {
-      const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-      return mockAttendanceApi.assignCover(input)
-    }
+    return this.fetch<{ ok: true; message: string; actorName: string }>('/attendance/assign-cover', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
   }
 
   recordResourceTransaction(input: {
@@ -2033,11 +2029,57 @@ export class ApiClient {
   }
 
   getIntegrations() {
-    return this.fetch<IntegrationRecord[]>('/integrations')
+    return this.fetch<IntegrationRecord[] | Record<string, unknown>>('/integrations')
+      .then((raw) => (Array.isArray(raw) ? raw : []))
+      .catch(() => [] as IntegrationRecord[])
+  }
+
+  getIntegrationApiKeys() {
+    return this.fetch<{ items?: IntegrationApiKeyRecord[] } | IntegrationApiKeyRecord[]>(
+      '/settings/integration-keys',
+    ).then((raw) => {
+      if (Array.isArray(raw)) return raw
+      return Array.isArray(raw?.items) ? raw.items : []
+    })
+  }
+
+  createIntegrationApiKey(input: { name: string; scopes?: string[]; expiresAt?: string | null }) {
+    return this.fetch<IntegrationApiKeyRecord>('/settings/integration-keys', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  }
+
+  revokeIntegrationApiKey(id: string) {
+    return this.fetch<IntegrationApiKeyRecord>(`/settings/integration-keys/${id}`, {
+      method: 'DELETE',
+    })
   }
 
   getAuditLogs() {
     return this.fetch<AuditLogRecord[]>('/audit')
+  }
+
+  getOverrideAuditEvents() {
+    return this.fetch<{ items?: Array<Record<string, unknown>> }>('/overrides').then((body) => {
+      const items = Array.isArray(body?.items) ? body.items : []
+      return items.map((row) => ({
+        id: String(row.id ?? ''),
+        ruleCode: row.ruleCode != null ? String(row.ruleCode) : undefined,
+        reason: row.reason != null ? String(row.reason) : undefined,
+        entityType: row.entityType != null ? String(row.entityType) : undefined,
+        entityId: row.entityId != null ? String(row.entityId) : undefined,
+        blockers: Array.isArray(row.blockers) ? row.blockers.map(String) : [],
+        occurredAt:
+          row.occurredAt != null
+            ? String(row.occurredAt)
+            : row.createdAt != null
+              ? String(row.createdAt)
+              : undefined,
+        createdAt: row.createdAt != null ? String(row.createdAt) : undefined,
+        actorUserId: row.actorUserId != null ? String(row.actorUserId) : null,
+      }))
+    })
   }
 
   getPricingRules() {
@@ -2576,10 +2618,67 @@ export class ApiClient {
     })
   }
 
-  getOperationalTrips(params?: { dutyId?: string; status?: string }) {
+  getPlaces() {
+    return this.fetch<import('@/lib/places/types').PlaceRecord[]>('/places')
+  }
+
+  createPlace(input: import('@/lib/places/types').CreatePlaceInput) {
+    return this.fetch<import('@/lib/places/types').PlaceRecord>('/places', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  }
+
+  getInterestSubmissions(params?: import('@/lib/interests/types').InterestListParams) {
+    const qs = new URLSearchParams()
+    if (params?.status) qs.set('status', params.status)
+    if (params?.source) qs.set('source', params.source)
+    if (params?.assignedTo) qs.set('assignedTo', params.assignedTo)
+    if (params?.service) qs.set('service', params.service)
+    if (params?.borough) qs.set('borough', params.borough)
+    if (params?.postcode) qs.set('postcode', params.postcode)
+    if (params?.accessibility) qs.set('accessibility', params.accessibility)
+    if (params?.marketing) qs.set('marketing', params.marketing)
+    if (params?.from) qs.set('from', params.from)
+    if (params?.to) qs.set('to', params.to)
+    if (params?.q) qs.set('q', params.q)
+    const q = qs.toString()
+    return this.fetch<import('@/lib/interests/types').InterestListResponse>(`/interests${q ? `?${q}` : ''}`)
+  }
+
+  getInterestSubmission(id: string) {
+    return this.fetch<import('@/lib/interests/types').InterestDetail>(`/interests/${id}`)
+  }
+
+  patchInterestSubmission(id: string, input: import('@/lib/interests/types').InterestPatchInput) {
+    return this.fetch<import('@/lib/interests/types').InterestDetail>(`/interests/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  }
+
+  acceptInterestSubmission(id: string) {
+    return this.fetch<import('@/lib/interests/types').InterestAcceptResult>(
+      `/interests/${encodeURIComponent(id)}/accept`,
+      { method: 'POST', body: '{}' },
+    )
+  }
+
+  rejectInterestSubmission(id: string, input?: { reason?: string; notifyCustomer?: boolean }) {
+    return this.fetch<import('@/lib/interests/types').InterestRejectResult>(
+      `/interests/${encodeURIComponent(id)}/reject`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input ?? {}),
+      },
+    )
+  }
+
+  getOperationalTrips(params?: { dutyId?: string; status?: string; serviceDate?: string }) {
     const qs = new URLSearchParams()
     if (params?.dutyId) qs.set('dutyId', params.dutyId)
     if (params?.status) qs.set('status', params.status)
+    if (params?.serviceDate) qs.set('serviceDate', params.serviceDate)
     const q = qs.toString()
     return this.fetch<import('@/lib/transfers/types').OperationalTrip[]>(
       `/operational-trips${q ? `?${q}` : ''}`,
@@ -2697,9 +2796,13 @@ export class ApiClient {
   }
 
   getOperationalTripsByBooking(bookingId: string) {
-    return this.fetch<import('@/lib/transfers/types').OperationalTrip[]>(
-      `/bookings/${bookingId}/operational-trips`,
-    ).then((trips) => trips.map(normalizeOperationalTrip))
+    return this.fetch<unknown>(`/bookings/${bookingId}/operational-trips`).then((raw) => {
+      if (!Array.isArray(raw)) return []
+      return raw
+        .filter(isOperationalTripLike)
+        .map(normalizeOperationalTrip)
+        .filter((trip) => !trip.bookingId || trip.bookingId === bookingId)
+    })
   }
 
   getJourneysByBooking(bookingId: string) {
@@ -2714,13 +2817,35 @@ export class ApiClient {
   }
 
   getTransferReport(periodFrom: string, periodTo: string) {
-    return this.fetch<import('@/lib/transfers/types').TransferReportSummary>(
+    return this.fetch<import('@/lib/transfers/types').TransferReportSummary | Record<string, unknown>>(
       `/transfers/report?from=${periodFrom}&to=${periodTo}`,
-    )
+    ).then((raw) => {
+      const data = (raw ?? {}) as Partial<import('@/lib/transfers/types').TransferReportSummary>
+      // command-api may still return a generic page shell for unimplemented transfer report.
+      if (!Array.isArray(data.byReason) || !Array.isArray(data.recentTransfers)) {
+        return {
+          periodFrom,
+          periodTo,
+          totalTransfers: Number(data.totalTransfers ?? 0),
+          byReason: Array.isArray(data.byReason) ? data.byReason : [],
+          byDepot: Array.isArray(data.byDepot) ? data.byDepot : [],
+          driverCaused: Number(data.driverCaused ?? 0),
+          vehicleCaused: Number(data.vehicleCaused ?? 0),
+          lateRecovery: Number(data.lateRecovery ?? 0),
+          managerOverrides: Number(data.managerOverrides ?? 0),
+          avgRecoveryMinutes: Number(data.avgRecoveryMinutes ?? 0),
+          passengersAffected: Number(data.passengersAffected ?? 0),
+          recentTransfers: Array.isArray(data.recentTransfers) ? data.recentTransfers : [],
+        } satisfies import('@/lib/transfers/types').TransferReportSummary
+      }
+      return data as import('@/lib/transfers/types').TransferReportSummary
+    })
   }
 
   getDialARideMembers() {
-    return this.fetch<import('@/lib/dial-a-ride/types').DialARideMember[]>('/dial-a-ride/members')
+    return this.fetch<unknown>('/dial-a-ride/members').then((raw) =>
+      asRecordList<import('@/lib/dial-a-ride/types').DialARideMember>(raw),
+    )
   }
 
   getDialARideMember(id: string) {
@@ -2729,7 +2854,9 @@ export class ApiClient {
 
   getDialARideRequests(params?: { view?: string }) {
     const q = params?.view ? `?view=${params.view}` : ''
-    return this.fetch<import('@/lib/dial-a-ride/types').DialARideRequestListItem[]>(`/dial-a-ride/requests${q}`)
+    return this.fetch<unknown>(`/dial-a-ride/requests${q}`).then((raw) =>
+      asRecordList<import('@/lib/dial-a-ride/types').DialARideRequestListItem>(raw),
+    )
   }
 
   getDialARideRequest(id: string) {
@@ -2737,12 +2864,18 @@ export class ApiClient {
   }
 
   getDialARideSummary() {
-    return this.fetch<{
-      requestsToday: number
-      awaitingDecision: number
-      unscheduled: number
-      membersTravelling: number
-    }>('/dial-a-ride/summary')
+    return this.fetch<unknown>('/dial-a-ride/summary').then((raw) => {
+      if (isCommandPageHub(raw) || !raw || typeof raw !== 'object') {
+        return { requestsToday: 0, awaitingDecision: 0, unscheduled: 0, membersTravelling: 0 }
+      }
+      const row = raw as Record<string, unknown>
+      return {
+        requestsToday: Number(row.requestsToday ?? 0),
+        awaitingDecision: Number(row.awaitingDecision ?? 0),
+        unscheduled: Number(row.unscheduled ?? 0),
+        membersTravelling: Number(row.membersTravelling ?? 0),
+      }
+    })
   }
 
   createDialARideRequestDraft(memberId?: string) {
@@ -2789,7 +2922,9 @@ export class ApiClient {
 
   getSchoolRoutes(params?: { view?: string }) {
     const q = params?.view ? `?view=${params.view}` : ''
-    return this.fetch<import('@/lib/school-routes/types').SchoolRouteListItem[]>(`/school-routes${q}`)
+    return this.fetch<unknown>(`/school-routes${q}`).then((raw) =>
+      asRecordList<import('@/lib/school-routes/types').SchoolRouteListItem>(raw),
+    )
   }
 
   getSchoolRoute(id: string) {
@@ -2797,12 +2932,18 @@ export class ApiClient {
   }
 
   getSchoolRoutesSummary() {
-    return this.fetch<{
-      activeRoutes: number
-      pupilsToday: number
-      unscheduledJobs: number
-      exceptions: number
-    }>('/school-routes/summary')
+    return this.fetch<unknown>('/school-routes/summary').then((raw) => {
+      if (isCommandPageHub(raw) || !raw || typeof raw !== 'object') {
+        return { activeRoutes: 0, pupilsToday: 0, unscheduledJobs: 0, exceptions: 0 }
+      }
+      const row = raw as Record<string, unknown>
+      return {
+        activeRoutes: Number(row.activeRoutes ?? 0),
+        pupilsToday: Number(row.pupilsToday ?? 0),
+        unscheduledJobs: Number(row.unscheduledJobs ?? 0),
+        exceptions: Number(row.exceptions ?? 0),
+      }
+    })
   }
 
   createSchoolRouteDraft() {
@@ -2827,8 +2968,33 @@ export class ApiClient {
   }
 
   getSchoolRouteAttendance(routeId: string) {
-    return this.fetch<import('@/lib/school-routes/types').SchoolRouteAttendanceRow[]>(
-      `/school-routes/${routeId}/attendance`,
+    return this.fetch<unknown>(`/school-routes/${routeId}/attendance`).then((raw) =>
+      asRecordList<import('@/lib/school-routes/types').SchoolRouteAttendanceRow>(raw),
+    )
+  }
+
+  listVehicleSwapRequests(status = 'pending') {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : ''
+    return this.fetch<VehicleSwapRequestRecord[]>(`/vehicle-swap-requests${qs}`)
+  }
+
+  approveVehicleSwapRequest(requestId: string, notes?: string) {
+    return this.fetch<VehicleSwapRequestRecord>(`/vehicle-swap-requests/${encodeURIComponent(requestId)}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ notes: notes ?? null }),
+    })
+  }
+
+  rejectVehicleSwapRequest(requestId: string, notes?: string) {
+    return this.fetch<VehicleSwapRequestRecord>(`/vehicle-swap-requests/${encodeURIComponent(requestId)}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ notes: notes ?? null }),
+    })
+  }
+
+  getJobExecution(jobId: string) {
+    return this.fetch<import('@/lib/operations/job-execution').JobExecutionSnapshot>(
+      `/jobs/${encodeURIComponent(jobId)}/execution`,
     )
   }
 

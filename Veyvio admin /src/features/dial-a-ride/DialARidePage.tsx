@@ -18,7 +18,10 @@ export function DialARidePage() {
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: tKey(['dial-a-ride-requests', tab]),
-    queryFn: () => api.getDialARideRequests({ view: tab === 'requests' ? undefined : tab }),
+    queryFn: async () => {
+      const rows = await api.getDialARideRequests({ view: tab === 'requests' ? undefined : tab })
+      return Array.isArray(rows) ? rows : []
+    },
     enabled: tab !== 'members',
   })
 

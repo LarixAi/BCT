@@ -36,6 +36,7 @@ export function PlatformSupportPage() {
 
       <p className="mb-4 text-sm text-muted">
         {active.length} active · {grants.length} recent. Open a customer to create a new grant.
+        Expired or revoked grants are refused by the API — staff cannot keep access past the time box.
       </p>
 
       <ul className="space-y-2">
@@ -57,7 +58,17 @@ export function PlatformSupportPage() {
                   {grant.expiresAt
                     ? ` · expires ${new Date(grant.expiresAt).toLocaleString()}`
                     : ''}
-                  {grant.revokedAt ? ' · revoked' : isActive ? ' · active' : ' · expired'}
+                  {grant.revokedAt
+                    ? ' · revoked'
+                    : isActive
+                      ? (() => {
+                          const ms = new Date(grant.expiresAt!).getTime() - Date.now()
+                          const hours = Math.max(0, Math.round(ms / (60 * 60 * 1000)))
+                          return hours < 48
+                            ? ` · active · ${hours}h remaining`
+                            : ' · active'
+                        })()
+                      : ' · expired (access refused)'}
                 </div>
               </div>
               <div className="flex gap-2">

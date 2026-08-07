@@ -568,7 +568,23 @@ const MOCK_COMPLIANCE_SETTINGS: ComplianceAutomationSettings = {
   blockAssignmentOnExpired: true,
   autoUnassignOnExpired: true,
   notifyRoles: ['company_owner', 'operations_manager', 'compliance_officer'],
+  blockExpiredLicence: true,
+  blockExpiredCpc: true,
+  blockExpiredDbs: true,
+  blockExpiredMedical: true,
+  blockExpiredMot: true,
+  blockExpiredInsurance: true,
+  blockExpiredTax: true,
+  blockExpiredPmi: true,
+  blockOverdueService: true,
+  blockOverdueTyreRetorque: true,
+  blockCriticalDefects: true,
+  blockVorVehicles: true,
+  requireTodaysCheckOnSignOn: true,
+  defectAutomationEnabled: true,
 }
+
+let mockPlaces: import('@/lib/places/types').PlaceRecord[] = []
 
 let mockMessages: MessageRecord[] = [
   {
@@ -795,6 +811,11 @@ export class MockApiClient {
 
   setPendingMemberships(memberships: TenantMembershipOption[]) {
     sessionStorage.setItem(MEMBERSHIPS_KEY, JSON.stringify(memberships))
+  }
+
+  clearPendingMemberships() {
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem(MEMBERSHIPS_KEY)
   }
 
   getPendingMemberships(): TenantMembershipOption[] {
@@ -2027,7 +2048,15 @@ export class MockApiClient {
 
   async getComplianceAutomationSettings(): Promise<ComplianceAutomationSettings> {
     await delay(50)
-    return MOCK_COMPLIANCE_SETTINGS
+    return { ...MOCK_COMPLIANCE_SETTINGS }
+  }
+
+  async updateComplianceAutomationSettings(
+    input: Partial<ComplianceAutomationSettings>,
+  ): Promise<ComplianceAutomationSettings> {
+    await delay(80)
+    Object.assign(MOCK_COMPLIANCE_SETTINGS, input)
+    return { ...MOCK_COMPLIANCE_SETTINGS }
   }
 
   async createMessage(input: {
@@ -2562,9 +2591,58 @@ export class MockApiClient {
     return MOCK_INTEGRATIONS
   }
 
+  async getIntegrationApiKeys(): Promise<import('./types').IntegrationApiKeyRecord[]> {
+    await delay(40)
+    return []
+  }
+
+  async createIntegrationApiKey(input: {
+    name: string
+    scopes?: string[]
+    expiresAt?: string | null
+  }): Promise<import('./types').IntegrationApiKeyRecord> {
+    await delay(80)
+    return {
+      id: `key-${Date.now()}`,
+      name: input.name,
+      keyPrefix: 'vyv_live_mockxx',
+      scopes: input.scopes ?? ['interests:create'],
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      secret: 'vyv_live_mock_secret_shown_once_only',
+    }
+  }
+
+  async revokeIntegrationApiKey(id: string): Promise<import('./types').IntegrationApiKeyRecord> {
+    await delay(40)
+    return {
+      id,
+      name: 'revoked',
+      keyPrefix: 'vyv_live_',
+      scopes: [],
+      status: 'revoked',
+      revokedAt: new Date().toISOString(),
+    }
+  }
+
   async getAuditLogs(): Promise<AuditLogRecord[]> {
     await delay()
     return MOCK_AUDIT
+  }
+
+  async getOverrideAuditEvents() {
+    await delay()
+    return [] as Array<{
+      id: string
+      ruleCode?: string
+      reason?: string
+      entityType?: string
+      entityId?: string
+      blockers?: string[]
+      occurredAt?: string
+      createdAt?: string
+      actorUserId?: string | null
+    }>
   }
 
   async getPricingRules(): Promise<PricingRuleRecord[]> {
@@ -2977,6 +3055,76 @@ export class MockApiClient {
     return mockDepotsApi.opsSnapshot(id, { vehicles, drivers, duties, staff })
   }
 
+  async getPlaces(): Promise<import('@/lib/places/types').PlaceRecord[]> {
+    await delay(50)
+    return [...mockPlaces]
+  }
+
+  async createPlace(
+    input: import('@/lib/places/types').CreatePlaceInput,
+  ): Promise<import('@/lib/places/types').PlaceRecord> {
+    await delay(80)
+    const record: import('@/lib/places/types').PlaceRecord = {
+      id: `place-${Date.now()}`,
+      kind: input.kind,
+      name: input.name,
+      address: input.address ?? null,
+      lat: input.lat,
+      lng: input.lng,
+      radiusM: input.radiusM ?? 120,
+      createdAt: new Date().toISOString(),
+    }
+    mockPlaces = [record, ...mockPlaces]
+    return record
+  }
+
+  async getInterestSubmissions(
+    _params?: import('@/lib/interests/types').InterestListParams,
+  ): Promise<import('@/lib/interests/types').InterestListResponse> {
+    await delay(40)
+    return {
+      summary: {
+        newToday: 0,
+        awaitingReview: 0,
+        assigned: 0,
+        contacted: 0,
+        qualified: 0,
+        converted: 0,
+        closed: 0,
+        spam: 0,
+      },
+      items: [],
+    }
+  }
+
+  async getInterestSubmission(id: string): Promise<import('@/lib/interests/types').InterestDetail> {
+    await delay(40)
+    throw new Error(`Interest submission ${id} is not available in mock mode`)
+  }
+
+  async patchInterestSubmission(
+    id: string,
+    _input: import('@/lib/interests/types').InterestPatchInput,
+  ): Promise<import('@/lib/interests/types').InterestDetail> {
+    await delay(40)
+    throw new Error(`Interest submission ${id} cannot be updated in mock mode`)
+  }
+
+  async acceptInterestSubmission(
+    id: string,
+  ): Promise<import('@/lib/interests/types').InterestAcceptResult> {
+    await delay(40)
+    throw new Error(`Interest submission ${id} cannot be accepted in mock mode`)
+  }
+
+  async rejectInterestSubmission(
+    id: string,
+    _input?: { reason?: string; notifyCustomer?: boolean },
+  ): Promise<import('@/lib/interests/types').InterestRejectResult> {
+    await delay(40)
+    throw new Error(`Interest submission ${id} cannot be rejected in mock mode`)
+  }
+
   async createDepot(input: import('@/lib/depots/types').CreateDepotInput, _actorName: string) {
     await delay(100)
     return mockDepotsApi.create(input)
@@ -3088,7 +3236,11 @@ export class MockApiClient {
     })
   }
 
-  async getOperationalTrips(params?: { dutyId?: string; status?: string }): Promise<OperationalTrip[]> {
+  async getOperationalTrips(params?: {
+    dutyId?: string
+    status?: string
+    serviceDate?: string
+  }): Promise<OperationalTrip[]> {
     await delay(50)
     return mockTransfersApi.listTrips(params)
   }
@@ -3320,6 +3472,51 @@ export class MockApiClient {
   async getSchoolRouteAttendance(routeId: string) {
     await delay(50)
     return mockSchoolRoutesApi.attendance(routeId)
+  }
+
+  async listVehicleSwapRequests(_status = 'pending') {
+    await delay(50)
+    return []
+  }
+
+  async approveVehicleSwapRequest(id: string, _notes?: string) {
+    await delay(50)
+    return {
+      id,
+      dutyId: 'duty-mock',
+      driverId: 'drv-mock',
+      currentVehicleId: 'veh-1',
+      requestedVehicleId: 'veh-2',
+      reason: 'Mock swap',
+      status: 'approved',
+      requestedAt: new Date().toISOString(),
+    }
+  }
+
+  async rejectVehicleSwapRequest(id: string, _notes?: string) {
+    await delay(50)
+    return {
+      id,
+      dutyId: 'duty-mock',
+      driverId: 'drv-mock',
+      currentVehicleId: 'veh-1',
+      requestedVehicleId: 'veh-2',
+      reason: 'Mock swap',
+      status: 'rejected',
+      requestedAt: new Date().toISOString(),
+    }
+  }
+
+  async getJobExecution(_jobId: string) {
+    await delay(50)
+    return {
+      events: [],
+      acceptedAt: null,
+      startedAt: null,
+      completedAt: null,
+      stopStatusById: {},
+      stopStatusBySequence: {},
+    }
   }
 
   async getCommandResource<T>(path: string): Promise<T> {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
@@ -39,14 +39,19 @@ function SourceBadge({ type }: { type: JobSourceType }) {
 export function JobsPage() {
   const [tab, setTab] = useState<TabId>('all')
   const [search, setSearch] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const today = new Date().toISOString().slice(0, 10)
+  const serviceDateParam = searchParams.get('serviceDate')
+  const serviceDate =
+    serviceDateParam && /^\d{4}-\d{2}-\d{2}$/.test(serviceDateParam) ? serviceDateParam : today
 
   const { data: trips = [], isLoading, error, isError } = useQuery({
-    queryKey: tKey(['operational-trips']),
-    queryFn: () => api.getOperationalTrips(),
+    queryKey: tKey(['operational-trips', serviceDate]),
+    queryFn: () => api.getOperationalTrips({ serviceDate }),
   })
 
   const jobs = useMemo(() => flattenTripsToJobs(trips), [trips])
-  const summary = useMemo(() => jobRegisterSummary(jobs), [jobs])
+  const summary = useMemo(() => jobRegisterSummary(jobs, serviceDate), [jobs, serviceDate])
 
   const filtered = useMemo(() => {
     let list = jobs
@@ -84,7 +89,18 @@ export function JobsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-ink">Jobs</h1>
           <p className="text-sm text-ink-soft">
-            All transport work requiring scheduling, delivery or completion.
+            Transport work for{' '}
+            <input
+              type="date"
+              value={serviceDate}
+              onChange={(e) => {
+                const next = e.target.value
+                if (!next) return
+                setSearchParams(next === today ? {} : { serviceDate: next })
+              }}
+              className="mx-1 rounded border border-border bg-surface px-2 py-0.5 text-sm font-medium text-ink"
+            />{' '}
+            (service date). Assign + publish a duty before work appears on Driver.
           </p>
         </div>
         <Link

@@ -9,9 +9,10 @@ describe('production api bundle must not import hybrid mock layer', () => {
     expect(index).not.toContain('withOperationsMock')
   })
 
-  it('config defaults mock to opt-in only', () => {
-    const config = readFileSync(resolve('src/lib/api/config.ts'), 'utf8')
-    expect(config).toContain("import.meta.env.VITE_MOCK_API === 'true'")
-    expect(config).not.toContain("!== 'false'")
+  it('real-client does not fall back to attendance or body-condition mocks', () => {
+    const realClient = readFileSync(resolve('src/lib/api/real-client.ts'), 'utf8')
+    expect(realClient).not.toContain('mock-hub')
+    expect(realClient).not.toContain('mock-body-condition')
+    expect(realClient).toContain('empty-hub')
   })
 })

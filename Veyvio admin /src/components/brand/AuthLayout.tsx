@@ -39,6 +39,12 @@ export function AuthLayout({
 
         {footer}
 
+        <div className="mt-6 text-center text-sm">
+          <a href="https://veyvio.co.uk" className={authLinkClass}>
+            Back to veyvio.co.uk
+          </a>
+        </div>
+
         {!isMockApi ? (
           <p className="mt-6 text-center text-[11px] text-muted/80">Connected to Command API</p>
         ) : null}

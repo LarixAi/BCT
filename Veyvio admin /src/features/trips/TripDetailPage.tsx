@@ -1,4 +1,5 @@
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { TripOperationalDetailPage } from '@/features/trips/TripOperationalDetailPage'
@@ -9,6 +10,7 @@ import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 export function TripDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const runId = searchParams.get('run')
   const tab = searchParams.get('tab')
@@ -23,6 +25,11 @@ export function TripDetailPage() {
     enabled: Boolean(id),
     retry: false,
   })
+
+  useEffect(() => {
+    if (!trip || !id || trip.id === id) return
+    navigate(`/trips/${trip.id}${searchParams.toString() ? `?${searchParams}` : ''}`, { replace: true })
+  }, [trip, id, navigate, searchParams])
 
   if (tripLoading) {
     return <p className="text-sm text-muted">Loading trip…</p>

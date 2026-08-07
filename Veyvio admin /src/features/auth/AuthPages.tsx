@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AuthLayout, authInputClass, authLinkClass, authPrimaryButtonClass } from '@/components/brand/AuthLayout'
 import { api, isMockApi } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
@@ -7,11 +7,15 @@ import { tenantSetupPath } from '@/features/auth/SignupPages'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login, verifyMfa } = useAuth()
   const [email, setEmail] = useState(isMockApi ? 'demo@veyvio.com' : '')
   const [password, setPassword] = useState(isMockApi ? 'demo' : '')
   const [rememberMe, setRememberMe] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => {
+    const state = location.state as { message?: string } | null
+    return state?.message ?? ''
+  })
   const [loading, setLoading] = useState(false)
   const [mfa, setMfa] = useState<{
     challengeId: string
@@ -186,6 +190,8 @@ export function SelectCompanyPage() {
   const [sessionReady, setSessionReady] = useState(isMockApi)
 
   useEffect(() => {
+    let cancelled = false
+
     if (isMockApi) {
       const pending = api.getPendingMemberships()
       if (pending.length) setMemberships(pending)
@@ -194,47 +200,79 @@ export function SelectCompanyPage() {
       return
     }
 
-    if (!api.hasAuthSession()) {
-      setRefreshing(false)
-      setSessionReady(false)
-      if (!api.getPendingMemberships().length) {
-        navigate('/login', { replace: true })
-      } else {
-        setError('Your session ended. Sign in again to select a company.')
-      }
-      return
-    }
-
-    async function refreshMemberships() {
+    async function bootstrap() {
       try {
+        // Revive access token from refresh when the JWT has expired mid-flow.
+        const token = await api.ensureValidAccessToken()
+        if (cancelled) return
+
+        if (!token) {
+          // Company list left in sessionStorage without tokens is unusable — clean up.
+          api.clearPendingMemberships()
+          setMemberships([])
+          setSessionReady(false)
+          setRefreshing(false)
+          navigate('/login', {
+            replace: true,
+            state: { message: 'Your session ended. Sign in again to select a company.' },
+          })
+          return
+        }
+
         const fresh = await api.listMemberships()
+        if (cancelled) return
         if (fresh.length) {
           api.setPendingMemberships(fresh)
           setMemberships(fresh)
+        } else {
+          const pending = api.getPendingMemberships()
+          if (pending.length) setMemberships(pending)
         }
         setSessionReady(true)
         setError('')
       } catch (err) {
+        if (cancelled) return
         const message = err instanceof Error ? err.message.toLowerCase() : ''
-        if (message.includes('session') && (message.includes('expired') || message.includes('invalid'))) {
+        if (
+          message.includes('session') &&
+          (message.includes('expired') || message.includes('invalid') || message.includes('sign in'))
+        ) {
+          api.clearPendingMemberships()
           setSessionReady(false)
-          navigate('/login', { replace: true })
+          navigate('/login', {
+            replace: true,
+            state: { message: 'Your session ended. Sign in again to select a company.' },
+          })
           return
         }
         setSessionReady(true)
         setError(err instanceof Error ? err.message : 'Could not load companies')
       } finally {
-        setRefreshing(false)
+        if (!cancelled) setRefreshing(false)
       }
     }
 
-    void refreshMemberships()
+    void bootstrap()
+    return () => {
+      cancelled = true
+    }
   }, [navigate])
 
   if (refreshing) {
     return (
       <AuthLayout title="Loading companies" subtitle="Checking which operators your account can access.">
         <p className="text-sm text-muted">One moment…</p>
+      </AuthLayout>
+    )
+  }
+
+  if (!sessionReady) {
+    return (
+      <AuthLayout title="Sign in required" subtitle="Your session ended before a company was selected.">
+        {error ? <p className="mb-4 rounded-lg bg-critical/10 px-3 py-2 text-sm text-critical">{error}</p> : null}
+        <Link to="/login" className={`inline-flex items-center justify-center ${authPrimaryButtonClass}`}>
+          Back to sign in
+        </Link>
       </AuthLayout>
     )
   }
@@ -263,7 +301,11 @@ export function SelectCompanyPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message.toLowerCase() : ''
       if (message.includes('session') && (message.includes('expired') || message.includes('invalid'))) {
-        navigate('/login', { replace: true })
+        api.clearPendingMemberships()
+        navigate('/login', {
+          replace: true,
+          state: { message: 'Your session ended. Sign in again to select a company.' },
+        })
         return
       }
       setError(err instanceof Error ? err.message : 'Could not select company')
@@ -283,18 +325,13 @@ export function SelectCompanyPage() {
         </p>
       ) : null}
       {error ? <p className="mb-4 rounded-lg bg-critical/10 px-3 py-2 text-sm text-critical">{error}</p> : null}
-      {!sessionReady ? (
-        <Link to="/login" className={`mb-4 inline-flex items-center justify-center ${authPrimaryButtonClass}`}>
-          Back to sign in
-        </Link>
-      ) : null}
       <ul className="space-y-2">
         {memberships.map((m) => (
           <li key={m.tenantId}>
             <button
               type="button"
               onClick={() => void handleSelect(m.tenantId)}
-              disabled={loading != null || !sessionReady}
+              disabled={loading != null}
               className="flex w-full items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3 text-left transition hover:border-command-500 hover:bg-command-50 disabled:opacity-60"
             >
               <div>

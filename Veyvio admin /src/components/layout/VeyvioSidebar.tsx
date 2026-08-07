@@ -21,6 +21,7 @@ import {
   Megaphone,
   Menu,
   MessageSquare,
+  Inbox,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
@@ -47,6 +48,7 @@ import {
 import { CommandWordmark } from "@/components/brand/CommandWordmark";
 import { useTheme } from "@/lib/theme-context";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api/client";
 import { filterNavByModules } from "@/lib/platform/module-routes";
 import { useSidebarNavBadges } from "./useSidebarNavBadges";
 
@@ -85,6 +87,7 @@ const sectionDefs: SidebarSection[] = [
       { label: "Bookings", href: "/bookings", icon: CalendarDays },
       { label: "Jobs", href: "/jobs", icon: Briefcase },
       { label: "Dial-a-Ride", href: "/dial-a-ride", icon: Users },
+      { label: "Incoming Interests", href: "/interests", icon: Inbox },
       { label: "School Routes", href: "/school-routes", icon: School },
       { label: "Schedule", href: "/schedule", icon: CalendarDays },
       { label: "Dispatch", href: "/dispatch", icon: Gauge },
@@ -610,7 +613,11 @@ export function VeyvioSidebar({
                       onProfileAction?.(action.action);
                       if (action.action === "profile") navigate("/profile");
                       if (action.action === "settings") navigate("/settings/company");
-                      if (action.action === "switch-company") navigate("/select-company");
+                      if (action.action === "switch-company") {
+                        const token = api.getToken();
+                        if (token) api.setToken(token, false);
+                        navigate("/select-company");
+                      }
                     }}
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink-soft hover:bg-page hover:text-ink"
                   >

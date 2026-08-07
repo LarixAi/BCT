@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { LiveVehicleMap, type MapStopMarker } from '@/components/map/LiveVehicleMap'
 import { SectionCard } from '@/components/ui'
@@ -10,6 +10,7 @@ import { AssignmentHistoryPanel } from '@/features/transfers/AssignmentHistoryPa
 import { ManageAssignmentButton } from '@/features/transfers/ManageAssignmentButton'
 import { TransferNotificationPanel } from '@/features/transfers/TransferNotificationPanel'
 import { OperationalTrail } from '@/components/operations/OperationalTrail'
+import { JobExecutionPanel } from '@/components/operations/JobExecutionPanel'
 import { api } from '@/lib/api/client'
 import { cn } from '@/lib/cn'
 import { buildTrailFromDuty } from '@/lib/operations/operational-trail'
@@ -22,6 +23,7 @@ import {
   validateRunPublish,
 } from '@/lib/runs/run-register'
 import { formatDutyClock } from '@/lib/ops/runs-trips-schedule'
+import { stopExecutionDone } from '@/lib/operations/job-execution'
 import type { OperationalTrip } from '@/lib/transfers/types'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
@@ -89,6 +91,14 @@ export function RunWorkspacePage({
   }, [duty])
 
   const trail = useMemo(() => buildTrailFromDuty(duty, opsTrip), [duty, opsTrip])
+
+  const dutyLive = ['signed_on', 'in_progress', 'passenger_boarded'].includes(duty.status)
+  const { data: jobExecution } = useQuery({
+    queryKey: tKey(['job-execution', duty.id]),
+    queryFn: () => api.getJobExecution(duty.id),
+    enabled: tab === 'timeline-duty',
+    refetchInterval: dutyLive ? 15_000 : false,
+  })
 
   const timelineEvents = useMemo(() => {
     const events: { id: string; at: string; title: string; detail: string }[] = []
@@ -302,26 +312,29 @@ export function RunWorkspacePage({
       )}
 
       {tab === 'timeline-duty' && (
-        <SectionCard title="Duty timeline" description="Sign-on through sign-off">
+        <div className="space-y-4">
+          <JobExecutionPanel jobId={duty.id} live={dutyLive} />
+          <SectionCard title="Duty timeline" description="Sign-on through sign-off — stops reflect Command execution when available">
           <ol className="relative space-y-4 border-l-2 border-command-200 pl-6">
             <TimelineItem
               time={formatDutyClock(duty.startTime)}
               title="Planned sign-on"
               detail={driverName ?? 'Driver unassigned'}
-              done={['signed_on', 'in_progress', 'passenger_boarded', 'completed'].includes(duty.status)}
+              done={Boolean(jobExecution?.startedAt) || ['signed_on', 'in_progress', 'passenger_boarded', 'completed'].includes(duty.status)}
             />
             {stops
               .slice()
               .sort((a, b) => a.stopOrder - b.stopOrder)
               .map((stop) => {
                 const cp = checkpoints.find((c) => c.routeStopId === stop.id)
+                const commandDone = stopExecutionDone(jobExecution, { id: stop.id, stopOrder: stop.stopOrder })
                 return (
                   <TimelineItem
                     key={stop.id}
                     time={stop.pickupTime ?? stop.dropoffTime ?? '—'}
                     title={stop.name}
                     detail={stop.address ?? 'Stop'}
-                    done={Boolean(cp?.arrivedAt)}
+                    done={commandDone || Boolean(cp?.arrivedAt)}
                   />
                 )
               })}
@@ -332,10 +345,11 @@ export function RunWorkspacePage({
               time={formatDutyClock(duty.endTime)}
               title="Planned sign-off"
               detail={formatWorkingTime(runWorkingTimeMinutes(duty))}
-              done={duty.status === 'completed' || duty.status === 'signed_off'}
+              done={Boolean(jobExecution?.completedAt) || duty.status === 'completed' || duty.status === 'signed_off'}
             />
           </ol>
         </SectionCard>
+        </div>
       )}
 
       {tab === 'driver' && (
