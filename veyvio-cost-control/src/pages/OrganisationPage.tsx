@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { MoneyText, StatusPill } from '../components/Money'
 import { PersonAvatar } from '../components/PersonAvatar'
@@ -20,6 +20,13 @@ export function OrganisationPage() {
   const employeeCostReferences = store.employeeCostReferences ?? []
   const [showAllPeople, setShowAllPeople] = useState(false)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [externalPayrollId, setExternalPayrollId] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [expectedPounds, setExpectedPounds] = useState('')
+  const [costCentre, setCostCentre] = useState('')
+  const [formMessage, setFormMessage] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const tree = useMemo(() => buildOrgTree(orgNodes), [orgNodes])
   const wageMembers = useMemo(
@@ -40,16 +47,40 @@ export function OrganisationPage() {
   const expectedTotal = sumExpectedEmployerCost(employeeCostReferences)
   const nodeTitle = Object.fromEntries(orgNodes.map((n) => [n.id, n.title]))
 
-  if (!orgNodes.length) {
-    return (
-      <div className="page">
-        <WageHubNav />
-        <p className="callout critical">
-          Organisation structure is not loaded. Refresh the page to reload the demo seed.
-        </p>
-      </div>
-    )
+  async function onAddWageMember(event: FormEvent) {
+    event.preventDefault()
+    setFormError(null)
+    setFormMessage(null)
+    setSaving(true)
+    try {
+      const pounds = Number(expectedPounds || '0')
+      if (!Number.isFinite(pounds) || pounds < 0) {
+        throw new Error('Expected employer cost must be a non-negative amount in pounds')
+      }
+      const result = await store.upsertEmployeeCostReferences([
+        {
+          externalPayrollId: externalPayrollId.trim(),
+          displayName: displayName.trim(),
+          costCentre: costCentre.trim(),
+          employmentKind: 'employed',
+          wageCostBearing: true,
+          expectedEmployerCostMinor: Math.round(pounds * 100),
+          allocationComplete: Boolean(costCentre.trim()),
+          active: true,
+        },
+      ])
+      setFormMessage(`Saved ${result.upserted} wage-cost member(s).`)
+      setExternalPayrollId('')
+      setDisplayName('')
+      setExpectedPounds('')
+      setCostCentre('')
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Could not save wage-cost member')
+    } finally {
+      setSaving(false)
+    }
   }
+
   return (
     <div className="page">
       <header className="page-header">
@@ -66,8 +97,16 @@ export function OrganisationPage() {
 
       <p className="callout info">
         Board and volunteer roles may appear in the structure without employer wage cost. Only
-        wage-cost-bearing members feed payroll cost control.
+        wage-cost-bearing members feed payroll cost control. Add members here so payroll summary
+        imports can match provider ids.
       </p>
+
+      {!orgNodes.length ? (
+        <p className="callout attention">
+          Organisational tree is not loaded for this company yet. You can still maintain the
+          wage-cost member register below.
+        </p>
+      ) : null}
 
       <div className="kpi-grid dense">
         <div className="kpi">
@@ -92,6 +131,58 @@ export function OrganisationPage() {
         </div>
       </div>
 
+      <section className="panel">
+        <h2>Add wage-cost member</h2>
+        <p className="muted">
+          Upserts by external payroll id. Expected employer cost is the register value used for
+          variance checks — not a payslip.
+        </p>
+        <form className="form-grid" onSubmit={onAddWageMember}>
+          <label>
+            External payroll id
+            <input
+              value={externalPayrollId}
+              onChange={(e) => setExternalPayrollId(e.target.value)}
+              required
+              placeholder="PRV-1001"
+            />
+          </label>
+          <label>
+            Display name
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
+              placeholder="Alex Founder"
+            />
+          </label>
+          <label>
+            Expected employer cost (£)
+            <input
+              value={expectedPounds}
+              onChange={(e) => setExpectedPounds(e.target.value)}
+              inputMode="decimal"
+              placeholder="5118.00"
+            />
+          </label>
+          <label>
+            Cost centre
+            <input
+              value={costCentre}
+              onChange={(e) => setCostCentre(e.target.value)}
+              placeholder="CC-OPS"
+            />
+          </label>
+          <div className="form-actions">
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Save member'}
+            </button>
+          </div>
+        </form>
+        {formMessage ? <p className="callout healthy">{formMessage}</p> : null}
+        {formError ? <p className="callout critical">{formError}</p> : null}
+      </section>
+
       <div className="org-layout">
         <section className="panel org-tree-panel">
           <div className="org-tree-head">
@@ -102,18 +193,22 @@ export function OrganisationPage() {
               </button>
             ) : null}
           </div>
-          <ul className="org-tree">
-            {tree.map((node) => (
-              <OrgBranch
-                key={node.id}
-                node={node}
-                depth={0}
-                selectedId={selectedNodeId}
-                onSelect={setSelectedNodeId}
-                people={employeeCostReferences}
-              />
-            ))}
-          </ul>
+          {tree.length ? (
+            <ul className="org-tree">
+              {tree.map((node) => (
+                <OrgBranch
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  selectedId={selectedNodeId}
+                  onSelect={setSelectedNodeId}
+                  people={employeeCostReferences}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">No organisational nodes loaded for this company.</p>
+          )}
         </section>
 
         <section className="panel">

@@ -205,5 +205,28 @@ describe('cost control repositories', () => {
       'https://finance.example.test/finance/imports/payroll-summary',
     )
   })
+
+  it('posts authenticated employee cost-reference upserts', async () => {
+    const workspace = createSeedStore()
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ upserted: 1, workspace }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    const repository = createApiCostControlRepository({
+      apiBaseUrl: 'https://finance.example.test',
+      fetchImpl,
+    })
+
+    const result = await repository.upsertEmployeeCostReferences(session, [
+      { externalPayrollId: 'PRV-1', displayName: 'Alex', expectedEmployerCostMinor: 1000 },
+    ])
+
+    expect(result.upserted).toBe(1)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://finance.example.test/finance/employee-cost-references/upsert',
+    )
+  })
 })
 

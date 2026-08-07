@@ -10,6 +10,7 @@ import {
 } from '../_shared/finance-review-decision.ts'
 import { importCostCsvForPersist } from '../_shared/finance-csv-import.ts'
 import { importPayrollSummaryForPersist } from '../_shared/finance-payroll-summary-import.ts'
+import { parseEmployeeCostReferenceInputs } from '../_shared/finance-employee-cost-references.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -87,6 +88,9 @@ Deno.serve(async (request) => {
     }
     if (path === '/finance/imports/payroll-summary' && request.method === 'POST') {
       return await handlePayrollSummaryImport(request)
+    }
+    if (path === '/finance/employee-cost-references/upsert' && request.method === 'POST') {
+      return await handleEmployeeCostReferenceUpsert(request)
     }
     if (path === '/bank/consent/start' && request.method === 'GET') {
       return await handleBankConsentStart(request, url)
@@ -1060,6 +1064,116 @@ async function handlePayrollSummaryImport(request: Request): Promise<Response> {
         fileName,
       },
       result: parsed,
+      workspace,
+    },
+    200,
+  )
+}
+
+async function handleEmployeeCostReferenceUpsert(request: Request): Promise<Response> {
+  const auth = await verifyBearer(request)
+  if (auth instanceof Response) return auth
+
+  const organisationId = request.headers.get('X-Veyvio-Organisation-ID')?.trim()
+  if (!organisationId) return json({ error: 'active_organisation_required' }, 400)
+
+  const membership = await findFinanceMembership(auth.userId, organisationId)
+  if (!membership?.active) return json({ error: 'organisation_access_denied' }, 403)
+  if (!roleAllowsPayrollImport(membership.role)) {
+    return json({ error: 'finance_permission_denied' }, 403)
+  }
+
+  await ensureOrganisationShell(organisationId)
+  await cc('organisation_memberships.upsert', admin.from('organisation_memberships').upsert(
+    {
+      id: `ccm_${organisationId}_${auth.userId}`,
+      organisation_id: organisationId,
+      user_subject: auth.userId,
+      role: membership.role,
+      active: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'organisation_id,user_subject' },
+  ))
+
+  let body: Record<string, unknown>
+  try {
+    body = (await request.json()) as Record<string, unknown>
+  } catch {
+    return json({ error: 'invalid_json' }, 400)
+  }
+
+  let employees
+  try {
+    employees = parseEmployeeCostReferenceInputs(body.employees)
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'invalid_employees'
+    return json({ error: code }, 400)
+  }
+
+  const now = new Date().toISOString()
+  const { data: existingRows } = await admin
+    .from('employee_cost_references')
+    .select('id, external_payroll_id')
+    .eq('organisation_id', organisationId)
+  const idByExternal = new Map(
+    (existingRows ?? []).map((row) => [
+      String(row.external_payroll_id).toUpperCase(),
+      String(row.id),
+    ]),
+  )
+
+  await cc(
+    'employee_cost_references.upsert',
+    admin.from('employee_cost_references').upsert(
+      employees.map((e) => {
+        const existingId = idByExternal.get(e.externalPayrollId.toUpperCase())
+        return {
+          id: existingId ?? e.id,
+          organisation_id: organisationId,
+          external_payroll_id: e.externalPayrollId,
+          display_name: e.displayName,
+          org_node_id: e.orgNodeId,
+          role_title: e.roleTitle,
+          cost_centre: e.costCentre,
+          employment_kind: e.employmentKind,
+          wage_cost_bearing: e.wageCostBearing,
+          expected_employer_cost_minor: e.expectedEmployerCostMinor,
+          overtime_minor: e.overtimeMinor,
+          employer_ni_minor: e.employerNiMinor,
+          employer_pension_minor: e.employerPensionMinor,
+          allocation_complete: e.allocationComplete,
+          active: e.active,
+          updated_at: now,
+          created_at: now,
+        }
+      }),
+      { onConflict: 'organisation_id,external_payroll_id' },
+    ),
+  )
+  await cc(
+    'audit_events.insert',
+    admin.from('audit_events').insert({
+      id: crypto.randomUUID(),
+      organisation_id: organisationId,
+      actor_id: auth.userId,
+      action: 'payroll.upsert_employee_cost_references',
+      entity_type: 'employee_cost_references',
+      entity_id: organisationId,
+      reason: `${employees.length} employee cost reference(s)`,
+      before_state: null,
+      after_state: {
+        count: employees.length,
+        externalPayrollIds: employees.map((e) => e.externalPayrollId),
+      },
+      created_at: now,
+    }),
+  )
+
+  const workspace = await loadWorkspace(organisationId)
+  return json(
+    {
+      upserted: employees.length,
       workspace,
     },
     200,

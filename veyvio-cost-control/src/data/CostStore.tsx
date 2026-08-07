@@ -32,6 +32,7 @@ import {
   resolveBankAdapter,
 } from '../integrations/bank'
 import type { ReviewItem } from '../domain/types'
+import type { EmployeeCostReference } from '../domain/org-structure'
 import {
   advanceWageBatch,
   createWageAdjustment,
@@ -84,6 +85,14 @@ type StoreApi = CostControlStore & {
     sandbox?: boolean
   }) => Promise<void>
   disconnectBank: () => Promise<void>
+  upsertEmployeeCostReferences: (
+    employees: Array<
+      Partial<EmployeeCostReference> & {
+        externalPayrollId: string
+        displayName: string
+      }
+    >,
+  ) => Promise<{ upserted: number }>
   sourceKeys: Set<string>
   lastPayrollSummaryImport: PayrollSummaryImportResult | null
 }
@@ -739,6 +748,83 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
     }))
   }, [store, auth.identity?.accessToken])
 
+  const upsertEmployeeCostReferences = useCallback(
+    async (
+      employees: Array<
+        Partial<EmployeeCostReference> & {
+          externalPayrollId: string
+          displayName: string
+        }
+      >,
+    ) => {
+      const financeConfig = readFinanceRepositoryConfig()
+      if (financeConfig.mode === 'api') {
+        const membership = auth.activeMembership
+        const identity = auth.identity
+        if (!membership || !identity?.accessToken || !identity.userSubject) {
+          throw new Error('Signed-in finance membership is required to upsert wage-cost members')
+        }
+        const result = await resolveCostControlRepository(
+          financeConfig,
+        ).upsertEmployeeCostReferences(
+          {
+            accessToken: identity.accessToken,
+            userSubject: identity.userSubject,
+            activeOrganisationId: membership.organisationId,
+          },
+          employees,
+        )
+        setStore(withSeedDefaults(result.workspace))
+        return { upserted: result.upserted }
+      }
+
+      assertBrowserMutationAllowed('upsertEmployeeCostReferences')
+      // Demo path — merge into local store only.
+      setStore((prev) => {
+        const byExternal = new Map(
+          (prev.employeeCostReferences ?? []).map((e) => [
+            e.externalPayrollId.toUpperCase(),
+            e,
+          ]),
+        )
+        for (const incoming of employees) {
+          const key = incoming.externalPayrollId.toUpperCase()
+          const existing = byExternal.get(key)
+          const next: EmployeeCostReference = {
+            id: existing?.id ?? incoming.id ?? crypto.randomUUID(),
+            organisationId: prev.organisation.id,
+            externalPayrollId: incoming.externalPayrollId,
+            displayName: incoming.displayName,
+            orgNodeId: incoming.orgNodeId ?? existing?.orgNodeId ?? '',
+            roleTitle: incoming.roleTitle ?? existing?.roleTitle ?? '',
+            costCentre: incoming.costCentre ?? existing?.costCentre ?? '',
+            employmentKind: incoming.employmentKind ?? existing?.employmentKind ?? 'employed',
+            wageCostBearing: incoming.wageCostBearing ?? existing?.wageCostBearing ?? true,
+            expectedEmployerCostMinor:
+              incoming.expectedEmployerCostMinor ?? existing?.expectedEmployerCostMinor ?? 0,
+            overtimeMinor: incoming.overtimeMinor ?? existing?.overtimeMinor ?? 0,
+            employerNiMinor: incoming.employerNiMinor ?? existing?.employerNiMinor ?? 0,
+            employerPensionMinor:
+              incoming.employerPensionMinor ?? existing?.employerPensionMinor ?? 0,
+            allocationComplete:
+              incoming.allocationComplete ?? existing?.allocationComplete ?? true,
+            active: incoming.active ?? existing?.active ?? true,
+            payInputs: incoming.payInputs ?? existing?.payInputs,
+          }
+          byExternal.set(key, next)
+        }
+        return {
+          ...prev,
+          employeeCostReferences: [...byExternal.values()].sort((a, b) =>
+            a.displayName.localeCompare(b.displayName),
+          ),
+        }
+      })
+      return { upserted: employees.length }
+    },
+    [auth.activeMembership, auth.identity],
+  )
+
   const refreshBankFeed = useCallback(async (_accountId?: string) => {
     const prev = store
     const connection = prev.bankConnection ?? emptyBankConnection(prev.organisation.id)
@@ -790,6 +876,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       startBankConnect,
       completeBankConnect,
       disconnectBank,
+      upsertEmployeeCostReferences,
       sourceKeys: new Set(safe.costs.map((c) => c.sourceKey)),
       lastPayrollSummaryImport,
     }
@@ -809,6 +896,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
     startBankConnect,
     completeBankConnect,
     disconnectBank,
+    upsertEmployeeCostReferences,
     lastPayrollSummaryImport,
   ])
 

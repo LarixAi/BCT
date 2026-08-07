@@ -2,6 +2,7 @@ import type { CostControlStore } from '../data/seed'
 import { createSeedStore } from '../data/seed'
 import type { AuditEvent, ReviewDecision } from '../domain/review-actions'
 import type { PayrollSummaryImportResult } from '../domain/payroll-summary-import'
+import type { EmployeeCostReference } from '../domain/org-structure'
 import { assertSameOrganisation, requireOrganisationId } from '../domain/tenancy'
 import type { CostRecord, OrganisationId, ReviewItem } from '../domain/types'
 
@@ -43,6 +44,11 @@ export type PayrollSummaryImportApiResult = {
   workspace: CostControlStore
 }
 
+export type EmployeeCostReferenceUpsertApiResult = {
+  upserted: number
+  workspace: CostControlStore
+}
+
 export type CostControlRepository = {
   readonly mode: 'demo' | 'api'
   loadWorkspace(session: FinanceSession): Promise<CostControlStore>
@@ -60,6 +66,13 @@ export type CostControlRepository = {
     session: FinanceSession,
     input: { fileName: string; text: string },
   ): Promise<PayrollSummaryImportApiResult>
+  upsertEmployeeCostReferences(
+    session: FinanceSession,
+    employees: Array<Partial<EmployeeCostReference> & {
+      externalPayrollId: string
+      displayName: string
+    }>,
+  ): Promise<EmployeeCostReferenceUpsertApiResult>
 }
 
 export type FinanceRepositoryConfig = {
@@ -98,6 +111,9 @@ export function createDemoCostControlRepository(): CostControlRepository {
       unsupportedDemoMutation()
     },
     async importPayrollSummary() {
+      unsupportedDemoMutation()
+    },
+    async upsertEmployeeCostReferences() {
       unsupportedDemoMutation()
     },
   }
@@ -264,6 +280,39 @@ export function createApiCostControlRepository(input: {
         session.activeOrganisationId,
         result.workspace.organisation.id,
         'payroll import workspace',
+      )
+      return result
+    },
+    async upsertEmployeeCostReferences(session, employees) {
+      requireSession(session)
+      const response = await fetchImpl(`${baseUrl}/finance/employee-cost-references/upsert`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Veyvio-Organisation-ID': session.activeOrganisationId,
+        },
+        body: JSON.stringify({ employees }),
+      })
+      if (!response.ok) {
+        let detail = `Finance API employee upsert failed (${response.status})`
+        try {
+          const payload = (await response.json()) as { error?: string }
+          if (payload.error) detail = payload.error
+        } catch {
+          // keep status text
+        }
+        throw new Error(detail)
+      }
+      const result = (await response.json()) as EmployeeCostReferenceUpsertApiResult
+      if (!result?.workspace?.organisation?.id || typeof result.upserted !== 'number') {
+        throw new Error('Finance API returned an invalid employee upsert result')
+      }
+      assertSameOrganisation(
+        session.activeOrganisationId,
+        result.workspace.organisation.id,
+        'employee upsert workspace',
       )
       return result
     },
