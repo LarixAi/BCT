@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "node scripts/validate-production-env.mjs && tsc -b && vite build",
     "build:ci": "node scripts/validate-production-env.mjs && vite build",
+    "typecheck": "tsc -b --pretty false",
     "validate:production-env": "VALIDATE_PRODUCTION_ENV=true node scripts/validate-production-env.mjs",
     "lint": "oxlint src",
     "preview": "vite preview",

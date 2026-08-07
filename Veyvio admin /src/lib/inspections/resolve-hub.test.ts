@@ -27,7 +27,7 @@ describe('resolveInspectionsHub', () => {
     expect(resolved.hub.summary.dueToday).toBe(1)
   })
 
-  it('falls back to demo seed when live and profiles fail', async () => {
+  it('falls back to demo seed when live and profiles fail in development', async () => {
     const resolved = await resolveInspectionsHub({
       fetchLiveHub: async () => {
         throw new Error('hub missing')
@@ -36,6 +36,7 @@ describe('resolveInspectionsHub', () => {
         throw new Error('profiles missing')
       },
     })
+    // Vitest runs with import.meta.env.DEV=true, so demo seed remains available locally.
     expect(resolved.source).toBe('demo')
     expect(resolved.hub.register.length).toBeGreaterThan(0)
   })

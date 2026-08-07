@@ -26,6 +26,17 @@ describe('cost control repositories', () => {
     ).toThrow(/VITE_FINANCE_API_URL/)
   })
 
+  it('rejects demo data mode for production env configs', async () => {
+    const { readFinanceRepositoryConfig } = await import('./cost-control-repository')
+    expect(() =>
+      readFinanceRepositoryConfig({
+        PROD: 'true',
+        MODE: 'production',
+        VITE_FINANCE_DATA_MODE: 'demo',
+      }),
+    ).toThrow(/VITE_FINANCE_DATA_MODE=api/)
+  })
+
   it('sends authenticated organisation context to the Finance API', async () => {
     const workspace = createSeedStore()
     const fetchImpl = vi.fn(async () =>

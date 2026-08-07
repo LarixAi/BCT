@@ -1,26 +1,12 @@
 /**
  * Dependency vulnerability scan wrapper for Executive CI and local checks.
  * Critical findings always fail. High findings fail unless they are on the
- * documented temporary allowlist awaiting a stable Next.js release outside the
- * current advisory range.
+ * documented temporary allowlist with an owner and expiry.
  */
 import { spawnSync } from "node:child_process";
 
-/** Temporary until a stable Next.js release clears GHSA ranges covering 16.2.x. */
-const ALLOWED_HIGH_PACKAGES = new Map([
-  [
-    "next",
-    "Pinned to latest stable 16.2.12; advisory range still includes 16.2.x until 16.3 stable.",
-  ],
-  [
-    "postcss",
-    "Transitive via next@16.2.12; cleared when Next ships a stable fix outside the advisory range.",
-  ],
-  [
-    "sharp",
-    "Transitive via next@16.2.12 image pipeline; cleared with the Next stable bump.",
-  ],
-]);
+/** Keep empty unless the board accepts a time-limited non-exploitable exception. */
+const ALLOWED_HIGH_PACKAGES = new Map([]);
 
 const result = spawnSync(
   "npm",
@@ -60,9 +46,7 @@ if (critical > 0 || unexpectedHigh.length > 0) {
   );
   process.exitCode = 1;
 } else {
-  console.log(
-    `Dependency audit passed with documented residuals (high=${high}, critical=${critical}).`,
-  );
+  console.log(`Dependency audit passed (high=${high}, critical=${critical}).`);
   for (const [name, reason] of ALLOWED_HIGH_PACKAGES) {
     if (vulnerabilities[name]) {
       console.log(`- allowlisted high: ${name} — ${reason}`);

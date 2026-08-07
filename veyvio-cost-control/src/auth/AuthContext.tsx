@@ -37,12 +37,29 @@ const AuthContext = createContext<AuthApi | null>(null)
 
 function configuredAdapter(): AuthAdapter | null {
   const mode = (import.meta.env.VITE_AUTH_MODE ?? '').trim().toLowerCase()
-  if (mode === 'demo' || import.meta.env.VITE_USE_MOCK_AUTH === 'true') {
+  const wantsDemo = mode === 'demo' || import.meta.env.VITE_USE_MOCK_AUTH === 'true'
+
+  if (import.meta.env.PROD) {
+    if (wantsDemo || mode === '' || mode === 'unavailable') {
+      throw new Error(
+        'Cost Control production builds require VITE_AUTH_MODE=command with live Command API credentials.',
+      )
+    }
+    const command = readCommandAuthConfig()
+    if (!command) {
+      throw new Error(
+        'Cost Control production builds require Command API URL and anon key (VITE_API_URL / VITE_SUPABASE_ANON_KEY).',
+      )
+    }
+    return createCommandAuthAdapter(command)
+  }
+
+  if (wantsDemo || mode === '') {
     return createDemoAuthAdapter()
   }
   const command = readCommandAuthConfig()
   if (command && mode !== 'unavailable') return createCommandAuthAdapter(command)
-  return mode ? null : createDemoAuthAdapter()
+  return null
 }
 
 const defaultAuthAdapter = configuredAdapter()

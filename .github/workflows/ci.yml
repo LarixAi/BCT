@@ -87,12 +87,23 @@ jobs:
           cd "Veyvio admin "
           npm test
 
+      - name: Typecheck
+        id: admin-typecheck
+        continue-on-error: true
+        run: |
+          cd "Veyvio admin "
+          npm run typecheck
+
       - name: Build
         env:
           CI: "true"
         run: |
           cd "Veyvio admin "
           npm run build:ci
+
+      - name: Typecheck debt notice
+        if: steps.admin-typecheck.outcome == 'failure'
+        run: echo "::warning::Admin typecheck still failing (P0-04). Vite build:ci remains the interim gate; clear tsc errors before flipping production build to tsc -b."
 
   driver:
     name: Driver
@@ -289,6 +300,72 @@ jobs:
 
       - name: Accessibility smoke
         run: npm run test:a11y
+
+  cost-control:
+    name: Cost Control
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: veyvio-cost-control
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: veyvio-cost-control/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build (production modes required)
+        env:
+          VITE_AUTH_MODE: command
+          VITE_FINANCE_DATA_MODE: api
+          VITE_API_URL: https://example.supabase.co/functions/v1/command-api
+          VITE_SUPABASE_ANON_KEY: ci-anon-key
+          VITE_FINANCE_API_URL: https://example.supabase.co/functions/v1/finance-api
+        run: npm run build
+
+  executive:
+    name: Executive
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: veyvio-executive
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.14"
+          cache: npm
+          cache-dependency-path: veyvio-executive/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Secret source scan
+        run: npm run security:scan:source
+
+      - name: Dependency audit
+        run: npm run security:audit
+
+      - name: Security unit tests (no production secrets)
+        run: node --test tests/*.test.mjs
 
   gate1-preflight:
     name: Gate 1 preflight (F-17)

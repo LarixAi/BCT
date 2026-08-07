@@ -12,7 +12,12 @@ export interface ResolvedInspectionsHub {
   source: InspectionsHubSource
 }
 
-/** Never throws — always returns a renderable hub for the Inspections page. */
+/** Demo seed is local/dev or explicit mock only — never after a live failure in production. */
+function allowDemoSeedFallback(): boolean {
+  return import.meta.env.VITE_MOCK_API === 'true' || import.meta.env.DEV === true
+}
+
+/** Live-first; production fails closed to empty when live/projected data is unavailable. */
 export async function resolveInspectionsHub(opts: {
   fetchLiveHub: () => Promise<InspectionsHubData>
   fetchProfiles: () => Promise<VehicleProfile[]>
@@ -32,6 +37,10 @@ export async function resolveInspectionsHub(opts: {
     }
   } catch {
     // continue
+  }
+
+  if (!allowDemoSeedFallback()) {
+    return { hub: emptyInspectionsHub(), source: 'empty' }
   }
 
   try {

@@ -12,6 +12,11 @@ export interface ResolvedFleetResourcesHub {
   source: FleetResourcesHubSource
 }
 
+/** Demo seed is local/dev or explicit mock only — never after a live failure in production. */
+function allowDemoSeedFallback(): boolean {
+  return import.meta.env.VITE_MOCK_API === 'true' || import.meta.env.DEV === true
+}
+
 async function loadProfiles(
   fetchProfiles?: () => Promise<VehicleProfile[]>,
 ): Promise<VehicleProfile[]> {
@@ -24,7 +29,7 @@ async function loadProfiles(
   }
 }
 
-/** Never throws — always returns a renderable hub. */
+/** Live-first; production fails closed to empty when live is unavailable. */
 export async function resolveFleetResourcesHub(opts: {
   fetchLiveHub: () => Promise<FleetResourcesHubData>
   fetchProfiles?: () => Promise<VehicleProfile[]>
@@ -41,6 +46,10 @@ export async function resolveFleetResourcesHub(opts: {
     return { hub, source: 'live' }
   } catch {
     // continue
+  }
+
+  if (!allowDemoSeedFallback()) {
+    return { hub: emptyFleetResourcesHub(), source: 'empty' }
   }
 
   try {

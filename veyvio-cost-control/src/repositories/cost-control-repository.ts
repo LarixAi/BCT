@@ -85,7 +85,14 @@ export function readFinanceRepositoryConfig(
     string | undefined
   >,
 ): FinanceRepositoryConfig {
-  const mode = env.VITE_FINANCE_DATA_MODE?.trim().toLowerCase() === 'api' ? 'api' : 'demo'
+  const raw = env.VITE_FINANCE_DATA_MODE?.trim().toLowerCase() ?? ''
+  const isProd = env.PROD === 'true' || env.MODE === 'production'
+  if (isProd && raw !== 'api') {
+    throw new Error(
+      'Cost Control production builds require VITE_FINANCE_DATA_MODE=api (demo data mode is not allowed).',
+    )
+  }
+  const mode = raw === 'api' ? 'api' : 'demo'
   return {
     mode,
     apiBaseUrl: env.VITE_FINANCE_API_URL?.trim() || null,
@@ -95,7 +102,12 @@ export function readFinanceRepositoryConfig(
 export function resolveCostControlRepository(
   config: FinanceRepositoryConfig = readFinanceRepositoryConfig(),
 ): CostControlRepository {
-  if (config.mode === 'demo') return createDemoCostControlRepository()
+  if (config.mode === 'demo') {
+    if (import.meta.env.PROD) {
+      throw new Error('Cost Control production builds cannot use the demo finance repository.')
+    }
+    return createDemoCostControlRepository()
+  }
   if (!config.apiBaseUrl) {
     throw new Error('VITE_FINANCE_API_URL is required when VITE_FINANCE_DATA_MODE=api')
   }
