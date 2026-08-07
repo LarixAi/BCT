@@ -9,6 +9,7 @@ import {
   parseSimpleReviewDecision,
 } from '../_shared/finance-review-decision.ts'
 import { importCostCsvForPersist } from '../_shared/finance-csv-import.ts'
+import { importPayrollSummaryForPersist } from '../_shared/finance-payroll-summary-import.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
@@ -83,6 +84,9 @@ Deno.serve(async (request) => {
     }
     if (path === '/finance/imports/costs' && request.method === 'POST') {
       return await handleCostCsvImport(request)
+    }
+    if (path === '/finance/imports/payroll-summary' && request.method === 'POST') {
+      return await handlePayrollSummaryImport(request)
     }
     if (path === '/bank/consent/start' && request.method === 'GET') {
       return await handleBankConsentStart(request, url)
@@ -720,6 +724,348 @@ async function handleCostCsvImport(request: Request): Promise<Response> {
   )
 }
 
+function roleAllowsPayrollImport(role: FinanceRole): boolean {
+  return [
+    'finance_director',
+    'finance_admin',
+    'finance_manager',
+    'finance_officer',
+    'payroll_cost_reviewer',
+  ].includes(role)
+}
+
+async function ensureWageCostRecord(organisationId: string, budgetId: string): Promise<string> {
+  const { data: existing } = await admin
+    .from('cost_records')
+    .select('id')
+    .eq('organisation_id', organisationId)
+    .eq('category', 'wages')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (existing?.id) return String(existing.id)
+
+  const id = `cost_wages_${organisationId}`
+  const now = new Date().toISOString()
+  const period = now.slice(0, 7)
+  await cc(
+    'cost_records.insert_wage',
+    admin.from('cost_records').upsert(
+      {
+        id,
+        organisation_id: organisationId,
+        version: 1,
+        supplier_name: 'Payroll',
+        description: 'Employer wage cost summary',
+        reference: `WAGES-${period}`,
+        transaction_date: `${period}-01`,
+        accounting_period: period,
+        net_minor: 0,
+        vat_minor: 0,
+        gross_minor: 0,
+        currency: 'GBP',
+        status: 'actual',
+        category: 'wages',
+        validation_state: 'validated',
+        review_state: 'open',
+        source_key: `wages|summary|${organisationId}`,
+        linked_commitment_id: null,
+        correction_reason: null,
+        created_at: now,
+        updated_at: now,
+      },
+      { onConflict: 'id' },
+    ),
+  )
+  await cc(
+    'cost_allocations.insert_wage',
+    admin.from('cost_allocations').upsert(
+      {
+        id: `alloc_${id}`,
+        organisation_id: organisationId,
+        cost_id: id,
+        budget_id: budgetId,
+        category: 'wages',
+        cost_centre_id: null,
+        vehicle_id: null,
+        supplier_id: null,
+        amount_minor: 0,
+        created_at: now,
+      },
+      { onConflict: 'id' },
+    ),
+  )
+  return id
+}
+
+async function ensurePayPeriod(organisationId: string): Promise<string> {
+  const { data: existing } = await admin
+    .from('pay_periods')
+    .select('id')
+    .eq('organisation_id', organisationId)
+    .order('sort_order', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (existing?.id) return String(existing.id)
+
+  const id = `payperiod_${organisationId}_current`
+  const year = new Date().getUTCFullYear()
+  const now = new Date().toISOString()
+  await cc(
+    'pay_periods.insert',
+    admin.from('pay_periods').insert({
+      id,
+      organisation_id: organisationId,
+      label: `${year}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')} pay period`,
+      tax_year: `${year}/${String(year + 1).slice(-2)}`,
+      frequency: 'monthly',
+      period_number: new Date().getUTCMonth() + 1,
+      status: 'forecast',
+      provider_name: '',
+      scheme_ref_token: '',
+      employee_count: 0,
+      budgeted_employer_cost_minor: 0,
+      forecast: {
+        grossWagesMinor: 0,
+        employerNiMinor: 0,
+        employerPensionMinor: 0,
+        overtimeMinor: 0,
+        allowancesMinor: 0,
+        agencyMinor: 0,
+        statutoryEmployerCostMinor: 0,
+        otherEmployerCostMinor: 0,
+        recoveriesMinor: 0,
+        totalEmployerCostMinor: 0,
+        formulaVersion: 'cost-control.payroll-employer.v1',
+      },
+      pre_payroll: null,
+      final_payroll: null,
+      exceptions: [],
+      last_import_at: null,
+      formula_version: 'cost-control.payroll-employer.v1',
+      sort_order: 0,
+      created_at: now,
+      updated_at: now,
+    }),
+  )
+  return id
+}
+
+async function handlePayrollSummaryImport(request: Request): Promise<Response> {
+  const auth = await verifyBearer(request)
+  if (auth instanceof Response) return auth
+
+  const organisationId = request.headers.get('X-Veyvio-Organisation-ID')?.trim()
+  if (!organisationId) return json({ error: 'active_organisation_required' }, 400)
+
+  const membership = await findFinanceMembership(auth.userId, organisationId)
+  if (!membership?.active) return json({ error: 'organisation_access_denied' }, 403)
+  if (!roleAllowsPayrollImport(membership.role)) {
+    return json({ error: 'finance_permission_denied' }, 403)
+  }
+
+  await ensureOrganisationShell(organisationId)
+  await cc('organisation_memberships.upsert', admin.from('organisation_memberships').upsert(
+    {
+      id: `ccm_${organisationId}_${auth.userId}`,
+      organisation_id: organisationId,
+      user_subject: auth.userId,
+      role: membership.role,
+      active: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'organisation_id,user_subject' },
+  ))
+
+  let body: Record<string, unknown>
+  try {
+    body = (await request.json()) as Record<string, unknown>
+  } catch {
+    return json({ error: 'invalid_json' }, 400)
+  }
+
+  const fileName = String(body.fileName ?? '').trim() || 'payroll-summary.csv'
+  const text = typeof body.text === 'string' ? body.text : ''
+  if (!text.trim()) return json({ error: 'csv_text_required' }, 400)
+  if (text.length > 2_000_000) return json({ error: 'csv_too_large' }, 413)
+
+  const { data: budgetRow } = await admin
+    .from('budgets')
+    .select('id')
+    .eq('organisation_id', organisationId)
+    .eq('status', 'approved')
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const budgetId = budgetRow?.id ?? `bud_${organisationId}_current`
+
+  const wageCostId = await ensureWageCostRecord(organisationId, budgetId)
+  await ensurePayPeriod(organisationId)
+
+  const { data: employeeRows } = await admin
+    .from('employee_cost_references')
+    .select('*')
+    .eq('organisation_id', organisationId)
+
+  const employees = (employeeRows ?? []).map((e) => ({
+    id: String(e.id),
+    externalPayrollId: String(e.external_payroll_id),
+    displayName: String(e.display_name),
+    expectedEmployerCostMinor: Number(e.expected_employer_cost_minor ?? 0),
+    overtimeMinor: Number(e.overtime_minor ?? 0),
+    allocationComplete: Boolean(e.allocation_complete),
+    active: Boolean(e.active),
+    wageCostBearing: Boolean(e.wage_cost_bearing),
+  }))
+
+  const startedAt = new Date().toISOString()
+  const parsed = importPayrollSummaryForPersist({
+    organisationId,
+    text,
+    wageCostId,
+    employees,
+    stage: 'pre_payroll',
+    nowIso: startedAt,
+  })
+  if (parsed.rowsRead > 5000) return json({ error: 'csv_too_many_rows' }, 413)
+
+  const finishedAt = new Date().toISOString()
+  const importId = crypto.randomUUID()
+  const runId = crypto.randomUUID()
+
+  if (parsed.quarantined.length) {
+    await cc(
+      'quarantine_items.insert',
+      admin.from('quarantine_items').insert(
+        parsed.quarantined.map((q) => ({
+          id: q.id,
+          organisation_id: organisationId,
+          source_key: q.sourceKey,
+          reason: q.reason,
+          raw: q.raw,
+          created_at: q.createdAt,
+        })),
+      ),
+    )
+  }
+
+  if (parsed.reviews.length) {
+    await cc(
+      'review_items.insert',
+      admin.from('review_items').insert(
+        parsed.reviews.map((r) => ({
+          id: crypto.randomUUID(),
+          organisation_id: organisationId,
+          cost_id: r.costId,
+          signal: r.signal,
+          title: r.title,
+          detail: r.detail,
+          state: 'open',
+          resolution_note: null,
+          version: 1,
+          created_at: finishedAt,
+          updated_at: finishedAt,
+        })),
+      ),
+    )
+  }
+
+  await cc(
+    'import_runs.insert',
+    admin.from('import_runs').insert({
+      id: runId,
+      organisation_id: organisationId,
+      file_name: `[payroll-summary] ${fileName}`,
+      started_at: startedAt,
+      finished_at: finishedAt,
+      rows_read: parsed.rowsRead,
+      accepted: parsed.totals.matchedCount,
+      quarantined: parsed.quarantined.length + parsed.totals.unmatchedCount,
+      duplicates_skipped: 0,
+    }),
+  )
+
+  await cc(
+    'payroll_summary_imports.insert',
+    admin.from('payroll_summary_imports').insert({
+      id: importId,
+      organisation_id: organisationId,
+      file_name: fileName,
+      stage: parsed.stage,
+      wage_cost_id: wageCostId,
+      rows_read: parsed.rowsRead,
+      matched_count: parsed.totals.matchedCount,
+      unmatched_count: parsed.totals.unmatchedCount,
+      variance_count: parsed.totals.varianceCount,
+      quarantined_count: parsed.quarantined.length,
+      exception_count: parsed.exceptions.length,
+      result_payload: parsed,
+      actor_id: auth.userId,
+      created_at: finishedAt,
+    }),
+  )
+
+  const { data: periodRow } = await admin
+    .from('pay_periods')
+    .select('id')
+    .eq('organisation_id', organisationId)
+    .order('sort_order', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (periodRow?.id) {
+    await cc(
+      'pay_periods.update',
+      admin
+        .from('pay_periods')
+        .update({
+          status: 'review',
+          pre_payroll: parsed.rolledUp,
+          exceptions: parsed.exceptions,
+          employee_count: Math.max(parsed.totals.matchedCount, employees.filter((e) => e.active && e.wageCostBearing).length),
+          last_import_at: finishedAt,
+          formula_version: parsed.rolledUp?.formulaVersion ?? 'cost-control.payroll-employer.v1',
+          updated_at: finishedAt,
+        })
+        .eq('organisation_id', organisationId)
+        .eq('id', periodRow.id),
+    )
+  }
+
+  await cc(
+    'audit_events.insert',
+    admin.from('audit_events').insert({
+      id: crypto.randomUUID(),
+      organisation_id: organisationId,
+      actor_id: auth.userId,
+      action: 'payroll.import_summary',
+      entity_type: 'payroll_summary_import',
+      entity_id: importId,
+      reason: fileName,
+      before_state: { employeeCount: employees.length },
+      after_state: parsed.totals,
+      created_at: finishedAt,
+    }),
+  )
+
+  const workspace = await loadWorkspace(organisationId)
+  return json(
+    {
+      summary: {
+        matched: parsed.totals.matchedCount,
+        unmatched: parsed.totals.unmatchedCount,
+        variance: parsed.totals.varianceCount,
+        quarantined: parsed.quarantined.length,
+        exceptions: parsed.exceptions.length,
+        importId,
+        fileName,
+      },
+      result: parsed,
+      workspace,
+    },
+    200,
+  )
+}
+
 async function loadWorkspace(organisationId: string) {
   const { data: org } = await admin
     .from('organisations')
@@ -775,6 +1121,15 @@ async function loadWorkspace(organisationId: string) {
     .eq('organisation_id', organisationId)
     .order('started_at', { ascending: false })
     .limit(50)
+  const { data: employeeRows } = await admin
+    .from('employee_cost_references')
+    .select('*')
+    .eq('organisation_id', organisationId)
+  const { data: payPeriodRows } = await admin
+    .from('pay_periods')
+    .select('*')
+    .eq('organisation_id', organisationId)
+    .order('sort_order', { ascending: true })
   const { data: snapRows } = await admin
     .from('financial_snapshots')
     .select('*')
@@ -998,9 +1353,58 @@ async function loadWorkspace(organisationId: string) {
       quarantined: Number(i.quarantined),
       duplicatesSkipped: Number(i.duplicates_skipped),
     })),
-    payPeriods: [],
+    payPeriods: (payPeriodRows ?? []).map((p) => ({
+      id: String(p.id),
+      organisationId,
+      label: String(p.label),
+      taxYear: String(p.tax_year ?? ''),
+      frequency: String(p.frequency ?? 'monthly'),
+      periodNumber: Number(p.period_number ?? 1),
+      periodStart: p.period_start ? String(p.period_start) : '',
+      periodEnd: p.period_end ? String(p.period_end) : '',
+      contractualPayday: p.contractual_payday ? String(p.contractual_payday) : '',
+      status: String(p.status ?? 'forecast'),
+      providerName: String(p.provider_name ?? ''),
+      schemeRefToken: String(p.scheme_ref_token ?? ''),
+      employeeCount: Number(p.employee_count ?? 0),
+      budgetedEmployerCostMinor: Number(p.budgeted_employer_cost_minor ?? 0),
+      forecast: p.forecast ?? {
+        grossWagesMinor: 0,
+        employerNiMinor: 0,
+        employerPensionMinor: 0,
+        overtimeMinor: 0,
+        allowancesMinor: 0,
+        agencyMinor: 0,
+        statutoryEmployerCostMinor: 0,
+        otherEmployerCostMinor: 0,
+        recoveriesMinor: 0,
+        totalEmployerCostMinor: 0,
+        formulaVersion: 'cost-control.payroll-employer.v1',
+      },
+      prePayroll: p.pre_payroll ?? null,
+      finalPayroll: p.final_payroll ?? null,
+      exceptions: Array.isArray(p.exceptions) ? p.exceptions : [],
+      lastImportAt: p.last_import_at ? String(p.last_import_at) : null,
+      formulaVersion: String(p.formula_version ?? 'cost-control.payroll-employer.v1'),
+    })),
     orgNodes: [],
-    employeeCostReferences: [],
+    employeeCostReferences: (employeeRows ?? []).map((e) => ({
+      id: String(e.id),
+      organisationId,
+      externalPayrollId: String(e.external_payroll_id),
+      displayName: String(e.display_name),
+      orgNodeId: String(e.org_node_id ?? ''),
+      roleTitle: String(e.role_title ?? ''),
+      costCentre: String(e.cost_centre ?? ''),
+      employmentKind: String(e.employment_kind ?? 'employed'),
+      wageCostBearing: Boolean(e.wage_cost_bearing),
+      expectedEmployerCostMinor: Number(e.expected_employer_cost_minor ?? 0),
+      overtimeMinor: Number(e.overtime_minor ?? 0),
+      employerNiMinor: Number(e.employer_ni_minor ?? 0),
+      employerPensionMinor: Number(e.employer_pension_minor ?? 0),
+      allocationComplete: Boolean(e.allocation_complete),
+      active: Boolean(e.active),
+    })),
     driverDays: [],
     payRates: [],
     wageBatches: [],

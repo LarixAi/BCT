@@ -153,5 +153,57 @@ describe('cost control repositories', () => {
     expect(url).toBe('https://finance.example.test/finance/imports/costs')
     expect(request?.method).toBe('POST')
   })
+
+  it('posts authenticated payroll summary imports to the Finance API', async () => {
+    const workspace = createSeedStore()
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          summary: {
+            matched: 1,
+            unmatched: 0,
+            variance: 0,
+            quarantined: 0,
+            exceptions: 0,
+            importId: 'imp-1',
+            fileName: 'payroll.csv',
+          },
+          result: {
+            stage: 'pre_payroll',
+            rowsRead: 1,
+            matched: [],
+            quarantined: [],
+            exceptions: [],
+            reviews: [],
+            rolledUp: null,
+            totals: {
+              importedEmployerCostMinor: 0,
+              expectedEmployerCostMinor: 0,
+              varianceMinor: 0,
+              matchedCount: 1,
+              unmatchedCount: 0,
+              varianceCount: 0,
+            },
+          },
+          workspace,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    const repository = createApiCostControlRepository({
+      apiBaseUrl: 'https://finance.example.test',
+      fetchImpl,
+    })
+
+    const result = await repository.importPayrollSummary(session, {
+      fileName: 'payroll.csv',
+      text: 'external_payroll_id,basic_pay\nPRV-1,10.00',
+    })
+
+    expect(result.summary.matched).toBe(1)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://finance.example.test/finance/imports/payroll-summary',
+    )
+  })
 })
 

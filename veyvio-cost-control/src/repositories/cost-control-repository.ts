@@ -1,6 +1,7 @@
 import type { CostControlStore } from '../data/seed'
 import { createSeedStore } from '../data/seed'
 import type { AuditEvent, ReviewDecision } from '../domain/review-actions'
+import type { PayrollSummaryImportResult } from '../domain/payroll-summary-import'
 import { assertSameOrganisation, requireOrganisationId } from '../domain/tenancy'
 import type { CostRecord, OrganisationId, ReviewItem } from '../domain/types'
 
@@ -28,6 +29,20 @@ export type CostCsvImportApiResult = {
   workspace: CostControlStore
 }
 
+export type PayrollSummaryImportApiResult = {
+  summary: {
+    matched: number
+    unmatched: number
+    variance: number
+    quarantined: number
+    exceptions: number
+    importId: string
+    fileName: string
+  }
+  result: PayrollSummaryImportResult
+  workspace: CostControlStore
+}
+
 export type CostControlRepository = {
   readonly mode: 'demo' | 'api'
   loadWorkspace(session: FinanceSession): Promise<CostControlStore>
@@ -41,6 +56,10 @@ export type CostControlRepository = {
     session: FinanceSession,
     input: { fileName: string; text: string },
   ): Promise<CostCsvImportApiResult>
+  importPayrollSummary(
+    session: FinanceSession,
+    input: { fileName: string; text: string },
+  ): Promise<PayrollSummaryImportApiResult>
 }
 
 export type FinanceRepositoryConfig = {
@@ -76,6 +95,9 @@ export function createDemoCostControlRepository(): CostControlRepository {
       unsupportedDemoMutation()
     },
     async importCostCsv() {
+      unsupportedDemoMutation()
+    },
+    async importPayrollSummary() {
       unsupportedDemoMutation()
     },
   }
@@ -206,6 +228,42 @@ export function createApiCostControlRepository(input: {
         session.activeOrganisationId,
         result.workspace.organisation.id,
         'cost import workspace',
+      )
+      return result
+    },
+    async importPayrollSummary(session, input) {
+      requireSession(session)
+      const response = await fetchImpl(`${baseUrl}/finance/imports/payroll-summary`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+          'X-Veyvio-Organisation-ID': session.activeOrganisationId,
+        },
+        body: JSON.stringify({
+          fileName: input.fileName,
+          text: input.text,
+        }),
+      })
+      if (!response.ok) {
+        let detail = `Finance API payroll summary import failed (${response.status})`
+        try {
+          const payload = (await response.json()) as { error?: string }
+          if (payload.error) detail = payload.error
+        } catch {
+          // keep status text
+        }
+        throw new Error(detail)
+      }
+      const result = (await response.json()) as PayrollSummaryImportApiResult
+      if (!result?.workspace?.organisation?.id || !result.summary || !result.result) {
+        throw new Error('Finance API returned an invalid payroll summary import result')
+      }
+      assertSameOrganisation(
+        session.activeOrganisationId,
+        result.workspace.organisation.id,
+        'payroll import workspace',
       )
       return result
     },

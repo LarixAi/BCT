@@ -59,13 +59,13 @@ type StoreApi = CostControlStore & {
   importPayrollSummary: (
     fileName: string,
     text: string,
-  ) => {
+  ) => Promise<{
     matched: number
     unmatched: number
     variance: number
     quarantined: number
     exceptions: number
-  }
+  }>
   resolveReview: (reviewId: string, state: ReviewItem['state']) => void | Promise<void>
   resolveReviewDecision: (reviewId: string, decision: ReviewDecision) => Promise<void>
   advanceWageBatchStatus: (batchId: string) => void
@@ -334,8 +334,33 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
     return summary
   }, [auth.activeMembership, auth.identity])
 
-  const importPayrollSummary = useCallback((fileName: string, text: string) => {
-    assertBrowserMutationAllowed('importPayrollSummary')
+  const importPayrollSummary = useCallback(async (fileName: string, text: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to import payroll summaries')
+      }
+      const result = await resolveCostControlRepository(financeConfig).importPayrollSummary(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        { fileName, text },
+      )
+      setStore(withSeedDefaults(result.workspace))
+      setLastPayrollSummaryImport(result.result)
+      return {
+        matched: result.summary.matched,
+        unmatched: result.summary.unmatched,
+        variance: result.summary.variance,
+        quarantined: result.summary.quarantined,
+        exceptions: result.summary.exceptions,
+      }
+    }
+
     let result!: PayrollSummaryImportResult
     setStore((prev) => {
       const wageCost =
@@ -401,7 +426,7 @@ export function CostStoreProvider({ children }: { children: ReactNode }) {
       quarantined: result.quarantined.length,
       exceptions: result.exceptions.length,
     }
-  }, [])
+  }, [auth.activeMembership, auth.identity])
 
   const resolveReviewDecision = useCallback(async (reviewId: string, decision: ReviewDecision) => {
     const financeConfig = readFinanceRepositoryConfig()

@@ -38,7 +38,7 @@ export function ImportsPage() {
     setMessage(null)
     try {
       const text = await file.text()
-      const summary = importPayrollSummary(file.name, text)
+      const summary = await importPayrollSummary(file.name, text)
       setMessage(
         `Payroll summary ${file.name}: ${summary.matched} matched, ${summary.unmatched} unmatched, ${summary.variance} variance, ${summary.exceptions} exceptions, ${summary.quarantined} quarantined.`,
       )
@@ -59,11 +59,19 @@ export function ImportsPage() {
     }
   }
 
-  function loadPayrollSample() {
-    const summary = importPayrollSummary('sample-payroll-summary.csv', SAMPLE_PAYROLL_SUMMARY_CSV)
-    setMessage(
-      `Sample payroll summary: ${summary.matched} matched, ${summary.unmatched} unmatched, ${summary.variance} variance → open Reviews / Wage costs.`,
-    )
+  async function loadPayrollSample() {
+    try {
+      setError(null)
+      const summary = await importPayrollSummary(
+        'sample-payroll-summary.csv',
+        SAMPLE_PAYROLL_SUMMARY_CSV,
+      )
+      setMessage(
+        `Sample payroll summary: ${summary.matched} matched, ${summary.unmatched} unmatched, ${summary.variance} variance → open Reviews / Wage costs.`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Payroll summary import failed')
+    }
   }
 
   return (
