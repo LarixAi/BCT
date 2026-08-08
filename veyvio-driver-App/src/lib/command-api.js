@@ -390,6 +390,59 @@ export async function commandAcknowledgeDuty(accessToken, dutyId) {
   return { ok: true, ...(await response.json()) };
 }
 
+export async function commandListJourneySequenceAcknowledgements(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured.", acknowledgements: [] };
+
+  const response = await fetch(`${base}/driver/journey-sequence-acknowledgements`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: await readError(response, "Journey sequence acknowledgements could not be loaded."),
+      acknowledgements: [],
+    };
+  }
+
+  const payload = await response.json();
+  return { ok: true, acknowledgements: Array.isArray(payload?.acknowledgements) ? payload.acknowledgements : [] };
+}
+
+export async function commandAdvanceJourneySequenceAcknowledgement(
+  accessToken,
+  tripKey,
+  { status, declineReason } = {},
+) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(
+    `${base}/driver/journey-sequence-acknowledgements/${encodeURIComponent(tripKey)}/advance`,
+    {
+      method: "POST",
+      credentials: "omit",
+      headers: bearerHeaders(accessToken),
+      body: JSON.stringify({
+        status,
+        ...(declineReason ? { declineReason } : {}),
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: await readError(response, "Journey sequence acknowledgement could not be updated."),
+    };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
 export async function commandSignOnDuty(accessToken, dutyId) {
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };

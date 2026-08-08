@@ -12,6 +12,10 @@ import {
   listPendingCorrectiveActions,
   listPendingDebriefNotices,
 } from "@/services/acknowledgements.service";
+import {
+  advanceJourneySequenceAcknowledgement,
+  listJourneySequenceAcknowledgements,
+} from "@/services/command-driver-ops.service";
 
 /** Hide PostgREST / schema messages from drivers. */
 function toDriverError(raw) {
@@ -23,9 +27,17 @@ function toDriverError(raw) {
   return message;
 }
 
+function journeyStatusLabel(status) {
+  const value = String(status ?? "").toLowerCase();
+  if (value === "viewed") return "Viewed — confirm when ready";
+  if (value === "delivered" || value === "sent") return "Stop order changed";
+  return status || "Pending";
+}
+
 export default function DriverAcknowledgements({ driver }) {
   const [debriefs, setDebriefs] = useState([]);
   const [actions, setActions] = useState([]);
+  const [journeyAcks, setJourneyAcks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
@@ -35,13 +47,19 @@ export default function DriverAcknowledgements({ driver }) {
     setLoading(true);
     setError("");
     try {
-      const [d, a] = await Promise.all([
+      const [d, a, journey] = await Promise.all([
         listPendingDebriefNotices(driver.id),
         listPendingCorrectiveActions(driver.id),
+        listJourneySequenceAcknowledgements(),
       ]);
       setDebriefs(d.items);
       setActions(a.items);
-      setListsUnavailable(Boolean(d.unavailable && a.unavailable));
+      setJourneyAcks(journey.ok ? journey.acknowledgements ?? [] : []);
+      setListsUnavailable(Boolean(d.unavailable && a.unavailable && !journey.ok));
+      if (!journey.ok && journey.message) {
+        const journeyMessage = toDriverError(journey.message);
+        if (journeyMessage) setError(journeyMessage);
+      }
     } catch (e) {
       const driverMessage = toDriverError(e instanceof Error ? e.message : String(e));
       if (driverMessage) {
@@ -49,6 +67,7 @@ export default function DriverAcknowledgements({ driver }) {
       } else {
         setDebriefs([]);
         setActions([]);
+        setJourneyAcks([]);
         setListsUnavailable(true);
       }
     } finally {
@@ -82,14 +101,26 @@ export default function DriverAcknowledgements({ driver }) {
     await refresh();
   };
 
-  const empty = !loading && debriefs.length === 0 && actions.length === 0;
+  const ackJourney = async (tripId, status) => {
+    setBusyId(tripId);
+    const result = await advanceJourneySequenceAcknowledgement(tripId, { status });
+    setBusyId(null);
+    if (!result.ok) {
+      setError(toDriverError(result.message) || result.message);
+      return;
+    }
+    await refresh();
+  };
+
+  const empty =
+    !loading && debriefs.length === 0 && actions.length === 0 && journeyAcks.length === 0;
   const visibleError = toDriverError(error);
 
   return (
     <div>
       <DriverOperationalHeader
         title="Acknowledgements"
-        subtitle="Debriefs and corrective actions"
+        subtitle="Sequence changes, debriefs, and corrective actions"
         backTo="/"
       />
       <div className="px-4 pb-8">
@@ -102,7 +133,7 @@ export default function DriverAcknowledgements({ driver }) {
             title={listsUnavailable ? "Nothing to acknowledge" : "Nothing pending"}
             description={
               listsUnavailable
-                ? "Duty acknowledgements live under Trips. Debriefs and corrective actions will appear here when your operator issues them."
+                ? "Duty acknowledgements live under Trips. Other notices will appear here when your operator issues them."
                 : "You're up to date. Duty acknowledgements live under Trips when a new duty is published."
             }
             action={
@@ -111,6 +142,49 @@ export default function DriverAcknowledgements({ driver }) {
               </Button>
             }
           />
+        ) : null}
+
+        {journeyAcks.length > 0 ? (
+          <section className="mt-4">
+            <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Journey sequence</h2>
+            <div className="space-y-3">
+              {journeyAcks.map((ack) => {
+                const tripId = ack.tripId ?? ack.id;
+                const needsConfirm = String(ack.status ?? "").toLowerCase() !== "viewed";
+                return (
+                  <div key={tripId} className={`p-4 ${op.card}`}>
+                    <p className="text-sm font-semibold text-foreground">
+                      {journeyStatusLabel(ack.status)}
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                      {ack.summary || "Your stop order changed. Confirm you have the latest sequence before continuing."}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {needsConfirm ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-11 min-h-[44px]"
+                          disabled={busyId === tripId}
+                          onClick={() => void ackJourney(tripId, "viewed")}
+                        >
+                          {busyId === tripId ? "Saving…" : "Mark viewed"}
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        className={`h-11 min-h-[44px] ${op.primaryBtn}`}
+                        disabled={busyId === tripId}
+                        onClick={() => void ackJourney(tripId, "acknowledged")}
+                      >
+                        {busyId === tripId ? "Acknowledging…" : "Acknowledge sequence"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         ) : null}
 
         {debriefs.length > 0 ? (

@@ -12,6 +12,7 @@ export const DRIVER_OPS_NOTIFICATION = {
   vehicleVor: 'driver.vehicle.vor',
   vehicleAwaitingCheck: 'driver.vehicle.awaiting_check',
   defectFollowUp: 'driver.defect.follow_up',
+  journeySequenceChanged: 'driver.journey_sequence.changed',
 } as const
 
 function formatDutyTime(iso: string | null | undefined): string {
@@ -209,5 +210,26 @@ export async function notifyDriverVehicleOperationalAlert(input: {
     sourceEntityType: 'vehicle',
     sourceEntityId: input.defectId ? `${input.vehicleId}:${input.defectId}` : input.vehicleId,
     dedupeWithinHours: 12,
+  })
+}
+
+/** F-29: notification only — acknowledgement state is written elsewhere. */
+export async function notifyDriverJourneySequenceChanged(input: {
+  companyId: string
+  driverId: string
+  tripKey: string
+  summary: string
+}) {
+  return notifyDriverDeduped({
+    companyId: input.companyId,
+    driverId: input.driverId,
+    type: DRIVER_OPS_NOTIFICATION.journeySequenceChanged,
+    title: 'Journey sequence updated',
+    body: input.summary || 'Your run stop order changed. Open Acknowledgements to confirm.',
+    severity: 'attention',
+    actionUrl: '/acknowledgements',
+    sourceEntityType: 'journey_sequence_acknowledgement',
+    sourceEntityId: input.tripKey,
+    dedupeWithinHours: 1,
   })
 }

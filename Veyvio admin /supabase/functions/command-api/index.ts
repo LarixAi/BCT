@@ -239,9 +239,11 @@ import {
 } from '../_shared/journey-sequence-move.ts'
 import {
   advanceJourneySequenceAcknowledgement,
+  driverAdvanceJourneySequenceAcknowledgement,
   ensureJourneySequenceAcknowledgement,
   getJourneySequenceAcknowledgement,
   journeyAckRequiredForTripStatus,
+  listPendingJourneySequenceAcksForDriver,
 } from '../_shared/journey-sequence-ack.ts'
 import { notifyExpiringDriverDocuments } from '../_shared/document-expiry-notifications.ts'
 import {
@@ -7993,6 +7995,56 @@ async function advanceJourneySequenceAckRoute(request: Request, tripId: string) 
   }
 }
 
+async function driverListJourneySequenceAcks(request: Request) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  try {
+    const acknowledgements = await listPendingJourneySequenceAcksForDriver({
+      companyId: context.companyId,
+      driverId: String(resolved.appAccount!.driver_id),
+    })
+    return json({ acknowledgements })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Journey sequence acknowledgements could not be loaded')
+  }
+}
+
+async function driverAdvanceJourneySequenceAckRoute(request: Request, tripKey: string) {
+  const context = await authenticate(request)
+  const resolved = await resolveDriverAppAccount(context)
+  if ('error' in resolved && resolved.error) return resolved.error
+  try {
+    const input = await readJson<{
+      status?: string
+      declineReason?: string
+    }>(request)
+    const status = String(input.status ?? '').trim()
+    if (!['viewed', 'acknowledged', 'declined', 'delivered'].includes(status)) {
+      return apiError(400, 'status must be viewed, acknowledged, declined, or delivered', 'invalid_status')
+    }
+    const acknowledgement = await driverAdvanceJourneySequenceAcknowledgement({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      driverId: String(resolved.appAccount!.driver_id),
+      tripKey,
+      nextStatus: status as 'viewed' | 'acknowledged' | 'declined' | 'delivered',
+      declineReason: (input.declineReason as
+        | 'already_driving'
+        | 'timing_impossible'
+        | 'passenger_not_suitable'
+        | 'capacity_problem'
+        | 'route_conflict'
+        | 'missing_passenger_information'
+        | 'other'
+        | null) ?? null,
+    })
+    return json({ acknowledgement })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Journey sequence acknowledgement update failed')
+  }
+}
+
 function parseDutyTripId(tripId: string): string | null {
   const match = /^duty-trip-([0-9a-f-]{36})$/i.exec(tripId.trim())
   return match?.[1] ?? null
@@ -10711,6 +10763,18 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (path === 'driver/condition-acknowledgements' && request.method === 'POST') {
     return driverConditionAcknowledgementRoute(request, authenticate)
+  }
+  if (path === 'driver/journey-sequence-acknowledgements' && request.method === 'GET') {
+    return driverListJourneySequenceAcks(request)
+  }
+  if (
+    segments[0] === 'driver' &&
+    segments[1] === 'journey-sequence-acknowledgements' &&
+    segments[2] &&
+    segments[3] === 'advance' &&
+    request.method === 'POST'
+  ) {
+    return driverAdvanceJourneySequenceAckRoute(request, decodeURIComponent(segments[2]))
   }
   if (path === 'yard/tasks' && request.method === 'POST') return createYardTaskRoute(request)
   if (segments[0] === 'yard' && segments[1] === 'tasks' && segments[2] && segments[3] === 'complete' && request.method === 'POST') {

@@ -1,11 +1,13 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
 import {
   commandAcknowledgeDuty,
+  commandAdvanceJourneySequenceAcknowledgement,
   commandArriveJourneyStop,
   commandCompleteJourney,
   commandCompleteJourneyStop,
   commandListDocuments,
   commandListDriverMessages,
+  commandListJourneySequenceAcknowledgements,
   commandListVehicleChecks,
   commandMarkDriverMessageRead,
   commandReplyDriverMessage,
@@ -32,6 +34,18 @@ export async function acknowledgeDuty(dutyId) {
   const token = await accessToken();
   if (!token) return { ok: false, message: "Not signed in." };
   return commandAcknowledgeDuty(token, dutyId);
+}
+
+export async function listJourneySequenceAcknowledgements() {
+  const token = await accessToken();
+  if (!token) return { ok: false, acknowledgements: [], message: "Not signed in." };
+  return commandListJourneySequenceAcknowledgements(token);
+}
+
+export async function advanceJourneySequenceAcknowledgement(tripKey, input = {}) {
+  const token = await accessToken();
+  if (!token) return { ok: false, message: "Not signed in." };
+  return commandAdvanceJourneySequenceAcknowledgement(token, tripKey, input);
 }
 
 export async function signOnDuty(dutyId) {

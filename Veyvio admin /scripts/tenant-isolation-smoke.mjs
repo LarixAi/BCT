@@ -382,6 +382,29 @@ async function main() {
       `expected vehicle_not_assigned or not_found, got ${JSON.stringify(crossVehicleDefect.json)}`,
     )
 
+    const driverJourneyAckList = await driverApi(
+      'GET',
+      'driver/journey-sequence-acknowledgements',
+      driverToken,
+    )
+    assert.equal(
+      driverJourneyAckList.status,
+      200,
+      `driver journey-sequence acknowledgements list failed: ${driverJourneyAckList.status}`,
+    )
+    assert.ok(
+      Array.isArray(driverJourneyAckList.json?.acknowledgements),
+      'driver journey-sequence acknowledgements payload must be an array',
+    )
+
+    const foreignJourneyAckAdvance = await driverApi(
+      'POST',
+      `driver/journey-sequence-acknowledgements/${encodeURIComponent(`duty-trip-${orgB.dutyId ?? '00000000-0000-4000-8000-000000000099'}`)}/advance`,
+      driverToken,
+      { status: 'acknowledged' },
+    )
+    assertDenied(foreignJourneyAckAdvance.status, 'driver advance foreign journey-sequence acknowledgement')
+
     const crossVehicleAdBlue = await driverApi('POST', 'driver/adblue-refill', driverToken, {
       vehicleId: orgB.vehicleId,
       mileage: 10000,
@@ -527,6 +550,21 @@ async function main() {
       { status: 'acknowledged' },
     )
     assertDenied(crossJourneyAck.status, 'cross-tenant journey-sequence acknowledgement')
+
+    const crossDriverJourneyAckList = await api(
+      'GET',
+      '/driver/journey-sequence-acknowledgements',
+      sessionB.accessToken,
+    )
+    assertDenied(crossDriverJourneyAckList.status, 'command user on driver journey-sequence acknowledgements')
+
+    const crossDriverJourneyAckAdvance = await api(
+      'POST',
+      `/driver/journey-sequence-acknowledgements/${encodeURIComponent(`duty-trip-${orgA.dutyId}`)}/advance`,
+      sessionB.accessToken,
+      { status: 'acknowledged' },
+    )
+    assertDenied(crossDriverJourneyAckAdvance.status, 'cross-tenant driver journey-sequence acknowledgement advance')
   }
 
   console.log('tenant-isolation: ok')
