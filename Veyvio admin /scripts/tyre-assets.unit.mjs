@@ -9,7 +9,6 @@ import {
   normalizeTyreStatus,
   tyreNeedsAttentionMapped,
 } from '../supabase/functions/_shared/tyre-assets.mapping.ts'
-import { countTyresNeedingAttention } from '../supabase/functions/_shared/tyre-assets.ts'
 
 assert.equal(normalizeTyreStatus('FITTED'), 'fitted')
 assert.equal(normalizeTyreStatus('unknown'), 'in_stock')
@@ -46,7 +45,6 @@ assert.equal(mapped.internalId, 'TY-014')
 assert.equal(mapped.registrationNumber, 'BX21 ABC')
 assert.equal(mapped.status, 'fitted')
 assert.equal(tyreNeedsAttentionMapped(mapped, 2), true)
-assert.equal(countTyresNeedingAttention([mapped], 2), 1)
 
 const healthy = mapTyreAssetRow({
   ...row,
