@@ -286,6 +286,10 @@ import {
   rotateTyreAssets,
 } from '../_shared/tyre-assets.ts'
 import {
+  approvePurchaseRequest,
+  createPurchaseRequest,
+} from '../_shared/purchase-requests.ts'
+import {
   listVehicleReports,
   getVehicleReport,
   createVehicleReport,
@@ -10257,6 +10261,52 @@ async function fleetResourcesTyreRotate(request: Request) {
   }
 }
 
+async function fleetResourcesPurchaseCreate(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const row = await createPurchaseRequest({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      resourceName: String(input.resourceName ?? ''),
+      quantity: Number(input.quantity ?? 0),
+      unit: input.unit ? String(input.unit) : undefined,
+      estimatedCost: Number(input.estimatedCost ?? 0),
+      vehicleId: input.vehicleId ? String(input.vehicleId) : null,
+      depotId: input.depotId ? String(input.depotId) : null,
+      reason: input.reason ? String(input.reason) : undefined,
+      urgency: input.urgency ? String(input.urgency) : undefined,
+      neededBy: input.neededBy ? String(input.neededBy) : null,
+    })
+    return json(row, 201)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Purchase create failed')
+  }
+}
+
+async function fleetResourcesPurchaseApprove(request: Request, purchaseId: string) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const row = await approvePurchaseRequest({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      purchaseId,
+    })
+    return json(row)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Purchase approve failed')
+  }
+}
+
 async function supportGrantCreate(request: Request) {
   const context = await authenticate(request)
   const input = await readJson<Row>(request)
@@ -10468,6 +10518,18 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (path === 'fleet-resources/tyres/rotate' && request.method === 'POST') {
     return fleetResourcesTyreRotate(request)
+  }
+  if (path === 'fleet-resources/purchases' && request.method === 'POST') {
+    return fleetResourcesPurchaseCreate(request)
+  }
+  if (
+    segments[0] === 'fleet-resources' &&
+    segments[1] === 'purchases' &&
+    segments[2] &&
+    segments[3] === 'approve' &&
+    request.method === 'POST'
+  ) {
+    return fleetResourcesPurchaseApprove(request, segments[2])
   }
   if (segments[0] === 'inspections' && segments[1] && segments[1] !== 'hub' && request.method === 'GET') {
     const context = await authenticate(request)

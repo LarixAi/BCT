@@ -1941,6 +1941,27 @@ export class ApiClient {
     )
   }
 
+  createResourcePurchase(input: {
+    resourceName: string
+    quantity: number
+    unit?: string
+    estimatedCost: number
+    vehicleId?: string | null
+    depotId?: string | null
+    reason?: string
+    urgency?: string
+    neededBy?: string | null
+    actorName: string
+  }) {
+    return this.fetch<import('@/lib/fleet-resources/types').PurchaseRequestRow>(
+      '/fleet-resources/purchases',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    )
+  }
+
   approveResourcePurchase(id: string, actorName: string) {
     return this.fetch<import('@/lib/fleet-resources/types').PurchaseRequestRow | null>(
       `/fleet-resources/purchases/${id}/approve`,

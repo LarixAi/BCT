@@ -1,11 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { resolveInspectionsHub } from './resolve-hub'
 
 describe('resolveInspectionsHub', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs()
-  })
-
   it('uses live hub when fetch succeeds', async () => {
     const resolved = await resolveInspectionsHub({
       fetchLiveHub: async () => ({
@@ -31,23 +27,25 @@ describe('resolveInspectionsHub', () => {
     expect(resolved.hub.summary.dueToday).toBe(1)
   })
 
-  it('fails closed to empty when live and profiles fail and mock is off (F-03)', async () => {
-    vi.stubEnv('VITE_MOCK_API', 'false')
+  it('projects from live vehicle profiles when hub fails (no demo seed)', async () => {
     const resolved = await resolveInspectionsHub({
       fetchLiveHub: async () => {
         throw new Error('hub missing')
       },
-      fetchProfiles: async () => {
-        throw new Error('profiles missing')
-      },
+      fetchProfiles: async () =>
+        [
+          {
+            id: 'veh-1',
+            registrationNumber: 'BX21 ABC',
+            motExpiry: '2026-09-01',
+          },
+        ] as never,
     })
-    expect(resolved.source).toBe('empty')
-    expect(resolved.hub.register).toEqual([])
-    expect(resolved.hub.providers).toEqual([])
+    expect(resolved.source).toBe('projected')
+    expect(resolved.hub.register.length).toBeGreaterThan(0)
   })
 
-  it('uses demo seed only when VITE_MOCK_API is true', async () => {
-    vi.stubEnv('VITE_MOCK_API', 'true')
+  it('fails closed to unavailable when live and profiles fail — never demo seed', async () => {
     const resolved = await resolveInspectionsHub({
       fetchLiveHub: async () => {
         throw new Error('hub missing')
@@ -56,7 +54,8 @@ describe('resolveInspectionsHub', () => {
         throw new Error('profiles missing')
       },
     })
-    expect(resolved.source).toBe('demo')
-    expect(resolved.hub.register.length).toBeGreaterThan(0)
+    expect(resolved.source).toBe('unavailable')
+    expect(resolved.hub.register).toEqual([])
+    expect(resolved.hub.providers).toEqual([])
   })
 })

@@ -294,7 +294,7 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 | TD-024 | Implicit Yard mock-auth when Command env missing | F-03 | Accidental mock login | 🔴 | Exec Gate 0 | Done (code) — prod never silent mock |
 | TD-025 | Website CRM/email stub returns success | F-03 (sales) | Lost waiting-list evidence | 🟠 | Exec Gate 4 | Done (code) — persist-first (KV/notify); production fails closed without persist; crmSynced/emailDelivered honest |
 | TD-026 | Shared BCT layout auto-substitution | F-03 | Fake depot geometry | 🟠 | Exec Gate 4 | Done (code) — map/hub no BCT fallback |
-| TD-027 | Compliance / fleet resource write APIs (core inventory Done) | F-18 | Incomplete write surface | 🟠 | Exec Gate 2 | Partial — exceptions, equipment, depot stock, fuel cards, tyres Done; purchasing invent removed from live path (honest empty); durable purchasing API still open |
+| TD-027 | Compliance / fleet resource write APIs (core inventory Done) | F-18 | Incomplete write surface | 🟠 | Exec Gate 2 | Partial — exceptions, equipment, depot stock, fuel cards, tyres, purchase requests (list/create/approve) Done in code; deploy + live smoke still required |
 
 _Add rows when discovery finds mock paths, dual writes, or blueprint conflicts._
 

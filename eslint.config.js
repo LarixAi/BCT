@@ -48,6 +48,11 @@ export default tseslint.config(
               message:
                 "F-03: import BootstrapPayload / live normalize from @/platform/yard/bootstrap-payload. Mock builder stays under @/data/mocks/bootstrap.",
             },
+            {
+              name: "@/data/mocks/tenancy",
+              message:
+                "F-03: mock tenancy is for mock-auth / DEV bypass only. Live routes must use Command depot lists or dynamic import under isMockAuth.",
+            },
           ],
         },
       ],
@@ -67,6 +72,7 @@ export default tseslint.config(
     files: [
       "src/data/mocks/**/*.{ts,tsx}",
       "src/platform/api/mock-*.ts",
+      "src/platform/auth/auth-api.mock.ts",
       "src/platform/api/server-handlers.ts",
       "src/platform/yard/dev-bypass-bootstrap.ts",
       "src/**/*.{test,spec}.{ts,tsx}",

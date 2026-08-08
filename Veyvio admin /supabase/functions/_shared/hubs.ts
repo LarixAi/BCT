@@ -2,6 +2,7 @@
 import { admin } from './supabase.ts'
 import { mapIncidentRegisterRow } from './incident-workflow.ts'
 import { listEquipmentAssets } from './equipment-assets.ts'
+import { listPurchaseRequests } from './purchase-requests.ts'
 import { listDepotStock, listFuelCards, listStockTransfers } from './depot-stock.ts'
 import { countTyresNeedingAttention, listTyreAssets } from './tyre-assets.ts'
 
@@ -544,13 +545,14 @@ export async function projectFleetResourcesHub(companyId: string) {
     costPerMile: null,
   }))
 
-  // F-03: do not invent kit, fuel cards, or depot stock. Equipment/stock/cards/tyres load from durable tables only.
-  const [equipment, stock, cards, stockTransfers, tyres] = await Promise.all([
+  // F-03: do not invent kit, fuel cards, stock, tyres, or purchases — durable tables only.
+  const [equipment, stock, cards, stockTransfers, tyres, purchaseRequests] = await Promise.all([
     listEquipmentAssets(companyId),
     listDepotStock(companyId),
     listFuelCards(companyId),
     listStockTransfers(companyId),
     listTyreAssets(companyId),
+    listPurchaseRequests(companyId),
   ])
   const missingEquipment = equipment.filter(
     (item) => item.status === 'missing' || item.status === 'expired' || item.status === 'unserviceable',
@@ -558,6 +560,7 @@ export async function projectFleetResourcesHub(companyId: string) {
   const lowDepotStock = stock.filter((item) => item.status === 'low' || item.status === 'reorder' || item.status === 'out').length
   const minTread = 2
   const tyresNeedingAttention = countTyresNeedingAttention(tyres, minTread)
+  const unapprovedPurchases = purchaseRequests.filter((p) => p.status === 'pending').length
 
   return {
     summary: {
@@ -567,7 +570,7 @@ export async function projectFleetResourcesHub(companyId: string) {
       suspectedCardMisuse: 0,
       tyresNeedingAttention,
       lowDepotStock,
-      unapprovedPurchases: 0,
+      unapprovedPurchases,
       missingEquipment,
       resourceBlocks: 0,
       spendThisMonth: 0,
@@ -578,7 +581,7 @@ export async function projectFleetResourcesHub(companyId: string) {
     transactions: [],
     stock,
     cards,
-    purchaseRequests: [],
+    purchaseRequests,
     vehicleCosts,
     tyres,
     equipment,

@@ -85,11 +85,17 @@ export function InspectionsPage() {
 
   return (
     <div className="space-y-6">
-      {(source === 'demo' || source === 'projected') && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          {source === 'demo'
-            ? 'Live inspections hub is unavailable — showing demo inspection register so you can keep working.'
-            : 'Live inspections hub is unavailable — showing inspection stubs from vehicle compliance dates.'}
+      {(source === 'projected' || source === 'unavailable') && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            source === 'unavailable'
+              ? 'border-red-200 bg-red-50 text-red-950'
+              : 'border-amber-200 bg-amber-50 text-amber-950'
+          }`}
+        >
+          {source === 'unavailable'
+            ? 'Inspections could not be loaded from Command. Showing an empty register — demo data is not used.'
+            : 'Live inspections hub is unavailable — showing inspection due items projected from live vehicle compliance dates only.'}
         </div>
       )}
 

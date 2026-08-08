@@ -1,6 +1,6 @@
 # F-03 Full Mock Replacement Plan
 
-**Status:** Exec Gate 0–2 Done (code + deploy) · Gate 3 Partial (scanner + dynamic seed + bootstrap types relocated + inspection providers empty) · Gate 4 Partial (purchasing honest empty; durable purchasing API still open; tenancy mock imports still in some routes)  
+**Status:** Exec Gate 0–2 Done (code) · Gate 3 Partial (bootstrap + tenancy route quarantine + scanners) · Gate 4 Partial (mock trees retained for Playwright) · Purchasing durable list/create/approve Done (code; deploy pending)  
 **Authority:** Combined Blueprint v2.0 §18 F-03, F-18, F-32; platform first → workflows → screens  
 **Date:** 8 August 2026  
 **Companion:** [veyvio-blueprint-alignment-plan.md](./veyvio-blueprint-alignment-plan.md) · [veyvio-production-gates.md](./veyvio-production-gates.md)

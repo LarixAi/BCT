@@ -19,14 +19,17 @@ describe('resolveFleetResourcesHub F-03', () => {
     expect(fetchProfiles).not.toHaveBeenCalled()
   })
 
-  it('fails closed to empty when live fails and mock is off', async () => {
+  it('fails closed to unavailable when live fails — never demo seed', async () => {
     const resolved = await resolveFleetResourcesHub({
       fetchLiveHub: async () => {
         throw new Error('network')
       },
     })
-    expect(resolved.source).toBe('empty')
+    expect(resolved.source).toBe('unavailable')
+    expect(resolved.errorMessage).toMatch(/network/)
     expect(resolved.hub.equipment).toEqual([])
     expect(resolved.hub.purchaseRequests).toEqual([])
+    expect(resolved.hub.tyres).toEqual([])
+    expect(resolved.hub.stock).toEqual([])
   })
 })

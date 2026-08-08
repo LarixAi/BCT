@@ -5,9 +5,8 @@ import { AppShell } from "@/components/yard/shells/AppShell";
 import { SheetHost } from "@/components/yard/sheets";
 import { getSessionSnapshot, useSessionStore } from "@/platform/auth/session-store";
 import { getTenancySnapshot, useTenancyStore } from "@/platform/tenancy/context-store";
-import { DEFAULT_MOCK_ROLE, MOCK_COMPANIES, MOCK_DEPOTS } from "@/data/mocks/tenancy";
 import { hydrateYardFromApi } from "@/platform/yard/hydrate-yard-store";
-import { ensureDevBypassBootstrap } from "@/platform/yard/dev-bypass-bootstrap";
+import { ensureDevBypassBootstrap, ensureDevBypassTenancy } from "@/platform/yard/dev-bypass-bootstrap";
 import { yardCopy } from "@/copy/yard-messages";
 import { useYard } from "@/store/yard";
 
@@ -19,15 +18,7 @@ const HUB_REFRESH_MS = 30_000;
 export const Route = createFileRoute("/_app")({
   beforeLoad: () => {
     if (DEV_BYPASS) {
-      const tenancy = getTenancySnapshot();
-      if (tenancy.depotId !== "dep_bct_main") {
-        const company = MOCK_COMPANIES.find(c => c.id === "co_bct");
-        const depot = MOCK_DEPOTS.find(d => d.id === "dep_bct_main");
-        if (company && depot) {
-          useTenancyStore.getState().selectCompany(company, DEFAULT_MOCK_ROLE);
-          useTenancyStore.getState().selectDepot(depot);
-        }
-      }
+      ensureDevBypassTenancy();
       return;
     }
 

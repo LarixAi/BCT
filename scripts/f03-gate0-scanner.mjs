@@ -72,23 +72,35 @@ const checks = [
   },
   {
     file: 'Veyvio admin /src/lib/fleet-resources/resolve-hub.ts',
-    mustNot: [/enrichSparseLiveHub/, /import\s*\{[^}]*createFleetResourcesSeed/, /from\s*['"]\.\/seed['"]/],
-    must: [/await import\(['"]\.\/seed['"]\)/],
+    mustNot: [
+      /enrichSparseLiveHub/,
+      /createFleetResourcesSeed/,
+      /from\s*['"]\.\/seed['"]/,
+      /await import\(['"]\.\/seed['"]\)/,
+      /source:\s*['"]demo['"]/,
+      /VITE_MOCK_API/,
+    ],
+    must: [/source:\s*['"]unavailable['"]/, /emptyFleetResourcesHub/],
   },
   {
     file: 'Veyvio admin /src/lib/inspections/resolve-hub.ts',
-    mustNot: [/import\s*\{[^}]*createInspectionSeed/, /from\s*['"]\.\/seed['"]/],
-    must: [/await import\(['"]\.\/seed['"]\)/],
+    mustNot: [
+      /createInspectionSeed/,
+      /from\s*['"]\.\/seed['"]/,
+      /await import\(['"]\.\/seed['"]\)/,
+      /source:\s*['"]demo['"]/,
+      /VITE_MOCK_API/,
+    ],
+    must: [/source:\s*['"]unavailable['"]/, /projectInspectionsFromProfiles/],
   },
   {
-    file: 'Veyvio admin /src/features/messages/MessagesPage.tsx',
-    mustNot: [/from\s*['"]@\/lib\/messages\/mock-conversations['"]/],
-    must: [/from\s*['"]@\/lib\/messages\/conversation-utils['"]/],
+    file: 'Veyvio admin /src/features/fleet-resources/FleetResourcesPage.tsx',
+    mustNot: [/showing demo ledger/],
+    must: [/source === 'unavailable'/, /Demo ledger is not used/],
   },
   {
-    file: 'Veyvio admin /src/features/fleet-resources/PurchasingTab.tsx',
-    mustNot: [/No purchase requests\./],
-    must: [/Purchasing is not filled with demo spend/],
+    file: 'Veyvio admin /src/features/inspections/InspectionsPage.tsx',
+    mustNot: [/showing demo inspection register/],
   },
   {
     file: 'src/platform/yard/hydrate-yard-store.ts',
@@ -109,6 +121,24 @@ const checks = [
     file: 'Veyvio admin /src/lib/inspections/empty-hub.ts',
     mustNot: [/from\s*['"]\.\/seed['"]/, /INSPECTION_PROVIDERS/],
     must: [/providers:\s*\[\s*\]/],
+  },
+  {
+    file: 'src/routes/_app.tsx',
+    mustNot: [/@\/data\/mocks\/tenancy/],
+    must: [/ensureDevBypassTenancy/],
+  },
+  {
+    file: 'src/routes/_public.depot-select.tsx',
+    mustNot: [/import\s*\{[^}]*depotsForCompany[^}]*\}\s*from\s*['"]@\/data\/mocks\/tenancy['"]/],
+    must: [/await import\(['"]@\/data\/mocks\/tenancy['"]\)/],
+  },
+  {
+    file: 'Veyvio admin /supabase/functions/_shared/hubs.ts',
+    must: [/listPurchaseRequests/],
+  },
+  {
+    file: 'Veyvio admin /supabase/functions/command-api/index.ts',
+    must: [/fleet-resources\/purchases/, /approvePurchaseRequest/],
   },
 ]
 

@@ -1,67 +1,33 @@
 import type { VehicleProfile } from '@/lib/vehicles/types'
-import { buildFleetResourcesHub } from './aggregate'
 import { emptyFleetResourcesHub, safeFleetResourcesHub } from './empty-hub'
 import type { FleetResourcesHubData } from './types'
 
-export type FleetResourcesHubSource = 'live' | 'demo' | 'empty'
+export type FleetResourcesHubSource = 'live' | 'unavailable'
 
 export interface ResolvedFleetResourcesHub {
   hub: FleetResourcesHubData
   source: FleetResourcesHubSource
-}
-
-/** Demo seed only when mock API is explicitly enabled — never DEV alone (F-03). */
-function allowDemoSeedFallback(): boolean {
-  return import.meta.env.VITE_MOCK_API === 'true'
-}
-
-async function loadProfiles(
-  fetchProfiles?: () => Promise<VehicleProfile[]>,
-): Promise<VehicleProfile[]> {
-  if (!fetchProfiles) return []
-  try {
-    const profiles = await fetchProfiles()
-    return Array.isArray(profiles) ? profiles : []
-  } catch {
-    return []
-  }
+  errorMessage?: string
 }
 
 /**
- * Live-first; production fails closed to empty when live is unavailable.
- * Never invent kit/cards/tyres on a sparse live hub (F-03).
- * Seed is dynamically imported only under explicit mock mode so live bundles
- * do not statically pull purchasing/budget invent data.
+ * Live Command hub only (F-03). Never invent kit/cards/tyres/purchasing from demo seed.
+ * When live fails, return empty + unavailable so the UI can say the truth.
  */
 export async function resolveFleetResourcesHub(opts: {
   fetchLiveHub: () => Promise<FleetResourcesHubData>
+  /** Kept for call-site compatibility; not used for invent/fallback. */
   fetchProfiles?: () => Promise<VehicleProfile[]>
 }): Promise<ResolvedFleetResourcesHub> {
   try {
     const live = await opts.fetchLiveHub()
     return { hub: safeFleetResourcesHub(live), source: 'live' }
-  } catch {
-    // continue
-  }
-
-  if (!allowDemoSeedFallback()) {
-    return { hub: emptyFleetResourcesHub(), source: 'empty' }
-  }
-
-  try {
-    const { createFleetResourcesSeed } = await import('./seed')
-    const seed = createFleetResourcesSeed()
-    const profiles = await loadProfiles(opts.fetchProfiles)
+  } catch (error) {
     return {
-      hub: safeFleetResourcesHub(
-        buildFleetResourcesHub({
-          ...seed,
-          profiles,
-        }),
-      ),
-      source: 'demo',
+      hub: emptyFleetResourcesHub(),
+      source: 'unavailable',
+      errorMessage:
+        error instanceof Error ? error.message : 'Fleet resources could not be loaded from Command',
     }
-  } catch {
-    return { hub: emptyFleetResourcesHub(), source: 'empty' }
   }
 }
