@@ -280,6 +280,12 @@ import {
   upsertDepotStock,
 } from '../_shared/depot-stock.ts'
 import {
+  createTyreAsset,
+  fitTyreAsset,
+  removeTyreAsset,
+  rotateTyreAssets,
+} from '../_shared/tyre-assets.ts'
+import {
   listVehicleReports,
   getVehicleReport,
   createVehicleReport,
@@ -10160,6 +10166,97 @@ async function fleetResourcesFuelCardAssign(request: Request) {
   }
 }
 
+async function fleetResourcesTyreCreate(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const tyre = await createTyreAsset({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      internalId: String(input.internalId ?? ''),
+      brand: String(input.brand ?? ''),
+      size: String(input.size ?? ''),
+      dotCode: input.dotCode ? String(input.dotCode) : undefined,
+      status: input.status ? String(input.status) : undefined,
+      treadDepthMm: typeof input.treadDepthMm === 'number' ? input.treadDepthMm : null,
+      pressurePsi: typeof input.pressurePsi === 'number' ? input.pressurePsi : null,
+      depotId: input.depotId ? String(input.depotId) : null,
+      unitCost: typeof input.unitCost === 'number' ? input.unitCost : null,
+    })
+    return json(tyre, 201)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Tyre create failed')
+  }
+}
+
+async function fleetResourcesTyreFit(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const tyre = await fitTyreAsset({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      tyreId: String(input.tyreId ?? ''),
+      vehicleId: String(input.vehicleId ?? ''),
+      position: String(input.position ?? ''),
+      positionLabel: String(input.positionLabel ?? input.position ?? ''),
+      retorqueDueAt: input.retorqueDueAt ? String(input.retorqueDueAt) : null,
+    })
+    return json(tyre)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Tyre fit failed')
+  }
+}
+
+async function fleetResourcesTyreRemove(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const tyre = await removeTyreAsset({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      tyreId: String(input.tyreId ?? ''),
+      quarantine: Boolean(input.quarantine),
+    })
+    return json(tyre)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Tyre remove failed')
+  }
+}
+
+async function fleetResourcesTyreRotate(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const tyres = await rotateTyreAssets({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      vehicleId: String(input.vehicleId ?? ''),
+      aTyreId: String(input.aTyreId ?? ''),
+      bTyreId: String(input.bTyreId ?? ''),
+    })
+    return json(tyres)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Tyre rotate failed')
+  }
+}
+
 async function supportGrantCreate(request: Request) {
   const context = await authenticate(request)
   const input = await readJson<Row>(request)
@@ -10359,6 +10456,18 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (path === 'fleet-resources/cards/assign' && request.method === 'POST') {
     return fleetResourcesFuelCardAssign(request)
+  }
+  if (path === 'fleet-resources/tyres' && request.method === 'POST') {
+    return fleetResourcesTyreCreate(request)
+  }
+  if (path === 'fleet-resources/tyres/fit' && request.method === 'POST') {
+    return fleetResourcesTyreFit(request)
+  }
+  if (path === 'fleet-resources/tyres/remove' && request.method === 'POST') {
+    return fleetResourcesTyreRemove(request)
+  }
+  if (path === 'fleet-resources/tyres/rotate' && request.method === 'POST') {
+    return fleetResourcesTyreRotate(request)
   }
   if (segments[0] === 'inspections' && segments[1] && segments[1] !== 'hub' && request.method === 'GET') {
     const context = await authenticate(request)

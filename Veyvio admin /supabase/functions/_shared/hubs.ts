@@ -3,6 +3,7 @@ import { admin } from './supabase.ts'
 import { mapIncidentRegisterRow } from './incident-workflow.ts'
 import { listEquipmentAssets } from './equipment-assets.ts'
 import { listDepotStock, listFuelCards, listStockTransfers } from './depot-stock.ts'
+import { countTyresNeedingAttention, listTyreAssets } from './tyre-assets.ts'
 
 type Row = Record<string, unknown>
 
@@ -552,17 +553,20 @@ export async function projectFleetResourcesHub(companyId: string) {
     costPerMile: null,
   }))
 
-  // F-03: do not invent kit, fuel cards, or depot stock. Equipment/stock/cards load from durable tables only.
-  const [equipment, stock, cards, stockTransfers] = await Promise.all([
+  // F-03: do not invent kit, fuel cards, or depot stock. Equipment/stock/cards/tyres load from durable tables only.
+  const [equipment, stock, cards, stockTransfers, tyres] = await Promise.all([
     listEquipmentAssets(companyId),
     listDepotStock(companyId),
     listFuelCards(companyId),
     listStockTransfers(companyId),
+    listTyreAssets(companyId),
   ])
   const missingEquipment = equipment.filter(
     (item) => item.status === 'missing' || item.status === 'expired' || item.status === 'unserviceable',
   ).length
   const lowDepotStock = stock.filter((item) => item.status === 'low' || item.status === 'reorder' || item.status === 'out').length
+  const minTread = 2
+  const tyresNeedingAttention = countTyresNeedingAttention(tyres, minTread)
 
   return {
     summary: {
@@ -570,7 +574,7 @@ export async function projectFleetResourcesHub(companyId: string) {
       lowAdBlueVehicles: 0,
       missingReceipts: 0,
       suspectedCardMisuse: 0,
-      tyresNeedingAttention: 0,
+      tyresNeedingAttention,
       lowDepotStock,
       unapprovedPurchases: 0,
       missingEquipment,
@@ -585,7 +589,7 @@ export async function projectFleetResourcesHub(companyId: string) {
     cards,
     purchaseRequests: [],
     vehicleCosts,
-    tyres: [],
+    tyres,
     equipment,
     stockTransfers,
     forecasts: [],
@@ -601,7 +605,7 @@ export async function projectFleetResourcesHub(companyId: string) {
       maxLitresPerTransaction: 200,
       managerApprovalAbove: 250,
       companyMpgBaseline: 9.5,
-      minTreadDepthMm: 2,
+      minTreadDepthMm: minTread,
       lowFuelPercent: 25,
     },
   }

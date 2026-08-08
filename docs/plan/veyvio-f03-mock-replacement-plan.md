@@ -1,6 +1,6 @@
 # F-03 Full Mock Replacement Plan
 
-**Status:** Exec Gate 0–1 Done (code) · Exception writes Done · Equipment + depot stock + fuel cards Done (code) · Compliance due-item read + website persist-first Done (code) · Tyres/purchasing + quarantine still open  
+**Status:** Exec Gate 0–1 Done (code) · Exception writes Done · Equipment + depot stock + fuel cards + tyres Done (code) · Compliance due-item read + website persist-first Done (code) · Purchasing + quarantine still open  
 **Authority:** Combined Blueprint v2.0 §18 F-03, F-18, F-32; platform first → workflows → screens  
 **Date:** 8 August 2026  
 **Companion:** [veyvio-blueprint-alignment-plan.md](./veyvio-blueprint-alignment-plan.md) · [veyvio-production-gates.md](./veyvio-production-gates.md)
