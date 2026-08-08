@@ -136,6 +136,18 @@ export interface YardHubResponse {
   driverMessages?: unknown[];
   vehicleChecks?: unknown[];
   platformEvents?: HubPlatformEventPayload[];
+  /** Durable equipment inventory keyed by vehicle id (F-03 / TD-027). */
+  equipmentByVehicle?: Record<
+    string,
+    {
+      fixed?: unknown[];
+      assigned?: unknown[];
+      consumables?: unknown[];
+      documents?: unknown[];
+    }
+  >;
+  /** Durable depot stock lines for the active depot. */
+  depotStock?: Array<{ defId: string; label: string; onHand: number; unit: string }>;
 }
 
 export type HubPlatformEventPayload = {

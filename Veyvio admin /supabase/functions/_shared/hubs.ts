@@ -1,6 +1,8 @@
 /** Live Command hub projections from shared operational tables. */
 import { admin } from './supabase.ts'
 import { mapIncidentRegisterRow } from './incident-workflow.ts'
+import { listEquipmentAssets } from './equipment-assets.ts'
+import { listDepotStock, listFuelCards, listStockTransfers } from './depot-stock.ts'
 
 type Row = Record<string, unknown>
 
@@ -550,9 +552,17 @@ export async function projectFleetResourcesHub(companyId: string) {
     costPerMile: null,
   }))
 
-  // F-03: do not invent kit, fuel cards, or depot stock. Empty until durable tables/API exist.
-  const equipment: unknown[] = []
-  const cards: unknown[] = []
+  // F-03: do not invent kit, fuel cards, or depot stock. Equipment/stock/cards load from durable tables only.
+  const [equipment, stock, cards, stockTransfers] = await Promise.all([
+    listEquipmentAssets(companyId),
+    listDepotStock(companyId),
+    listFuelCards(companyId),
+    listStockTransfers(companyId),
+  ])
+  const missingEquipment = equipment.filter(
+    (item) => item.status === 'missing' || item.status === 'expired' || item.status === 'unserviceable',
+  ).length
+  const lowDepotStock = stock.filter((item) => item.status === 'low' || item.status === 'reorder' || item.status === 'out').length
 
   return {
     summary: {
@@ -561,9 +571,9 @@ export async function projectFleetResourcesHub(companyId: string) {
       missingReceipts: 0,
       suspectedCardMisuse: 0,
       tyresNeedingAttention: 0,
-      lowDepotStock: 0,
+      lowDepotStock,
       unapprovedPurchases: 0,
-      missingEquipment: 0,
+      missingEquipment,
       resourceBlocks: 0,
       spendThisMonth: 0,
       costPerMileThisMonth: null,
@@ -571,13 +581,13 @@ export async function projectFleetResourcesHub(companyId: string) {
     alerts: [],
     catalogue: [],
     transactions: [],
-    stock: [],
+    stock,
     cards,
     purchaseRequests: [],
     vehicleCosts,
     tyres: [],
     equipment,
-    stockTransfers: [],
+    stockTransfers,
     forecasts: [],
     anomalies: [],
     baselines: [],

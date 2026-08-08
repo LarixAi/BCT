@@ -1,5 +1,9 @@
 /** Command read-model projections over shared platform tables. */
 import { admin } from './supabase.ts'
+import {
+  groupVehicleEquipmentItems,
+  listEquipmentRowsForCompany,
+} from './equipment-assets.ts'
 
 type Row = Record<string, unknown>
 
@@ -1000,14 +1004,19 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
   const { data, error } = await query
   if (error) throw new Error(error.message)
 
-  const [{ data: defectCounts }, checkEntries] = await Promise.all([
+  const [{ data: defectCounts }, checkEntries, equipmentRows] = await Promise.all([
     admin
       .from('defects')
       .select('vehicle_id, severity, status')
       .eq('company_id', companyId)
       .not('status', 'in', '("closed","rejected")'),
     loadVehicleCheckEntries(companyId, vehicleId),
+    listEquipmentRowsForCompany(companyId),
   ])
+
+  const equipmentByVehicle = groupVehicleEquipmentItems(
+    vehicleId ? equipmentRows.filter((row) => String(row.vehicle_id ?? '') === vehicleId) : equipmentRows,
+  )
 
   const openByVehicle = new Map<string, { open: number; critical: number }>()
   for (const defect of defectCounts ?? []) {
@@ -1145,7 +1154,7 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
       downtimeEvents: [],
       wheelLayout: [],
       retorqueTasks: [],
-      equipment: [],
+      equipment: equipmentByVehicle.get(String(row.id)) ?? [],
       tachograph: null,
       onboarding: approvedOnboarding(),
       damageRecords: [],

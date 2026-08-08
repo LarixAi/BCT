@@ -4,6 +4,8 @@
  */
 import { recordAdBlueRefill } from './adblue-records.ts'
 import { maybeCreateExceptionForDefect } from './defect-automation.ts'
+import { applyYardEquipmentMutation } from './equipment-assets.ts'
+import { applyYardConsumableRestock } from './depot-stock.ts'
 import { apiError, json } from './http.ts'
 import { admin, type RequestContext } from './supabase.ts'
 
@@ -277,20 +279,61 @@ async function yardEquipmentMutation(
   actorName: string,
   localOperationId: string,
 ): Promise<Response> {
-  const vehicleId = String(payload.vehicleId ?? '')
-  if (!vehicleId) return apiError(400, 'vehicleId is required')
+  const vehicleId = String(payload.vehicleId ?? payload.fromVehicleId ?? payload.toVehicleId ?? '')
+  if (!vehicleId && type !== 'equipment.restock') {
+    return apiError(400, 'vehicleId is required')
+  }
 
-  const correlationId = localOperationId || `yard_${type}_${vehicleId}_${payload.itemId ?? Date.now()}`
-  const serverId = await writeYardAuditEvent({
-    context,
-    action: `yard.${type}`,
-    entityType: 'vehicle_equipment',
-    entityId: vehicleId,
-    correlationId,
-    actorName,
-    afterSnapshot: payload,
-  })
-  return json({ ok: true, serverId })
+  const correlationId = localOperationId || `yard_${type}_${vehicleId}_${payload.itemId ?? payload.defId ?? Date.now()}`
+  try {
+    if (type === 'equipment.restock') {
+      const result = await applyYardConsumableRestock({
+        companyId: context.companyId,
+        actorUserId: context.user.id,
+        actorName,
+        vehicleId: String(payload.vehicleId ?? ''),
+        defId: String(payload.defId ?? payload.itemId ?? ''),
+        addQty: Number(payload.addQty ?? payload.quantity ?? 0),
+        label: payload.label ? String(payload.label) : undefined,
+        unit: payload.unit ? String(payload.unit) : undefined,
+        depotId: payload.depotId ? String(payload.depotId) : null,
+      })
+      const serverId = await writeYardAuditEvent({
+        context,
+        action: `yard.${type}`,
+        entityType: 'vehicle_equipment',
+        entityId: result.stockItemId,
+        correlationId,
+        actorName,
+        afterSnapshot: { ...payload, ...result },
+      })
+      return json({ ok: true, serverId, ...result })
+    }
+
+    const result = await applyYardEquipmentMutation({
+      type,
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName,
+      payload,
+    })
+    const serverId = await writeYardAuditEvent({
+      context,
+      action: `yard.${type}`,
+      entityType: 'vehicle_equipment',
+      entityId: result.equipmentId,
+      correlationId,
+      actorName,
+      afterSnapshot: { ...payload, equipmentId: result.equipmentId },
+    })
+    return json({ ok: true, serverId, equipmentId: result.equipmentId })
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      const httpErr = error as Error & { status: number }
+      return apiError(httpErr.status || 400, httpErr.message)
+    }
+    return apiError(500, error instanceof Error ? error.message : 'Equipment mutation failed')
+  }
 }
 
 async function yardDepartureReleaseMutation(

@@ -37,8 +37,49 @@ describe("mapYardHubToBootstrap", () => {
     expect(payload.vehicles[1].status).toBe("VOR");
     expect(payload.tasks).toEqual([]);
     expect(payload.bays.length).toBeGreaterThan(0);
-    expect(payload.yardMapEnabled).toBe(true);
-    expect(payload.yardLayout?.bays.length).toBe(26);
+    // F-03: no invented yard layout when hub omits yardLayout.
+    expect(payload.yardMapEnabled).toBe(false);
+    expect(payload.yardLayout).toBeNull();
+    expect(payload.equipment).toEqual({});
+  });
+
+  it("maps durable equipmentByVehicle from hub without inventing kit", () => {
+    const hub: YardHubResponse = {
+      depotId: "dep_live",
+      depotName: "Wembley",
+      vehicles: [
+        {
+          vehicleId: "veh_1",
+          registrationNumber: "AB12 CDE",
+          vehicleCategory: "minibus",
+          zone: "Yard",
+          readinessState: "ready_for_service",
+        },
+      ],
+      equipmentByVehicle: {
+        veh_1: {
+          fixed: [],
+          assigned: [
+            {
+              id: "eq-1",
+              defId: "equipment",
+              label: "Wheelchair Strap",
+              status: "present",
+              assignedAt: "2026-08-08T10:00:00.000Z",
+              assignedBy: "Yard lead",
+              qrCode: "WCS-014",
+            },
+          ],
+          consumables: [],
+          documents: [],
+        },
+      },
+    };
+
+    const payload = mapYardHubToBootstrap(hub, "co_live", "dep_live", "yard_manager");
+    expect(payload.equipment.veh_1?.assigned).toHaveLength(1);
+    expect(payload.equipment.veh_1?.assigned[0]?.label).toBe("Wheelchair Strap");
+    expect(payload.equipment.veh_2).toBeUndefined();
   });
 
   it("maps driver check sections from hub top-level sections field", () => {

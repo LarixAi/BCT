@@ -264,6 +264,22 @@ import {
 } from '../_shared/compliance-engine.ts'
 import { DEFAULT_DEFECT_AUTOMATION_RULES, maybeCreateExceptionForDefect } from '../_shared/defect-automation.ts'
 import {
+  assignEquipmentAsset,
+  buildEquipmentByVehicleMap,
+  createEquipmentAsset,
+  listEquipmentRowsForCompany,
+  updateVehicleEquipmentItem,
+} from '../_shared/equipment-assets.ts'
+import {
+  assignFuelCard,
+  createFuelCard,
+  createStockTransfer,
+  listYardDepotStockLines,
+  listVehicleConsumablesByCompany,
+  mergeConsumablesIntoEquipmentMap,
+  upsertDepotStock,
+} from '../_shared/depot-stock.ts'
+import {
   listVehicleReports,
   getVehicleReport,
   createVehicleReport,
@@ -5972,7 +5988,8 @@ async function yardHubData(context: Awaited<ReturnType<typeof authenticate>>, re
     ? { id: String(activeDepotRow.id), name: String(activeDepotRow.name ?? 'Depot'), code: String(activeDepotRow.code ?? '') }
     : { id: '', name: 'All depots', code: '' }
 
-  const [tasks, movements, layoutResult, locationMap, platformEvents] = await Promise.all([
+  const [tasks, movements, layoutResult, locationMap, platformEvents, equipmentRows, consumableRows, depotStock] =
+    await Promise.all([
     loadYardOpsTasks(context.companyId, activeDepot.id || null),
     loadYardOpsMovements(context.companyId, activeDepot.id || null),
     activeDepot.id
@@ -5984,6 +6001,9 @@ async function yardHubData(context: Awaited<ReturnType<typeof authenticate>>, re
     activeDepot.id
       ? loadRecentVehicleReturnedEvents(admin, context.companyId, activeDepot.id)
       : Promise.resolve([]),
+    listEquipmentRowsForCompany(context.companyId),
+    listVehicleConsumablesByCompany(context.companyId),
+    listYardDepotStockLines(context.companyId, activeDepot.id || null),
   ])
 
   const filtered = (vehicles ?? []).filter((v: Row) => {
@@ -6110,6 +6130,11 @@ async function yardHubData(context: Awaited<ReturnType<typeof authenticate>>, re
     vehicleChecks: await loadYardVehicleChecksForHub(context.companyId),
     bodyCondition: await loadBodyConditionForYardHub(context.companyId, activeDepot.id || null),
     platformEvents,
+    equipmentByVehicle: mergeConsumablesIntoEquipmentMap(
+      buildEquipmentByVehicleMap(equipmentRows),
+      consumableRows,
+    ),
+    depotStock,
   }
 }
 
@@ -9940,6 +9965,201 @@ async function fleetResourcesHub(request: Request) {
   }
 }
 
+async function fleetResourcesEquipmentCreate(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const asset = await createEquipmentAsset({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      name: String(input.name ?? ''),
+      category: input.category ? String(input.category) : undefined,
+      status: input.status ? String(input.status) : undefined,
+      depotId: input.depotId ? String(input.depotId) : null,
+      vehicleId: input.vehicleId ? String(input.vehicleId) : null,
+      qrCode: input.qrCode ? String(input.qrCode) : null,
+      serialNumber: input.serialNumber ? String(input.serialNumber) : null,
+      requiredForDuty: Boolean(input.requiredForDuty),
+      expiryAt: input.expiryAt ? String(input.expiryAt) : input.expiryDate ? String(input.expiryDate) : null,
+      inspectionDueAt: input.inspectionDueAt ? String(input.inspectionDueAt) : null,
+      serviceable: input.serviceable !== false,
+      inDate: input.inDate !== false,
+    })
+    return json(asset, 201)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Equipment create failed')
+  }
+}
+
+async function fleetResourcesEquipmentAssign(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const equipmentId = String(input.equipmentId ?? '')
+    if (!equipmentId) return apiError(400, 'equipmentId is required')
+    const vehicleId =
+      input.vehicleId === null || input.vehicleId === undefined || input.vehicleId === ''
+        ? null
+        : String(input.vehicleId)
+    const asset = await assignEquipmentAsset({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      equipmentId,
+      vehicleId,
+      depotId: input.depotId ? String(input.depotId) : null,
+    })
+    return json(asset)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Equipment assign failed')
+  }
+}
+
+async function patchVehicleEquipment(request: Request, vehicleId: string) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const equipmentId = String(input.equipmentId ?? '')
+    if (!equipmentId) return apiError(400, 'equipmentId is required')
+    await updateVehicleEquipmentItem({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      vehicleId,
+      equipmentId,
+      assigned: typeof input.assigned === 'boolean' ? input.assigned : undefined,
+      serviceable: typeof input.serviceable === 'boolean' ? input.serviceable : undefined,
+      inDate: typeof input.inDate === 'boolean' ? input.inDate : undefined,
+      status: input.status ? String(input.status) : undefined,
+    })
+    const profile = await projectVehicleProfile(context.companyId, vehicleId)
+    if (!profile) return apiError(404, 'Vehicle not found')
+    return json(profile)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Equipment update failed')
+  }
+}
+
+async function fleetResourcesStockUpsert(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const row = await upsertDepotStock({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      depotId: String(input.depotId ?? ''),
+      resourceItemId: String(input.resourceItemId ?? ''),
+      resourceName: String(input.resourceName ?? ''),
+      category: input.category ? String(input.category) : undefined,
+      unit: input.unit ? String(input.unit) : undefined,
+      available: typeof input.available === 'number' ? input.available : undefined,
+      minimum: typeof input.minimum === 'number' ? input.minimum : undefined,
+      adjustBy: typeof input.adjustBy === 'number' ? input.adjustBy : undefined,
+    })
+    return json(row, 201)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Stock upsert failed')
+  }
+}
+
+async function fleetResourcesStockTransfer(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const row = await createStockTransfer({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      resourceItemId: String(input.resourceItemId ?? ''),
+      resourceName: String(input.resourceName ?? ''),
+      quantity: Number(input.quantity ?? 0),
+      unit: input.unit ? String(input.unit) : undefined,
+      fromDepotId: String(input.fromDepotId ?? ''),
+      toDepotId: String(input.toDepotId ?? ''),
+    })
+    return json(row, 201)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Stock transfer failed')
+  }
+}
+
+async function fleetResourcesFuelCardCreate(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const card = await createFuelCard({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      provider: String(input.provider ?? ''),
+      maskedNumber: String(input.maskedNumber ?? ''),
+      status: input.status ? String(input.status) : undefined,
+      assignmentModel: input.assignmentModel ? String(input.assignmentModel) : undefined,
+      assignedVehicleId: input.assignedVehicleId ? String(input.assignedVehicleId) : null,
+      assignedDriverName: input.assignedDriverName ? String(input.assignedDriverName) : null,
+      depotId: input.depotId ? String(input.depotId) : null,
+      dailyLimit: typeof input.dailyLimit === 'number' ? input.dailyLimit : null,
+    })
+    return json(card, 201)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Fuel card create failed')
+  }
+}
+
+async function fleetResourcesFuelCardAssign(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  try {
+    const fuelCardId = String(input.fuelCardId ?? input.cardId ?? '')
+    if (!fuelCardId) return apiError(400, 'fuelCardId is required')
+    const card = await assignFuelCard({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Command'),
+      fuelCardId,
+      assignedVehicleId:
+        input.assignedVehicleId === undefined
+          ? undefined
+          : input.assignedVehicleId
+            ? String(input.assignedVehicleId)
+            : null,
+      assignedDriverName:
+        input.assignedDriverName === undefined
+          ? undefined
+          : input.assignedDriverName
+            ? String(input.assignedDriverName)
+            : null,
+      status: input.status ? String(input.status) : undefined,
+    })
+    return json(card)
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      return apiError((error as Error & { status: number }).status, error.message)
+    }
+    return apiError(400, error instanceof Error ? error.message : 'Fuel card assign failed')
+  }
+}
+
 async function supportGrantCreate(request: Request) {
   const context = await authenticate(request)
   const input = await readJson<Row>(request)
@@ -10122,6 +10342,24 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'maintenance/hub' && request.method === 'GET') return maintenanceHub(request)
   if (path === 'inspections/hub' && request.method === 'GET') return inspectionsHub(request)
   if (path === 'fleet-resources/hub' && request.method === 'GET') return fleetResourcesHub(request)
+  if (path === 'fleet-resources/equipment' && request.method === 'POST') {
+    return fleetResourcesEquipmentCreate(request)
+  }
+  if (path === 'fleet-resources/equipment/assign' && request.method === 'POST') {
+    return fleetResourcesEquipmentAssign(request)
+  }
+  if (path === 'fleet-resources/stock' && request.method === 'POST') {
+    return fleetResourcesStockUpsert(request)
+  }
+  if (path === 'fleet-resources/stock/transfers' && request.method === 'POST') {
+    return fleetResourcesStockTransfer(request)
+  }
+  if (path === 'fleet-resources/cards' && request.method === 'POST') {
+    return fleetResourcesFuelCardCreate(request)
+  }
+  if (path === 'fleet-resources/cards/assign' && request.method === 'POST') {
+    return fleetResourcesFuelCardAssign(request)
+  }
   if (segments[0] === 'inspections' && segments[1] && segments[1] !== 'hub' && request.method === 'GET') {
     const context = await authenticate(request)
     try {
@@ -10762,6 +11000,9 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'vehicles/summary' && request.method === 'GET') return vehicleSummary(request)
   if (segments[0] === 'vehicles' && segments[2] === 'profile' && request.method === 'GET') {
     return vehicleProfiles(request, segments[1])
+  }
+  if (segments[0] === 'vehicles' && segments[1] && segments[2] === 'equipment' && request.method === 'PATCH') {
+    return patchVehicleEquipment(request, segments[1])
   }
   if (path === 'vehicles' && request.method === 'POST') return createVehicle(request)
   if (path === 'vehicles' && request.method === 'GET') {

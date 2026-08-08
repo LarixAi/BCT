@@ -21,6 +21,8 @@ import type {
   VehicleStatus,
   VehicleType,
 } from "@/types/yard";
+import type { VehicleEquipment } from "@/types/equipment";
+import type { StockLine } from "@/data/equipment-fixtures";
 import type { YardHubLayoutSnapshot } from "@veyvio/yard";
 import { ingestHubPlatformEvents } from "@/platform/ops/ingest-hub-platform-events";
 import { parseDefectIdFromTaskInstructions } from "@/domain/tasks/server-task-automation";
@@ -513,6 +515,28 @@ export function mapYardHubToBootstrap(
 
   ingestHubPlatformEvents(hub.platformEvents);
 
+  const equipment: Record<string, VehicleEquipment> = {};
+  const hubEquipment = hub.equipmentByVehicle ?? {};
+  for (const [vehicleId, pack] of Object.entries(hubEquipment)) {
+    equipment[vehicleId] = {
+      fixed: Array.isArray(pack.fixed) ? (pack.fixed as VehicleEquipment["fixed"]) : [],
+      assigned: Array.isArray(pack.assigned) ? (pack.assigned as VehicleEquipment["assigned"]) : [],
+      consumables: Array.isArray(pack.consumables)
+        ? (pack.consumables as VehicleEquipment["consumables"])
+        : [],
+      documents: Array.isArray(pack.documents) ? (pack.documents as VehicleEquipment["documents"]) : [],
+    };
+  }
+
+  const depotStock: StockLine[] = Array.isArray(hub.depotStock)
+    ? hub.depotStock.map((line) => ({
+        defId: String(line.defId),
+        label: String(line.label),
+        onHand: Number(line.onHand ?? 0),
+        unit: String(line.unit ?? "units"),
+      }))
+    : [];
+
   return {
     ...shell,
     dataSource: COMMAND_HUB_BOOTSTRAP_SOURCE,
@@ -531,6 +555,8 @@ export function mapYardHubToBootstrap(
     defects: [],
     vorCases: [],
     yardChecks: hubChecks,
+    equipment,
+    depotStock,
     inspections: hubInspections,
     inspectionMedia: hubInspectionMedia,
     damageObservations: mergedObservations,
