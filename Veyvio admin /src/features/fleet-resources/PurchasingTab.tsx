@@ -43,7 +43,7 @@ export function PurchasingTab({ hub }: { hub: FleetResourcesHubData }) {
             {hub.purchaseRequests.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-muted">
-                  No purchase requests.
+                  No purchase requests from Command. Purchasing is not filled with demo spend.
                 </td>
               </tr>
             ) : (

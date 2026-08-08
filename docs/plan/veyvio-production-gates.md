@@ -112,7 +112,7 @@ Gate 4 — Production launch
 | **G2** | Job execution + duty closeout + vehicle swap | Verified (prod) | `test:gate2-live` + tenant-isolation 28 Jul; [gate2-wip-triage.md](./gate2-wip-triage.md) |
 | **G2** | Gate 2 RLS migration | Verified (deployed) | `202607270001` applied; tenant-isolation PASS |
 | **F-02** | Tenant isolation depth | Partial | Isolation smoke includes job execution / closeout / swap; extend as hubs ship |
-| **F-03** | No mock/fallback production (full replacement) | Partial | Exec Gate 0 Done (code) — scanner `npm run test:f03-gate0`; remaining Gate 2 writes + Gate 4 cleanup — [veyvio-f03-mock-replacement-plan.md](./veyvio-f03-mock-replacement-plan.md) |
+| **F-03** | No mock/fallback production (full replacement) | Partial | Exec Gate 0–2 Done (deployed); Gate 3 Partial (`test:f03-gate0` + Admin fallback inventory); Gate 4 Partial (purchasing honest empty; quarantine open) — [veyvio-f03-mock-replacement-plan.md](./veyvio-f03-mock-replacement-plan.md) |
 | **Yard** | Bodywork report wizard (steps 1–5) | Done (slice) | `ReportDamageWizard` + `damage.report` outbox — [gate2-wip-triage.md](./gate2-wip-triage.md) |
 
 _Update this table as Gate 1/2 items ship._

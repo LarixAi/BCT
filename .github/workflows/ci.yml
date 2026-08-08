@@ -90,6 +90,11 @@ jobs:
           cd "Veyvio admin "
           npm test
 
+      - name: F-03 production fallback inventory
+        run: |
+          cd "Veyvio admin "
+          npm run test:f03-fallback-inventory
+
       - name: Typecheck
         run: |
           cd "Veyvio admin "

@@ -39,6 +39,7 @@
     "test:geofencing": "npx tsx scripts/geofencing.unit.mjs",
     "test:interest-submissions": "npx tsx scripts/interest-submissions.unit.mjs",
     "test:gate2-live": "node scripts/gate2-live-smoke.mjs",
+    "test:f03-fallback-inventory": "node scripts/production-fallback-inventory.mjs",
     "gate1:bct-readiness": "node scripts/gate1-bct-readiness.mjs",
     "gate1:bct-pilot-setup": "node scripts/gate1-bct-pilot-setup.mjs",
     "gate1:rotate-credentials": "node scripts/rotate-gate1-credentials.mjs",

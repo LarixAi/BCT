@@ -15,6 +15,7 @@ describe('resolveFleetResourcesHub F-03', () => {
     expect(resolved.source).toBe('live')
     expect(resolved.hub.equipment).toEqual([])
     expect(resolved.hub.cards).toEqual([])
+    expect(resolved.hub.purchaseRequests).toEqual([])
     expect(fetchProfiles).not.toHaveBeenCalled()
   })
 
@@ -26,5 +27,6 @@ describe('resolveFleetResourcesHub F-03', () => {
     })
     expect(resolved.source).toBe('empty')
     expect(resolved.hub.equipment).toEqual([])
+    expect(resolved.hub.purchaseRequests).toEqual([])
   })
 })

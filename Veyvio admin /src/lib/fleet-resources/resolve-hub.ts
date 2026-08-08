@@ -1,7 +1,6 @@
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { buildFleetResourcesHub } from './aggregate'
 import { emptyFleetResourcesHub, safeFleetResourcesHub } from './empty-hub'
-import { createFleetResourcesSeed } from './seed'
 import type { FleetResourcesHubData } from './types'
 
 export type FleetResourcesHubSource = 'live' | 'demo' | 'empty'
@@ -31,6 +30,8 @@ async function loadProfiles(
 /**
  * Live-first; production fails closed to empty when live is unavailable.
  * Never invent kit/cards/tyres on a sparse live hub (F-03).
+ * Seed is dynamically imported only under explicit mock mode so live bundles
+ * do not statically pull purchasing/budget invent data.
  */
 export async function resolveFleetResourcesHub(opts: {
   fetchLiveHub: () => Promise<FleetResourcesHubData>
@@ -48,6 +49,7 @@ export async function resolveFleetResourcesHub(opts: {
   }
 
   try {
+    const { createFleetResourcesSeed } = await import('./seed')
     const seed = createFleetResourcesSeed()
     const profiles = await loadProfiles(opts.fetchProfiles)
     return {

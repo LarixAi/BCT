@@ -2,7 +2,6 @@ import type { VehicleProfile } from '@/lib/vehicles/types'
 import { buildInspectionsHub } from './aggregate'
 import { emptyInspectionsHub, safeInspectionsHub } from './empty-hub'
 import { projectInspectionsFromProfiles } from './project-from-profiles'
-import { createInspectionSeed } from './seed'
 import type { InspectionsHubData } from './types'
 
 export type InspectionsHubSource = 'live' | 'projected' | 'demo' | 'empty'
@@ -17,7 +16,10 @@ function allowDemoSeedFallback(): boolean {
   return import.meta.env.VITE_MOCK_API === 'true'
 }
 
-/** Live-first; production fails closed to empty when live/projected data is unavailable. */
+/**
+ * Live-first; production fails closed to empty when live/projected data is unavailable.
+ * Seed is dynamically imported only under explicit mock mode (F-03 Gate 3).
+ */
 export async function resolveInspectionsHub(opts: {
   fetchLiveHub: () => Promise<InspectionsHubData>
   fetchProfiles: () => Promise<VehicleProfile[]>
@@ -44,6 +46,7 @@ export async function resolveInspectionsHub(opts: {
   }
 
   try {
+    const { createInspectionSeed } = await import('./seed')
     return { hub: safeInspectionsHub(buildInspectionsHub(createInspectionSeed())), source: 'demo' }
   } catch {
     return { hub: emptyInspectionsHub(), source: 'empty' }

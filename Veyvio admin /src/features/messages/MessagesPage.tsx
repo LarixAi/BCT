@@ -4,7 +4,7 @@ import { SectionCard } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
 import type { MessageRecord } from '@/lib/api/types'
-import { conversationKpis, filterConversations } from '@/lib/messages/mock-conversations'
+import { conversationKpis, filterConversations } from '@/lib/messages/conversation-utils'
 import type { Conversation, ConversationMessage, MessageInboxTab } from '@/lib/messages/types'
 
 const TABS: { id: MessageInboxTab; label: string }[] = [

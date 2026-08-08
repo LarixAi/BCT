@@ -72,7 +72,23 @@ const checks = [
   },
   {
     file: 'Veyvio admin /src/lib/fleet-resources/resolve-hub.ts',
-    mustNot: [/enrichSparseLiveHub/],
+    mustNot: [/enrichSparseLiveHub/, /import\s*\{[^}]*createFleetResourcesSeed/, /from\s*['"]\.\/seed['"]/],
+    must: [/await import\(['"]\.\/seed['"]\)/],
+  },
+  {
+    file: 'Veyvio admin /src/lib/inspections/resolve-hub.ts',
+    mustNot: [/import\s*\{[^}]*createInspectionSeed/, /from\s*['"]\.\/seed['"]/],
+    must: [/await import\(['"]\.\/seed['"]\)/],
+  },
+  {
+    file: 'Veyvio admin /src/features/messages/MessagesPage.tsx',
+    mustNot: [/from\s*['"]@\/lib\/messages\/mock-conversations['"]/],
+    must: [/from\s*['"]@\/lib\/messages\/conversation-utils['"]/],
+  },
+  {
+    file: 'Veyvio admin /src/features/fleet-resources/PurchasingTab.tsx',
+    mustNot: [/No purchase requests\./],
+    must: [/Purchasing is not filled with demo spend/],
   },
 ]
 
