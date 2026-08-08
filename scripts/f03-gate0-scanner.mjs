@@ -25,7 +25,8 @@ const checks = [
   },
   {
     file: 'Veyvio admin /src/features/messages/MessagesPage.tsx',
-    mustNot: [/MOCK_CONVERSATIONS/],
+    mustNot: [/MOCK_CONVERSATIONS/, /from\s*['"]@\/lib\/messages\/mock-conversations['"]/],
+    must: [/from\s*['"]@\/lib\/messages\/conversation-utils['"]/],
   },
   {
     file: 'Veyvio admin /src/lib/inspections/resolve-hub.ts',
@@ -101,6 +102,11 @@ const checks = [
   {
     file: 'Veyvio admin /src/features/inspections/InspectionsPage.tsx',
     mustNot: [/showing demo inspection register/],
+  },
+  {
+    file: 'Veyvio admin /src/features/fleet-resources/PurchasingTab.tsx',
+    mustNot: [/No purchase requests\./],
+    must: [/Purchasing is not filled with demo spend/],
   },
   {
     file: 'src/platform/yard/hydrate-yard-store.ts',
