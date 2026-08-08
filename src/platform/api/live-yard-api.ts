@@ -1,7 +1,7 @@
 import { getApiBaseUrl, usesCommandYardApi } from "./config";
 import { isProductionBuild } from "@/platform/api/production-guards";
 import { mapYardHubToBootstrap } from "./map-yard-hub";
-import type { BootstrapPayload } from "@/data/mocks/bootstrap";
+import type { BootstrapPayload } from "@/platform/yard/bootstrap-payload";
 import type { YardRole } from "@/types/permissions";
 import type { OutboxMutation } from "@/types/sync";
 import { formatSyncError } from "@/domain/sync/format-sync-error";

@@ -25,7 +25,7 @@ import type {
   VehicleInspection,
 } from "@/types/condition";
 import type { YardCheckResult } from "@/types/yard-check";
-import type { BootstrapDataSource } from "@/data/mocks/bootstrap";
+import type { BootstrapDataSource } from "@/platform/yard/bootstrap-payload";
 
 /** Operational store fields with no demo fleet — used on first paint and after tenant switch. */
 export function createEmptyYardCoreState(): {

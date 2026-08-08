@@ -2,7 +2,7 @@ import {
   buildLiveBootstrapShell,
   COMMAND_HUB_BOOTSTRAP_SOURCE,
   type BootstrapPayload,
-} from "@/data/mocks/bootstrap";
+} from "@/platform/yard/bootstrap-payload";
 import type {
   YardHubMovement,
   YardHubResponse,
@@ -21,8 +21,7 @@ import type {
   VehicleStatus,
   VehicleType,
 } from "@/types/yard";
-import type { VehicleEquipment } from "@/types/equipment";
-import type { StockLine } from "@/data/equipment-fixtures";
+import type { StockLine, VehicleEquipment } from "@/types/equipment";
 import type { YardHubLayoutSnapshot } from "@veyvio/yard";
 import { ingestHubPlatformEvents } from "@/platform/ops/ingest-hub-platform-events";
 import { parseDefectIdFromTaskInstructions } from "@/domain/tasks/server-task-automation";

@@ -43,6 +43,11 @@ export default tseslint.config(
               message:
                 "TanStack Start does not use the Next.js `server-only` package. Rename the module to `*.server.ts` or mark it with `@tanstack/react-start/server-only`.",
             },
+            {
+              name: "@/data/mocks/bootstrap",
+              message:
+                "F-03: import BootstrapPayload / live normalize from @/platform/yard/bootstrap-payload. Mock builder stays under @/data/mocks/bootstrap.",
+            },
           ],
         },
       ],
@@ -56,6 +61,18 @@ export default tseslint.config(
     rules: {
       // Avoid failing CI on historical Prettier churn in Yard source.
       "prettier/prettier": "off",
+    },
+  },
+  {
+    files: [
+      "src/data/mocks/**/*.{ts,tsx}",
+      "src/platform/api/mock-*.ts",
+      "src/platform/api/server-handlers.ts",
+      "src/platform/yard/dev-bypass-bootstrap.ts",
+      "src/**/*.{test,spec}.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-imports": "off",
     },
   },
 );

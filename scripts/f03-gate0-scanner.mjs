@@ -90,6 +90,26 @@ const checks = [
     mustNot: [/No purchase requests\./],
     must: [/Purchasing is not filled with demo spend/],
   },
+  {
+    file: 'src/platform/yard/hydrate-yard-store.ts',
+    mustNot: [/@\/data\/mocks\/bootstrap/],
+    must: [/normalizeLiveBootstrapPayload/, /@\/platform\/yard\/bootstrap-payload/],
+  },
+  {
+    file: 'src/platform/api/map-yard-hub.ts',
+    mustNot: [/@\/data\/mocks\/bootstrap/],
+    must: [/@\/platform\/yard\/bootstrap-payload/],
+  },
+  {
+    file: 'src/store/yard.ts',
+    mustNot: [/@\/data\/mocks\/bootstrap/],
+    must: [/@\/platform\/yard\/bootstrap-payload/],
+  },
+  {
+    file: 'Veyvio admin /src/lib/inspections/empty-hub.ts',
+    mustNot: [/from\s*['"]\.\/seed['"]/, /INSPECTION_PROVIDERS/],
+    must: [/providers:\s*\[\s*\]/],
+  },
 ]
 
 let failures = 0

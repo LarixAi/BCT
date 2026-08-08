@@ -514,17 +514,8 @@ export async function projectInspectionsHub(companyId: string) {
       eventKind: 'inspection',
       status: r.status,
     })),
-    providers: [
-      {
-        id: 'prov-internal',
-        name: 'Fleet Workshop (internal)',
-        type: 'internal',
-        approved: true,
-        services: ['Safety Inspection (PMI)', 'Post-repair', 'Return-to-service'],
-        slaHours: 48,
-        contactEmail: 'workshop@example.com',
-      },
-    ],
+    // No durable provider register yet — honest empty (F-03), not invented workshops.
+    providers: [],
   }
 }
 

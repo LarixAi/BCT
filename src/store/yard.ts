@@ -1,9 +1,14 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import type { BootstrapDataSource, BootstrapPayload } from "@/data/mocks/bootstrap";
-import { COMMAND_HUB_BOOTSTRAP_SOURCE } from "@/data/mocks/bootstrap";
+import {
+  COMMAND_HUB_BOOTSTRAP_SOURCE,
+  type BootstrapDataSource,
+  type BootstrapPayload,
+} from "@/platform/yard/bootstrap-payload";
 import { createEmptyYardCoreState } from "@/platform/yard/empty-yard-state";
-import { buildEquipmentForVehicle, mergeEquipmentForVehicles, isValidVehicleEquipment, type StockLine } from "@/data/equipment-fixtures";
+import { isValidVehicleEquipment } from "@/domain/equipment/equipment-shape";
+import type { StockLine } from "@/types/equipment";
+import { buildEquipmentForVehicle, mergeEquipmentForVehicles } from "@/data/equipment-fixtures";
 import type { CompleteYardCheckInput, YardCheckResult } from "@/types/yard-check";
 import { computeOverallPassed, computeSafetyOutcome, severityForSection } from "@/domain/yard/check-outcome";
 import { getSectionDef, isManagerAuditCheck } from "@/domain/yard/check-templates";

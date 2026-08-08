@@ -7,60 +7,22 @@ import { buildDemoOperationalPlan } from "@/data/plan-fixtures";
 import { BCT_MAIN_DEPOT_LAYOUT } from "@veyvio/yard";
 import type { YardHubLayoutSnapshot } from "@veyvio/yard";
 import { bctBays, bctDriverBodyworkObservations, bctTrips, bctVehicles } from "@/data/bct-yard";
-import type {
-  CustodyEvent,
-  DamageObservation,
-  DamageRecord,
-  DamageReview,
-  InspectionMedia,
-  RepairWorkOrder,
-  VehicleConditionProfile,
-  VehicleConditionSnapshot,
-  VehicleInspection,
-} from "@/types/condition";
-import type { OperationalDayPlan } from "@/types/plan";
 import { ROLE_PERMISSIONS, type YardRole } from "@/types/permissions";
-import type { YardTask } from "@/types/tasks";
+import {
+  BOOTSTRAP_SCHEMA_VERSION,
+  COMMAND_HUB_BOOTSTRAP_SOURCE,
+  normalizeLiveBootstrapPayload,
+  type BootstrapPayload,
+} from "@/platform/yard/bootstrap-payload";
 
-export const BOOTSTRAP_SCHEMA_VERSION = 6;
-
-export const COMMAND_HUB_BOOTSTRAP_SOURCE = "command-hub" as const;
-
-export type BootstrapDataSource = "mock" | typeof COMMAND_HUB_BOOTSTRAP_SOURCE;
-
-export interface BootstrapPayload {
-  companyId: string;
-  depotId: string;
-  depotCode?: string | null;
-  yardMapEnabled?: boolean;
-  yardLayout?: YardHubLayoutSnapshot | null;
-  syncedAt: string;
-  dataSource?: BootstrapDataSource;
-  vehicles: typeof fx.vehicles;
-  bays: typeof fx.bays;
-  trips: typeof fx.trips;
-  defects: typeof fx.defects;
-  vorCases: typeof fx.vorCases;
-  movements: typeof fx.movements;
-  yardChecks: typeof fx.yardChecks;
-  equipment: typeof initialVehicleEquipment;
-  depotStock: typeof initialDepotStock;
-  permissions: string[];
-  shiftWindow: string;
-  tasks: YardTask[];
-  schemaVersion: number;
-  conditionProfiles: Record<string, VehicleConditionProfile>;
-  inspections: VehicleInspection[];
-  inspectionMedia: InspectionMedia[];
-  damageRecords: DamageRecord[];
-  damageObservations: DamageObservation[];
-  damageReviews: DamageReview[];
-  conditionSnapshots: VehicleConditionSnapshot[];
-  custodyTimeline: CustodyEvent[];
-  repairWorkOrders: RepairWorkOrder[];
-  adblueRefills: typeof initialAdBlueRefills;
-  operationalPlan: OperationalDayPlan | null;
-}
+export {
+  BOOTSTRAP_SCHEMA_VERSION,
+  COMMAND_HUB_BOOTSTRAP_SOURCE,
+  buildLiveBootstrapShell,
+  normalizeLiveBootstrapPayload,
+  type BootstrapDataSource,
+  type BootstrapPayload,
+} from "@/platform/yard/bootstrap-payload";
 
 export function buildBootstrapPayload(companyId: string, depotId: string, role: YardRole = "yard_manager"): BootstrapPayload {
   if (depotId === "dep_bct_main") {
@@ -142,61 +104,13 @@ export function buildBootstrapPayload(companyId: string, depotId: string, role: 
   };
 }
 
-/** Live Command hub — structural bays only; no demo fleet, trips, or plan. */
-export function buildLiveBootstrapShell(
-  companyId: string,
-  depotId: string,
-  role: YardRole = "yard_manager",
-): BootstrapPayload {
-  return {
-    companyId,
-    depotId,
-    syncedAt: new Date().toISOString(),
-    dataSource: COMMAND_HUB_BOOTSTRAP_SOURCE,
-    schemaVersion: BOOTSTRAP_SCHEMA_VERSION,
-    vehicles: [],
-    bays: [],
-    trips: [],
-    defects: [],
-    vorCases: [],
-    movements: [],
-    yardChecks: [],
-    equipment: {},
-    depotStock: {},
-    permissions: ROLE_PERMISSIONS[role],
-    shiftWindow: "Day shift",
-    tasks: [],
-    conditionProfiles: {},
-    inspections: [],
-    inspectionMedia: [],
-    damageRecords: [],
-    damageObservations: [],
-    damageReviews: [],
-    conditionSnapshots: [],
-    custodyTimeline: [],
-    repairWorkOrders: [],
-    adblueRefills: [],
-    operationalPlan: null,
-    yardMapEnabled: false,
-    yardLayout: null,
-  };
-}
-
 /** Back-fill fields missing from older IndexedDB bootstrap caches. */
 export function normalizeBootstrapPayload(
   payload: Partial<BootstrapPayload> & Pick<BootstrapPayload, "companyId" | "depotId">,
   role: YardRole = "yard_manager",
 ): BootstrapPayload {
   if (payload.dataSource === COMMAND_HUB_BOOTSTRAP_SOURCE) {
-    const shell = buildLiveBootstrapShell(payload.companyId, payload.depotId, role);
-    return {
-      ...shell,
-      ...payload,
-      dataSource: COMMAND_HUB_BOOTSTRAP_SOURCE,
-      schemaVersion: payload.schemaVersion ?? BOOTSTRAP_SCHEMA_VERSION,
-      permissions: payload.permissions ?? shell.permissions,
-      bays: payload.bays ?? [],
-    };
+    return normalizeLiveBootstrapPayload(payload, role);
   }
 
   const defaults = buildBootstrapPayload(payload.companyId, payload.depotId, role);

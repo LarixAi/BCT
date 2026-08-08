@@ -1,7 +1,7 @@
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { INSPECTION_TYPE_LABELS } from './constants'
+import { INSPECTION_PROVIDERS } from './providers'
 import { daysUntil, hasMissingBrakeEvidence, isDueToday, isDueWithin, isOverdueDate } from './due'
-import { INSPECTION_PROVIDERS } from './seed'
 import type {
   InspectionCalendarEvent,
   InspectionRecord,
@@ -95,6 +95,7 @@ export function enrichInspectionsFromProfiles(
 export function buildInspectionsHub(
   seed: InspectionRecord[],
   profiles: VehicleProfile[] = [],
+  providers = INSPECTION_PROVIDERS,
 ): InspectionsHubData {
   const register = enrichInspectionsFromProfiles(seed, profiles).sort((a, b) => {
     const aOver = isOverdueDate(a.dueDate) ? 0 : 1
@@ -107,7 +108,7 @@ export function buildInspectionsHub(
     summary: buildInspectionsSummary(register),
     register,
     calendar: buildInspectionCalendar(register),
-    providers: INSPECTION_PROVIDERS,
+    providers,
   }
 }
 

@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolveInspectionsHub } from './resolve-hub'
 
 describe('resolveInspectionsHub', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('uses live hub when fetch succeeds', async () => {
     const resolved = await resolveInspectionsHub({
       fetchLiveHub: async () => ({
@@ -27,7 +31,8 @@ describe('resolveInspectionsHub', () => {
     expect(resolved.hub.summary.dueToday).toBe(1)
   })
 
-  it('falls back to demo seed when live and profiles fail in development', async () => {
+  it('fails closed to empty when live and profiles fail and mock is off (F-03)', async () => {
+    vi.stubEnv('VITE_MOCK_API', 'false')
     const resolved = await resolveInspectionsHub({
       fetchLiveHub: async () => {
         throw new Error('hub missing')
@@ -36,7 +41,21 @@ describe('resolveInspectionsHub', () => {
         throw new Error('profiles missing')
       },
     })
-    // Vitest runs with import.meta.env.DEV=true, so demo seed remains available locally.
+    expect(resolved.source).toBe('empty')
+    expect(resolved.hub.register).toEqual([])
+    expect(resolved.hub.providers).toEqual([])
+  })
+
+  it('uses demo seed only when VITE_MOCK_API is true', async () => {
+    vi.stubEnv('VITE_MOCK_API', 'true')
+    const resolved = await resolveInspectionsHub({
+      fetchLiveHub: async () => {
+        throw new Error('hub missing')
+      },
+      fetchProfiles: async () => {
+        throw new Error('profiles missing')
+      },
+    })
     expect(resolved.source).toBe('demo')
     expect(resolved.hub.register.length).toBeGreaterThan(0)
   })

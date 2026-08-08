@@ -1,4 +1,8 @@
-import { normalizeBootstrapPayload, type BootstrapPayload } from "@/data/mocks/bootstrap";
+import {
+  COMMAND_HUB_BOOTSTRAP_SOURCE,
+  normalizeLiveBootstrapPayload,
+  type BootstrapPayload,
+} from "@/platform/yard/bootstrap-payload";
 import { getYardApi } from "@/platform/api";
 import { isProductionBuild } from "@/platform/api/production-guards";
 import { loadBootstrapCache, saveBootstrapCache } from "@/platform/storage/local-db";
@@ -10,7 +14,17 @@ export function applyBootstrapToYard(payload: BootstrapPayload): void {
   if (isProductionBuild() && payload.dataSource === "mock") {
     throw new Error("Mock yard bootstrap cannot be loaded in production builds.");
   }
-  const normalized = normalizeBootstrapPayload(payload);
+
+  // Live / production: never invent from mock fixtures (F-03).
+  // Mock/dev: mock API returns complete payloads; fixture backfill stays in mocks normalize for tests.
+  const normalized =
+    payload.dataSource === "mock"
+      ? payload
+      : normalizeLiveBootstrapPayload({
+          ...payload,
+          dataSource: payload.dataSource ?? COMMAND_HUB_BOOTSTRAP_SOURCE,
+        });
+
   useYard.getState().hydrateFromBootstrap(normalized);
   usePermissionStore.getState().setPermissions(normalized.permissions as YardPermission[]);
 }

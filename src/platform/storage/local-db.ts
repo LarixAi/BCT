@@ -1,4 +1,4 @@
-import type { BootstrapPayload } from "@/data/mocks/bootstrap";
+import type { BootstrapPayload } from "@/platform/yard/bootstrap-payload";
 import type { OutboxMutation } from "@/types/sync";
 
 const DB_NAME = "veyvio-yard";
