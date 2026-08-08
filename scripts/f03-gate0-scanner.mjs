@@ -59,7 +59,11 @@ const checks = [
   {
     file: 'Veyvio admin /supabase/functions/_shared/hubs.ts',
     mustNot: [/Fire extinguisher/, /eq-live-/, /card-live-/, /stk-live-adblue/],
-    must: [/do not invent kit/],
+    must: [/do not invent kit/, /listTyreAssets/],
+  },
+  {
+    file: 'Veyvio admin /supabase/functions/command-api/index.ts',
+    must: [/fleet-resources\/tyres\/fit/, /fleet-resources\/tyres\/remove/, /fleet-resources\/tyres\/rotate/],
   },
   {
     file: 'veyvio-website/server/demo-handler.ts',
