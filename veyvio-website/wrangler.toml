@@ -20,12 +20,11 @@ SALES_EMAIL = "info@veyvio.co.uk"
 # DEMO_NOTIFY_EMAIL
 # CALENDAR_BOOKING_URL
 
-# Waiting-list / demo enquiry persistence (F-03 TD-025). Create once:
-#   wrangler kv namespace create DEMO_LEADS
-# then set id below (and staging id under [env.staging]).
-# [[kv_namespaces]]
-# binding = "DEMO_LEADS"
-# id = "<kv_namespace_id>"
+# Waiting-list / demo enquiry persistence (F-03 TD-025)
+[[kv_namespaces]]
+binding = "DEMO_LEADS"
+id = "6b16dc76631a40168b65bf75d59e8b51"
+preview_id = "8b0ee28f3dd4487da2a399a21e525609"
 
 [observability]
 enabled = true
@@ -38,3 +37,7 @@ ENVIRONMENT = "staging"
 CRM_PROVIDER = "hubspot"
 EMAIL_PROVIDER = "resend"
 SALES_EMAIL = "info@veyvio.co.uk"
+
+[[env.staging.kv_namespaces]]
+binding = "DEMO_LEADS"
+id = "cdac66be3ab4403784e6690c8f285c23"
