@@ -237,6 +237,12 @@ import {
   commitJourneySequenceMove,
   listJourneySequenceDestinations,
 } from '../_shared/journey-sequence-move.ts'
+import {
+  advanceJourneySequenceAcknowledgement,
+  ensureJourneySequenceAcknowledgement,
+  getJourneySequenceAcknowledgement,
+  journeyAckRequiredForTripStatus,
+} from '../_shared/journey-sequence-ack.ts'
 import { notifyExpiringDriverDocuments } from '../_shared/document-expiry-notifications.ts'
 import {
   getComplianceSettings,
@@ -7843,9 +7849,28 @@ async function reorderJourneySequence(request: Request, tripId: string) {
       ? await projectOperationalTripByDuty(context.companyId, dutyId)
       : await projectOperationalTrips(context.companyId, tripId)
 
+    const tripStatus =
+      trip && typeof trip === 'object' && trip !== null && 'status' in trip
+        ? String((trip as { status?: unknown }).status ?? '')
+        : ''
+    const ackRequired =
+      Boolean(input.sendNotifications) && journeyAckRequiredForTripStatus(tripStatus)
+    const acknowledgement = await ensureJourneySequenceAcknowledgement({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      tripKey: tripId,
+      summary: result.changed
+        ? 'Journey sequence updated — driver must acknowledge the new stop order.'
+        : 'Journey sequence checked — no order change.',
+      required: ackRequired,
+      dutyId,
+      runId: null,
+    })
+
     return json({
       ...result,
       trip,
+      acknowledgement,
     })
   } catch (error) {
     return toApiErrorResponse(error, 'Journey sequence reorder failed')
@@ -7902,12 +7927,69 @@ async function moveJourneySequence(request: Request, tripId: string) {
       ? await projectOperationalTripByDuty(context.companyId, dutyId)
       : await projectOperationalTrips(context.companyId, tripId)
 
+    const needsAck = action === 'move_to_run' || action === 'create_new_run'
+    const acknowledgement = await ensureJourneySequenceAcknowledgement({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      tripKey: tripId,
+      summary: result.message,
+      required: needsAck,
+      dutyId,
+      runId: result.destinationRunId ?? result.sourceRunId,
+    })
+
     return json({
       ...result,
       trip,
+      acknowledgement,
     })
   } catch (error) {
     return toApiErrorResponse(error, 'Journey sequence move failed')
+  }
+}
+
+async function getJourneySequenceAckRoute(request: Request, tripId: string) {
+  const context = await authenticate(request)
+  try {
+    const ack = await getJourneySequenceAcknowledgement({
+      companyId: context.companyId,
+      tripKey: tripId,
+    })
+    return json({ acknowledgement: ack })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Journey sequence acknowledgement lookup failed')
+  }
+}
+
+async function advanceJourneySequenceAckRoute(request: Request, tripId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<{
+      status?: string
+      declineReason?: string
+    }>(request)
+    const status = String(input.status ?? '').trim()
+    if (!['viewed', 'acknowledged', 'declined', 'delivered'].includes(status)) {
+      return apiError(400, 'status must be viewed, acknowledged, declined, or delivered', 'invalid_status')
+    }
+    const acknowledgement = await advanceJourneySequenceAcknowledgement({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      tripKey: tripId,
+      nextStatus: status as 'viewed' | 'acknowledged' | 'declined' | 'delivered',
+      declineReason: (input.declineReason as
+        | 'already_driving'
+        | 'timing_impossible'
+        | 'passenger_not_suitable'
+        | 'capacity_problem'
+        | 'route_conflict'
+        | 'missing_passenger_information'
+        | 'other'
+        | null) ?? null,
+    })
+    return json({ acknowledgement })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Journey sequence acknowledgement update failed')
   }
 }
 
@@ -10577,6 +10659,24 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
     request.method === 'GET'
   ) {
     return listJourneySequenceDestinationRuns(request, segments[1])
+  }
+  if (
+    segments[0] === 'operational-trips' &&
+    segments[1] &&
+    segments[2] === 'journey-sequence' &&
+    segments[3] === 'acknowledgement' &&
+    request.method === 'GET'
+  ) {
+    return getJourneySequenceAckRoute(request, segments[1])
+  }
+  if (
+    segments[0] === 'operational-trips' &&
+    segments[1] &&
+    segments[2] === 'journey-sequence' &&
+    segments[3] === 'acknowledgement' &&
+    request.method === 'POST'
+  ) {
+    return advanceJourneySequenceAckRoute(request, segments[1])
   }
   if (segments[0] === 'duties' && segments[1] && segments[2] === 'operational-trip' && request.method === 'GET') {
     return operationalTripForDuty(request, segments[1])

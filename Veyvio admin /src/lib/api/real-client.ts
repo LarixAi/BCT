@@ -2804,6 +2804,7 @@ export class ApiClient {
       changed: boolean
       auditId: string
       trip: import('@/lib/transfers/types').OperationalTrip | null
+      acknowledgement: import('@/lib/journey-sequence/types').DriverAckRecord | null
     }>(`/operational-trips/${encodeURIComponent(input.tripId)}/journey-sequence/reorder`, {
       method: 'POST',
       body: JSON.stringify({
@@ -2818,6 +2819,7 @@ export class ApiClient {
     }).then((result) => ({
       ...result,
       trip: result.trip ? normalizeOperationalTrip(result.trip) : null,
+      acknowledgement: result.acknowledgement ?? null,
     }))
   }
 
@@ -2855,6 +2857,7 @@ export class ApiClient {
       message: string
       auditId: string
       trip: import('@/lib/transfers/types').OperationalTrip | null
+      acknowledgement: import('@/lib/journey-sequence/types').DriverAckRecord | null
     }>(`/operational-trips/${encodeURIComponent(input.tripId)}/journey-sequence/move`, {
       method: 'POST',
       body: JSON.stringify({
@@ -2868,7 +2871,30 @@ export class ApiClient {
     }).then((result) => ({
       ...result,
       trip: result.trip ? normalizeOperationalTrip(result.trip) : null,
+      acknowledgement: result.acknowledgement ?? null,
     }))
+  }
+
+  getJourneySequenceAcknowledgement(tripId: string) {
+    return this.fetch<{
+      acknowledgement: import('@/lib/journey-sequence/types').DriverAckRecord | null
+    }>(`/operational-trips/${encodeURIComponent(tripId)}/journey-sequence/acknowledgement`)
+  }
+
+  advanceJourneySequenceAcknowledgement(input: {
+    tripId: string
+    status: 'viewed' | 'acknowledged' | 'declined' | 'delivered'
+    declineReason?: string
+  }) {
+    return this.fetch<{
+      acknowledgement: import('@/lib/journey-sequence/types').DriverAckRecord
+    }>(`/operational-trips/${encodeURIComponent(input.tripId)}/journey-sequence/acknowledgement`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: input.status,
+        declineReason: input.declineReason,
+      }),
+    })
   }
 
   getTransferHistory(tripId?: string) {

@@ -16,9 +16,9 @@ import type {
 } from './types'
 
 export const JOURNEY_SEQUENCE_LIVE_BLOCKED =
-  'Driver acknowledgement is not available on live Command yet. Reorder and move use the Command API.'
+  'Journey sequence acknowledgement controls require a signed-in Command session.'
 
-/** Reorder and move are writable in mock and on live Command; ack remains mock-only for now. */
+/** Reorder, move, and acknowledgement are writable in mock and on live Command. */
 export function isJourneySequenceWritable(): boolean {
   return true
 }
@@ -171,6 +171,14 @@ export const journeySequenceApi = {
     return projectJourneyWorkspace(trip, siblings)
   },
 
+  async loadAcknowledgement(tripId: string) {
+    if (isMockApi) {
+      return mockJourneySequenceApi.getAcknowledgement(tripId)
+    }
+    const result = await api.getJourneySequenceAcknowledgement(tripId)
+    return result.acknowledgement
+  },
+
   listAudit(tripId: string) {
     if (!isMockApi) return []
     return mockJourneySequenceApi.listAudit(tripId)
@@ -230,23 +238,28 @@ export const journeySequenceApi = {
         notificationsSent: input.sendNotifications
           ? preview.notifications.filter((n) => n.notify).map((n) => n.audience)
           : [],
-        acknowledgementRequired: false,
+        acknowledgementRequired: Boolean(result.acknowledgement),
         originalPickupOrder: result.originalOrder,
         newPickupOrder: result.newOrder,
       },
-      acknowledgement: null,
+      acknowledgement: result.acknowledgement ?? null,
     }
   },
 
-  advanceAcknowledgement(
+  async advanceAcknowledgement(
     tripId: string,
     status: 'viewed' | 'acknowledged' | 'declined',
     declineReason?: DriverDeclineReason,
   ) {
-    if (!isMockApi) {
-      throw new Error(JOURNEY_SEQUENCE_LIVE_BLOCKED)
+    if (isMockApi) {
+      return mockJourneySequenceApi.advanceAcknowledgement(tripId, status, declineReason)
     }
-    return mockJourneySequenceApi.advanceAcknowledgement(tripId, status, declineReason)
+    const result = await api.advanceJourneySequenceAcknowledgement({
+      tripId,
+      status,
+      declineReason,
+    })
+    return result.acknowledgement
   },
 
   findLinkedReturnForJob(tripId: string, jobId: string) {

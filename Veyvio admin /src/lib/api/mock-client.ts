@@ -3376,6 +3376,7 @@ export class MockApiClient {
       changed: true,
       auditId: result.audit.id,
       trip: result.trip,
+      acknowledgement: result.acknowledgement,
     }
   }
 
@@ -3412,6 +3413,31 @@ export class MockApiClient {
       message: result.message,
       auditId: `move-audit-${Date.now()}`,
       trip: null,
+      acknowledgement: result.destinationTripId
+        ? mockJourneySequenceApi.getAcknowledgement(result.destinationTripId)
+        : mockJourneySequenceApi.getAcknowledgement(input.tripId),
+    }
+  }
+
+  async getJourneySequenceAcknowledgement(tripId: string) {
+    await delay(40)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    return { acknowledgement: mockJourneySequenceApi.getAcknowledgement(tripId) }
+  }
+
+  async advanceJourneySequenceAcknowledgement(input: {
+    tripId: string
+    status: 'viewed' | 'acknowledged' | 'declined' | 'delivered'
+    declineReason?: string
+  }) {
+    await delay(80)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    return {
+      acknowledgement: mockJourneySequenceApi.advanceAcknowledgement(
+        input.tripId,
+        input.status,
+        input.declineReason as import('@/lib/journey-sequence/types').DriverDeclineReason | undefined,
+      ),
     }
   }
 

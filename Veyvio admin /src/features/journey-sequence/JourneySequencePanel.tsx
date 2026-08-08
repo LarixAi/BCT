@@ -117,32 +117,34 @@ export function JourneySequencePanel({
       }
 
       // Prefer duty route stops when they already match the Stops tab (full pickup list).
+      let workspace
       if (dutyPickupCount >= 2 && dutyPickupCount >= (initialTrip?.jobs?.length ?? 0)) {
-        return fromDuty()
-      }
-      if (initialTrip?.jobs?.length && initialTrip.jobs.length >= Math.max(dutyPickupCount, 1)) {
-        return project(initialTrip)
-      }
-      if (dutyPickupCount > (initialTrip?.jobs?.length ?? 0)) {
-        return fromDuty()
-      }
-      if (initialTrip?.jobs?.length) {
-        return project(initialTrip)
-      }
-
-      if (tripId) {
+        workspace = await fromDuty()
+      } else if (initialTrip?.jobs?.length && initialTrip.jobs.length >= Math.max(dutyPickupCount, 1)) {
+        workspace = await project(initialTrip)
+      } else if (dutyPickupCount > (initialTrip?.jobs?.length ?? 0)) {
+        workspace = await fromDuty()
+      } else if (initialTrip?.jobs?.length) {
+        workspace = await project(initialTrip)
+      } else if (tripId) {
         try {
           const trip = await api.getOperationalTrip(tripId)
           if ((trip.jobs?.length ?? 0) >= Math.max(dutyPickupCount, 1)) {
-            return project(trip)
+            workspace = await project(trip)
           }
         } catch {
           // fall through
         }
       }
 
-      if (duty) return fromDuty()
-      throw new Error('No operational trip or duty stops available for this run')
+      if (!workspace && duty) workspace = await fromDuty()
+      if (!workspace) throw new Error('No operational trip or duty stops available for this run')
+
+      if (!isMockApi) {
+        const acknowledgement = await journeySequenceApi.loadAcknowledgement(workspace.tripId)
+        return { ...workspace, acknowledgement }
+      }
+      return workspace
     },
     retry: 1,
   })
@@ -361,7 +363,7 @@ export function JourneySequencePanel({
                 onClick={() => ackMut.mutate('viewed')}
                 className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
               >
-                Mark viewed (demo)
+                Mark viewed
               </button>
               <button
                 type="button"

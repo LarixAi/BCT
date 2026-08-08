@@ -519,6 +519,14 @@ async function main() {
       },
     )
     assertDenied(crossJourneyMove.status, 'cross-tenant journey-sequence move')
+
+    const crossJourneyAck = await api(
+      'POST',
+      `/operational-trips/${encodeURIComponent(`duty-trip-${orgA.dutyId}`)}/journey-sequence/acknowledgement`,
+      sessionB.accessToken,
+      { status: 'acknowledged' },
+    )
+    assertDenied(crossJourneyAck.status, 'cross-tenant journey-sequence acknowledgement')
   }
 
   console.log('tenant-isolation: ok')
