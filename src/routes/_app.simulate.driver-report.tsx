@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { SectionHeader } from "@/components/yard/primitives";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,12 @@ export const Route = createFileRoute("/_app/simulate/driver-report")({
   head: () => ({
     meta: [{ title: "Simulate Driver Report — Veyvio Yard" }],
   }),
+  beforeLoad: () => {
+    // F-03 / TD-019: prototype damage writer is not an operational production path.
+    if (import.meta.env.PROD && import.meta.env.VITE_ENABLE_SIMULATE_DRIVER_REPORT !== "true") {
+      throw redirect({ to: "/inspections" });
+    }
+  },
   component: SimulateDriverReport,
 });
 

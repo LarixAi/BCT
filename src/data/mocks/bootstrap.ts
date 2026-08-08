@@ -1,5 +1,4 @@
 import * as fx from "@/data/fixtures";
-import { bays as defaultYardBays } from "@/data/fixtures";
 import { initialVehicleEquipment, initialDepotStock } from "@/data/equipment-fixtures";
 import { initialTasks } from "@/data/tasks-fixtures";
 import * as cfx from "@/data/condition-fixtures";
@@ -156,7 +155,7 @@ export function buildLiveBootstrapShell(
     dataSource: COMMAND_HUB_BOOTSTRAP_SOURCE,
     schemaVersion: BOOTSTRAP_SCHEMA_VERSION,
     vehicles: [],
-    bays: defaultYardBays.map(b => ({ ...b })),
+    bays: [],
     trips: [],
     defects: [],
     vorCases: [],
@@ -178,6 +177,8 @@ export function buildLiveBootstrapShell(
     repairWorkOrders: [],
     adblueRefills: [],
     operationalPlan: null,
+    yardMapEnabled: false,
+    yardLayout: null,
   };
 }
 
@@ -194,7 +195,7 @@ export function normalizeBootstrapPayload(
       dataSource: COMMAND_HUB_BOOTSTRAP_SOURCE,
       schemaVersion: payload.schemaVersion ?? BOOTSTRAP_SCHEMA_VERSION,
       permissions: payload.permissions ?? shell.permissions,
-      bays: payload.bays ?? shell.bays,
+      bays: payload.bays ?? [],
     };
   }
 

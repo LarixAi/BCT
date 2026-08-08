@@ -114,9 +114,10 @@ export function ExceptionsPage() {
       driverExceptions: driverEligibilityExceptions,
       vehicleExceptions: vehicleReleaseExceptions,
       yardExceptions: yardHub?.exceptions,
-      includeCatalog: true,
+      includeCatalog: false,
     })
-    return [...localRaised, ...inbox]
+    // localRaised retained for mock/demo only; live Command never invents exceptions client-side (F-03/F-18).
+    return [...inbox]
   }, [
     dashboard,
     defects,
@@ -282,7 +283,7 @@ export function ExceptionsPage() {
           if (v === 'resolved') setListTab('resolved')
           else setListTab('open')
         }}
-        onRaise={() => setCreateOpen(true)}
+        onRaise={undefined}
         onRefresh={refresh}
         isLoading={isFetching}
       />
@@ -296,6 +297,11 @@ export function ExceptionsPage() {
         </p>
       )}
 
+      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        Exception actions that only update this screen are disabled. Acknowledge and raise will return when Command
+        accepts those writes.
+      </p>
+
       <ExceptionSummaryStrip
         counts={severityCounts}
         kpis={kpis}
@@ -305,12 +311,12 @@ export function ExceptionsPage() {
 
       <ExceptionBulkBar
         count={selectedIds.size}
-        onAssignDispatch={() => bulkPatch({ owner: 'Dispatch', status: 'assigned' })}
-        onAssignFleet={() => bulkPatch({ owner: 'Fleet', status: 'assigned' })}
-        onEscalate={() => bulkPatch({ escalated: true, status: 'action_in_progress' })}
-        onInvestigating={() => bulkPatch({ status: 'investigating' })}
-        onClose={() => bulkPatch({ status: 'resolved' })}
-        onExport={() => setToast('Export queued (mock)')}
+        onAssignDispatch={undefined}
+        onAssignFleet={undefined}
+        onEscalate={undefined}
+        onInvestigating={undefined}
+        onClose={undefined}
+        onExport={() => setToast('Export is not available yet')}
       />
 
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_340px]">
@@ -336,27 +342,15 @@ export function ExceptionsPage() {
 
         <ExceptionInvestigationPanel
           exception={selected}
-          onAssignMe={() => selected && patchOverlay(selected.id, { owner: currentUserName, status: 'assigned' })}
-          onInvestigate={() => selected && patchOverlay(selected.id, { status: 'investigating' })}
-          onEscalate={() =>
-            selected && patchOverlay(selected.id, { escalated: true, status: 'action_in_progress' })
-          }
-          onClose={() => selected && patchOverlay(selected.id, { status: 'resolved' })}
-          onAddNote={(body) => {
-            if (!selected) return
-            const entry = {
-              id: `note-${Date.now()}`,
-              at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              author: currentUserName,
-              body,
-            }
-            const existing = overlays[selected.id]?.notes ?? selected.notes ?? []
-            patchOverlay(selected.id, { notes: [...existing, entry] })
-          }}
+          onAssignMe={undefined}
+          onInvestigate={undefined}
+          onEscalate={undefined}
+          onClose={undefined}
+          onAddNote={undefined}
         />
       </div>
 
-      {createOpen && (
+      {false && createOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-midnight/40 p-4">
           <div className="w-full max-w-md rounded-xl border border-border bg-surface p-4 shadow-xl">
             <h2 className="text-lg font-semibold text-ink">Raise exception</h2>

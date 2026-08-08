@@ -13,6 +13,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:f03-gate0": "node scripts/f03-gate0-scanner.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "verify:production-build": "node scripts/verify-production-build.mjs",

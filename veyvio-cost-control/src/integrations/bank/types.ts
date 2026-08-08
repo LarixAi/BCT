@@ -96,11 +96,23 @@ export type BankIntegrationConfig = {
 export function readBankIntegrationConfig(
   env: Record<string, string | undefined> = import.meta.env as Record<string, string | undefined>,
 ): BankIntegrationConfig {
-  const modeRaw = (env.VITE_BANK_FEED_MODE ?? 'demo_live').toLowerCase()
+  const isProduction = env.PROD === true || env.PROD === 'true' || env.MODE === 'production'
+  const modeRaw = (env.VITE_BANK_FEED_MODE ?? '').toLowerCase()
   const mode: BankFeedMode =
-    modeRaw === 'open_banking' || modeRaw === 'manual_csv' || modeRaw === 'disconnected'
-      ? modeRaw
-      : 'demo_live'
+    modeRaw === 'open_banking' ||
+    modeRaw === 'manual_csv' ||
+    modeRaw === 'disconnected' ||
+    modeRaw === 'demo_live'
+      ? (modeRaw as BankFeedMode)
+      : isProduction
+        ? 'disconnected'
+        : 'demo_live'
+
+  if (isProduction && !modeRaw) {
+    throw new Error(
+      'VITE_BANK_FEED_MODE must be set explicitly in production (open_banking | manual_csv | disconnected).',
+    )
+  }
 
   const providerRaw = (env.VITE_BANK_PROVIDER ?? 'truelayer_sandbox').toLowerCase()
   const providerId = (['truelayer_sandbox', 'truelayer', 'yapily_sandbox', 'yapily', 'generic_ais', 'demo'].includes(

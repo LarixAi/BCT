@@ -24,7 +24,7 @@ describe("upcoming-scheduling", () => {
 });
 
 describe("buildUpcomingFeed", () => {
-  it("includes open tasks and compliance fixtures", () => {
+  it("includes open tasks without inventing compliance fixtures by default", () => {
     const task: YardTask = {
       id: "task_1",
       title: "Pre-departure check",
@@ -46,8 +46,20 @@ describe("buildUpcomingFeed", () => {
     });
 
     expect(feed.some(item => item.yardTaskId === "task_1")).toBe(true);
-    expect(feed.some(item => item.category === "mot")).toBe(true);
+    expect(feed.some(item => item.category === "mot")).toBe(false);
     expect(countByBucket(feed).today).toBeGreaterThan(0);
+  });
+
+  it("includes compliance fixtures only when explicitly opted in", () => {
+    const feed = buildUpcomingFeed({
+      tasks: [],
+      vehicles: [vehicle],
+      defects: [],
+      movements: [],
+      includeComplianceFixtures: true,
+      now,
+    });
+    expect(feed.some(item => item.category === "mot")).toBe(true);
   });
 
   it("deduplicates inactive vehicle rows for the same vehicle", () => {
@@ -56,7 +68,7 @@ describe("buildUpcomingFeed", () => {
       id: "v10",
       reg: "GJ21 QRS",
       status: "Available",
-      lastCheckAt: undefined,
+      lastCheckAt: "2026-07-01T12:00:00.000Z",
     };
 
     const feed = buildUpcomingFeed({

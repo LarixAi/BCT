@@ -702,8 +702,9 @@ export function JourneySequencePanel({
                       </li>
                     ))}
                   <li>
-                    Run distance {previewQuery.data.distanceMiles.from} →{' '}
-                    {previewQuery.data.distanceMiles.to} miles
+                    {previewQuery.data.distanceMiles
+                      ? `Run distance ${previewQuery.data.distanceMiles.from} → ${previewQuery.data.distanceMiles.to} miles`
+                      : 'Route estimate not calculated.'}
                   </li>
                   <li>
                     Linked return:{' '}

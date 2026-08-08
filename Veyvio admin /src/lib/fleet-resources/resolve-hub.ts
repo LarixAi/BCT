@@ -12,9 +12,9 @@ export interface ResolvedFleetResourcesHub {
   source: FleetResourcesHubSource
 }
 
-/** Demo seed is local/dev or explicit mock only — never after a live failure in production. */
+/** Demo seed only when mock API is explicitly enabled — never DEV alone (F-03). */
 function allowDemoSeedFallback(): boolean {
-  return import.meta.env.VITE_MOCK_API === 'true' || import.meta.env.DEV === true
+  return import.meta.env.VITE_MOCK_API === 'true'
 }
 
 async function loadProfiles(

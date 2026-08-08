@@ -49,6 +49,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: F-03 Gate 0 scanner
+        run: npm run test:f03-gate0
+
       - name: Build
         run: npm run build
 

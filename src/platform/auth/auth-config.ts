@@ -31,7 +31,11 @@ export function isMockAuth(): boolean {
   if (import.meta.env.VITE_USE_MOCK_AUTH === "false") {
     return !(getCommandApiUrl() && getSupabaseAnonKey());
   }
-  // Default: live when both env vars present, otherwise mock
+  // Production builds never silently fall open to mock (F-03 / TD-024).
+  if (import.meta.env.PROD) {
+    return false;
+  }
+  // Local/dev: live when both env vars present, otherwise mock for convenience.
   return !(getCommandApiUrl() && getSupabaseAnonKey());
 }
 

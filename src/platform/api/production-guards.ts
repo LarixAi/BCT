@@ -32,4 +32,13 @@ export function assertProductionApiConfig(): void {
       "VITE_USE_MOCK_AUTH must not be true in production builds.",
     );
   }
+
+  const apiUrl =
+    import.meta.env.VITE_API_URL ?? import.meta.env.VITE_COMMAND_API_BASE_URL ?? "";
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
+  if (!String(apiUrl).trim() || !String(anonKey).trim()) {
+    throw new ProductionConfigurationError(
+      "Production Yard requires VITE_API_URL (or VITE_COMMAND_API_BASE_URL) and VITE_SUPABASE_ANON_KEY.",
+    );
+  }
 }

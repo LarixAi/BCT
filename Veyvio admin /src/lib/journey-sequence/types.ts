@@ -86,8 +86,8 @@ export interface SequenceChangePreview {
   oldPosition: number | null
   newPosition: number | null
   pickupDeltas: PassengerTimeDelta[]
-  distanceMiles: { from: number; to: number }
-  durationMinutes: { from: number; to: number }
+  distanceMiles: { from: number; to: number } | null
+  durationMinutes: { from: number; to: number } | null
   affectedPassengerCount: number
   schoolArrival: { from: string; to: string }
   linkedReturn: LinkedJourneyLeg | null

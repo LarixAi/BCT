@@ -5,7 +5,6 @@ import { buildWorkspace, findLinkedReturn, recalculatePickupTimes } from './buil
 import { canReorderSequence, sequenceEditCapability } from './edit-rules'
 import { evaluateMoveChecks } from './move-checks'
 import { NOTIFY_TOLERANCE } from './constants'
-import { mockJourneySequenceApi } from './mock-hub'
 import type {
   DriverDeclineReason,
   JourneySequenceWorkspace,
@@ -14,6 +13,11 @@ import type {
   SequenceChangePreview,
   SequenceCommitInput,
 } from './types'
+
+const mockJourneySequenceApi =
+  import.meta.env.VITE_MOCK_API === 'true'
+    ? (await import('./mock-hub')).mockJourneySequenceApi
+    : null
 
 export const JOURNEY_SEQUENCE_LIVE_BLOCKED =
   'Journey sequence acknowledgement controls require a signed-in Command session.'
@@ -106,11 +110,8 @@ function buildLivePreview(
     oldPosition: firstMoved >= 0 ? firstMoved + 1 : null,
     newPosition: newPos,
     pickupDeltas,
-    distanceMiles: { from: 12.4, to: 12.4 },
-    durationMinutes: {
-      from: 48,
-      to: 48 + Math.abs(pickupDeltas.find((d) => d.minutesDelta !== 0)?.minutesDelta ?? 0),
-    },
+    distanceMiles: null,
+    durationMinutes: null,
     affectedPassengerCount: pickupDeltas.filter((d) => d.minutesDelta !== 0).length,
     schoolArrival: { from: schoolFrom, to: schoolTo },
     linkedReturn,
@@ -156,7 +157,7 @@ export function projectJourneyWorkspace(
 
 export const journeySequenceApi = {
   getWorkspace(tripId: string): JourneySequenceWorkspace {
-    if (isMockApi) return mockJourneySequenceApi.getWorkspace(tripId)
+    if (isMockApi && mockJourneySequenceApi) return mockJourneySequenceApi.getWorkspace(tripId)
     const { trip, siblings } = requireCachedTrip(tripId)
     return {
       ...buildWorkspace(trip, siblings),
@@ -165,14 +166,14 @@ export const journeySequenceApi = {
   },
 
   ensureWorkspaceFromTrips(trip: OperationalTrip, siblings: OperationalTrip[]): JourneySequenceWorkspace {
-    if (isMockApi) {
+    if (isMockApi && mockJourneySequenceApi) {
       return mockJourneySequenceApi.ensureWorkspaceFromTrips(trip, siblings)
     }
     return projectJourneyWorkspace(trip, siblings)
   },
 
   async loadAcknowledgement(tripId: string) {
-    if (isMockApi) {
+    if (isMockApi && mockJourneySequenceApi) {
       return mockJourneySequenceApi.getAcknowledgement(tripId)
     }
     const result = await api.getJourneySequenceAcknowledgement(tripId)
@@ -180,25 +181,29 @@ export const journeySequenceApi = {
   },
 
   listAudit(tripId: string) {
-    if (!isMockApi) return []
+    if (!(isMockApi && mockJourneySequenceApi)) return []
     return mockJourneySequenceApi.listAudit(tripId)
   },
 
   previewStops(tripId: string, orderedPickupJobIds: string[]) {
-    if (isMockApi) return mockJourneySequenceApi.previewStops(tripId, orderedPickupJobIds)
+    if (isMockApi && mockJourneySequenceApi) {
+      return mockJourneySequenceApi.previewStops(tripId, orderedPickupJobIds)
+    }
     const { trip, siblings } = requireCachedTrip(tripId)
     const recalculated = recalculatePickupTimes(trip.jobs, orderedPickupJobIds)
     return buildWorkspace(trip, siblings, recalculated).stops
   },
 
   previewReorder(tripId: string, orderedPickupJobIds: string[], linked: LinkedReturnDecision) {
-    if (isMockApi) return mockJourneySequenceApi.previewReorder(tripId, orderedPickupJobIds, linked)
+    if (isMockApi && mockJourneySequenceApi) {
+      return mockJourneySequenceApi.previewReorder(tripId, orderedPickupJobIds, linked)
+    }
     const { trip, siblings } = requireCachedTrip(tripId)
     return buildLivePreview(trip, siblings, orderedPickupJobIds, linked)
   },
 
   async commitReorder(input: SequenceCommitInput & { dutyId?: string | null }) {
-    if (isMockApi) return mockJourneySequenceApi.commitReorder(input)
+    if (isMockApi && mockJourneySequenceApi) return mockJourneySequenceApi.commitReorder(input)
 
     const preview = journeySequenceApi.previewReorder(
       input.tripId,
@@ -251,7 +256,7 @@ export const journeySequenceApi = {
     status: 'viewed' | 'acknowledged' | 'declined',
     declineReason?: DriverDeclineReason,
   ) {
-    if (isMockApi) {
+    if (isMockApi && mockJourneySequenceApi) {
       return mockJourneySequenceApi.advanceAcknowledgement(tripId, status, declineReason)
     }
     const result = await api.advanceJourneySequenceAcknowledgement({
@@ -263,7 +268,9 @@ export const journeySequenceApi = {
   },
 
   findLinkedReturnForJob(tripId: string, jobId: string) {
-    if (isMockApi) return mockJourneySequenceApi.findLinkedReturnForJob(tripId, jobId)
+    if (isMockApi && mockJourneySequenceApi) {
+      return mockJourneySequenceApi.findLinkedReturnForJob(tripId, jobId)
+    }
     const { trip, siblings } = requireCachedTrip(tripId)
     const job = trip.jobs.find((j) => j.id === jobId)
     if (!job) return null
@@ -271,7 +278,7 @@ export const journeySequenceApi = {
   },
 
   listDestinationRuns(tripId: string, dutyId?: string | null) {
-    if (isMockApi) return mockJourneySequenceApi.listDestinationRuns(tripId)
+    if (isMockApi && mockJourneySequenceApi) return mockJourneySequenceApi.listDestinationRuns(tripId)
     return api.listJourneySequenceDestinations(tripId, dutyId)
   },
 
@@ -281,7 +288,7 @@ export const journeySequenceApi = {
     action: MoveJourneyAction
     destinationTripId: string | null
   }) {
-    if (isMockApi) return mockJourneySequenceApi.previewMove(input)
+    if (isMockApi && mockJourneySequenceApi) return mockJourneySequenceApi.previewMove(input)
     const { trip: sourceTrip, siblings } = requireCachedTrip(input.sourceTripId)
     const jobs = sourceTrip.jobs.filter((j) => input.jobIds.includes(j.id))
     const destinationTrip = input.destinationTripId
@@ -316,7 +323,7 @@ export const journeySequenceApi = {
     reason: string
     dutyId?: string | null
   }) {
-    if (isMockApi) return mockJourneySequenceApi.commitMove(input)
+    if (isMockApi && mockJourneySequenceApi) return mockJourneySequenceApi.commitMove(input)
     const preview = journeySequenceApi.previewMove(input)
     if (preview.blocked) {
       throw new Error(preview.checks.find((c) => c.level === 'error')?.message ?? 'Cannot move journey')

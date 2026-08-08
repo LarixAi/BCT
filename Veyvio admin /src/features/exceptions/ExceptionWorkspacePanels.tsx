@@ -28,7 +28,7 @@ export function ExceptionControlBar({
   onListTab: (t: 'open' | 'resolved') => void
   smart: ExceptionSmartFilter
   onSmart: (v: ExceptionSmartFilter) => void
-  onRaise: () => void
+  onRaise?: () => void
   onRefresh: () => void
   isLoading?: boolean
 }) {
@@ -47,13 +47,15 @@ export function ExceptionControlBar({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={onRaise}
-            className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100"
-          >
-            Raise exception
-          </button>
+          {onRaise ? (
+            <button
+              type="button"
+              onClick={onRaise}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100"
+            >
+              Raise exception
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onRefresh}

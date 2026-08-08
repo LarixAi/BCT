@@ -116,7 +116,7 @@ export function DispatchPage() {
   const lateJobs = useMemo(() => listLateJobs(opsTrips), [opsTrips])
   const urgentJobs = useMemo(() => listUrgentUnassignedJobs(opsTrips), [opsTrips])
   const dispatchExceptions = useMemo(
-    () => listDispatchExceptions(buildExceptionsInbox({ includeCatalog: true })),
+    () => listDispatchExceptions(buildExceptionsInbox({ includeCatalog: false })),
     [],
   )
 

@@ -192,7 +192,7 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 |----|------|--------|----------|
 | **F-01** | Deny-by-default; application scopes | Done (prod) | `application-scopes.ts` |
 | **F-02** | Structural tenant isolation | Partial | Live isolation smoke incl. job execution, closeout, swap; Gate 5 depth |
-| **F-03** | No mock/fallback production | Partial | Attendance/body-condition fail-closed in `real-client.ts`; journey-sequence mock remains |
+| **F-03** | No mock/fallback production | Partial | Exec Gate 0 kill switches Done (code); remaining: Command exception writes (TD-013/027), website CRM (TD-025), full quarantine — [veyvio-f03-mock-replacement-plan.md](./veyvio-f03-mock-replacement-plan.md) |
 | **F-04** | Rotate credentials | Done (ops) | `gate1:rotate-credentials` |
 | **F-05** | Centralise business rules | Done (prod) | `compliance-engine.ts` |
 | **F-06** | Safety hard gates | Done (prod) | VOR + ack-before-sign-on |
@@ -278,6 +278,23 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 | TD-008 | Broad roles only | F-11, E matrix | Over-permissioning | 🟠 | Gate 2 | Done (prod) — matrix UI + PATCH grants |
 | TD-009 | Yard outbox without Command handler | F-03 | Local-only yard actions | 🔴 | Gate 1 | Done (prod) |
 | TD-010 | PHV jobs dual-write (Supabase + Command) | F-18, §7.2 | Split job truth | Done (code) | Command authoritative; Supabase cache offline-queue only |
+| TD-011 | Admin Exceptions/Dispatch inject `EXCEPTION_CATALOG` | F-03 | False control-room state | 🔴 | Exec Gate 0 | Done (code) — catalog default off |
+| TD-012 | Admin Messages fail-open to `MOCK_CONVERSATIONS` | F-03 | Fake threads on API error | 🔴 | Exec Gate 0 | Done (code) — fail-closed empty |
+| TD-013 | Admin exception raise/ack client-only | F-03, F-18 | Fake durability | 🔴 | Gate 0 disable → Gate 2 wire | Partial — CTAs disabled; Command writes still open |
+| TD-014 | Yard equipment seeded on live hydrate | F-03 | False readiness | 🔴 | Exec Gate 0 | Done (code) — command-hub skips seed |
+| TD-015 | Yard Upcoming compliance fixtures always on | F-03 | Invented MOT/retorque | 🔴 | Exec Gate 0 | Done (code) — opt-in only |
+| TD-016 | Yard North Bolton fixture bay fallback | F-03 | Wrong layout / ops mistakes | 🔴 | Exec Gate 0 | Done (code) — honest empty layout |
+| TD-017 | Admin resolve-hub demo seed via `DEV` | F-03 | Live-dev false ledger | 🟠 | Exec Gate 0 | Done (code) — mock flag only |
+| TD-018 | Journey preview hardcoded miles/mins | F-03 | Synthetic route facts | 🟠 | Exec Gate 0 | Done (code) — “not calculated” |
+| TD-019 | Simulate-driver-report ungated in prod nav | F-03 | Prototype as ops path | 🟠 | Exec Gate 0 | Done (code) — prod gated |
+| TD-020 | Admin mock-client static import in live entry | F-03 | Bundle / misconfig blast radius | 🟠 | Exec Gate 0–3 | Partial — dynamic import when `VITE_MOCK_API=true` |
+| TD-021 | Cost Control bank implicit `demo_live` | F-03 | Finance demo mistaken for live | 🟠 | Exec Gate 4 | Done (code) — prod requires explicit mode |
+| TD-022 | Stale Driver “transport mock-only” docs | F-03 | Gate review false signal | 🟡 | Exec Gate 4 | Done (docs) |
+| TD-023 | Scanner / absence-test blind spots | F-03, F-17 | False PASS on F-03 | 🔴 | Exec Gate 3 | Partial — `npm run test:f03-gate0` in CI; expand absence suite still open |
+| TD-024 | Implicit Yard mock-auth when Command env missing | F-03 | Accidental mock login | 🔴 | Exec Gate 0 | Done (code) — prod never silent mock |
+| TD-025 | Website CRM/email stub returns success | F-03 (sales) | Lost waiting-list evidence | 🟠 | Exec Gate 4 | Open |
+| TD-026 | Shared BCT layout auto-substitution | F-03 | Fake depot geometry | 🟠 | Exec Gate 4 | Done (code) — map/hub no BCT fallback |
+| TD-027 | Exception / compliance / equipment write APIs absent | F-18 | Read-only until Gate 2 | 🟠 | Exec Gate 2 | Open |
 
 _Add rows when discovery finds mock paths, dual writes, or blueprint conflicts._
 

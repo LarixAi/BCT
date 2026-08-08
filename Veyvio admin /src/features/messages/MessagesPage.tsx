@@ -4,7 +4,7 @@ import { SectionCard } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
 import type { MessageRecord } from '@/lib/api/types'
-import { conversationKpis, filterConversations, MOCK_CONVERSATIONS } from '@/lib/messages/mock-conversations'
+import { conversationKpis, filterConversations } from '@/lib/messages/mock-conversations'
 import type { Conversation, ConversationMessage, MessageInboxTab } from '@/lib/messages/types'
 
 const TABS: { id: MessageInboxTab; label: string }[] = [
@@ -93,8 +93,8 @@ export function MessagesPage() {
       if (!selectedId && live[0]) setSelectedId(live[0].id)
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Messages could not be loaded.')
-      setConversations(MOCK_CONVERSATIONS)
-      if (!selectedId) setSelectedId(MOCK_CONVERSATIONS[0]?.id ?? null)
+      setConversations([])
+      setSelectedId(null)
     }
   }
 

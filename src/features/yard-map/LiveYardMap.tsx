@@ -5,9 +5,7 @@ import { useYard } from "@/store/yard";
 import { useTenancyStore } from "@/platform/tenancy/context-store";
 import {
   buildSpatialBayStates,
-  isLiveYardMapDepot,
   layoutCapacitySummary,
-  resolveYardLayout,
 } from "@/features/yard-map/resolve-layout";
 import { useMapViewport } from "@/features/yard-map/hooks/useMapViewport";
 import { useLayoutEditor } from "@/features/yard-map/hooks/useLayoutEditor";
@@ -23,7 +21,6 @@ import { VehicleDetailDrawer } from "@/features/yard-map/drawers/VehicleDetailDr
 import { clientToSvg } from "@/features/yard-map/lib/svg-coords";
 import { layoutContentBounds } from "@/features/yard-map/lib/layout-content-bounds";
 import { DEFAULT_MAP_LAYERS, type MapLayerId, type LayoutBay, type YardHubLayoutSnapshot, type YardLayoutDefinition } from "@veyvio/yard";
-import { BCT_MAIN_DEPOT_LAYOUT } from "@veyvio/yard";
 
 type ViewMode = "map" | "list";
 
@@ -50,15 +47,12 @@ export function LiveYardMap({ onEditModeChange }: LiveYardMapProps = {}) {
   const vehicles = useYard(s => s.vehicles);
   const trips = useYard(s => s.trips);
   const yardLayout = useYard(s => s.yardLayout);
-  const yardMapEnabled = useYard(s => s.yardMapEnabled);
 
   const baseLayout = useMemo(() => {
     if (yardLayout) return hubSnapshotToLayout(yardLayout);
-    if (yardMapEnabled || isLiveYardMapDepot(depotCode)) {
-      return resolveYardLayout(depotCode ?? "BCT-MAIN") ?? BCT_MAIN_DEPOT_LAYOUT;
-    }
-    return resolveYardLayout(depotCode);
-  }, [yardLayout, yardMapEnabled, depotCode]);
+    // F-03: never fall back to BCT template as live depot truth.
+    return null;
+  }, [yardLayout]);
 
   const {
     layout,
@@ -448,6 +442,17 @@ export function LiveYardMap({ onEditModeChange }: LiveYardMapProps = {}) {
       {mapCanvas}
     </div>
   ) : null;
+
+  if (!baseLayout) {
+    return (
+      <div className="rounded border border-border bg-white p-6 text-sm text-muted">
+        <p className="font-semibold text-foreground">No yard layout configured</p>
+        <p className="mt-2">
+          This depot has no layout from Command yet. Bay map stays empty until a layout is published.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className={editMode ? "space-y-0" : "space-y-3"}>

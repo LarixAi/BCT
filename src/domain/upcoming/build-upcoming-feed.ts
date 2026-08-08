@@ -194,7 +194,7 @@ export function buildUpcomingFeed(input: UpcomingFeedInput): UpcomingItem[] {
     if (inactive) items.push(inactive);
   }
 
-  if (input.includeComplianceFixtures !== false) {
+  if (input.includeComplianceFixtures === true) {
     items.push(...buildComplianceUpcomingItems(input.vehicles, now));
   }
 

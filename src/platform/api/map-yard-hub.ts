@@ -24,7 +24,6 @@ import type {
 import type { YardHubLayoutSnapshot } from "@veyvio/yard";
 import { ingestHubPlatformEvents } from "@/platform/ops/ingest-hub-platform-events";
 import { parseDefectIdFromTaskInstructions } from "@/domain/tasks/server-task-automation";
-import { defaultSpatialYardLayout } from "@veyvio/yard";
 import type { YardCheckResult, YardCheckSectionResult, YardCheckType, CheckSafetyOutcome, YardCheckEvidenceItem } from "@/types/yard-check";
 
 type HubBodyworkReport = {
@@ -440,19 +439,8 @@ function layoutSnapshotToBays(layout: YardHubLayoutSnapshot | null | undefined):
 }
 
 function resolveHubLayout(hub: YardHubResponse): YardHubLayoutSnapshot | null {
-  if (hub.yardLayout) return hub.yardLayout;
-  const spatial = defaultSpatialYardLayout(hub.depotCode, hub.depotName);
-  return {
-    layoutId: spatial.id,
-    depotCode: spatial.depotCode,
-    name: spatial.name,
-    canvasWidth: spatial.canvasWidth,
-    canvasHeight: spatial.canvasHeight,
-    yardMapEnabled: true,
-    zones: spatial.zones,
-    bays: spatial.bays,
-    gates: spatial.gates,
-  };
+  // F-03: never substitute BCT/spatial template for a missing tenant layout.
+  return hub.yardLayout ?? null;
 }
 
 /**
@@ -472,13 +460,13 @@ export function mapYardHubToBootstrap(
   const yardLayout = resolveHubLayout(hub);
   const layoutBays = layoutSnapshotToBays(yardLayout);
 
-  const bayIds = new Set((layoutBays.length ? layoutBays : shell.bays).map(b => b.id));
+  const bayIds = new Set(layoutBays.map(b => b.id));
   const extraBays: Bay[] = [];
   const vehicles: Vehicle[] = hub.vehicles.map((row, index) => {
     const zone = mapZone(row);
     let bayId = hubBayToBayId(row.bay);
     if (!bayId || !bayIds.has(bayId)) {
-      const zoneBays = (layoutBays.length ? layoutBays : shell.bays).filter(b => b.zone === zone);
+      const zoneBays = layoutBays.filter(b => b.zone === zone);
       bayId = zoneBays[index % Math.max(zoneBays.length, 1)]?.id ?? `H${String(index + 1).padStart(2, "0")}`;
       if (!bayIds.has(bayId)) {
         bayIds.add(bayId);
@@ -535,7 +523,7 @@ export function mapYardHubToBootstrap(
     yardMapEnabled: Boolean(yardLayout),
     yardLayout,
     syncedAt: new Date().toISOString(),
-    bays: layoutBays.length ? [...layoutBays, ...extraBays] : [...shell.bays, ...extraBays],
+    bays: [...layoutBays, ...extraBays],
     vehicles,
     tasks: hubTasks,
     movements: hubMovements,
