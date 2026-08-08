@@ -232,6 +232,7 @@ import {
   arriveDriverJourneyStop,
   completeDriverJourneyStop,
 } from '../_shared/journey-handlers.ts'
+import { commitJourneySequenceReorder } from '../_shared/journey-sequence-reorder.ts'
 import { notifyExpiringDriverDocuments } from '../_shared/document-expiry-notifications.ts'
 import {
   getComplianceSettings,
@@ -7800,6 +7801,58 @@ async function operationalTripForDuty(request: Request, dutyId: string) {
   }
 }
 
+async function reorderJourneySequence(request: Request, tripId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<{
+      orderedPickupJobIds?: string[]
+      reason?: string
+      reasonNotes?: string
+      linkedReturnDecision?: string
+      sendNotifications?: boolean
+      actorName?: string
+      dutyId?: string | null
+    }>(request)
+
+    const orderedPickupJobIds = Array.isArray(input.orderedPickupJobIds)
+      ? input.orderedPickupJobIds.map(String)
+      : []
+    if (!orderedPickupJobIds.length) {
+      return apiError(400, 'orderedPickupJobIds is required', 'invalid_request')
+    }
+
+    const result = await commitJourneySequenceReorder({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      tripId,
+      orderedPickupJobIds,
+      reason: String(input.reason ?? ''),
+      reasonNotes: input.reasonNotes ?? null,
+      linkedReturnDecision: input.linkedReturnDecision ?? 'keep_unchanged',
+      sendNotifications: Boolean(input.sendNotifications),
+      actorName: input.actorName ?? null,
+      dutyId: input.dutyId ?? null,
+    })
+
+    const dutyId = input.dutyId ?? parseDutyTripId(tripId)
+    const trip = dutyId
+      ? await projectOperationalTripByDuty(context.companyId, dutyId)
+      : await projectOperationalTrips(context.companyId, tripId)
+
+    return json({
+      ...result,
+      trip,
+    })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Journey sequence reorder failed')
+  }
+}
+
+function parseDutyTripId(tripId: string): string | null {
+  const match = /^duty-trip-([0-9a-f-]{36})$/i.exec(tripId.trim())
+  return match?.[1] ?? null
+}
+
 async function auditDriver(
   companyId: string,
   actorId: string,
@@ -10434,6 +10487,15 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (segments[0] === 'operational-trips' && segments[1] && !segments[2] && request.method === 'GET') {
     return operationalTrips(request, segments[1])
+  }
+  if (
+    segments[0] === 'operational-trips' &&
+    segments[1] &&
+    segments[2] === 'journey-sequence' &&
+    segments[3] === 'reorder' &&
+    request.method === 'POST'
+  ) {
+    return reorderJourneySequence(request, segments[1])
   }
   if (segments[0] === 'duties' && segments[1] && segments[2] === 'operational-trip' && request.method === 'GET') {
     return operationalTripForDuty(request, segments[1])

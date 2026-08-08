@@ -2786,6 +2786,41 @@ export class ApiClient {
     })
   }
 
+  commitJourneySequenceReorder(input: {
+    tripId: string
+    orderedPickupJobIds: string[]
+    reason: string
+    reasonNotes?: string
+    linkedReturnDecision?: string
+    sendNotifications?: boolean
+    actorName?: string
+    dutyId?: string | null
+  }) {
+    return this.fetch<{
+      mode: 'run_trips' | 'passenger_ids'
+      entityId: string
+      originalOrder: string[]
+      newOrder: string[]
+      changed: boolean
+      auditId: string
+      trip: import('@/lib/transfers/types').OperationalTrip | null
+    }>(`/operational-trips/${encodeURIComponent(input.tripId)}/journey-sequence/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({
+        orderedPickupJobIds: input.orderedPickupJobIds,
+        reason: input.reason,
+        reasonNotes: input.reasonNotes,
+        linkedReturnDecision: input.linkedReturnDecision ?? 'keep_unchanged',
+        sendNotifications: Boolean(input.sendNotifications),
+        actorName: input.actorName,
+        dutyId: input.dutyId ?? null,
+      }),
+    }).then((result) => ({
+      ...result,
+      trip: result.trip ? normalizeOperationalTrip(result.trip) : null,
+    }))
+  }
+
   getTransferHistory(tripId?: string) {
     const q = tripId ? `?tripId=${tripId}` : ''
     return this.fetch<import('@/lib/transfers/types').TransferRecord[]>(`/transfers${q}`)

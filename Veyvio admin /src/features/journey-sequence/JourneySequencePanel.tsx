@@ -5,6 +5,7 @@ import { SectionCard } from '@/components/ui'
 import { AUDIENCE_LABEL, REORGANISE_REASON_LABEL, REORGANISE_REASONS } from '@/lib/journey-sequence/constants'
 import { canReorderSequence, canSaveWithoutNotify, capabilityBanner } from '@/lib/journey-sequence/edit-rules'
 import {
+  isJourneySequenceMoveWritable,
   isJourneySequenceWritable,
   JOURNEY_SEQUENCE_LIVE_BLOCKED,
   journeySequenceApi,
@@ -192,6 +193,11 @@ export function JourneySequencePanel({
         linkedReturnDecision: linkedDecision,
         sendNotifications,
         actorName,
+        dutyId:
+          duty?.id ??
+          (workspace?.tripId.startsWith('duty-trip-')
+            ? workspace.tripId.replace(/^duty-trip-/, '')
+            : null),
       }),
     onSuccess: (result) => {
       setCommitMessage(
@@ -582,7 +588,7 @@ export function JourneySequencePanel({
         </SectionCard>
 
         <div className="space-y-4">
-          {sequenceWritable ? (
+          {isJourneySequenceMoveWritable() ? (
           <MoveJourneyPanel
             tripId={activeTripId}
             selectedJobIds={selectedJobIds}

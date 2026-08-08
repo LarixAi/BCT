@@ -489,6 +489,21 @@ async function main() {
       notes: 'Cross-tenant approve probe',
     })
     assertDenied(crossSwapApprove.status, 'cross-tenant vehicle swap approve')
+
+    const crossJourneyReorder = await api(
+      'POST',
+      `/operational-trips/${encodeURIComponent(`duty-trip-${orgA.dutyId}`)}/journey-sequence/reorder`,
+      sessionB.accessToken,
+      {
+        orderedPickupJobIds: [
+          'duty-stop-00000000-0000-4000-8000-000000000001-stop-pickup-00000000-0000-4000-8000-000000000002',
+        ],
+        reason: 'operational_optimisation',
+        dutyId: orgA.dutyId,
+        actorName: 'Isolation probe',
+      },
+    )
+    assertDenied(crossJourneyReorder.status, 'cross-tenant journey-sequence reorder')
   }
 
   console.log('tenant-isolation: ok')

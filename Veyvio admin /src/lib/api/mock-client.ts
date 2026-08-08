@@ -3345,6 +3345,40 @@ export class MockApiClient {
     return mockTransfersApi.commitTransfer(input, actorName, getMockDrivers(), getMockVehicles())
   }
 
+  async commitJourneySequenceReorder(input: {
+    tripId: string
+    orderedPickupJobIds: string[]
+    reason: string
+    reasonNotes?: string
+    linkedReturnDecision?: string
+    sendNotifications?: boolean
+    actorName?: string
+    dutyId?: string | null
+  }) {
+    await delay(120)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    const result = mockJourneySequenceApi.commitReorder({
+      tripId: input.tripId,
+      orderedPickupJobIds: input.orderedPickupJobIds,
+      reason: input.reason as import('@/lib/journey-sequence/types').ReorganiseReasonCode,
+      reasonNotes: input.reasonNotes,
+      linkedReturnDecision:
+        (input.linkedReturnDecision as import('@/lib/journey-sequence/types').LinkedReturnDecision) ??
+        'keep_unchanged',
+      sendNotifications: Boolean(input.sendNotifications),
+      actorName: input.actorName ?? 'Operations',
+    })
+    return {
+      mode: 'run_trips' as const,
+      entityId: input.tripId,
+      originalOrder: result.audit.originalPickupOrder,
+      newOrder: result.audit.newPickupOrder,
+      changed: true,
+      auditId: result.audit.id,
+      trip: result.trip,
+    }
+  }
+
   async getTransferHistory(tripId?: string): Promise<TransferRecord[]> {
     await delay(50)
     return mockTransfersApi.listTransfers(tripId)

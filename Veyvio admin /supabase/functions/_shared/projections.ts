@@ -2444,7 +2444,7 @@ export async function projectOperationalTrips(
     const live = dutyIdForTrip ? liveByDuty.get(dutyIdForTrip) : null
 
     const jobs = passengerIds.map((passengerId, index) => ({
-      id: `${row.id}-pax-${index + 1}`,
+      id: `${row.id}-pax-${passengerId}`,
       tripId: row.id,
       sequence: index + 1,
       passengerId,
