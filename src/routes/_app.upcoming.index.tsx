@@ -71,6 +71,14 @@ function UpcomingPage() {
         onCalendarRangeChange={setCalendarRange}
       />
 
+      <div className="rounded-xs border border-border bg-white px-4 py-3 text-sm text-muted">
+        <p className="font-semibold text-foreground">Compliance schedule unavailable/not configured</p>
+        <p className="mt-1">
+          MOT, retorque, and other compliance due dates appear here when Command provides an authoritative due-item feed.
+          Synthetic compliance rows are never invented.
+        </p>
+      </div>
+
       <section className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-4">
         {kpis.map(kpi => (
           <div key={kpi.id} className="w-[min(82vw,300px)] shrink-0 snap-start sm:w-auto sm:min-w-0">

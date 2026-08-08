@@ -1,6 +1,6 @@
 # F-03 Full Mock Replacement Plan
 
-**Status:** Exec Gate 0 Done (code) — Gate 2 writes + Gate 4 cleanup still open  
+**Status:** Exec Gate 0 Done (code) · Gate 1 read-model UX in progress · Exception writes landed early (7fdc438) · Gate 3–4 still open  
 **Authority:** Combined Blueprint v2.0 §18 F-03, F-18, F-32; platform first → workflows → screens  
 **Date:** 8 August 2026  
 **Companion:** [veyvio-blueprint-alignment-plan.md](./veyvio-blueprint-alignment-plan.md) · [veyvio-production-gates.md](./veyvio-production-gates.md)

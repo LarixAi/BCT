@@ -192,7 +192,7 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 |----|------|--------|----------|
 | **F-01** | Deny-by-default; application scopes | Done (prod) | `application-scopes.ts` |
 | **F-02** | Structural tenant isolation | Partial | Live isolation smoke incl. job execution, closeout, swap; Gate 5 depth |
-| **F-03** | No mock/fallback production | Partial | Exec Gate 0 kill switches Done (code); remaining: Command exception writes (TD-013/027), website CRM (TD-025), full quarantine — [veyvio-f03-mock-replacement-plan.md](./veyvio-f03-mock-replacement-plan.md) |
+| **F-03** | No mock/fallback production | Partial | Exec Gate 0 Done; Gate 1 read UX in progress; exception writes Done (TD-013); remaining: compliance/equipment write APIs (TD-027), website CRM (TD-025), scanners/quarantine — [veyvio-f03-mock-replacement-plan.md](./veyvio-f03-mock-replacement-plan.md) |
 | **F-04** | Rotate credentials | Done (ops) | `gate1:rotate-credentials` |
 | **F-05** | Centralise business rules | Done (prod) | `compliance-engine.ts` |
 | **F-06** | Safety hard gates | Done (prod) | VOR + ack-before-sign-on |
@@ -279,7 +279,7 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 | TD-009 | Yard outbox without Command handler | F-03 | Local-only yard actions | 🔴 | Gate 1 | Done (prod) |
 | TD-010 | PHV jobs dual-write (Supabase + Command) | F-18, §7.2 | Split job truth | Done (code) | Command authoritative; Supabase cache offline-queue only |
 | TD-011 | Admin Exceptions/Dispatch inject `EXCEPTION_CATALOG` | F-03 | False control-room state | 🔴 | Exec Gate 0 | Done (code) — catalog default off |
-| TD-012 | Admin Messages fail-open to `MOCK_CONVERSATIONS` | F-03 | Fake threads on API error | 🔴 | Exec Gate 0 | Done (code) — fail-closed empty |
+| TD-012 | Admin Messages fail-open to `MOCK_CONVERSATIONS` | F-03 | Fake threads on API error | 🔴 | Exec Gate 0–1 | Done (code) — fail-closed empty + retry banner |
 | TD-013 | Admin exception raise/ack client-only | F-03, F-18 | Fake durability | 🔴 | Gate 0 disable → Gate 2 wire | Done (code) — Command `/exceptions` raise/assign/escalate/close/notes; Admin wired |
 | TD-014 | Yard equipment seeded on live hydrate | F-03 | False readiness | 🔴 | Exec Gate 0 | Done (code) — command-hub skips seed |
 | TD-015 | Yard Upcoming compliance fixtures always on | F-03 | Invented MOT/retorque | 🔴 | Exec Gate 0 | Done (code) — opt-in only |
@@ -294,7 +294,7 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 | TD-024 | Implicit Yard mock-auth when Command env missing | F-03 | Accidental mock login | 🔴 | Exec Gate 0 | Done (code) — prod never silent mock |
 | TD-025 | Website CRM/email stub returns success | F-03 (sales) | Lost waiting-list evidence | 🟠 | Exec Gate 4 | Open |
 | TD-026 | Shared BCT layout auto-substitution | F-03 | Fake depot geometry | 🟠 | Exec Gate 4 | Done (code) — map/hub no BCT fallback |
-| TD-027 | Exception / compliance / equipment write APIs absent | F-18 | Read-only until Gate 2 | 🟠 | Exec Gate 2 | Open |
+| TD-027 | Compliance / equipment write APIs absent (exceptions Done) | F-18 | Incomplete write surface | 🟠 | Exec Gate 2 | Partial — exceptions Command workflow landed; compliance due-items + equipment records still open |
 
 _Add rows when discovery finds mock paths, dual writes, or blueprint conflicts._
 

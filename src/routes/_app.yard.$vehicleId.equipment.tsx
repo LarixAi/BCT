@@ -38,6 +38,7 @@ function EquipmentPage() {
   const navigate = useNavigate();
   const vehicle = useYard(s => s.vehicles.find(v => v.id === vehicleId));
   const eq = useYard(s => s.equipment[vehicleId]);
+  const dataSource = useYard(s => s.dataSource);
   const ensureVehicleEquipment = useYard(s => s.ensureVehicleEquipment);
   const readiness = useVehicleReadiness(vehicleId);
   const equipmentAudit = useYard(s => s.equipmentAudit);
@@ -46,6 +47,7 @@ function EquipmentPage() {
     [equipmentAudit, vehicleId],
   );
   const openSheet = useYard(s => s.openSheet);
+  const liveCommand = dataSource === "command-hub";
 
   useEffect(() => {
     if (vehicle) ensureVehicleEquipment(vehicleId);
@@ -55,6 +57,29 @@ function EquipmentPage() {
     return <p className="p-8 text-center text-muted text-sm">Loading vehicle…</p>;
   }
   if (!eq?.fixed || !eq.assigned || !eq.consumables || !eq.documents) {
+    // F-03: live hub must not invent kit — show honest empty, not a spinner forever.
+    if (liveCommand) {
+      return (
+        <div className="space-y-4 animate-in-up pb-4">
+          <Link to="/yard" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-foreground">
+            <ArrowLeft className="size-3" /> Yard Inventory
+          </Link>
+          <div className="rounded-xs border border-border bg-white p-6">
+            <p className="text-sm font-semibold text-ink">No equipment recorded for this vehicle.</p>
+            <p className="mt-2 text-sm text-muted">
+              Command has not returned kit for {vehicle.reg}. Missing equipment can block readiness — it will not be invented on this device.
+            </p>
+            <Link
+              to="/yard/$vehicleId"
+              params={{ vehicleId }}
+              className="mt-4 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline"
+            >
+              <Wrench className="size-3" /> Vehicle detail
+            </Link>
+          </div>
+        </div>
+      );
+    }
     return <p className="p-8 text-center text-muted text-sm">Loading equipment checklist…</p>;
   }
 

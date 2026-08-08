@@ -82,19 +82,25 @@ export function MessagesPage() {
   const [composeBody, setComposeBody] = useState('')
   const [internalNote, setInternalNote] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
 
   async function reloadLiveMessages() {
+    setLoading(true)
     try {
       const rows = await api.getMessages()
       const live = conversationsFromMessages(rows)
       setConversations(live.length ? live : [])
       setLoadError('')
       if (!selectedId && live[0]) setSelectedId(live[0].id)
+      if (selectedId && !live.some((c) => c.id === selectedId)) setSelectedId(live[0]?.id ?? null)
     } catch (error) {
+      // F-03: never fail-open to demo conversations.
       setLoadError(error instanceof Error ? error.message : 'Messages could not be loaded.')
       setConversations([])
       setSelectedId(null)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -220,13 +226,21 @@ export function MessagesPage() {
             <p className="mt-1 text-xs text-emerald-700">
               Live Command threads with the Driver app — not system alerts
             </p>
-            {loadError ? <p className="mt-1 text-xs text-amber-700">{loadError}</p> : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => void reloadLiveMessages()}
+              disabled={loading}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:opacity-60"
+            >
+              {loading ? 'Loading…' : 'Retry'}
+            </button>
+            <button
+              type="button"
               onClick={() => setComposeOpen(true)}
-              className="rounded-lg border border-command-200 bg-command-50 px-3 py-1.5 text-sm font-medium text-command-800 hover:bg-command-100"
+              disabled={Boolean(loadError)}
+              className="rounded-lg border border-command-200 bg-command-50 px-3 py-1.5 text-sm font-medium text-command-800 hover:bg-command-100 disabled:opacity-60"
             >
               New message
             </button>
@@ -271,12 +285,37 @@ export function MessagesPage() {
         </div>
       </div>
 
+      {loadError ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-medium">Messages could not be loaded from Command.</p>
+          <p className="mt-1 text-amber-900">{loadError}</p>
+          <p className="mt-1 text-xs text-amber-800">Nothing is shown until Command responds — demo threads are never used.</p>
+          <button
+            type="button"
+            onClick={() => void reloadLiveMessages()}
+            disabled={loading}
+            className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-60"
+          >
+            {loading ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      ) : null}
+
+      {!loadError && !loading && conversations.length === 0 ? (
+        <div className="rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-ink-soft">
+          <p className="font-medium text-ink">Messaging has not been configured</p>
+          <p className="mt-1">
+            No live conversations yet. Compose from a driver profile when Driver messaging is enabled for this company.
+          </p>
+        </div>
+      ) : null}
+
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { title: 'Unread conversations', value: kpis.unread },
-          { title: 'Awaiting reply', value: kpis.awaiting, tone: 'warning' as const },
-          { title: 'Assigned to me', value: kpis.assignedToMe },
-          { title: 'Urgent', value: kpis.urgent, tone: 'danger' as const },
+          { title: 'Unread conversations', value: loadError ? '—' : kpis.unread },
+          { title: 'Awaiting reply', value: loadError ? '—' : kpis.awaiting, tone: 'warning' as const },
+          { title: 'Assigned to me', value: loadError ? '—' : kpis.assignedToMe },
+          { title: 'Urgent', value: loadError ? '—' : kpis.urgent, tone: 'danger' as const },
         ].map((card) => (
           <div
             key={card.title}
@@ -301,8 +340,16 @@ export function MessagesPage() {
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_300px]">
         <SectionCard title="Inbox" description={`${filtered.length} conversations`} className="min-h-0 overflow-hidden" flush>
           <div className="max-h-[640px] overflow-auto">
-            {filtered.length === 0 ? (
-              <p className="p-4 text-sm text-muted">No conversations match this view.</p>
+            {loading ? (
+              <p className="p-4 text-sm text-muted">Loading conversations…</p>
+            ) : loadError ? (
+              <p className="p-4 text-sm text-muted">Inbox unavailable until Command responds.</p>
+            ) : filtered.length === 0 ? (
+              <p className="p-4 text-sm text-muted">
+                {conversations.length === 0
+                  ? 'No conversations yet.'
+                  : 'No conversations match this view.'}
+              </p>
             ) : (
               <ul className="divide-y divide-border">
                 {filtered.map((c) => (

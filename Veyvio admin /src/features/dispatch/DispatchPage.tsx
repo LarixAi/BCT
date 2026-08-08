@@ -112,12 +112,102 @@ export function DispatchPage() {
     enabled: !!companyId,
   })
 
+  const {
+    data: dashboard,
+    isError: dashboardError,
+    isFetching: dashboardFetching,
+  } = useQuery({
+    queryKey: tKey(['dashboard']),
+    queryFn: () => api.getDashboard(),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: defects = [],
+    isError: defectsError,
+    isFetching: defectsFetching,
+  } = useQuery({
+    queryKey: tKey(['defects', 'open']),
+    queryFn: () => api.getDefects({ status: 'open' }),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: incidents = [],
+    isError: incidentsError,
+    isFetching: incidentsFetching,
+  } = useQuery({
+    queryKey: tKey(['incidents', 'open']),
+    queryFn: () => api.getIncidents({ status: 'open' }),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: durableExceptions = [],
+    isError: exceptionsError,
+    isFetching: exceptionsFetching,
+  } = useQuery({
+    queryKey: tKey(['exceptions', 'open']),
+    queryFn: () => api.getExceptions(),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: driverEligibilityExceptions = [],
+    isError: driverExceptionsError,
+  } = useQuery({
+    queryKey: tKey(['driver-eligibility-exceptions']),
+    queryFn: () => api.getDriverEligibilityExceptions(),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: vehicleReleaseExceptions = [],
+    isError: vehicleExceptionsError,
+  } = useQuery({
+    queryKey: tKey(['vehicle-release-exceptions']),
+    queryFn: () => api.getVehicleReleaseExceptions(),
+    enabled: !!companyId,
+  })
+
+  const exceptionsUnavailable =
+    dashboardError ||
+    defectsError ||
+    incidentsError ||
+    exceptionsError ||
+    driverExceptionsError ||
+    vehicleExceptionsError
+
+  const exceptionsLoading =
+    dashboardFetching || defectsFetching || incidentsFetching || exceptionsFetching
+
   const activeRuns = useMemo(() => listActiveRuns(duties), [duties])
   const lateJobs = useMemo(() => listLateJobs(opsTrips), [opsTrips])
   const urgentJobs = useMemo(() => listUrgentUnassignedJobs(opsTrips), [opsTrips])
   const dispatchExceptions = useMemo(
-    () => listDispatchExceptions(buildExceptionsInbox({ includeCatalog: false })),
-    [],
+    () =>
+      exceptionsUnavailable
+        ? []
+        : listDispatchExceptions(
+            buildExceptionsInbox({
+              alerts: dashboard?.alerts,
+              defects,
+              incidents,
+              driverExceptions: driverEligibilityExceptions,
+              vehicleExceptions: vehicleReleaseExceptions,
+              apiExceptions: durableExceptions,
+              includeCatalog: false,
+            }),
+          ),
+    [
+      exceptionsUnavailable,
+      dashboard,
+      defects,
+      incidents,
+      driverEligibilityExceptions,
+      vehicleReleaseExceptions,
+      durableExceptions,
+    ],
   )
 
   const selectedDuty = duties.find((d) => d.id === selectedDutyId) ?? null
@@ -373,11 +463,17 @@ export function DispatchPage() {
 
       <VehicleSwapApprovalPanel duties={duties} drivers={drivers} vehicles={vehicles} />
 
-      {dispatchExceptions.length > 0 && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-900">
-          {dispatchExceptions.length} critical dispatch {dispatchExceptions.length === 1 ? 'exception' : 'exceptions'} need attention.
+      {exceptionsUnavailable ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
+          Dispatch exception data is currently unavailable.
+          {exceptionsLoading ? ' Retrying…' : ''}
         </p>
-      )}
+      ) : dispatchExceptions.length > 0 ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-900">
+          {dispatchExceptions.length} critical dispatch{' '}
+          {dispatchExceptions.length === 1 ? 'exception' : 'exceptions'} need attention.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="space-y-4">
@@ -553,6 +649,7 @@ export function DispatchPage() {
             activeRuns={activeRuns}
             lateJobs={lateJobs}
             exceptions={dispatchExceptions}
+            exceptionsUnavailable={exceptionsUnavailable}
             messages={messages}
             urgentJobs={urgentJobs}
             selectedDutyId={selectedDutyId}
