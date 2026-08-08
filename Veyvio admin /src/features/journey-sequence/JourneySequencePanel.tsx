@@ -593,6 +593,12 @@ export function JourneySequencePanel({
             tripId={activeTripId}
             selectedJobIds={selectedJobIds}
             actorName={actorName}
+            dutyId={
+              duty?.id ??
+              (workspace?.tripId.startsWith('duty-trip-')
+                ? workspace.tripId.replace(/^duty-trip-/, '')
+                : null)
+            }
             onDone={(message) => {
               setCommitMessage(message)
               setSelectedJobIds([])

@@ -3,6 +3,7 @@ import { api } from '@/lib/api/client'
 import type { OperationalTrip } from '@/lib/transfers/types'
 import { buildWorkspace, findLinkedReturn, recalculatePickupTimes } from './build-sequence'
 import { canReorderSequence, sequenceEditCapability } from './edit-rules'
+import { evaluateMoveChecks } from './move-checks'
 import { NOTIFY_TOLERANCE } from './constants'
 import { mockJourneySequenceApi } from './mock-hub'
 import type {
@@ -15,15 +16,15 @@ import type {
 } from './types'
 
 export const JOURNEY_SEQUENCE_LIVE_BLOCKED =
-  'Journey move / acknowledgement is not available on live Command yet. Reorder save uses the Command API.'
+  'Driver acknowledgement is not available on live Command yet. Reorder and move use the Command API.'
 
-/** Reorder is writable in mock and on live Command; move/ack remain mock-only for now. */
+/** Reorder and move are writable in mock and on live Command; ack remains mock-only for now. */
 export function isJourneySequenceWritable(): boolean {
   return true
 }
 
 export function isJourneySequenceMoveWritable(): boolean {
-  return isMockApi
+  return true
 }
 
 type LiveTripCache = {
@@ -256,9 +257,9 @@ export const journeySequenceApi = {
     return findLinkedReturn(trip, job, siblings)
   },
 
-  listDestinationRuns(tripId: string) {
-    if (!isMockApi) return []
-    return mockJourneySequenceApi.listDestinationRuns(tripId)
+  listDestinationRuns(tripId: string, dutyId?: string | null) {
+    if (isMockApi) return mockJourneySequenceApi.listDestinationRuns(tripId)
+    return api.listJourneySequenceDestinations(tripId, dutyId)
   },
 
   previewMove(input: {
@@ -267,23 +268,59 @@ export const journeySequenceApi = {
     action: MoveJourneyAction
     destinationTripId: string | null
   }) {
-    if (!isMockApi) {
-      throw new Error(JOURNEY_SEQUENCE_LIVE_BLOCKED)
+    if (isMockApi) return mockJourneySequenceApi.previewMove(input)
+    const { trip: sourceTrip, siblings } = requireCachedTrip(input.sourceTripId)
+    const jobs = sourceTrip.jobs.filter((j) => input.jobIds.includes(j.id))
+    const destinationTrip = input.destinationTripId
+      ? siblings.find((t) => t.id === input.destinationTripId) ??
+        liveTripCache.get(input.destinationTripId)?.trip ??
+        null
+      : null
+    const { checks, blocked, suggestedOptions } = evaluateMoveChecks({
+      sourceTrip,
+      destinationTrip,
+      jobs,
+      action: input.action,
+    })
+    return {
+      sourceTripId: input.sourceTripId,
+      destinationTripId: input.destinationTripId ?? null,
+      action: input.action,
+      jobIds: input.jobIds,
+      passengerNames: jobs.map((j) => j.passengerName),
+      checks,
+      blocked,
+      suggestedOptions,
     }
-    return mockJourneySequenceApi.previewMove(input)
   },
 
-  commitMove(input: {
+  async commitMove(input: {
     sourceTripId: string
     jobIds: string[]
     action: MoveJourneyAction
     destinationTripId: string | null
     actorName: string
     reason: string
+    dutyId?: string | null
   }) {
-    if (!isMockApi) {
-      throw new Error(JOURNEY_SEQUENCE_LIVE_BLOCKED)
+    if (isMockApi) return mockJourneySequenceApi.commitMove(input)
+    const preview = journeySequenceApi.previewMove(input)
+    if (preview.blocked) {
+      throw new Error(preview.checks.find((c) => c.level === 'error')?.message ?? 'Cannot move journey')
     }
-    return mockJourneySequenceApi.commitMove(input)
+    const result = await api.commitJourneySequenceMove({
+      tripId: input.sourceTripId,
+      jobIds: input.jobIds,
+      action: input.action,
+      destinationTripId: input.destinationTripId,
+      actorName: input.actorName,
+      reason: input.reason,
+      dutyId: input.dutyId ?? null,
+    })
+    if (result.trip) cacheTrips(result.trip, [result.trip])
+    return {
+      message: result.message,
+      destinationTripId: result.destinationRunId,
+    }
   },
 }

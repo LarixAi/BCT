@@ -504,6 +504,21 @@ async function main() {
       },
     )
     assertDenied(crossJourneyReorder.status, 'cross-tenant journey-sequence reorder')
+
+    const crossJourneyMove = await api(
+      'POST',
+      `/operational-trips/${encodeURIComponent(`duty-trip-${orgA.dutyId}`)}/journey-sequence/move`,
+      sessionB.accessToken,
+      {
+        jobIds: [
+          'duty-stop-00000000-0000-4000-8000-000000000001-stop-pickup-00000000-0000-4000-8000-000000000002',
+        ],
+        action: 'leave_unassigned',
+        dutyId: orgA.dutyId,
+        actorName: 'Isolation probe',
+      },
+    )
+    assertDenied(crossJourneyMove.status, 'cross-tenant journey-sequence move')
   }
 
   console.log('tenant-isolation: ok')

@@ -19,11 +19,13 @@ export function MoveJourneyPanel({
   tripId,
   selectedJobIds,
   actorName,
+  dutyId,
   onDone,
 }: {
   tripId: string
   selectedJobIds: string[]
   actorName: string
+  dutyId?: string | null
   onDone: (message: string) => void
 }) {
   const queryClient = useQueryClient()
@@ -31,8 +33,8 @@ export function MoveJourneyPanel({
   const [destinationTripId, setDestinationTripId] = useState<string>('')
 
   const { data: destinations = [] } = useQuery({
-    queryKey: tKey(['journey-destinations', tripId]),
-    queryFn: () => journeySequenceApi.listDestinationRuns(tripId),
+    queryKey: tKey(['journey-destinations', tripId, dutyId ?? null]),
+    queryFn: () => journeySequenceApi.listDestinationRuns(tripId, dutyId),
   })
 
   const preview = useMemo(
@@ -57,6 +59,7 @@ export function MoveJourneyPanel({
         destinationTripId: action === 'move_to_run' ? destinationTripId || null : null,
         actorName,
         reason: 'Operational transfer',
+        dutyId: dutyId ?? null,
       }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: tKey(['journey-sequence']) })

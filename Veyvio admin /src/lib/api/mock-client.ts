@@ -3379,6 +3379,42 @@ export class MockApiClient {
     }
   }
 
+  async listJourneySequenceDestinations(tripId: string, _dutyId?: string | null) {
+    await delay(40)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    return mockJourneySequenceApi.listDestinationRuns(tripId)
+  }
+
+  async commitJourneySequenceMove(input: {
+    tripId: string
+    jobIds: string[]
+    action: string
+    destinationTripId?: string | null
+    reason?: string
+    actorName?: string
+    dutyId?: string | null
+  }) {
+    await delay(120)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    const result = mockJourneySequenceApi.commitMove({
+      sourceTripId: input.tripId,
+      jobIds: input.jobIds,
+      action: input.action as import('@/lib/journey-sequence/types').MoveJourneyAction,
+      destinationTripId: input.destinationTripId ?? null,
+      actorName: input.actorName ?? 'Operations',
+      reason: input.reason ?? 'Operational transfer',
+    })
+    return {
+      action: input.action,
+      movedTripIds: input.jobIds,
+      sourceRunId: input.tripId,
+      destinationRunId: result.destinationTripId,
+      message: result.message,
+      auditId: `move-audit-${Date.now()}`,
+      trip: null,
+    }
+  }
+
   async getTransferHistory(tripId?: string): Promise<TransferRecord[]> {
     await delay(50)
     return mockTransfersApi.listTransfers(tripId)

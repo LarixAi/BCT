@@ -233,6 +233,10 @@ import {
   completeDriverJourneyStop,
 } from '../_shared/journey-handlers.ts'
 import { commitJourneySequenceReorder } from '../_shared/journey-sequence-reorder.ts'
+import {
+  commitJourneySequenceMove,
+  listJourneySequenceDestinations,
+} from '../_shared/journey-sequence-move.ts'
 import { notifyExpiringDriverDocuments } from '../_shared/document-expiry-notifications.ts'
 import {
   getComplianceSettings,
@@ -7848,6 +7852,65 @@ async function reorderJourneySequence(request: Request, tripId: string) {
   }
 }
 
+async function listJourneySequenceDestinationRuns(request: Request, tripId: string) {
+  const context = await authenticate(request)
+  try {
+    const url = new URL(request.url)
+    const dutyId = url.searchParams.get('dutyId')
+    const destinations = await listJourneySequenceDestinations({
+      companyId: context.companyId,
+      sourceTripId: tripId,
+      dutyId,
+    })
+    return json(destinations)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Journey sequence destinations failed')
+  }
+}
+
+async function moveJourneySequence(request: Request, tripId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<{
+      jobIds?: string[]
+      action?: string
+      destinationTripId?: string | null
+      reason?: string
+      actorName?: string
+      dutyId?: string | null
+    }>(request)
+
+    const jobIds = Array.isArray(input.jobIds) ? input.jobIds.map(String) : []
+    if (!jobIds.length) return apiError(400, 'jobIds is required', 'invalid_request')
+    const action = String(input.action ?? '').trim()
+    if (!action) return apiError(400, 'action is required', 'invalid_request')
+
+    const result = await commitJourneySequenceMove({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      sourceTripId: tripId,
+      jobIds,
+      action: action as 'move_to_run' | 'create_new_run' | 'assign_standby' | 'leave_unassigned',
+      destinationTripId: input.destinationTripId ?? null,
+      reason: input.reason ?? null,
+      actorName: input.actorName ?? null,
+      dutyId: input.dutyId ?? null,
+    })
+
+    const dutyId = input.dutyId ?? parseDutyTripId(tripId)
+    const trip = dutyId
+      ? await projectOperationalTripByDuty(context.companyId, dutyId)
+      : await projectOperationalTrips(context.companyId, tripId)
+
+    return json({
+      ...result,
+      trip,
+    })
+  } catch (error) {
+    return toApiErrorResponse(error, 'Journey sequence move failed')
+  }
+}
+
 function parseDutyTripId(tripId: string): string | null {
   const match = /^duty-trip-([0-9a-f-]{36})$/i.exec(tripId.trim())
   return match?.[1] ?? null
@@ -10496,6 +10559,24 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
     request.method === 'POST'
   ) {
     return reorderJourneySequence(request, segments[1])
+  }
+  if (
+    segments[0] === 'operational-trips' &&
+    segments[1] &&
+    segments[2] === 'journey-sequence' &&
+    segments[3] === 'move' &&
+    request.method === 'POST'
+  ) {
+    return moveJourneySequence(request, segments[1])
+  }
+  if (
+    segments[0] === 'operational-trips' &&
+    segments[1] &&
+    segments[2] === 'journey-sequence' &&
+    segments[3] === 'destinations' &&
+    request.method === 'GET'
+  ) {
+    return listJourneySequenceDestinationRuns(request, segments[1])
   }
   if (segments[0] === 'duties' && segments[1] && segments[2] === 'operational-trip' && request.method === 'GET') {
     return operationalTripForDuty(request, segments[1])

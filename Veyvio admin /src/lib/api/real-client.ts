@@ -2821,6 +2821,56 @@ export class ApiClient {
     }))
   }
 
+  listJourneySequenceDestinations(tripId: string, dutyId?: string | null) {
+    const q = dutyId ? `?dutyId=${encodeURIComponent(dutyId)}` : ''
+    return this.fetch<
+      Array<{
+        tripId: string
+        tripReference: string
+        runReference: string | null
+        routeName: string | null
+        driverName: string | null
+        vehicleRegistration: string | null
+        tripStatus: string
+        jobCount: number
+        wheelchairSpacesHint: number
+      }>
+    >(`/operational-trips/${encodeURIComponent(tripId)}/journey-sequence/destinations${q}`)
+  }
+
+  commitJourneySequenceMove(input: {
+    tripId: string
+    jobIds: string[]
+    action: string
+    destinationTripId?: string | null
+    reason?: string
+    actorName?: string
+    dutyId?: string | null
+  }) {
+    return this.fetch<{
+      action: string
+      movedTripIds: string[]
+      sourceRunId: string | null
+      destinationRunId: string | null
+      message: string
+      auditId: string
+      trip: import('@/lib/transfers/types').OperationalTrip | null
+    }>(`/operational-trips/${encodeURIComponent(input.tripId)}/journey-sequence/move`, {
+      method: 'POST',
+      body: JSON.stringify({
+        jobIds: input.jobIds,
+        action: input.action,
+        destinationTripId: input.destinationTripId ?? null,
+        reason: input.reason,
+        actorName: input.actorName,
+        dutyId: input.dutyId ?? null,
+      }),
+    }).then((result) => ({
+      ...result,
+      trip: result.trip ? normalizeOperationalTrip(result.trip) : null,
+    }))
+  }
+
   getTransferHistory(tripId?: string) {
     const q = tripId ? `?tripId=${tripId}` : ''
     return this.fetch<import('@/lib/transfers/types').TransferRecord[]>(`/transfers${q}`)
