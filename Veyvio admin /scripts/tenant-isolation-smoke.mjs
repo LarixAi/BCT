@@ -565,6 +565,25 @@ async function main() {
       { status: 'acknowledged' },
     )
     assertDenied(crossDriverJourneyAckAdvance.status, 'cross-tenant driver journey-sequence acknowledgement advance')
+
+    const crossExceptionRaise = await api('POST', '/exceptions', sessionB.accessToken, {
+      title: 'Cross-tenant exception probe',
+      severity: 'high',
+      category: 'dispatch',
+    })
+    // Org B may raise in its own tenant — assert the probe cannot close an Org A synthetic id.
+    assert.ok(
+      crossExceptionRaise.status === 200 || crossExceptionRaise.status === 201 || [400, 403, 404, 409].includes(crossExceptionRaise.status),
+      `exception raise unexpected status ${crossExceptionRaise.status}`,
+    )
+    const foreignExceptionId = '00000000-0000-4000-8000-000000000097'
+    const crossExceptionClose = await api(
+      'POST',
+      `/exceptions/${foreignExceptionId}/close`,
+      sessionB.accessToken,
+      { resolution: 'Cross-tenant close probe' },
+    )
+    assertDenied(crossExceptionClose.status, 'cross-tenant exception close')
   }
 
   console.log('tenant-isolation: ok')

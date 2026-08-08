@@ -280,7 +280,7 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 | TD-010 | PHV jobs dual-write (Supabase + Command) | F-18, §7.2 | Split job truth | Done (code) | Command authoritative; Supabase cache offline-queue only |
 | TD-011 | Admin Exceptions/Dispatch inject `EXCEPTION_CATALOG` | F-03 | False control-room state | 🔴 | Exec Gate 0 | Done (code) — catalog default off |
 | TD-012 | Admin Messages fail-open to `MOCK_CONVERSATIONS` | F-03 | Fake threads on API error | 🔴 | Exec Gate 0 | Done (code) — fail-closed empty |
-| TD-013 | Admin exception raise/ack client-only | F-03, F-18 | Fake durability | 🔴 | Gate 0 disable → Gate 2 wire | Partial — CTAs disabled; Command writes still open |
+| TD-013 | Admin exception raise/ack client-only | F-03, F-18 | Fake durability | 🔴 | Gate 0 disable → Gate 2 wire | Done (code) — Command `/exceptions` raise/assign/escalate/close/notes; Admin wired |
 | TD-014 | Yard equipment seeded on live hydrate | F-03 | False readiness | 🔴 | Exec Gate 0 | Done (code) — command-hub skips seed |
 | TD-015 | Yard Upcoming compliance fixtures always on | F-03 | Invented MOT/retorque | 🔴 | Exec Gate 0 | Done (code) — opt-in only |
 | TD-016 | Yard North Bolton fixture bay fallback | F-03 | Wrong layout / ops mistakes | 🔴 | Exec Gate 0 | Done (code) — honest empty layout |

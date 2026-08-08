@@ -1342,6 +1342,85 @@ export class ApiClient {
     return this.fetch<IncidentRecord[]>(`/incidents${q ? `?${q}` : ''}`)
   }
 
+  getExceptions(params?: { status?: string; openOnly?: boolean }) {
+    const qs = new URLSearchParams()
+    if (params?.status) qs.set('status', params.status)
+    if (params?.openOnly === false) qs.set('openOnly', 'false')
+    const q = qs.toString()
+    return this.fetch<import('@/lib/types').OperationalException[]>(`/exceptions${q ? `?${q}` : ''}`)
+  }
+
+  getException(id: string) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}`,
+    )
+  }
+
+  raiseException(input: {
+    title: string
+    description?: string
+    severity?: string
+    category?: string
+    typeCode?: string
+    relatedRecord?: string
+    relatedHref?: string
+    depotId?: string | null
+    actorName?: string
+  }) {
+    return this.fetch<import('@/lib/types').OperationalException>('/exceptions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  }
+
+  acknowledgeException(id: string, input: { notes?: string; actorName?: string } = {}) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/acknowledge`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  assignException(
+    id: string,
+    input: { assigneeUserId?: string; assigneeName?: string; actorName?: string } = {},
+  ) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/assign`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  investigateException(id: string, input: { actorName?: string } = {}) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/investigate`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  escalateException(id: string, input: { reason?: string; actorName?: string } = {}) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/escalate`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  closeException(
+    id: string,
+    input: { resolution?: string; dismiss?: boolean; actorName?: string } = {},
+  ) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/close`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  addExceptionNote(id: string, input: { body: string; actorName?: string }) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/notes`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
   getIncident(id: string) {
     return this.fetch<IncidentRecord>(`/incidents/${id}`)
   }

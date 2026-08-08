@@ -245,6 +245,17 @@ import {
   journeyAckRequiredForTripStatus,
   listPendingJourneySequenceAcksForDriver,
 } from '../_shared/journey-sequence-ack.ts'
+import {
+  acknowledgeOperationalException,
+  addOperationalExceptionNote,
+  assignOperationalException,
+  closeOperationalException,
+  escalateOperationalException,
+  getOperationalException,
+  investigateOperationalException,
+  listOperationalExceptions,
+  raiseOperationalException,
+} from '../_shared/operational-exceptions.ts'
 import { notifyExpiringDriverDocuments } from '../_shared/document-expiry-notifications.ts'
 import {
   getComplianceSettings,
@@ -5028,7 +5039,7 @@ async function dashboard(request: Request) {
     admin.from('duties').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('service_date', today).eq('status', 'signed_on'),
     admin.from('defects').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '("closed","rejected")'),
     admin.from('incidents').select('*', { count: 'exact', head: true }).eq('company_id', companyId).neq('status', 'closed'),
-    admin.from('operational_exceptions').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'open'),
+    admin.from('operational_exceptions').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(resolved,dismissed)'),
   ])
   const [activeDuties, vehiclesInService, vehiclesOffRoad, driversOnDuty, openDefects, openIncidents, openExceptions] =
     counts.map((result) => result.count ?? 0)
@@ -5037,7 +5048,7 @@ async function dashboard(request: Request) {
     .from('operational_exceptions')
     .select('id, title, severity, status, source_entity_type')
     .eq('company_id', companyId)
-    .eq('status', 'open')
+    .not('status', 'in', '(resolved,dismissed)')
     .order('detected_at', { ascending: false })
     .limit(5)
 
@@ -7995,6 +8006,163 @@ async function advanceJourneySequenceAckRoute(request: Request, tripId: string) 
   }
 }
 
+async function listOperationalExceptionsRoute(request: Request) {
+  const context = await authenticate(request)
+  try {
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const openOnly = url.searchParams.get('openOnly')
+    const exceptions = await listOperationalExceptions({
+      companyId: context.companyId,
+      status,
+      openOnly: openOnly === 'false' ? false : true,
+    })
+    return json(exceptions)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Exceptions could not be loaded')
+  }
+}
+
+async function getOperationalExceptionRoute(request: Request, exceptionId: string) {
+  const context = await authenticate(request)
+  try {
+    const exception = await getOperationalException(context.companyId, exceptionId)
+    if (!exception) return apiError(404, 'Exception not found', 'not_found')
+    return json(exception)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Exception could not be loaded')
+  }
+}
+
+async function raiseOperationalExceptionRoute(request: Request) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request)
+    const exception = await raiseOperationalException({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
+      title: String(input.title ?? ''),
+      description: input.description ? String(input.description) : null,
+      severity: input.severity ? String(input.severity) : 'high',
+      category: input.category ? String(input.category) : 'dispatch',
+      typeCode: input.typeCode ? String(input.typeCode) : 'manual_exception',
+      sourceEntityType: input.sourceEntityType ? String(input.sourceEntityType) : 'manual',
+      sourceEntityId: input.sourceEntityId ? String(input.sourceEntityId) : null,
+      depotId: input.depotId ? String(input.depotId) : null,
+      relatedRecord: input.relatedRecord ? String(input.relatedRecord) : null,
+      relatedHref: input.relatedHref ? String(input.relatedHref) : null,
+      slaMinutes: input.slaMinutes != null ? Number(input.slaMinutes) : 30,
+    })
+    return json(exception)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Exception could not be raised')
+  }
+}
+
+async function acknowledgeOperationalExceptionRoute(request: Request, exceptionId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request).catch(() => ({} as Row))
+    const exception = await acknowledgeOperationalException({
+      companyId: context.companyId,
+      exceptionId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
+      notes: input.notes ? String(input.notes) : null,
+    })
+    return json(exception)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Exception acknowledgement failed')
+  }
+}
+
+async function assignOperationalExceptionRoute(request: Request, exceptionId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request).catch(() => ({} as Row))
+    const exception = await assignOperationalException({
+      companyId: context.companyId,
+      exceptionId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
+      assigneeUserId: input.assigneeUserId ? String(input.assigneeUserId) : context.user.id,
+      assigneeName: input.assigneeName ? String(input.assigneeName) : null,
+    })
+    return json(exception)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Exception assignment failed')
+  }
+}
+
+async function investigateOperationalExceptionRoute(request: Request, exceptionId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request).catch(() => ({} as Row))
+    const exception = await investigateOperationalException({
+      companyId: context.companyId,
+      exceptionId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
+    })
+    return json(exception)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Exception investigate failed')
+  }
+}
+
+async function escalateOperationalExceptionRoute(request: Request, exceptionId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request).catch(() => ({} as Row))
+    const exception = await escalateOperationalException({
+      companyId: context.companyId,
+      exceptionId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
+      reason: input.reason ? String(input.reason) : null,
+    })
+    return json(exception)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Exception escalate failed')
+  }
+}
+
+async function closeOperationalExceptionRoute(request: Request, exceptionId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request).catch(() => ({} as Row))
+    const exception = await closeOperationalException({
+      companyId: context.companyId,
+      exceptionId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
+      resolution: input.resolution ? String(input.resolution) : null,
+      dismiss: Boolean(input.dismiss),
+    })
+    return json(exception)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Exception close failed')
+  }
+}
+
+async function noteOperationalExceptionRoute(request: Request, exceptionId: string) {
+  const context = await authenticate(request)
+  try {
+    const input = await readJson<Row>(request)
+    const exception = await addOperationalExceptionNote({
+      companyId: context.companyId,
+      exceptionId,
+      actorUserId: context.user.id,
+      actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
+      body: String(input.body ?? ''),
+    })
+    return json(exception)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Exception note failed')
+  }
+}
+
 async function driverListJourneySequenceAcks(request: Request) {
   const context = await authenticate(request)
   const resolved = await resolveDriverAppAccount(context)
@@ -8573,12 +8741,16 @@ async function suspendDriver(request: Request, driverId: string) {
     await admin.from('operational_exceptions').insert({
       company_id: context.companyId,
       type: 'driver_suspended',
-      status: 'open',
+      type_code: 'driver_suspended',
+      category: 'driver',
+      status: 'new',
       severity: 'high',
       title: 'Driver suspended',
       description: reason,
       source_entity_type: 'driver',
       source_entity_id: driverId,
+      related_record: driverId,
+      related_href: `/drivers/${driverId}`,
       created_by: context.user.id,
       source_app: 'COMMAND',
     })
@@ -10277,7 +10449,59 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
     if (error) return apiError(500, error.message)
     return json(expandRow(data ?? []))
   }
-  if (path === 'exceptions' && request.method === 'GET') return listResource(request, 'exceptions')
+  if (path === 'exceptions' && request.method === 'GET') return listOperationalExceptionsRoute(request)
+  if (path === 'exceptions' && request.method === 'POST') return raiseOperationalExceptionRoute(request)
+  if (segments[0] === 'exceptions' && segments[1] && !segments[2] && request.method === 'GET') {
+    return getOperationalExceptionRoute(request, segments[1])
+  }
+  if (
+    segments[0] === 'exceptions' &&
+    segments[1] &&
+    segments[2] === 'acknowledge' &&
+    request.method === 'POST'
+  ) {
+    return acknowledgeOperationalExceptionRoute(request, segments[1])
+  }
+  if (
+    segments[0] === 'exceptions' &&
+    segments[1] &&
+    segments[2] === 'assign' &&
+    request.method === 'POST'
+  ) {
+    return assignOperationalExceptionRoute(request, segments[1])
+  }
+  if (
+    segments[0] === 'exceptions' &&
+    segments[1] &&
+    segments[2] === 'investigate' &&
+    request.method === 'POST'
+  ) {
+    return investigateOperationalExceptionRoute(request, segments[1])
+  }
+  if (
+    segments[0] === 'exceptions' &&
+    segments[1] &&
+    segments[2] === 'escalate' &&
+    request.method === 'POST'
+  ) {
+    return escalateOperationalExceptionRoute(request, segments[1])
+  }
+  if (
+    segments[0] === 'exceptions' &&
+    segments[1] &&
+    segments[2] === 'close' &&
+    request.method === 'POST'
+  ) {
+    return closeOperationalExceptionRoute(request, segments[1])
+  }
+  if (
+    segments[0] === 'exceptions' &&
+    segments[1] &&
+    segments[2] === 'notes' &&
+    request.method === 'POST'
+  ) {
+    return noteOperationalExceptionRoute(request, segments[1])
+  }
   if (path === 'communication/delivery' && request.method === 'GET') return listResource(request, 'messages')
   if (path === 'settings/roles' && request.method === 'GET') return listRolesMatrix(request)
   if (
