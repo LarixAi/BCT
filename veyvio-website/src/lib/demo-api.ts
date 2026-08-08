@@ -17,9 +17,7 @@ export type DemoSubmissionResult = {
   message: string;
   emailDelivered?: boolean;
   persisted?: boolean;
-  persistedInternally?: boolean;
   crmStatus?: "ok" | "skipped_stub" | "error";
-  crmSynced?: boolean;
 };
 
 export async function submitDemoEnquiry(payload: DemoSubmission): Promise<DemoSubmissionResult> {
