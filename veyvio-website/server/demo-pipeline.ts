@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { demoErrorStatus, processDemoSubmission, validateSubmission } from "./demo-handler";
-import { createFileLeadStore } from "./demo-leads-store";
+import { createFileLeadStore } from "./demo-leads-store.node";
 
 const leadStore = createFileLeadStore();
 
