@@ -262,7 +262,7 @@ import {
   upsertComplianceSettings,
   DEFAULT_COMPLIANCE_SETTINGS,
 } from '../_shared/compliance-engine.ts'
-import { DEFAULT_DEFECT_AUTOMATION_RULES } from '../_shared/defect-automation.ts'
+import { DEFAULT_DEFECT_AUTOMATION_RULES, maybeCreateExceptionForDefect } from '../_shared/defect-automation.ts'
 import {
   listVehicleReports,
   getVehicleReport,
@@ -3095,6 +3095,21 @@ async function driverReportDefect(request: Request) {
       driverId: String(appAccount.driver_id),
       userId: context.user.id,
     })
+  }
+
+  try {
+    await maybeCreateExceptionForDefect({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName: String(context.user.email ?? 'Driver'),
+      defectId: String(defectRow.id),
+      vehicleId,
+      severity: severityRaw,
+      category,
+      description,
+    })
+  } catch (automationError) {
+    console.error('defect exception automation failed', automationError)
   }
 
   return json(data, 201)
@@ -7606,10 +7621,16 @@ async function complianceExpiries(request: Request) {
   const context = await authenticate(request)
   const days = Number(new URL(request.url).searchParams.get('days') ?? 30)
   const limit = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
-  const { data: drivers } = await admin
-    .from('drivers')
-    .select('id, driver_number, licence_expiry_date')
-    .eq('company_id', context.companyId)
+  const [{ data: drivers }, { data: vehicles }] = await Promise.all([
+    admin
+      .from('drivers')
+      .select('id, driver_number, licence_expiry_date')
+      .eq('company_id', context.companyId),
+    admin
+      .from('vehicles')
+      .select('id, registration, fleet_number, mot_expiry, wheel_retorque_due_at')
+      .eq('company_id', context.companyId),
+  ])
 
   const items: Row[] = []
   for (const driver of drivers ?? []) {
@@ -7622,6 +7643,36 @@ async function complianceExpiries(request: Request) {
         entity_label: driver.driver_number,
         document_type: 'Driving licence',
         expiry_date: expiry,
+        source: 'drivers.licence_expiry_date',
+      })
+    }
+  }
+  for (const vehicle of vehicles ?? []) {
+    const label = vehicle.registration ?? vehicle.fleet_number ?? vehicle.id
+    const mot = vehicle.mot_expiry ? String(vehicle.mot_expiry).slice(0, 10) : null
+    if (mot && mot <= limit) {
+      items.push({
+        id: `${vehicle.id}:mot`,
+        entity_type: 'vehicle',
+        entity_id: vehicle.id,
+        entity_label: label,
+        document_type: 'MOT',
+        expiry_date: mot,
+        source: 'vehicles.mot_expiry',
+      })
+    }
+    const retorque = vehicle.wheel_retorque_due_at
+      ? String(vehicle.wheel_retorque_due_at).slice(0, 10)
+      : null
+    if (retorque && retorque <= limit) {
+      items.push({
+        id: `${vehicle.id}:wheel_retorque`,
+        entity_type: 'vehicle',
+        entity_id: vehicle.id,
+        entity_label: label,
+        document_type: 'Wheel re-torque',
+        expiry_date: retorque,
+        source: 'vehicles.wheel_retorque_due_at',
       })
     }
   }

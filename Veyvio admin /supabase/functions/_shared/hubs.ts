@@ -550,42 +550,9 @@ export async function projectFleetResourcesHub(companyId: string) {
     costPerMile: null,
   }))
 
-  // Until dedicated equipment / card tables exist, project a working register from the fleet.
-  const kit = [
-    { key: 'fe', name: 'Fire extinguisher', category: 'safety_equipment', required: true },
-    { key: 'fa', name: 'First aid kit', category: 'safety_equipment', required: true },
-    { key: 'gh', name: 'Glass hammer', category: 'safety_equipment', required: true },
-  ] as const
-
-  const equipment = vehicleRows.flatMap((v: Row) =>
-    kit.map((item) => ({
-      id: `eq-live-${v.id}-${item.key}`,
-      qrCode: `EQ-${String(v.fleet_number ?? v.registration ?? v.id).slice(0, 8)}-${item.key.toUpperCase()}`,
-      name: item.name,
-      category: item.category,
-      status: 'assigned',
-      vehicleId: v.id,
-      registrationNumber: v.registration ?? '—',
-      depotId: null,
-      depotName: null,
-      expiryDate: null,
-      lastCheckedAt: null,
-      requiredForDuty: item.required,
-    })),
-  )
-
-  const cards = vehicleRows.slice(0, 20).map((v: Row, index: number) => ({
-    id: `card-live-${v.id}`,
-    provider: index % 2 === 0 ? 'Allstar' : 'FuelGenie',
-    maskedNumber: `•••• ${String(1000 + ((index * 137) % 9000))}`,
-    status: 'active',
-    assignmentModel: 'vehicle',
-    assignedVehicleId: v.id,
-    assignedRegistration: v.registration ?? '—',
-    assignedDriverName: null,
-    dailyLimit: 200,
-    lastTransactionAt: null,
-  }))
+  // F-03: do not invent kit, fuel cards, or depot stock. Empty until durable tables/API exist.
+  const equipment: unknown[] = []
+  const cards: unknown[] = []
 
   return {
     summary: {
@@ -594,7 +561,7 @@ export async function projectFleetResourcesHub(companyId: string) {
       missingReceipts: 0,
       suspectedCardMisuse: 0,
       tyresNeedingAttention: 0,
-      lowDepotStock: (depots ?? []).length,
+      lowDepotStock: 0,
       unapprovedPurchases: 0,
       missingEquipment: 0,
       resourceBlocks: 0,
@@ -604,21 +571,7 @@ export async function projectFleetResourcesHub(companyId: string) {
     alerts: [],
     catalogue: [],
     transactions: [],
-    stock: (depots ?? []).flatMap((d) => [
-      {
-        id: `stk-live-adblue-${d.id}`,
-        depotId: d.id,
-        depotName: d.name,
-        resourceItemId: 'res-adblue',
-        resourceName: 'AdBlue',
-        category: 'adblue',
-        available: 0,
-        reserved: 0,
-        minimum: 40,
-        unit: 'L',
-        status: 'out',
-      },
-    ]),
+    stock: [],
     cards,
     purchaseRequests: [],
     vehicleCosts,

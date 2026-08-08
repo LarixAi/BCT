@@ -3,6 +3,7 @@
  * Persists to shared tables or append-only audit_events — idempotent by client correlation id.
  */
 import { recordAdBlueRefill } from './adblue-records.ts'
+import { maybeCreateExceptionForDefect } from './defect-automation.ts'
 import { apiError, json } from './http.ts'
 import { admin, type RequestContext } from './supabase.ts'
 
@@ -152,6 +153,22 @@ async function yardDefectCreateMutation(
       if (dup?.id) return json({ ok: true, serverId: String(dup.id) })
     }
     return apiError(500, error.message, 'database_error')
+  }
+
+  const severity = mapYardDefectSeverity(payload.severity)
+  try {
+    await maybeCreateExceptionForDefect({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName,
+      defectId: String(data.id),
+      vehicleId,
+      severity,
+      category: String(payload.category ?? 'yard_reported'),
+      description: description || 'Yard defect report',
+    })
+  } catch (automationError) {
+    console.error('yard defect exception automation failed', automationError)
   }
 
   return json({ ok: true, serverId: String(data.id) })

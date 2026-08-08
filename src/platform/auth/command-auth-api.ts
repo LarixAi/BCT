@@ -349,6 +349,38 @@ export async function commandFetchYardHub(
   return parseJson<YardHubResponse>(res, "Could not load yard hub");
 }
 
+export type CommandComplianceExpiryItem = {
+  id: string;
+  entityType?: string;
+  entity_type?: string;
+  entityId?: string;
+  entity_id?: string;
+  entityLabel?: string | null;
+  entity_label?: string | null;
+  documentType?: string;
+  document_type?: string;
+  expiryDate?: string;
+  expiry_date?: string;
+  source?: string;
+};
+
+/** Authoritative MOT / licence / retorque due rows from Command. */
+export async function commandFetchComplianceExpiring(
+  accessToken: string,
+  days = 60,
+): Promise<CommandComplianceExpiryItem[]> {
+  const res = await fetch(commandApiUrl(`/compliance/expiring?days=${days}`), {
+    method: "GET",
+    headers: authedHeaders(accessToken),
+  });
+  const data = await parseJson<{ items?: CommandComplianceExpiryItem[] } | CommandComplianceExpiryItem[]>(
+    res,
+    "Could not load compliance due items",
+  );
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data.items) ? data.items : [];
+}
+
 /** Map Command company role → Yard permission role. */
 export function mapCommandRoleToYardRole(role: string | null | undefined): YardRole {
   const r = (role ?? "").toLowerCase();

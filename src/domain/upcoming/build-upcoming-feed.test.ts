@@ -62,6 +62,28 @@ describe("buildUpcomingFeed", () => {
     expect(feed.some(item => item.category === "mot")).toBe(true);
   });
 
+  it("includes authoritative compliance due items without fixtures", () => {
+    const feed = buildUpcomingFeed({
+      tasks: [],
+      vehicles: [vehicle],
+      defects: [],
+      movements: [],
+      complianceDueItems: [
+        {
+          id: "v1:mot",
+          entityType: "vehicle",
+          entityId: "v1",
+          documentType: "MOT",
+          expiryDate: "2026-07-25",
+          source: "vehicles.mot_expiry",
+        },
+      ],
+      now,
+    });
+    expect(feed.some(item => item.id === "v1:mot" && item.category === "mot")).toBe(true);
+    expect(feed.filter(item => item.category === "mot")).toHaveLength(1);
+  });
+
   it("deduplicates inactive vehicle rows for the same vehicle", () => {
     const inactiveVehicle: Vehicle = {
       ...vehicle,

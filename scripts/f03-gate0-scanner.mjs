@@ -56,6 +56,20 @@ const checks = [
     file: 'src/platform/auth/auth-config.ts',
     must: [/import\.meta\.env\.PROD/],
   },
+  {
+    file: 'Veyvio admin /supabase/functions/_shared/hubs.ts',
+    mustNot: [/Fire extinguisher/, /eq-live-/, /card-live-/, /stk-live-adblue/],
+    must: [/do not invent kit/],
+  },
+  {
+    file: 'veyvio-website/server/demo-handler.ts',
+    must: [/persisted:\s*true/, /store\.save/, /crmStatus/],
+    mustNot: [/Enquiry received\. We will be in touch shortly\. \(Confirmation email pending/],
+  },
+  {
+    file: 'Veyvio admin /src/lib/fleet-resources/resolve-hub.ts',
+    mustNot: [/enrichSparseLiveHub/],
+  },
 ]
 
 let failures = 0

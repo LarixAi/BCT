@@ -29,13 +29,20 @@ export type DemoEnv = {
   CALENDAR_BOOKING_URL?: string;
 };
 
+export type LeadStore = {
+  save(lead: LeadRecord): Promise<{ persisted: true; reference: string }>;
+};
+
 export type DemoResult = {
   ok: true;
   reference: string;
   calendarUrl?: string;
   message: string;
+  /** True only after durable persist succeeded. */
+  persisted: true;
   /** True only when Resend accepted the confirmation send. Never true for stub / missing key / send failure. */
   emailDelivered: boolean;
+  crmStatus: "ok" | "skipped_stub" | "error";
 };
 
 export function validateSubmission(input: unknown): DemoSubmission {
@@ -72,7 +79,10 @@ export function buildCalendarUrl(baseUrl: string, lead: LeadRecord): string {
     url.searchParams.set("name", lead.name);
     url.searchParams.set("email", lead.email);
     if (!url.searchParams.has("notes")) {
-      url.searchParams.set("notes", `${lead.organisation} · ${lead.serviceType} · ${lead.fleetSize} fleet · ref ${lead.reference}`);
+      url.searchParams.set(
+        "notes",
+        `${lead.organisation} · ${lead.serviceType} · ${lead.fleetSize} fleet · ref ${lead.reference}`,
+      );
     }
     return url.toString();
   } catch {
@@ -132,10 +142,19 @@ async function sendResendEmail(
   }
 }
 
+/**
+ * Persist-first demo enquiry (F-03 / TD-025).
+ * Stub CRM/email must never be the authority for success.
+ */
 export async function processDemoSubmission(
   payload: DemoSubmission,
   env: DemoEnv,
+  store: LeadStore,
 ): Promise<DemoResult> {
+  if (!store) {
+    throw new Error("Lead store is not configured");
+  }
+
   const lead: LeadRecord = {
     ...payload,
     reference: newReferenceId(),
@@ -143,11 +162,29 @@ export async function processDemoSubmission(
     source: "veyvio-website-demo",
   };
 
+  try {
+    await store.save(lead);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error("[demo-pipeline] Persist failed", { reference: lead.reference, error: reason });
+    throw new Error(`Enquiry could not be saved (${reason})`);
+  }
+
+  let crmStatus: DemoResult["crmStatus"] = "skipped_stub";
   const crmProvider = env.CRM_PROVIDER ?? "stub";
   if (crmProvider === "hubspot" && env.HUBSPOT_ACCESS_TOKEN) {
-    await createHubSpotLead(lead, env.HUBSPOT_ACCESS_TOKEN);
+    try {
+      await createHubSpotLead(lead, env.HUBSPOT_ACCESS_TOKEN);
+      crmStatus = "ok";
+    } catch (err) {
+      crmStatus = "error";
+      console.error("[demo-pipeline] CRM failed after persist", {
+        reference: lead.reference,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   } else {
-    console.info("[demo-pipeline] CRM stub", {
+    console.info("[demo-pipeline] CRM stub after persist", {
       reference: lead.reference,
       email: lead.email,
       organisation: lead.organisation,
@@ -179,7 +216,7 @@ export async function processDemoSubmission(
       emailSent = true;
     } catch (err) {
       emailFailureReason = err instanceof Error ? err.message : String(err);
-      console.error("[demo-pipeline] Email failed (CRM saved)", {
+      console.error("[demo-pipeline] Email failed after persist", {
         reference: lead.reference,
         error: emailFailureReason,
       });
@@ -188,7 +225,7 @@ export async function processDemoSubmission(
     emailFailureReason = "RESEND_API_KEY not configured";
     console.info("[demo-pipeline] Email skipped — no RESEND_API_KEY", { reference: lead.reference });
   } else {
-    console.info("[demo-pipeline] Email stub", { reference: lead.reference, to: lead.email });
+    console.info("[demo-pipeline] Email stub after persist", { reference: lead.reference, to: lead.email });
   }
 
   const calendarUrl = env.CALENDAR_BOOKING_URL
@@ -196,17 +233,19 @@ export async function processDemoSubmission(
     : undefined;
 
   const message = emailSent
-    ? "Enquiry received. We will be in touch shortly."
+    ? `Enquiry saved (reference ${lead.reference}). We will be in touch shortly.`
     : emailFailureReason
-      ? `Enquiry received (reference ${lead.reference}). Confirmation email could not be sent — our team still has your details. (${emailFailureReason})`
-      : "Enquiry received. We will be in touch shortly. (Confirmation email pending — email provider is not sending yet; our team has your details.)";
+      ? `Enquiry saved (reference ${lead.reference}). Confirmation email could not be sent yet (${emailFailureReason}). Our team still has your details on file.`
+      : `Enquiry saved (reference ${lead.reference}). Confirmation email is pending — your details are stored even if CRM/email integrations are not live.`;
 
   return {
     ok: true,
     reference: lead.reference,
     calendarUrl,
     message,
+    persisted: true,
     emailDelivered: emailSent,
+    crmStatus,
   };
 }
 
@@ -215,7 +254,8 @@ export function demoErrorStatus(message: string): number {
   if (
     message.startsWith("All fields") ||
     message.startsWith("Enter a valid") ||
-    message.startsWith("Consent")
+    message.startsWith("Consent") ||
+    message.startsWith("Invalid")
   ) {
     return 400;
   }

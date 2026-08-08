@@ -192,7 +192,7 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 |----|------|--------|----------|
 | **F-01** | Deny-by-default; application scopes | Done (prod) | `application-scopes.ts` |
 | **F-02** | Structural tenant isolation | Partial | Live isolation smoke incl. job execution, closeout, swap; Gate 5 depth |
-| **F-03** | No mock/fallback production | Partial | Exec Gate 0 Done; Gate 1 read UX in progress; exception writes Done (TD-013); remaining: compliance/equipment write APIs (TD-027), website CRM (TD-025), scanners/quarantine — [veyvio-f03-mock-replacement-plan.md](./veyvio-f03-mock-replacement-plan.md) |
+| **F-03** | No mock/fallback production | Partial | Exec Gate 0 Done; exception writes + critical-defect auto-raise Done; fleet hub invent removed; website demo persist-first Done (TD-025); remaining: durable equipment/compliance tables — [veyvio-f03-mock-replacement-plan.md](./veyvio-f03-mock-replacement-plan.md) |
 | **F-04** | Rotate credentials | Done (ops) | `gate1:rotate-credentials` |
 | **F-05** | Centralise business rules | Done (prod) | `compliance-engine.ts` |
 | **F-06** | Safety hard gates | Done (prod) | VOR + ack-before-sign-on |
@@ -292,9 +292,9 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 | TD-022 | Stale Driver “transport mock-only” docs | F-03 | Gate review false signal | 🟡 | Exec Gate 4 | Done (docs) |
 | TD-023 | Scanner / absence-test blind spots | F-03, F-17 | False PASS on F-03 | 🔴 | Exec Gate 3 | Partial — `npm run test:f03-gate0` in CI; expand absence suite still open |
 | TD-024 | Implicit Yard mock-auth when Command env missing | F-03 | Accidental mock login | 🔴 | Exec Gate 0 | Done (code) — prod never silent mock |
-| TD-025 | Website CRM/email stub returns success | F-03 (sales) | Lost waiting-list evidence | 🟠 | Exec Gate 4 | Open |
+| TD-025 | Website CRM/email stub returns success | F-03 (sales) | Lost waiting-list evidence | 🟠 | Exec Gate 4 | Done (code) — persist-first (KV/notify); production fails closed without persist; crmSynced/emailDelivered honest |
 | TD-026 | Shared BCT layout auto-substitution | F-03 | Fake depot geometry | 🟠 | Exec Gate 4 | Done (code) — map/hub no BCT fallback |
-| TD-027 | Compliance / equipment write APIs absent (exceptions Done) | F-18 | Incomplete write surface | 🟠 | Exec Gate 2 | Partial — exceptions Command workflow landed; compliance due-items + equipment records still open |
+| TD-027 | Compliance / equipment write APIs absent (exceptions Done) | F-18 | Incomplete write surface | 🟠 | Exec Gate 2 | Partial — exceptions + critical-defect auto-raise Done; fleet hub no longer invents kit; durable equipment/compliance tables still open |
 
 _Add rows when discovery finds mock paths, dual writes, or blueprint conflicts._
 

@@ -1,4 +1,5 @@
 import { demoErrorStatus, processDemoSubmission, validateSubmission } from "../server/demo-handler";
+import { createKvLeadStore, createMemoryLeadStore } from "../server/demo-leads-store";
 
 export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
@@ -11,6 +12,8 @@ export interface Env {
   DEMO_NOTIFY_EMAIL?: string;
   SALES_EMAIL?: string;
   CALENDAR_BOOKING_URL?: string;
+  /** Durable demo/waiting-list leads — required in production. */
+  DEMO_LEADS?: KVNamespace;
 }
 
 const securityHeaders: Record<string, string> = {
@@ -73,7 +76,22 @@ function json(data: unknown, status = 200, extraHeaders: Record<string, string> 
 async function handleDemoPost(request: Request, env: Env) {
   try {
     const payload = validateSubmission(await request.json());
-    const result = await processDemoSubmission(payload, env);
+    // F-03 / TD-025: persist required. KV in production; memory only for non-prod without binding.
+    const store = env.DEMO_LEADS
+      ? createKvLeadStore(env.DEMO_LEADS)
+      : env.ENVIRONMENT && env.ENVIRONMENT !== "production"
+        ? createMemoryLeadStore()
+        : null;
+    if (!store) {
+      return json(
+        {
+          ok: false,
+          error: "Enquiry storage is not configured (DEMO_LEADS KV binding required).",
+        },
+        503,
+      );
+    }
+    const result = await processDemoSubmission(payload, env, store);
     return json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Submission failed";

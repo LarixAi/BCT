@@ -1,7 +1,6 @@
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { buildFleetResourcesHub } from './aggregate'
 import { emptyFleetResourcesHub, safeFleetResourcesHub } from './empty-hub'
-import { enrichSparseLiveHub } from './enrich-sparse-hub'
 import { createFleetResourcesSeed } from './seed'
 import type { FleetResourcesHubData } from './types'
 
@@ -29,21 +28,17 @@ async function loadProfiles(
   }
 }
 
-/** Live-first; production fails closed to empty when live is unavailable. */
+/**
+ * Live-first; production fails closed to empty when live is unavailable.
+ * Never invent kit/cards/tyres on a sparse live hub (F-03).
+ */
 export async function resolveFleetResourcesHub(opts: {
   fetchLiveHub: () => Promise<FleetResourcesHubData>
   fetchProfiles?: () => Promise<VehicleProfile[]>
 }): Promise<ResolvedFleetResourcesHub> {
   try {
     const live = await opts.fetchLiveHub()
-    let hub = safeFleetResourcesHub(live)
-    const sparse =
-      hub.equipment.length === 0 || hub.cards.length === 0 || hub.tyres.length === 0
-    if (sparse) {
-      const profiles = await loadProfiles(opts.fetchProfiles)
-      hub = enrichSparseLiveHub(hub, profiles)
-    }
-    return { hub, source: 'live' }
+    return { hub: safeFleetResourcesHub(live), source: 'live' }
   } catch {
     // continue
   }
