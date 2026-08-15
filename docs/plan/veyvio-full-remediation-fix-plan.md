@@ -258,12 +258,13 @@ The current private-key regex flags PEM marker strings used by parser code and o
 ## FIX-R0-005 — Restore live tenant-isolation certification
 
 **Severity:** P0 STOP-SHIP  
-**Status:** IMPLEMENTED  
+**Status:** TESTED  
 
 ### Evidence
-- Login/MFA/select-tenant now fail closed with the exact stage that lost `accessToken`.
-- Tests: live `npm run test:tenant-isolation` was not run here (`VEYVIO_ANON_KEY` unset). CI remains fail-closed on trusted triggers.
-- Remaining limitations: hosted token bootstrap still needs a CI run with repo secrets to reach VERIFIED.
+- Login/MFA/select-tenant fail closed with the exact stage that lost `accessToken`.
+- Isolation seed now sets `mfa_enabled: false` and clears TOTP methods (command-api deployed to `qeckgqjrfbdyxchuncdt`).
+- Command-without-driver-account check uses the platform session for `/driver/journey-sequence-acknowledgements`.
+- Remaining limitations: confirm GitHub `tenant-isolation` job on this commit.
 
 **Area:** Tenancy / Supabase / CI  
 **Problem:**

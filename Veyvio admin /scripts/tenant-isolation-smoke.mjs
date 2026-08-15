@@ -573,7 +573,7 @@ async function main() {
     const crossDriverJourneyAckList = await api(
       'GET',
       '/driver/journey-sequence-acknowledgements',
-      sessionB.accessToken,
+      platform.accessToken,
     )
     assertDenied(crossDriverJourneyAckList.status, 'command user on driver journey-sequence acknowledgements')
 
