@@ -104,8 +104,16 @@ function listTrackedFiles() {
 }
 
 function shouldScan(file) {
-  if (SKIP_PATH_PARTS.some((part) => file.includes(part))) return false;
-  if (ALLOWLIST_PATH_PARTS.some((part) => file.endsWith(part) || file.includes(part))) return false;
+  const norm = String(file).replaceAll("\\", "/");
+  if (SKIP_PATH_PARTS.some((part) => norm.includes(part))) return false;
+  if (
+    ALLOWLIST_PATH_PARTS.some((part) => {
+      const needle = part.replace(/^\//, "");
+      return norm === needle || norm.endsWith(`/${needle}`) || norm.endsWith(part);
+    })
+  ) {
+    return false;
+  }
   const ext = extname(file).toLowerCase();
   if (SKIP_EXTENSIONS.has(ext)) return false;
   return true;

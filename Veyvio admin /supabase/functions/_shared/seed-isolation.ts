@@ -83,7 +83,9 @@ async function seedOne(org: IsolationOrg) {
     email: org.email,
     first_name: 'Isolation',
     last_name: org.label,
+    mfa_enabled: false,
   }, { onConflict: 'id' })
+  await admin.from('user_mfa_methods').delete().eq('user_id', userId)
 
   let { data: company } = await admin
     .from('companies')
