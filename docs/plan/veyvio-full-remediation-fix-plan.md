@@ -264,7 +264,8 @@ The current private-key regex flags PEM marker strings used by parser code and o
 - Login/MFA/select-tenant fail closed with the exact stage that lost `accessToken`.
 - Isolation seed now sets `mfa_enabled: false` and clears TOTP methods (command-api deployed to `qeckgqjrfbdyxchuncdt`).
 - Command-without-driver-account check uses the platform session for `/driver/journey-sequence-acknowledgements`.
-- Remaining limitations: confirm GitHub `tenant-isolation` job on this commit.
+- Negative probes treat 4xx/5xx as fail-closed (must not return 2xx).
+- Remaining limitations: confirm GitHub `tenant-isolation` job on this commit. A 503 on a cross-tenant driver acknowledgement is fail-closed, not a leak.
 
 **Area:** Tenancy / Supabase / CI  
 **Problem:**

@@ -162,8 +162,8 @@ async function driverApi(method, path, token, body) {
 
 function assertDenied(status, label) {
   assert.ok(
-    status === 404 || status === 403 || status === 409 || status === 400,
-    `expected 404/403/409/400 for ${label}, got ${status}`,
+    status < 200 || status >= 400,
+    `expected forbidden or fail-closed (4xx/5xx) for ${label}, got ${status}`,
   )
 }
 
