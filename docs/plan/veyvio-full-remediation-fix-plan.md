@@ -342,7 +342,7 @@ This is the highest-risk product-engineering area discovered in the audit.
 ## FIX-P0-001 — Eliminate false-success offline queue writes
 
 **Severity:** P0 STOP-SHIP  
-**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
+**Status:** TESTED (Wave 2 hardening — not ACCEPTED / not DEVICE_VERIFIED)  
 **Area:** Driver offline mutation system
 
 ### Evidence
@@ -412,7 +412,7 @@ sync through Command
 ## FIX-P0-002 — Persistent dead-letter/reconciliation queue
 
 **Severity:** P0 STOP-SHIP  
-**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
+**Status:** TESTED (Wave 2 hardening — not ACCEPTED / not DEVICE_VERIFIED)  
 **Area:** Driver offline sync
 
 **Current risk:**
@@ -468,7 +468,7 @@ for safety/operational evidence.
 ## FIX-P0-003 — Remove unscoped Driver outbox fallback
 
 **Severity:** P0 STOP-SHIP  
-**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
+**Status:** TESTED (Wave 2 hardening — not ACCEPTED / not DEVICE_VERIFIED)  
 **Area:** Driver tenancy
 
 **Current risk:**
@@ -505,7 +505,7 @@ and persistence must be blocked.
 ## FIX-P0-004 — Replace mirrored tenant-storage tests
 
 **Severity:** P1 HIGH  
-**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
+**Status:** TESTED (Wave 2 hardening — not ACCEPTED / not DEVICE_VERIFIED)  
 **Area:** Driver tests
 
 **Problem:**
@@ -528,7 +528,7 @@ A tenant storage test reimplements the production workspace-key algorithm instea
 ## FIX-P1-005 — Harden Driver media durability
 
 **Severity:** P1 HIGH  
-**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
+**Status:** TESTED (Wave 2 hardening — not ACCEPTED / not DEVICE_VERIFIED)  
 **Area:** Driver offline media/evidence
 
 **Risk:**
@@ -553,7 +553,7 @@ Memory fallback cannot be described as durable because process termination loses
 ## FIX-P1-006 — Prove degraded Driver mode cannot bypass server safety gates
 
 **Severity:** P1 HIGH  
-**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
+**Status:** TESTED (Wave 2 hardening — not ACCEPTED / not DEVICE_VERIFIED)  
 **Area:** Driver compliance / safety
 
 **Context:**
@@ -2070,7 +2070,7 @@ Do not run all fixes simultaneously.
 
 **Exit:** no false queued-success and no silent offline discard.
 
-**Wave 2 implementation status:** TESTED locally (Driver 151 tests + typecheck). Not ACCEPTED until architectural review and GitHub required CI on this commit. Device restart of acknowledged queues is still a remaining limitation.
+**Wave 2 implementation status:** TESTED locally after acceptance-hardening (item-per-record queues, Command membershipId, provenance-aware migration, CONTEXT_UNAVAILABLE, no automatic RECONCILIATION replay). Not ACCEPTED until architectural re-review and physical-device restart proof.
 
 ---
 

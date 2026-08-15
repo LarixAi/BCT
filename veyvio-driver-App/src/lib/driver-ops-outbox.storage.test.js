@@ -103,4 +103,32 @@ describe("driver-ops-outbox.storage", () => {
     expect(queue[0].payload.dutyId).toBe("duty-9");
     expect(queue[0].status).not.toBe(OPS_ITEM_RECONCILIATION);
   });
+
+  it("keeps concurrent enqueues instead of last-write-wins", async () => {
+    await Promise.all(
+      Array.from({ length: 40 }, (_, index) =>
+        enqueueOpsCommand(
+          "drv-1",
+          { type: "defect", payload: { description: `D${index}`, clientId: `ops-c-${index}` } },
+          "co-a",
+          "mem-1",
+        ),
+      ),
+    );
+    const queue = await loadOpsOutbox("drv-1", "co-a", "mem-1");
+    expect(queue).toHaveLength(40);
+    expect(new Set(queue.map((item) => item.idempotencyKey)).size).toBe(40);
+  });
+
+  it("quarantines legacy items that do not prove current tenant membership", async () => {
+    localStorage.setItem(
+      "csf_driver_ops_outbox:drv-1",
+      JSON.stringify([
+        { id: "foreign", type: "defect", companyId: "co-other", membershipId: "mem-x", payload: { clientId: "foreign" } },
+        { id: "mine", type: "defect", driverId: "drv-1", payload: { clientId: "mine" } },
+      ]),
+    );
+    const queue = await loadOpsOutbox("drv-1", "co-a", "mem-1");
+    expect(queue.map((item) => item.id)).toEqual(["mine"]);
+  });
 });

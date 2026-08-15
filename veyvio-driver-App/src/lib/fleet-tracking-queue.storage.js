@@ -1,5 +1,13 @@
-import { durableGet, durablePut, DurableStorageError } from "@/lib/driver-durable-kv"
 import { driverWorkspaceStorageKey, requireWorkspaceIds } from "@/lib/driver-workspace-storage"
+import {
+  ITEM_PENDING,
+  QUEUE_FLEET,
+  deleteQueueItem,
+  listQueueItems,
+  migrateLegacyQueues,
+  putQueueItem,
+  workspaceProvenance,
+} from "@/lib/driver-durable-queue"
 
 export const LEGACY_QUEUE_PREFIX = "csf_fleet_tracking_ping_queue:"
 
@@ -8,72 +16,61 @@ export function fleetPingQueueKey(driverId, companyId, membershipId) {
   return driverWorkspaceStorageKey(companyId, membershipId, "fleet-ping-queue")
 }
 
-function readLegacyLocalQueue(key) {
-  if (typeof localStorage === "undefined") return []
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    throw new DurableStorageError("CORRUPT_OUTBOX", "Queued location pings could not be read. They were not discarded.")
-  }
+async function ensureMigrated(driverId, companyId, membershipId, userId) {
+  await migrateLegacyQueues({
+    driverId,
+    companyId,
+    membershipId,
+    queueType: QUEUE_FLEET,
+    scopedLocalKey: fleetPingQueueKey(driverId, companyId, membershipId),
+    driverLocalPrefix: LEGACY_QUEUE_PREFIX,
+    kvKey: fleetPingQueueKey(driverId, companyId, membershipId),
+    proof: workspaceProvenance(driverId, companyId, membershipId, userId),
+  })
 }
 
-async function loadQueueRecord(driverId, companyId, membershipId) {
-  const key = fleetPingQueueKey(driverId, companyId, membershipId)
-  const stored = await durableGet(key)
-  if (stored.found) {
-    const items = stored.value?.items
-    if (!Array.isArray(items)) {
-      throw new DurableStorageError("CORRUPT_OUTBOX", "Queued location pings could not be read. They were not discarded.")
-    }
-    return { key, items }
-  }
-  const scoped = readLegacyLocalQueue(key)
-  const legacy = driverId ? readLegacyLocalQueue(`${LEGACY_QUEUE_PREFIX}${driverId}`) : []
-  const migrated = [...scoped, ...legacy]
-  if (migrated.length) {
-    await durablePut(key, { items: migrated, migratedAt: new Date().toISOString() })
-    try {
-      localStorage.removeItem(key)
-      if (driverId) localStorage.removeItem(`${LEGACY_QUEUE_PREFIX}${driverId}`)
-    } catch {
-      /* leftover backup */
-    }
-  }
-  return { key, items: migrated }
-}
-
-export async function loadFleetPingQueue(driverId, companyId, membershipId) {
-  const { items } = await loadQueueRecord(driverId, companyId, membershipId)
-  return items
+export async function loadFleetPingQueue(driverId, companyId, membershipId, userId = null) {
+  await ensureMigrated(driverId, companyId, membershipId, userId)
+  return listQueueItems(companyId, membershipId, QUEUE_FLEET)
 }
 
 export async function saveFleetPingQueue(driverId, queue, companyId, membershipId) {
-  const key = fleetPingQueueKey(driverId, companyId, membershipId)
-  await durablePut(key, { items: queue, updatedAt: new Date().toISOString() })
+  const existing = await loadFleetPingQueue(driverId, companyId, membershipId)
+  const keep = new Set((queue ?? []).map((item) => item.id))
+  for (const item of existing) {
+    if (!keep.has(item.id)) await deleteQueueItem(companyId, membershipId, QUEUE_FLEET, item.id)
+  }
+  for (const item of queue ?? []) {
+    await putQueueItem({
+      ...item,
+      queueType: QUEUE_FLEET,
+      companyId,
+      membershipId,
+      driverId: item.driverId ?? driverId,
+    })
+  }
 }
 
-export async function enqueueFleetPing(driverId, payload, companyId, membershipId) {
+export async function enqueueFleetPing(driverId, payload, companyId, membershipId, userId = null) {
   requireWorkspaceIds(companyId, membershipId)
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
-  items.push({
-    id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  await ensureMigrated(driverId, companyId, membershipId, userId)
+  const id = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  await putQueueItem({
+    id,
     createdAt: new Date().toISOString(),
     companyId,
     membershipId,
+    driverId,
+    queueType: QUEUE_FLEET,
+    status: ITEM_PENDING,
     payload,
   })
-  await durablePut(key, { items, updatedAt: new Date().toISOString() })
-  return items.length
+  return (await listQueueItems(companyId, membershipId, QUEUE_FLEET)).length
 }
 
 export async function dequeueFleetPing(driverId, pendingId, companyId, membershipId) {
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
-  const next = items.filter((item) => item.id !== pendingId)
-  await durablePut(key, { items: next, updatedAt: new Date().toISOString() })
-  return next
+  await deleteQueueItem(companyId, membershipId, QUEUE_FLEET, pendingId)
+  return listQueueItems(companyId, membershipId, QUEUE_FLEET)
 }
 
 export async function clearFleetPingQueue(driverId, companyId, membershipId) {

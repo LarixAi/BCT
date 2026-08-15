@@ -17,6 +17,7 @@ export function mapDriverRowToRecord(row, opts = {}) {
   return {
     id: row.id,
     userId: row.user_id,
+    membershipId: row.membership_id ?? row.membershipId ?? null,
     organisationId: row.organisation_id,
     fullName: row.full_name,
     email: row.email ?? "",

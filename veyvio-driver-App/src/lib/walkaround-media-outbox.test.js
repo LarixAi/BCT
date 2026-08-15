@@ -15,7 +15,7 @@ describe("walkaround-media-outbox durability", () => {
       kind: "odometer",
     });
     expect(id).toContain("driver:co-a:mem-1:media:");
-    expect(await loadWalkaroundMediaDataUrl(id)).toBe(dataUrl);
+    expect(await loadWalkaroundMediaDataUrl(id, { companyId: "co-a", membershipId: "mem-1" })).toBe(dataUrl);
   });
 
   it("refuses to persist required evidence without tenant context", async () => {

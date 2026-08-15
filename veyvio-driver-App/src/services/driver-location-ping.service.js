@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { commandPostDriverLocation } from "@/lib/command-api";
-import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import { requireDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import {
   dequeueFleetPing,
@@ -207,12 +207,18 @@ function detectAppState() {
  * Start periodic GPS pings for an active duty.
  * Always posts to Command Live Ops; legacy fleet session is optional.
  */
-export function startFleetTrackingPings({ driver, active, onPing, dutyId = null }) {
+export function startFleetTrackingPings({ driver, session = null, active, onPing, dutyId = null }) {
   if (!active || !driver?.id) {
     return () => {};
   }
 
-  const { companyId, membershipId } = resolveDriverWorkspaceScope(driver, driver);
+  let companyId;
+  let membershipId;
+  try {
+    ({ companyId, membershipId } = requireDriverWorkspaceScope(driver, session));
+  } catch {
+    return () => {};
+  }
 
   let cancelled = false;
 

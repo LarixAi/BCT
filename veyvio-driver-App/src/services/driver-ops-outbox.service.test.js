@@ -75,6 +75,12 @@ describe("driver-ops-outbox.service", () => {
     const queue = await loadOpsOutbox("drv-1", "co-1", "mem-1");
     expect(queue).toHaveLength(1);
     expect(queue[0].status).toBe("RECONCILIATION_REQUIRED");
+
+    reportDefectViaCommand.mockClear();
+    const second = await flushOpsOutbox({ id: "drv-1" }, { companyId: "co-1", membershipId: "mem-1" });
+    expect(reportDefectViaCommand).not.toHaveBeenCalled();
+    expect(second.blocked).toBe(0);
+    expect(second.remaining).toBe(1);
   });
 
   it("keeps transient failures in the queue", async () => {

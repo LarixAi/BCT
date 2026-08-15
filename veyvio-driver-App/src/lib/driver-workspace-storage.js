@@ -1,6 +1,6 @@
 /**
  * Organisation-scoped offline storage keys for Driver app.
- * Operational queues must include company + membership. Missing context fails closed.
+ * Operational queues require companyId + company_memberships.id. Never use userId as membership.
  */
 export class OfflineContextError extends Error {
   constructor(message = "Company and membership context is required before saving offline work.") {
@@ -8,6 +8,10 @@ export class OfflineContextError extends Error {
     this.name = "OfflineContextError"
     this.code = "OFFLINE_CONTEXT_NOT_READY"
   }
+}
+
+function isUsableId(value) {
+  return Boolean(String(value ?? "").trim())
 }
 
 export function driverWorkspaceStorageKey(companyId, membershipId, suffix) {
@@ -25,7 +29,7 @@ export function parseDriverWorkspaceStorageKey(key) {
   return { companyId: match[1], membershipId: match[2], suffix: match[3] }
 }
 
-/** Resolve org + membership for offline queues from driver/session payloads. */
+/** Resolve org + membership for offline queues. Membership is company_memberships.id only. */
 export function resolveDriverWorkspaceScope(driver, session) {
   const companyId =
     session?.activeCompanyId ??
@@ -33,12 +37,8 @@ export function resolveDriverWorkspaceScope(driver, session) {
     driver?.organisation_id ??
     driver?.organisationId ??
     null
-  const membershipId =
-    session?.membershipId ??
-    session?.userId ??
-    driver?.user_id ??
-    null
-  return { companyId, membershipId }
+  const membershipId = session?.membershipId ?? driver?.membership_id ?? driver?.membershipId ?? null
+  return { companyId, membershipId: isUsableId(membershipId) ? String(membershipId).trim() : null }
 }
 
 export function requireDriverWorkspaceScope(driver, session) {

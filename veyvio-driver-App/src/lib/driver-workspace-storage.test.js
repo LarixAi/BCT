@@ -46,4 +46,22 @@ describe("driver-workspace-storage", () => {
     expect(() => driverWorkspaceStorageKey("", "mem-1", "ops")).toThrow(OfflineContextError);
     expect(() => requireWorkspaceIds("co-a", null)).toThrow(OfflineContextError);
   });
+
+  it("never treats userId as membershipId", () => {
+    expect(
+      resolveDriverWorkspaceScope(
+        { id: "drv-1", organisation_id: "co-a", user_id: "user-1" },
+        { activeCompanyId: "co-a", userId: "user-1", membershipId: null },
+      ),
+    ).toEqual({ companyId: "co-a", membershipId: null });
+  });
+
+  it("uses Command membership_id rather than a user-id fallback", () => {
+    expect(
+      requireDriverWorkspaceScope(
+        { id: "drv-1", organisation_id: "co-a", membership_id: "mem-real" },
+        { companyId: "co-a", membershipId: "mem-real" },
+      ),
+    ).toEqual({ companyId: "co-a", membershipId: "mem-real" });
+  });
 });

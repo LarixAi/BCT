@@ -1,5 +1,15 @@
-import { durableGet, durablePut, DurableStorageError } from "@/lib/driver-durable-kv"
 import { driverWorkspaceStorageKey, requireWorkspaceIds } from "@/lib/driver-workspace-storage"
+import {
+  ITEM_PENDING,
+  ITEM_RECONCILIATION,
+  QUEUE_WALKAROUND,
+  deleteQueueItem,
+  listQueueItems,
+  migrateLegacyQueues,
+  patchQueueItem,
+  putQueueItem,
+  workspaceProvenance,
+} from "@/lib/driver-durable-queue"
 
 export const LEGACY_WALKAROUND_QUEUE_PREFIX = "csf_walkaround_sync_queue:"
 
@@ -8,89 +18,73 @@ export function syncQueueKey(driverId, companyId, membershipId) {
   return driverWorkspaceStorageKey(companyId, membershipId, "walkaround-sync-queue")
 }
 
-function readLegacyLocalQueue(key) {
-  if (typeof localStorage === "undefined") return []
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    throw new DurableStorageError("CORRUPT_OUTBOX", "Queued vehicle checks could not be read. They were not discarded.")
-  }
+async function ensureMigrated(driverId, companyId, membershipId, userId) {
+  await migrateLegacyQueues({
+    driverId,
+    companyId,
+    membershipId,
+    queueType: QUEUE_WALKAROUND,
+    scopedLocalKey: syncQueueKey(driverId, companyId, membershipId),
+    driverLocalPrefix: LEGACY_WALKAROUND_QUEUE_PREFIX,
+    kvKey: syncQueueKey(driverId, companyId, membershipId),
+    proof: workspaceProvenance(driverId, companyId, membershipId, userId),
+  })
 }
 
-async function loadQueueRecord(driverId, companyId, membershipId) {
-  const key = syncQueueKey(driverId, companyId, membershipId)
-  const stored = await durableGet(key)
-  if (stored.found) {
-    const items = stored.value?.items
-    if (!Array.isArray(items)) {
-      throw new DurableStorageError("CORRUPT_OUTBOX", "Queued vehicle checks could not be read. They were not discarded.")
-    }
-    return { key, items }
-  }
-  const scoped = readLegacyLocalQueue(key)
-  const legacy = driverId ? readLegacyLocalQueue(`${LEGACY_WALKAROUND_QUEUE_PREFIX}${driverId}`) : []
-  const migrated = [...scoped, ...legacy].map((item) => ({
-    ...item,
-    companyId: item.companyId ?? companyId,
-    membershipId: item.membershipId ?? membershipId,
-    status: item.status ?? "PENDING",
-  }))
-  if (migrated.length) {
-    await durablePut(key, { items: migrated, migratedAt: new Date().toISOString() })
-    try {
-      localStorage.removeItem(key)
-      if (driverId) localStorage.removeItem(`${LEGACY_WALKAROUND_QUEUE_PREFIX}${driverId}`)
-    } catch {
-      /* keep leftover */
-    }
-  }
-  return { key, items: migrated }
-}
-
-export async function loadSyncQueue(driverId, companyId, membershipId) {
-  const { items } = await loadQueueRecord(driverId, companyId, membershipId)
-  return items
+export async function loadSyncQueue(driverId, companyId, membershipId, userId = null) {
+  await ensureMigrated(driverId, companyId, membershipId, userId)
+  return listQueueItems(companyId, membershipId, QUEUE_WALKAROUND)
 }
 
 export async function saveSyncQueue(driverId, queue, companyId, membershipId) {
-  const key = syncQueueKey(driverId, companyId, membershipId)
-  await durablePut(key, { items: queue, updatedAt: new Date().toISOString() })
+  const existing = await loadSyncQueue(driverId, companyId, membershipId)
+  const keep = new Set((queue ?? []).map((item) => item.id))
+  for (const item of existing) {
+    if (!keep.has(item.id)) await deleteQueueItem(companyId, membershipId, QUEUE_WALKAROUND, item.id)
+  }
+  for (const item of queue ?? []) {
+    await putQueueItem({
+      ...item,
+      queueType: QUEUE_WALKAROUND,
+      companyId,
+      membershipId,
+      driverId: item.driverId ?? driverId,
+    })
+  }
   return queue
 }
 
-export async function enqueueWalkaroundSubmission(driverId, payload, companyId, membershipId) {
+export async function enqueueWalkaroundSubmission(driverId, payload, companyId, membershipId, userId = null) {
   requireWorkspaceIds(companyId, membershipId)
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
-  items.push({
-    id: payload?.clientId ?? `pending-${Date.now()}`,
+  await ensureMigrated(driverId, companyId, membershipId, userId)
+  const id = payload?.clientId ?? payload?.clientCheckId ?? `pending-${Date.now()}`
+  await putQueueItem({
+    id,
     createdAt: new Date().toISOString(),
     companyId,
     membershipId,
-    status: "PENDING",
-    idempotencyKey: payload?.clientId ?? payload?.clientCheckId ?? null,
+    driverId,
+    queueType: QUEUE_WALKAROUND,
+    status: ITEM_PENDING,
+    idempotencyKey: payload?.clientId ?? payload?.clientCheckId ?? id,
     payload,
   })
-  await durablePut(key, { items, updatedAt: new Date().toISOString() })
-  return items.length
+  return (await listQueueItems(companyId, membershipId, QUEUE_WALKAROUND)).length
 }
 
 export async function dequeueWalkaroundSubmission(driverId, pendingId, companyId, membershipId) {
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
-  const next = items.filter((item) => item.id !== pendingId)
-  await durablePut(key, { items: next, updatedAt: new Date().toISOString() })
-  return next
+  await deleteQueueItem(companyId, membershipId, QUEUE_WALKAROUND, pendingId)
+  return listQueueItems(companyId, membershipId, QUEUE_WALKAROUND)
 }
 
 export async function markWalkaroundReconciliation(driverId, pendingId, companyId, membershipId, errorMeta = {}) {
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
-  const next = items.map((item) =>
-    item.id === pendingId
-      ? { ...item, status: "RECONCILIATION_REQUIRED", lastError: errorMeta, lastAttemptedAt: new Date().toISOString() }
-      : item,
-  )
-  await durablePut(key, { items: next, updatedAt: new Date().toISOString() })
-  return next
+  return patchQueueItem(companyId, membershipId, QUEUE_WALKAROUND, pendingId, {
+    status: ITEM_RECONCILIATION,
+    lastError: errorMeta,
+    lastAttemptedAt: new Date().toISOString(),
+  })
+}
+
+export function isWalkaroundAutoReplayEligible(item) {
+  return (item?.status ?? ITEM_PENDING) !== ITEM_RECONCILIATION
 }

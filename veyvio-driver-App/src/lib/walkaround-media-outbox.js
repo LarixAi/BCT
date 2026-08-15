@@ -33,11 +33,18 @@ function openDb() {
 }
 
 async function putMedia(record) {
+  const blob = record.blob
+  const bytes = blob ? new Uint8Array(await blob.arrayBuffer()) : new Uint8Array()
+  const storedRecord = {
+    ...record,
+    blob: undefined,
+    blobBytes: Array.from(bytes),
+  }
   const db = await openDb();
   await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(record, record.id);
-    tx.oncomplete = () => resolve(record.id);
+    tx.objectStore(STORE).put(storedRecord, storedRecord.id);
+    tx.oncomplete = () => resolve(storedRecord.id);
     tx.onerror = () => reject(tx.error ?? new Error("Could not persist media"));
   });
   const stored = await getMedia(record.id);
@@ -47,12 +54,27 @@ async function putMedia(record) {
   return record.id;
 }
 
+function recordToBlob(record) {
+  if (record?.blob) return record.blob
+  if (Array.isArray(record?.blobBytes)) {
+    return new Blob([new Uint8Array(record.blobBytes)], { type: record.mimeType || "image/jpeg" })
+  }
+  return null
+}
+
 async function getMedia(mediaId) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
     const request = tx.objectStore(STORE).get(mediaId);
-    request.onsuccess = () => resolve(request.result ?? null);
+    request.onsuccess = () => {
+      const row = request.result ?? null
+      if (!row) {
+        resolve(null)
+        return
+      }
+      resolve({ ...row, blob: recordToBlob(row) })
+    }
     request.onerror = () => reject(request.error ?? new Error("Could not load media"));
   });
 }
@@ -68,6 +90,14 @@ async function deleteMedia(mediaId) {
 }
 
 function blobToDataUrl(blob) {
+  if (typeof FileReader === "undefined") {
+    return blob.arrayBuffer().then((buffer) => {
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+      return `data:${blob.type || "image/jpeg"};base64,${btoa(binary)}`;
+    });
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ""));
@@ -107,8 +137,8 @@ export async function persistWalkaroundMediaDataUrl({
   for (let i = 0; i < dataUrl.length; i += 1) checksum = (checksum * 31 + dataUrl.charCodeAt(i)) >>> 0;
   await putMedia({
     id,
-    companyId,
-    membershipId,
+    companyId: company,
+    membershipId: membership,
     kind: kind ?? "photo",
     itemKey,
     clientCheckId,
@@ -116,18 +146,20 @@ export async function persistWalkaroundMediaDataUrl({
     bytes: blob.size,
     checksum: String(checksum),
     blob,
-    dataUrlCache: dataUrl,
     status: "queued",
     capturedAt: new Date().toISOString(),
   });
   return id;
 }
 
-export async function loadWalkaroundMediaDataUrl(mediaId) {
+export async function loadWalkaroundMediaDataUrl(mediaId, { companyId, membershipId } = {}) {
+  requireWorkspaceIds(companyId, membershipId);
   const record = await getMedia(mediaId);
-  if (record?.dataUrlCache) return record.dataUrlCache;
-  if (!record?.blob) return null;
-  if (typeof FileReader === "undefined") return null;
+  if (!record) return null;
+  if (String(record.companyId) !== String(companyId) || String(record.membershipId) !== String(membershipId)) {
+    throw new DurableStorageError("OFFLINE_CONTEXT_NOT_READY", "This evidence belongs to another workspace.");
+  }
+  if (!record.blob) return null;
   return blobToDataUrl(record.blob);
 }
 
@@ -197,15 +229,19 @@ export async function externalizeWalkaroundPayloadMedia(payload, { companyId, me
   return next;
 }
 
-export async function hydrateWalkaroundPayloadMedia(payload) {
+export async function hydrateWalkaroundPayloadMedia(payload, { companyId, membershipId } = {}) {
   if (!payload) return payload;
   const next = { ...payload };
+  const scope = {
+    companyId: companyId ?? payload.companyId,
+    membershipId: membershipId ?? payload.membershipId,
+  };
 
   if (!next.odometerPhotoDataUrl && next.odometerPhotoMediaRef) {
-    next.odometerPhotoDataUrl = await loadWalkaroundMediaDataUrl(next.odometerPhotoMediaRef);
+    next.odometerPhotoDataUrl = await loadWalkaroundMediaDataUrl(next.odometerPhotoMediaRef, scope);
   }
   if (!next.driverSignatureDataUrl && next.driverSignatureMediaRef) {
-    next.driverSignatureDataUrl = await loadWalkaroundMediaDataUrl(next.driverSignatureMediaRef);
+    next.driverSignatureDataUrl = await loadWalkaroundMediaDataUrl(next.driverSignatureMediaRef, scope);
   }
 
   if (next.answers && typeof next.answers === "object") {
@@ -213,7 +249,7 @@ export async function hydrateWalkaroundPayloadMedia(payload) {
     for (const [itemId, answer] of Object.entries(next.answers)) {
       const copy = { ...answer };
       if (!copy.photoDataUrl && copy.photoMediaRef) {
-        copy.photoDataUrl = await loadWalkaroundMediaDataUrl(copy.photoMediaRef);
+        copy.photoDataUrl = await loadWalkaroundMediaDataUrl(copy.photoMediaRef, scope);
       }
       answers[itemId] = copy;
     }

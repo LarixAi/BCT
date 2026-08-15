@@ -22,8 +22,30 @@ async function accessTokenFromSession(session) {
   return authSession?.access_token ?? null;
 }
 
+function unavailableQueueSummary() {
+  return {
+    status: "CONTEXT_UNAVAILABLE",
+    code: "OFFLINE_CONTEXT_NOT_READY",
+    total: null,
+    walkaroundChecks: null,
+    locationPings: null,
+    opsCommands: null,
+    defects: null,
+    incidents: null,
+    messages: null,
+    dutyOps: null,
+    journeySteps: null,
+    handbacks: null,
+    dutyCloseouts: null,
+    vehicleSwapRequests: null,
+    jobExecution: null,
+  };
+}
+
 function emptyQueueSummary() {
   return {
+    status: "READY",
+    code: null,
     total: 0,
     walkaroundChecks: 0,
     locationPings: 0,
@@ -45,7 +67,7 @@ export async function describeOfflineQueue(driverId, companyId, membershipId) {
   try {
     requireWorkspaceIds(companyId, membershipId);
   } catch {
-    return emptyQueueSummary();
+    return unavailableQueueSummary();
   }
   const walkaroundChecks = (await loadSyncQueue(driverId, companyId, membershipId)).length;
   const locationPings = (await loadFleetPingQueue(driverId, companyId, membershipId)).length;
@@ -66,6 +88,8 @@ export async function describeOfflineQueue(driverId, companyId, membershipId) {
   const opsCommands =
     defects + incidents + messages + dutyOps + journeySteps + handbacks + dutyCloseouts + vehicleSwapRequests + jobExecution;
   return {
+    status: "READY",
+    code: null,
     total: walkaroundChecks + locationPings + opsCommands,
     walkaroundChecks,
     locationPings,
@@ -83,7 +107,9 @@ export async function describeOfflineQueue(driverId, companyId, membershipId) {
 }
 
 export async function countPendingOfflineCommands(driverId, companyId, membershipId) {
-  return (await describeOfflineQueue(driverId, companyId, membershipId)).total;
+  const summary = await describeOfflineQueue(driverId, companyId, membershipId);
+  if (summary.status === "CONTEXT_UNAVAILABLE") return null;
+  return summary.total;
 }
 
 function capabilityStatus(probe) {

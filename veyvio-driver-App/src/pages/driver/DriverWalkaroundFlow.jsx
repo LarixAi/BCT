@@ -118,7 +118,7 @@ export default function DriverWalkaroundFlow({ driver }) {
   ).length;
 
   useEffect(() => {
-    void flushPendingWalkaroundSubmissions(driver);
+    void flushPendingWalkaroundSubmissions(driver, authSession);
     void getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId).then(setPendingSync);
   }, [driver, authSession, workspace.companyId, workspace.membershipId]);
 
@@ -505,6 +505,7 @@ export default function DriverWalkaroundFlow({ driver }) {
         gps,
         startedAt,
         driverSignatureDataUrl: signatureDataUrl,
+        session: authSession,
       });
 
       if (!result.ok) {
@@ -557,7 +558,7 @@ export default function DriverWalkaroundFlow({ driver }) {
             : signedOn?.message ?? null,
       });
       setStep("result");
-      void flushPendingWalkaroundSubmissions(driver);
+      void flushPendingWalkaroundSubmissions(driver, authSession);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong submitting your check.");
     } finally {

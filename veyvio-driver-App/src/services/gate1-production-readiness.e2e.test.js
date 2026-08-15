@@ -70,7 +70,10 @@ describe("gate1 production readiness e2e", () => {
     expect(externalized.answers.tyres.photoDataUrl).toBeUndefined();
     expect(externalized.answers.tyres.photoMediaRef).toBeTruthy();
 
-    const hydrated = await hydrateWalkaroundPayloadMedia(externalized);
+    const hydrated = await hydrateWalkaroundPayloadMedia(externalized, {
+      companyId: "co-a",
+      membershipId: "mem-1",
+    });
     expect(hydrated.odometerPhotoDataUrl).toContain("data:image/jpeg;base64,");
     expect(hydrated.answers.tyres.photoDataUrl).toContain("data:image/jpeg;base64,");
 

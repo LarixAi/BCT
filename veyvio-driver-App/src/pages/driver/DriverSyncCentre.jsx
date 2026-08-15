@@ -17,7 +17,18 @@ import { withTimeout } from "@/lib/withTimeout";
 const PROBE_TIMEOUT_MS = 12000;
 
 function emptyQueue() {
-  return { total: 0, walkaroundChecks: 0, locationPings: 0, opsCommands: 0 };
+  return { status: "READY", total: 0, walkaroundChecks: 0, locationPings: 0, opsCommands: 0 };
+}
+
+function unavailableQueue() {
+  return {
+    status: "CONTEXT_UNAVAILABLE",
+    code: "OFFLINE_CONTEXT_NOT_READY",
+    total: null,
+    walkaroundChecks: null,
+    locationPings: null,
+    opsCommands: null,
+  };
 }
 
 export default function DriverSyncCentre() {
@@ -38,8 +49,8 @@ export default function DriverSyncCentre() {
 
   const refreshQueue = useCallback(async () => {
     if (!driver?.id || !workspace.companyId || !workspace.membershipId) {
-      setOfflineQueue(emptyQueue());
-      return emptyQueue();
+      setOfflineQueue(unavailableQueue());
+      return unavailableQueue();
     }
     const next = await describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId);
     setOfflineQueue(next);
@@ -53,7 +64,9 @@ export default function DriverSyncCentre() {
     try {
       const result = await flushOpsOutbox(driver, session);
       const remaining = await refreshQueue();
-      if (result.synced > 0) {
+      if (result.status === "CONTEXT_UNAVAILABLE" || remaining.status === "CONTEXT_UNAVAILABLE") {
+        setFlushMsg("Offline work cannot currently be inspected. Restore your account context before syncing.");
+      } else if (result.synced > 0) {
         setFlushMsg(
           remaining.total === 0
             ? `Synced ${result.synced} item${result.synced === 1 ? "" : "s"} to Command.`
@@ -145,7 +158,9 @@ export default function DriverSyncCentre() {
           ? "Checking…"
           : "Online";
   const pendingLabel =
-    offlineQueue.total === 0
+    offlineQueue.status === "CONTEXT_UNAVAILABLE"
+      ? "Offline work cannot currently be inspected. Restore your account context before syncing."
+      : offlineQueue.total === 0
       ? "Pending offline queue · none"
       : `Pending offline queue · ${offlineQueue.total} (${offlineQueue.walkaroundChecks} checks, ${offlineQueue.locationPings} location${offlineQueue.opsCommands ? `, ${offlineQueue.opsCommands} reports` : ""})`;
 

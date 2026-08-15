@@ -1,10 +1,20 @@
-import { durableGet, durablePut, DurableStorageError } from "@/lib/driver-durable-kv"
 import { driverWorkspaceStorageKey, requireWorkspaceIds } from "@/lib/driver-workspace-storage"
+import {
+  ITEM_PENDING,
+  ITEM_RECONCILIATION,
+  ITEM_RETRYABLE,
+  QUEUE_OPS,
+  deleteQueueItem,
+  listQueueItems,
+  migrateLegacyQueues,
+  patchQueueItem,
+  putQueueItem,
+  workspaceProvenance,
+} from "@/lib/driver-durable-queue"
 
-export const OPS_ITEM_PENDING = "PENDING"
-export const OPS_ITEM_RETRYABLE = "RETRYABLE_FAILURE"
-export const OPS_ITEM_RECONCILIATION = "RECONCILIATION_REQUIRED"
-
+export const OPS_ITEM_PENDING = ITEM_PENDING
+export const OPS_ITEM_RETRYABLE = ITEM_RETRYABLE
+export const OPS_ITEM_RECONCILIATION = ITEM_RECONCILIATION
 export const LEGACY_OPS_QUEUE_PREFIX = "csf_driver_ops_outbox:"
 
 export function opsOutboxKey(driverId, companyId, membershipId) {
@@ -12,151 +22,115 @@ export function opsOutboxKey(driverId, companyId, membershipId) {
   return driverWorkspaceStorageKey(companyId, membershipId, "ops-command-outbox")
 }
 
-function readLegacyLocalQueue(key) {
-  if (typeof localStorage === "undefined") return []
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    throw new DurableStorageError("CORRUPT_OUTBOX", "Queued work on this device could not be read. It was not discarded.")
-  }
+function proofFor(driverId, companyId, membershipId, userId) {
+  return workspaceProvenance(driverId, companyId, membershipId, userId)
 }
 
-async function loadQueueRecord(driverId, companyId, membershipId) {
-  const key = opsOutboxKey(driverId, companyId, membershipId)
-  const stored = await durableGet(key)
-  if (stored.found) {
-    const items = stored.value?.items
-    if (!Array.isArray(items)) {
-      throw new DurableStorageError("CORRUPT_OUTBOX", "Queued work on this device could not be read. It was not discarded.")
-    }
-    return { key, items }
-  }
-
-  const scopedLegacy = readLegacyLocalQueue(key)
-  const driverLegacy = driverId ? readLegacyLocalQueue(`${LEGACY_OPS_QUEUE_PREFIX}${driverId}`) : []
-  const migrated = [...scopedLegacy, ...driverLegacy].map((item) => ({
-    ...item,
-    companyId: item.companyId ?? companyId,
-    membershipId: item.membershipId ?? membershipId,
-    status: item.status ?? OPS_ITEM_PENDING,
-    mutationVersion: item.mutationVersion ?? 1,
-  }))
-  if (migrated.length) {
-    await durablePut(key, { items: migrated, migratedAt: new Date().toISOString() })
-    try {
-      localStorage.removeItem(key)
-      if (driverId) localStorage.removeItem(`${LEGACY_OPS_QUEUE_PREFIX}${driverId}`)
-    } catch {
-      /* backup copy may remain */
-    }
-  }
-  return { key, items: migrated }
+async function ensureMigrated(driverId, companyId, membershipId, userId) {
+  await migrateLegacyQueues({
+    driverId,
+    companyId,
+    membershipId,
+    queueType: QUEUE_OPS,
+    scopedLocalKey: opsOutboxKey(driverId, companyId, membershipId),
+    driverLocalPrefix: LEGACY_OPS_QUEUE_PREFIX,
+    kvKey: opsOutboxKey(driverId, companyId, membershipId),
+    proof: proofFor(driverId, companyId, membershipId, userId),
+  })
 }
 
-async function persistQueue(key, items) {
-  await durablePut(key, { items, updatedAt: new Date().toISOString() })
-  return items
-}
-
-export async function loadOpsOutbox(driverId, companyId, membershipId) {
-  const { items } = await loadQueueRecord(driverId, companyId, membershipId)
-  return items
+export async function loadOpsOutbox(driverId, companyId, membershipId, userId = null) {
+  await ensureMigrated(driverId, companyId, membershipId, userId)
+  return listQueueItems(companyId, membershipId, QUEUE_OPS)
 }
 
 export async function saveOpsOutbox(driverId, queue, companyId, membershipId) {
-  const key = opsOutboxKey(driverId, companyId, membershipId)
-  await persistQueue(key, queue)
+  const existing = await loadOpsOutbox(driverId, companyId, membershipId)
+  const keep = new Set((queue ?? []).map((item) => item.id))
+  for (const item of existing) {
+    if (!keep.has(item.id)) {
+      await deleteQueueItem(companyId, membershipId, QUEUE_OPS, item.id)
+    }
+  }
+  for (const item of queue ?? []) {
+    await putQueueItem({ ...item, queueType: QUEUE_OPS, companyId, membershipId, driverId: item.driverId ?? driverId })
+  }
   return queue
 }
 
-export async function enqueueOpsCommand(driverId, entry, companyId, membershipId) {
+export async function enqueueOpsCommand(driverId, entry, companyId, membershipId, userId = null) {
   requireWorkspaceIds(companyId, membershipId)
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
+  await ensureMigrated(driverId, companyId, membershipId, userId)
   const id = entry.id ?? `ops-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const payload = {
     ...(entry.payload ?? {}),
     clientId: entry.payload?.clientId ?? id,
   }
-  items.push({
+  await putQueueItem({
     id,
     createdAt: new Date().toISOString(),
     type: entry.type,
+    queueType: QUEUE_OPS,
     companyId,
     membershipId,
     driverId: driverId ?? null,
-    status: OPS_ITEM_PENDING,
+    status: ITEM_PENDING,
     mutationVersion: 1,
     idempotencyKey: payload.clientId,
     payload,
   })
-  await persistQueue(key, items)
-  return items.length
+  return (await listQueueItems(companyId, membershipId, QUEUE_OPS)).length
 }
 
 export async function dequeueOpsCommand(driverId, pendingId, companyId, membershipId) {
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
-  const next = items.filter((item) => item.id !== pendingId)
-  await persistQueue(key, next)
-  return next
+  await deleteQueueItem(companyId, membershipId, QUEUE_OPS, pendingId)
+  return listQueueItems(companyId, membershipId, QUEUE_OPS)
 }
 
 export async function markOpsCommandReconciliation(driverId, pendingId, companyId, membershipId, errorMeta = {}) {
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
-  const next = items.map((item) =>
-    item.id === pendingId
-      ? {
-          ...item,
-          status: OPS_ITEM_RECONCILIATION,
-          lastAttemptedAt: new Date().toISOString(),
-          lastError: errorMeta,
-          retryCount: Number(item.retryCount ?? 0) + 1,
-        }
-      : item,
-  )
-  await persistQueue(key, next)
-  return next
+  return patchQueueItem(companyId, membershipId, QUEUE_OPS, pendingId, {
+    status: ITEM_RECONCILIATION,
+    lastAttemptedAt: new Date().toISOString(),
+    lastError: errorMeta,
+  })
 }
 
 export async function markOpsCommandRetryable(driverId, pendingId, companyId, membershipId, errorMeta = {}) {
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
-  const next = items.map((item) =>
-    item.id === pendingId
-      ? {
-          ...item,
-          status: OPS_ITEM_RETRYABLE,
-          lastAttemptedAt: new Date().toISOString(),
-          lastError: errorMeta,
-          retryCount: Number(item.retryCount ?? 0) + 1,
-        }
-      : item,
-  )
-  await persistQueue(key, next)
-  return next
+  const current = (await listQueueItems(companyId, membershipId, QUEUE_OPS)).find((item) => item.id === pendingId)
+  return patchQueueItem(companyId, membershipId, QUEUE_OPS, pendingId, {
+    status: ITEM_RETRYABLE,
+    lastAttemptedAt: new Date().toISOString(),
+    lastError: errorMeta,
+    retryCount: Number(current?.retryCount ?? 0) + 1,
+  })
 }
 
-export async function enqueueDutyOpsCommand(driverId, type, dutyId, companyId, membershipId) {
+export async function revalidateOpsCommand(driverId, pendingId, companyId, membershipId) {
+  return patchQueueItem(companyId, membershipId, QUEUE_OPS, pendingId, {
+    status: ITEM_PENDING,
+    revalidatedAt: new Date().toISOString(),
+  })
+}
+
+export async function enqueueDutyOpsCommand(driverId, type, dutyId, companyId, membershipId, userId = null) {
   requireWorkspaceIds(companyId, membershipId)
+  await ensureMigrated(driverId, companyId, membershipId, userId)
   const dutyKey = String(dutyId)
   const id = `duty-${type}-${dutyKey}`
-  const { key, items } = await loadQueueRecord(driverId, companyId, membershipId)
-  const next = items.filter((item) => !(item.type === type && String(item.payload?.dutyId ?? "") === dutyKey))
-  next.push({
+  await putQueueItem({
     id,
     createdAt: new Date().toISOString(),
     type,
+    queueType: QUEUE_OPS,
     companyId,
     membershipId,
     driverId: driverId ?? null,
-    status: OPS_ITEM_PENDING,
+    status: ITEM_PENDING,
     mutationVersion: 1,
     idempotencyKey: id,
     payload: { dutyId: dutyKey, clientId: id },
   })
-  await persistQueue(key, next)
-  return next.length
+  return (await listQueueItems(companyId, membershipId, QUEUE_OPS)).length
 }
 
 export async function hasPendingDutyOps(driverId, dutyId, companyId, membershipId) {
@@ -166,7 +140,7 @@ export async function hasPendingDutyOps(driverId, dutyId, companyId, membershipI
     (item) =>
       (item.type === "duty_sign_on" || item.type === "duty_sign_off") &&
       String(item.payload?.dutyId ?? "") === dutyKey &&
-      item.status !== OPS_ITEM_RECONCILIATION,
+      item.status !== ITEM_RECONCILIATION,
   )
 }
 
@@ -180,4 +154,9 @@ export async function listPendingMessageOps(driverId, companyId, membershipId, c
     }
     return false
   })
+}
+
+export function isAutoReplayEligible(item) {
+  const status = item?.status ?? ITEM_PENDING
+  return status === ITEM_PENDING || status === ITEM_RETRYABLE
 }

@@ -98,6 +98,7 @@ export default function DriverSupabaseHome({ driver }) {
   );
   useFleetTracking({
     driver,
+    authSession: session,
     active: trackingActive,
     dutyId: dutyState?.dutyId ?? null,
   });
@@ -209,7 +210,7 @@ export default function DriverSupabaseHome({ driver }) {
   }, [sessionHomeSummary, sessionBootstrap]);
 
   useEffect(() => {
-    void Promise.all([flushPendingWalkaroundSubmissions(driver), flushOpsOutbox(driver, session)])
+    void Promise.all([flushPendingWalkaroundSubmissions(driver, session), flushOpsOutbox(driver, session)])
       .then((results) => {
         const synced = results.reduce((sum, row) => sum + (row?.synced ?? 0), 0);
         if (synced > 0) void reloadHomeData({ force: true });

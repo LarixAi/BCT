@@ -20,6 +20,8 @@ describe("driver-sync-status.service", () => {
   it("sums walkaround and location pending commands", async () => {
     expect(await countPendingOfflineCommands("drv-1", "co-a", "mem-1")).toBe(4);
     expect(await describeOfflineQueue("drv-1", "co-a", "mem-1")).toEqual({
+      status: "READY",
+      code: null,
       total: 4,
       walkaroundChecks: 2,
       locationPings: 1,
@@ -34,5 +36,14 @@ describe("driver-sync-status.service", () => {
       vehicleSwapRequests: 0,
       jobExecution: 0,
     });
+  });
+
+  it("does not treat missing membership as an empty queue", async () => {
+    expect(await describeOfflineQueue("drv-1", "co-a", null)).toMatchObject({
+      status: "CONTEXT_UNAVAILABLE",
+      total: null,
+      code: "OFFLINE_CONTEXT_NOT_READY",
+    });
+    expect(await countPendingOfflineCommands("drv-1", "co-a", null)).toBeNull();
   });
 });

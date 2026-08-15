@@ -14,6 +14,7 @@ import { isChecklistFullyAnswered, normalizeChecklistProgress } from "@/lib/walk
 import {
   dequeueWalkaroundSubmission,
   enqueueWalkaroundSubmission,
+  isWalkaroundAutoReplayEligible,
   loadSyncQueue,
   markWalkaroundReconciliation,
 } from "@/lib/walkaround-sync.storage";
@@ -940,6 +941,7 @@ export async function submitWalkaroundCheck({
   startedAt,
   driverSignatureDataUrl,
   offlineSubmit = false,
+  session = null,
 }) {
   if (!vehicle?.id) return { ok: false, message: "No vehicle selected." };
   if (!vehicleConfirmed) return { ok: false, message: "Confirm this is your vehicle before submitting." };
@@ -986,11 +988,12 @@ export async function submitWalkaroundCheck({
     gps,
     startedAt,
     driverSignatureDataUrl,
+    session,
   };
 
   if (offlineSubmit || !navigator.onLine) {
     try {
-      const { companyId, membershipId } = requireDriverWorkspaceScope(driver, null);
+      const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
       const externalized = await externalizeWalkaroundPayloadMedia(payload, { companyId, membershipId });
       await enqueueWalkaroundSubmission(driver.id, externalized, companyId, membershipId);
     } catch (error) {
@@ -1249,6 +1252,7 @@ async function insertWalkaroundCheck(payload) {
     gps,
     startedAt,
     driverSignatureDataUrl,
+    session,
   } = payload;
 
   const items = checklist.items;
@@ -1336,7 +1340,7 @@ async function insertWalkaroundCheck(payload) {
   if (checkError || !checkRow) {
     if (!navigator.onLine) {
       try {
-        const { companyId, membershipId } = requireDriverWorkspaceScope(driver, null);
+        const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
         await enqueueWalkaroundSubmission(driver.id, payload, companyId, membershipId);
       } catch (error) {
         return { ok: false, queued: false, message: error.message, code: error.code };
@@ -1368,13 +1372,13 @@ async function insertWalkaroundCheck(payload) {
   };
 }
 
-export async function flushPendingWalkaroundSubmissions(driver) {
+export async function flushPendingWalkaroundSubmissions(driver, session = null) {
   let companyId;
   let membershipId;
   try {
-    ({ companyId, membershipId } = requireDriverWorkspaceScope(driver, null));
+    ({ companyId, membershipId } = requireDriverWorkspaceScope(driver, session));
   } catch {
-    return { synced: 0, remaining: 0 };
+    return { synced: 0, remaining: null, status: "CONTEXT_UNAVAILABLE", code: "OFFLINE_CONTEXT_NOT_READY" };
   }
   const queue = await loadSyncQueue(driver.id, companyId, membershipId);
   if (!queue.length || !navigator.onLine) {
@@ -1383,10 +1387,11 @@ export async function flushPendingWalkaroundSubmissions(driver) {
 
   let synced = 0;
   for (const item of queue) {
+    if (!isWalkaroundAutoReplayEligible(item)) continue;
     if (item.companyId && companyId && item.companyId !== companyId) {
       continue;
     }
-    const hydrated = await hydrateWalkaroundPayloadMedia(item.payload);
+    const hydrated = await hydrateWalkaroundPayloadMedia(item.payload, { companyId, membershipId });
     let result = await insertWalkaroundCheckViaCommand(hydrated);
     if (!result.ok && !getCommandApiBaseUrl() && !result.skipLegacy) {
       result = await insertWalkaroundCheck(hydrated);

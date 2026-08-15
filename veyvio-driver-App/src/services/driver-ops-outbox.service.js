@@ -5,6 +5,7 @@ import {
   enqueueDutyOpsCommand,
   enqueueOpsCommand,
   hasPendingDutyOps,
+  isAutoReplayEligible,
   loadOpsOutbox,
   markOpsCommandReconciliation,
   markOpsCommandRetryable,
@@ -407,7 +408,14 @@ export async function flushOpsOutbox(driver, session) {
   try {
     ;({ companyId, membershipId } = workspaceFrom(driver, session));
   } catch {
-    return { synced: 0, blocked: 0, remaining: 0, blockedItems: [] };
+    return {
+      synced: 0,
+      blocked: 0,
+      remaining: null,
+      status: "CONTEXT_UNAVAILABLE",
+      code: "OFFLINE_CONTEXT_NOT_READY",
+      blockedItems: [],
+    };
   }
   const driverId = driver?.id;
   if (!driverId || isOffline()) {
@@ -423,6 +431,7 @@ export async function flushOpsOutbox(driver, session) {
   let refreshAttempted = false;
 
   for (const item of queue) {
+    if (!isAutoReplayEligible(item)) continue;
     if (item.companyId && companyId && item.companyId !== companyId) continue;
 
     let result = await runOpsItem(item, refreshedSession ?? session);

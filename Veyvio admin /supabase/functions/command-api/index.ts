@@ -1721,6 +1721,24 @@ async function driverSession(request: Request) {
 
   const activationPhase = await activationPhasePromise
 
+  const membershipCandidates = [context.membershipId, appAccount.membership_id, membership?.id]
+  let verifiedMembershipId: string | null = null
+  for (const candidate of membershipCandidates) {
+    const id = String(candidate ?? '').trim()
+    if (!id) continue
+    const { data: verified } = await admin
+      .from('company_memberships')
+      .select('id')
+      .eq('id', id)
+      .eq('company_id', context.companyId)
+      .eq('user_id', context.user.id)
+      .maybeSingle()
+    if (verified?.id) {
+      verifiedMembershipId = String(verified.id)
+      break
+    }
+  }
+
   // Non-blocking — do not delay the session response.
   void admin
     .from('driver_app_accounts')
@@ -1733,8 +1751,10 @@ async function driverSession(request: Request) {
     .eq('company_id', context.companyId)
 
   return json({
+    userId: context.user.id,
     driverId,
     companyId: context.companyId,
+    membershipId: verifiedMembershipId,
     companyName: company?.trading_name ?? company?.legal_name ?? 'Company',
     role: 'driver',
     accountStatus: String(appAccount.account_status ?? 'active'),
@@ -11054,6 +11074,7 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (path === 'auth/me' && request.method === 'GET') return getMe(request)
   if (path === 'auth/driver-session' && request.method === 'GET') return driverSession(request)
+  if (path === 'driver/session' && request.method === 'GET') return driverSession(request)
   if (path === 'driver/bootstrap' && request.method === 'GET') return driverBootstrap(request)
   if (path === 'driver/vehicle-readiness' && request.method === 'GET') return driverVehicleReadiness(request)
   if (path === 'driver/vehicle-timeline' && request.method === 'GET') return driverVehicleTimeline(request)

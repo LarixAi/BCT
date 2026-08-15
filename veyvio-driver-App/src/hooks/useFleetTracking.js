@@ -6,7 +6,7 @@ import { ensureFleetSessionForOpenShift, getActiveFleetSession } from "@/service
  * Duty-scoped fleet tracking: GPS pings while signed on, plus live speed for UI.
  * Posts to Command Live Ops even when the legacy fleet session table is empty.
  */
-export function useFleetTracking({ driver, active, dutyId = null }) {
+export function useFleetTracking({ driver, authSession = null, active, dutyId = null }) {
   const [session, setSession] = useState(null);
   const [speedMph, setSpeedMph] = useState(null);
   const [speedLimitMph, setSpeedLimitMph] = useState(null);
@@ -41,6 +41,7 @@ export function useFleetTracking({ driver, active, dutyId = null }) {
 
     const stopPings = startFleetTrackingPings({
       driver,
+      session: authSession,
       active: true,
       dutyId,
       onPing: ({ speedMph: speed, speedLimitMph: limit, accuracyMeters: accuracy, batteryLevel: battery, recordedAt, ok, message }) => {
@@ -74,7 +75,7 @@ export function useFleetTracking({ driver, active, dutyId = null }) {
       window.clearInterval(speedInterval);
       window.clearInterval(sessionInterval);
     };
-  }, [active, driver, dutyId, refreshSession]);
+  }, [active, driver, authSession, dutyId, refreshSession]);
 
   return {
     session,

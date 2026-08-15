@@ -88,6 +88,7 @@ function mapCommandSessionToDriver(commandSession, userId) {
     id: commandSession.driverId,
     user_id: userId,
     organisation_id: commandSession.companyId,
+    membership_id: commandSession.membershipId ?? null,
     full_name: fullName,
     email: commandSession.email ?? "",
     phone: commandSession.mobile ?? "",
@@ -121,6 +122,7 @@ function mapCommandSessionToDriver(commandSession, userId) {
     driver: mapDriverRowToRecord(row, { depotName: depot?.name ?? null }),
     organisationId: commandSession.companyId,
     organisationName: commandSession.companyName ?? null,
+    membershipId: commandSession.membershipId ?? null,
     depots: commandSession.depots ?? [],
     accountStatus: commandSession.accountStatus,
   };
@@ -413,7 +415,8 @@ export async function getDriverSessionContext() {
     driverId: refreshedDriver.id,
     organisationId: mapped.organisationId,
     organisationName: mapped.organisationName,
-    membershipId: null,
+    membershipId: mapped.membershipId,
+    userId: user.id,
     driver: bootstrap?.driver?.displayName
       ? {
           ...refreshedDriver,
