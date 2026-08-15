@@ -6,6 +6,7 @@ import type { EmployeeCostReference } from '../domain/org-structure'
 import type { WageCostBatch } from '../domain/wage-period-workflow'
 import { assertSameOrganisation, requireOrganisationId } from '../domain/tenancy'
 import type { CostRecord, OrganisationId, ReviewItem } from '../domain/types'
+import { isViteProduction, type ViteLikeEnv } from '../lib/vite-env'
 
 export type FinanceSession = {
   accessToken: string
@@ -487,13 +488,10 @@ async function postWageMutation(
 }
 
 export function readFinanceRepositoryConfig(
-  env: Record<string, string | undefined> = import.meta.env as Record<
-    string,
-    string | undefined
-  >,
+  env: ViteLikeEnv = import.meta.env,
 ): FinanceRepositoryConfig {
-  const raw = env.VITE_FINANCE_DATA_MODE?.trim().toLowerCase() ?? ''
-  const isProd = env.PROD === 'true' || env.MODE === 'production'
+  const raw = String(env.VITE_FINANCE_DATA_MODE ?? '').trim().toLowerCase()
+  const isProd = isViteProduction(env)
   if (isProd && raw !== 'api') {
     throw new Error(
       'Cost Control production builds require VITE_FINANCE_DATA_MODE=api (demo data mode is not allowed).',
@@ -502,7 +500,7 @@ export function readFinanceRepositoryConfig(
   const mode = raw === 'api' ? 'api' : 'demo'
   return {
     mode,
-    apiBaseUrl: env.VITE_FINANCE_API_URL?.trim() || null,
+    apiBaseUrl: String(env.VITE_FINANCE_API_URL ?? '').trim() || null,
   }
 }
 

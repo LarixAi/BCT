@@ -5,7 +5,8 @@
  */
 import { execSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import { extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const root = new URL("..", import.meta.url).pathname;
 
@@ -55,6 +56,7 @@ const SKIP_PATH_PARTS = [
 const ALLOWLIST_PATH_PARTS = [
   "/.env.example",
   "/scripts/audit-secrets.mjs",
+  "/scripts/audit-secrets.unit.mjs",
   "/scripts/set-github-ci-secrets.mjs",
   "/scripts/check-nav-secrets.mjs",
   "/supabase/functions/_shared/supabase.ts",
@@ -66,11 +68,32 @@ const SECRET_PATTERNS = [
   { name: "supabase_service_role_literal", re: /service_role['"]?\s*:\s*['"]eyJ[a-zA-Z0-9_-]{20,}/i },
   { name: "stripe_live_key", re: /\bsk_live_[0-9a-zA-Z]{16,}\b/ },
   { name: "aws_access_key", re: /\bAKIA[0-9A-Z]{16}\b/ },
-  { name: "private_key_block", re: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
   { name: "google_api_key_literal", re: /AIza[0-9A-Za-z_-]{20,}/ },
   { name: "github_pat", re: /\bghp_[0-9a-zA-Z]{20,}\b/ },
   { name: "github_fine_grained_pat", re: /\bgithub_pat_[0-9a-zA-Z_]{20,}\b/ },
 ];
+
+const PEM_BEGIN = /-----BEGIN ((?:RSA |EC |OPENSSH )?PRIVATE KEY)-----/g;
+
+/**
+ * Fail only on plausible PEM material (BEGIN + substantial base64 body).
+ * Parser/source markers and dummy ABC fixtures must not trip the scanner.
+ */
+export function sourceContainsPrivateKeyMaterial(source) {
+  const text = String(source ?? "");
+  PEM_BEGIN.lastIndex = 0;
+  let match;
+  while ((match = PEM_BEGIN.exec(text))) {
+    const after = text.slice(match.index + match[0].length);
+    const endAt = after.search(/-----END /);
+    const body = (endAt === -1 ? after.slice(0, 800) : after.slice(0, endAt))
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "");
+    const b64 = body.replace(/[^A-Za-z0-9+/=]/g, "");
+    if (b64.length >= 64) return true;
+  }
+  return false;
+}
 
 function listTrackedFiles() {
   const out = execSync("git ls-files -z", { cwd: root, encoding: "buffer" });
@@ -92,38 +115,47 @@ function relativePath(file) {
   return file.startsWith(root) ? file.slice(root.length + 1) : file;
 }
 
-const failures = [];
+function runSecretsAudit() {
+  const failures = [];
 
-for (const envFile of TRACKED_ENV_DENY) {
-  const tracked = listTrackedFiles().filter((file) => file === envFile || file.endsWith(`/${envFile}`));
-  if (tracked.length) {
-    failures.push(`Tracked env file must not be committed: ${tracked.join(", ")}`);
-  }
-}
-
-for (const file of listTrackedFiles()) {
-  if (!shouldScan(file)) continue;
-  const abs = join(root, file);
-  let source = "";
-  try {
-    if (!statSync(abs).isFile()) continue;
-    source = readFileSync(abs, "utf8");
-  } catch {
-    continue;
-  }
-
-  for (const pattern of SECRET_PATTERNS) {
-    if (pattern.re.test(source)) {
-      failures.push(`${relativePath(abs)} matches ${pattern.name}`);
-      break;
+  for (const envFile of TRACKED_ENV_DENY) {
+    const tracked = listTrackedFiles().filter((file) => file === envFile || file.endsWith(`/${envFile}`));
+    if (tracked.length) {
+      failures.push(`Tracked env file must not be committed: ${tracked.join(", ")}`);
     }
   }
+
+  for (const file of listTrackedFiles()) {
+    if (!shouldScan(file)) continue;
+    const abs = join(root, file);
+    let source = "";
+    try {
+      if (!statSync(abs).isFile()) continue;
+      source = readFileSync(abs, "utf8");
+    } catch {
+      continue;
+    }
+
+    for (const pattern of SECRET_PATTERNS) {
+      if (pattern.re.test(source)) {
+        failures.push(`${relativePath(abs)} matches ${pattern.name}`);
+        break;
+      }
+    }
+    if (sourceContainsPrivateKeyMaterial(source)) {
+      failures.push(`${relativePath(abs)} matches private_key_block`);
+    }
+  }
+
+  if (failures.length) {
+    console.error("Secrets audit failed:");
+    for (const failure of failures) console.error(`  ✗ ${failure}`);
+    process.exit(1);
+  }
+
+  console.log("Secrets audit passed (tracked files scanned, no committed secrets detected).");
 }
 
-if (failures.length) {
-  console.error("Secrets audit failed:");
-  for (const failure of failures) console.error(`  ✗ ${failure}`);
-  process.exit(1);
-}
-
-console.log("Secrets audit passed (tracked files scanned, no committed secrets detected).");
+const isMain =
+  Boolean(process.argv[1]) && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) runSecretsAudit();

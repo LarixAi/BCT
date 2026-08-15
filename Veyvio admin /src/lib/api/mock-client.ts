@@ -38,7 +38,11 @@ import type {
   PerformanceMetrics,
   YardSummary,
   PricingRuleRecord,
+  ExceptionsPort,
 } from './types'
+import type { OperationalException } from '@/lib/types'
+import { EXCEPTION_CATALOG } from '@/lib/exceptions/mock-catalog'
+import { isOpenException } from '@/lib/exceptions/exception-filters'
 import { mockBookingsApi } from './mock-bookings'
 import { mockDialARideApi } from './mock-dial-a-ride'
 import { mockSchoolRoutesApi } from './mock-school-routes'
@@ -772,7 +776,34 @@ function dutyToLiveVehicle(duty: DutyDetailRecord): LiveDispatchResponse['vehicl
   }
 }
 
-export class MockApiClient {
+const mockExceptionCases: OperationalException[] = EXCEPTION_CATALOG.map((ex) => ({
+  ...ex,
+  durableCase: true,
+  notes: ex.notes ? [...ex.notes] : [],
+  timeline: ex.timeline ? [...ex.timeline] : [],
+  audit: ex.audit ? [...ex.audit] : [],
+}))
+
+function stampException(
+  row: OperationalException,
+  status: OperationalException['status'],
+  actor: string,
+  action: string,
+  extra: Partial<OperationalException> = {},
+): OperationalException {
+  const nowIso = new Date().toISOString()
+  return {
+    ...row,
+    ...extra,
+    status,
+    lastUpdate: nowIso,
+    owner: extra.owner ?? row.owner,
+    timeline: [...(row.timeline ?? []), { at: nowIso, label: action }],
+    audit: [...(row.audit ?? []), { id: `aud-${Date.now()}`, at: nowIso, actor, action }],
+  }
+}
+
+export class MockApiClient implements ExceptionsPort {
   private accessToken: string | null = null
 
   setToken(token: string | null, hasTenant = true) {
@@ -2021,6 +2052,147 @@ export class MockApiClient {
     const defect = MOCK_DEFECTS.find((d) => d.id === id)
     if (!defect) throw new Error('Defect not found')
     return defect
+  }
+
+  async getExceptions(params?: { status?: string; openOnly?: boolean }): Promise<OperationalException[]> {
+    await delay()
+    let rows = [...mockExceptionCases]
+    if (params?.status) rows = rows.filter((row) => row.status === params.status)
+    if (params?.openOnly !== false) rows = rows.filter((row) => isOpenException(row))
+    return rows
+  }
+
+  async getException(id: string): Promise<OperationalException> {
+    await delay()
+    const row = mockExceptionCases.find((item) => item.id === id)
+    if (!row) throw new Error('Exception not found')
+    return row
+  }
+
+  async raiseException(input: {
+    title: string
+    description?: string
+    severity?: string
+    category?: string
+    typeCode?: string
+    relatedRecord?: string
+    relatedHref?: string
+    depotId?: string | null
+    actorName?: string
+  }): Promise<OperationalException> {
+    await delay()
+    const actor = input.actorName ?? 'Ops'
+    const nowIso = new Date().toISOString()
+    const row: OperationalException = {
+      id: `mock-ex-${Date.now()}`,
+      title: input.title,
+      description: input.description,
+      severity: (input.severity as OperationalException['severity']) || 'medium',
+      category: (input.category as OperationalException['category']) || 'dispatch',
+      typeCode: input.typeCode,
+      relatedRecord: input.relatedRecord ?? '—',
+      relatedHref: input.relatedHref ?? '/exceptions',
+      depot: input.depotId ?? '—',
+      raisedAt: nowIso,
+      ageMinutes: 0,
+      slaMinutesRemaining: 60,
+      owner: actor,
+      status: 'new',
+      lastUpdate: nowIso,
+      durableCase: true,
+      timeline: [{ at: nowIso, label: 'Raised' }],
+      notes: [],
+      audit: [{ id: `aud-${Date.now()}`, at: nowIso, actor, action: 'raised' }],
+    }
+    mockExceptionCases.unshift(row)
+    return row
+  }
+
+  async acknowledgeException(id: string, input: { notes?: string; actorName?: string } = {}) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const next = stampException(mockExceptionCases[idx]!, 'acknowledged', actor, 'Acknowledged')
+    if (input.notes) {
+      next.notes = [
+        ...(next.notes ?? []),
+        { id: `note-${Date.now()}`, at: new Date().toISOString(), author: actor, body: input.notes },
+      ]
+    }
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async assignException(
+    id: string,
+    input: { assigneeUserId?: string; assigneeName?: string; actorName?: string } = {},
+  ) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const next = stampException(mockExceptionCases[idx]!, 'assigned', actor, 'Assigned', {
+      owner: input.assigneeName ?? actor,
+      assignedToUserId: input.assigneeUserId ?? null,
+    })
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async investigateException(id: string, input: { actorName?: string } = {}) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const next = stampException(mockExceptionCases[idx]!, 'investigating', input.actorName ?? 'Ops', 'Investigating')
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async escalateException(id: string, input: { reason?: string; actorName?: string } = {}) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const next = stampException(mockExceptionCases[idx]!, 'investigating', actor, input.reason ?? 'Escalated', {
+      escalated: true,
+    })
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async closeException(
+    id: string,
+    input: { resolution?: string; dismiss?: boolean; actorName?: string } = {},
+  ) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const status = input.dismiss ? 'dismissed' : 'resolved'
+    const next = stampException(mockExceptionCases[idx]!, status, actor, input.resolution ?? 'Closed')
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async addExceptionNote(id: string, input: { body: string; actorName?: string }) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const stamped = new Date().toISOString()
+    const current = mockExceptionCases[idx]!
+    const next: OperationalException = {
+      ...current,
+      lastUpdate: stamped,
+      notes: [
+        ...(current.notes ?? []),
+        { id: `note-${Date.now()}`, at: stamped, author: actor, body: input.body },
+      ],
+      audit: [...(current.audit ?? []), { id: `aud-${Date.now()}`, at: stamped, actor, action: 'note' }],
+    }
+    mockExceptionCases[idx] = next
+    return next
   }
 
   async getIncidents(params?: { status?: string }): Promise<IncidentRecord[]> {

@@ -59,18 +59,22 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Production build scan
+      - name: Build release web artifact
+        env:
+          VITE_ENABLE_PUSH: "false"
+          VITE_MOCK_API: "false"
+        run: npm run build
+
+      - name: Production scan of the exact web artifact
         run: npm run verify:production-build
         env:
           VERIFY_SKIP_BUILD: "1"
 
-      - name: Build web + sync Capacitor (release flags)
+      - name: Capacitor sync
         env:
           VITE_ENABLE_PUSH: "false"
           VITE_MOCK_API: "false"
-        run: |
-          npm run build
-          npx cap sync android
+        run: npx cap sync android
 
       - name: Decode upload keystore
         env:
@@ -86,8 +90,17 @@ jobs:
           VEYVIO_UPLOAD_KEY_ALIAS: ${{ secrets.VEYVIO_UPLOAD_KEY_ALIAS }}
           VEYVIO_UPLOAD_KEY_PASSWORD: ${{ secrets.VEYVIO_UPLOAD_KEY_PASSWORD }}
         run: |
+          echo "commit_sha=${GITHUB_SHA}"
           cd android
           ./gradlew bundleRelease --no-daemon
+          aab=$(ls app/build/outputs/bundle/release/*.aab | head -n 1)
+          echo "aab_path=$aab"
+          shasum -a 256 "$aab"
+          {
+            echo "commit_sha=${GITHUB_SHA}"
+            echo "aab_path=$aab"
+            echo "aab_sha256=$(shasum -a 256 "$aab" | awk '{print $1}')"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4

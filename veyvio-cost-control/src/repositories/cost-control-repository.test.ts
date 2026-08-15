@@ -30,7 +30,7 @@ describe('cost control repositories', () => {
     const { readFinanceRepositoryConfig } = await import('./cost-control-repository')
     expect(() =>
       readFinanceRepositoryConfig({
-        PROD: 'true',
+        PROD: true,
         MODE: 'production',
         VITE_FINANCE_DATA_MODE: 'demo',
       }),

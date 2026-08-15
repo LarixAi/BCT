@@ -1,3 +1,5 @@
+import type { OperationalException } from '@/lib/types'
+
 export interface AuthUser {
   id: string
   email: string
@@ -652,4 +654,35 @@ export interface DutyTrackResponse {
     stopOrder: number
     arrivedAt: string | null
   }>
+}
+
+export type RaiseExceptionInput = {
+  title: string
+  description?: string
+  severity?: string
+  category?: string
+  typeCode?: string
+  relatedRecord?: string
+  relatedHref?: string
+  depotId?: string | null
+  actorName?: string
+}
+
+/** Shared Command exceptions contract — real and mock adapters must both implement this. */
+export interface ExceptionsPort {
+  getExceptions(params?: { status?: string; openOnly?: boolean }): Promise<OperationalException[]>
+  getException(id: string): Promise<OperationalException>
+  raiseException(input: RaiseExceptionInput): Promise<OperationalException>
+  acknowledgeException(id: string, input?: { notes?: string; actorName?: string }): Promise<OperationalException>
+  assignException(
+    id: string,
+    input?: { assigneeUserId?: string; assigneeName?: string; actorName?: string },
+  ): Promise<OperationalException>
+  investigateException(id: string, input?: { actorName?: string }): Promise<OperationalException>
+  escalateException(id: string, input?: { reason?: string; actorName?: string }): Promise<OperationalException>
+  closeException(
+    id: string,
+    input?: { resolution?: string; dismiss?: boolean; actorName?: string },
+  ): Promise<OperationalException>
+  addExceptionNote(id: string, input: { body: string; actorName?: string }): Promise<OperationalException>
 }

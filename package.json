@@ -19,6 +19,7 @@
     "test:e2e:ui": "playwright test --ui",
     "verify:production-build": "node scripts/verify-production-build.mjs",
     "audit:secrets": "node scripts/audit-secrets.mjs",
+    "test:audit-secrets": "node scripts/audit-secrets.unit.mjs",
     "gate1:preflight": "node scripts/gate1-preflight.mjs",
     "gate1:bct-readiness": "npm run gate1:bct-readiness --prefix \"Veyvio admin \"",
     "gate1:bct-pilot-setup": "npm run gate1:bct-pilot-setup --prefix \"Veyvio admin \"",

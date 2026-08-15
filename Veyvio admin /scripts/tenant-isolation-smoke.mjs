@@ -51,7 +51,12 @@ async function login(email, password, options = {}) {
   let body = await res.json().catch(() => ({}))
   assert.equal(res.status, 200, `login failed for ${email}: ${JSON.stringify(body)}`)
 
-  if (body.requiresMfaChallenge && body.devMfaCode && body.mfaChallengeId) {
+  if (body.requiresMfaChallenge) {
+    assert.ok(body.mfaChallengeId, `MFA required for ${email} but mfaChallengeId missing`)
+    assert.ok(
+      body.devMfaCode,
+      `MFA required for ${email} but no devMfaCode — isolation login cannot complete`,
+    )
     const confirm = await fetch(`${API}/api/auth/login/confirm`, {
       method: 'POST',
       headers: {
@@ -65,13 +70,15 @@ async function login(email, password, options = {}) {
         companyId: body.pendingCompanyId,
       }),
     })
-    body = await confirm.json()
-    assert.equal(confirm.status, 200, `MFA confirm failed for ${email}`)
+    body = await confirm.json().catch(() => ({}))
+    assert.equal(confirm.status, 200, `MFA confirm failed for ${email}: ${JSON.stringify(body)}`)
+    requireAccessToken(body, email, 'MFA confirm')
   }
 
   if (body.requiresTenantSelection && !options.skipTenantSelection) {
     const tenantId = body.memberships?.[0]?.tenantId ?? body.memberships?.[0]?.companyId
     assert.ok(tenantId, `tenant selection required but no membership for ${email}`)
+    assert.ok(body.accessToken, `select-tenant required for ${email} but login had no accessToken`)
     const select = await fetch(`${API}/api/auth/select-tenant`, {
       method: 'POST',
       headers: {
@@ -81,11 +88,22 @@ async function login(email, password, options = {}) {
       },
       body: JSON.stringify({ companyId: tenantId, refreshToken: body.refreshToken }),
     })
-    body = await select.json()
+    body = await select.json().catch(() => ({}))
     assert.equal(select.status, 200, `tenant select failed for ${email}: ${JSON.stringify(body)}`)
+    requireAccessToken(body, email, 'select-tenant')
   }
 
+  requireAccessToken(body, email, 'login')
   return body
+}
+
+function requireAccessToken(body, email, stage) {
+  const token = body?.accessToken
+  assert.ok(
+    typeof token === 'string' && token.length > 0,
+    `${stage} produced no accessToken for ${email}. keys=${Object.keys(body ?? {}).join(',')} requiresMfa=${Boolean(body?.requiresMfaChallenge)} requiresTenant=${Boolean(body?.requiresTenantSelection)} error=${body?.error ?? body?.message ?? ''}`,
+  )
+  return token
 }
 
 async function api(method, path, token, body) {
@@ -190,7 +208,8 @@ async function main() {
   // Local defaults may differ from the deployed secret.
   const sessionA = await login(orgA.email, orgA.password ?? ISOLATION_PASSWORD)
   const sessionB = await login(orgB.email, orgB.password ?? ISOLATION_PASSWORD)
-  assert.ok(sessionA.accessToken && sessionB.accessToken)
+  requireAccessToken(sessionA, orgA.email, 'Org A session')
+  requireAccessToken(sessionB, orgB.email, 'Org B session')
 
   // Positive: each org can read its own vehicle
   const ownA = await api('GET', `/vehicles/${orgA.vehicleId}/profile`, sessionA.accessToken)

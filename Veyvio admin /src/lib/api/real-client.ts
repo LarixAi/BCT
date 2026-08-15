@@ -38,6 +38,7 @@ import type {
   PerformanceMetrics,
   YardSummary,
   PricingRuleRecord,
+  ExceptionsPort,
 } from './types'
 import type { BookingDraft, BookingListItem, BookingRecord, CustomerBookingContext, CreateDraftOptions, CancelBookingInput, AutoPlanProposal, EditImpact } from '@/lib/bookings/types'
 import {
@@ -151,7 +152,7 @@ function normalizeOperationalPosition(
   throw new Error('Operational position could not be loaded')
 }
 
-export class ApiClient {
+export class ApiClient implements ExceptionsPort {
   private accessToken: string | null = null
 
   setToken(token: string | null, hasTenant = true) {

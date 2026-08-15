@@ -26,6 +26,9 @@ jobs:
       - name: Scan tracked files for committed secrets
         run: npm run audit:secrets
 
+      - name: Secret scanner unit tests
+        run: node scripts/audit-secrets.unit.mjs
+
   yard:
     name: Yard
     runs-on: ubuntu-latest
@@ -366,8 +369,8 @@ jobs:
       - name: Dependency audit
         run: npm run security:audit
 
-      - name: Security unit tests (no production secrets)
-        run: node --test tests/*.test.mjs
+      - name: Build then security tests (artifact HTML assertions)
+        run: npm test
 
   gate1-preflight:
     name: Gate 1 preflight (F-17)

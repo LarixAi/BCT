@@ -1,5 +1,6 @@
 import type { BankAccount, BankFeedMode, BankTransaction } from '../../domain/bank-account'
 import type { OrganisationId } from '../../domain/types'
+import { isViteProduction, type ViteLikeEnv } from '../../lib/vite-env'
 
 /**
  * Integration adapter contract — Blueprint §12.9.
@@ -94,10 +95,10 @@ export type BankIntegrationConfig = {
 }
 
 export function readBankIntegrationConfig(
-  env: Record<string, string | undefined> = import.meta.env as Record<string, string | undefined>,
+  env: ViteLikeEnv = import.meta.env,
 ): BankIntegrationConfig {
-  const isProduction = env.PROD === true || env.PROD === 'true' || env.MODE === 'production'
-  const modeRaw = (env.VITE_BANK_FEED_MODE ?? '').toLowerCase()
+  const isProduction = isViteProduction(env)
+  const modeRaw = String(env.VITE_BANK_FEED_MODE ?? '').toLowerCase()
   const mode: BankFeedMode =
     modeRaw === 'open_banking' ||
     modeRaw === 'manual_csv' ||
@@ -114,7 +115,7 @@ export function readBankIntegrationConfig(
     )
   }
 
-  const providerRaw = (env.VITE_BANK_PROVIDER ?? 'truelayer_sandbox').toLowerCase()
+  const providerRaw = String(env.VITE_BANK_PROVIDER ?? 'truelayer_sandbox').toLowerCase()
   const providerId = (['truelayer_sandbox', 'truelayer', 'yapily_sandbox', 'yapily', 'generic_ais', 'demo'].includes(
     providerRaw,
   )
@@ -124,13 +125,13 @@ export function readBankIntegrationConfig(
   return {
     mode,
     providerId: mode === 'demo_live' ? 'demo' : providerId,
-    tokenProxyBaseUrl: env.VITE_BANK_TOKEN_PROXY_URL?.trim() || null,
+    tokenProxyBaseUrl: String(env.VITE_BANK_TOKEN_PROXY_URL ?? '').trim() || null,
     redirectUri:
-      env.VITE_BANK_REDIRECT_URI?.trim() ||
+      String(env.VITE_BANK_REDIRECT_URI ?? '').trim() ||
       (typeof window !== 'undefined'
         ? `${window.location.origin}/settings?bank_callback=1`
         : 'http://localhost:5176/settings?bank_callback=1'),
-    clientIdPublic: env.VITE_BANK_CLIENT_ID?.trim() || null,
+    clientIdPublic: String(env.VITE_BANK_CLIENT_ID ?? '').trim() || null,
   }
 }
 

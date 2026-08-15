@@ -11,6 +11,21 @@ import type { MaintenanceIntelligence } from '@/lib/maintenance/intelligence'
 import type { MaintenanceHubData } from '@/lib/maintenance/types'
 import type { YardHubData, YardSummary } from '@/lib/yard/types'
 
+/** Coerce API/fixture year values without comparing number | null to ''. */
+export function parseOptionalModelYear(value: unknown): number | null {
+  if (value == null) return null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  return null
+}
+
 const EMPTY_DEFECT_ANALYTICS: DefectAnalytics = {
   byDepot: [],
   byCategory: [],
@@ -359,10 +374,7 @@ export function normalizeChecksOperationalRow(
     registrationNumber: String(row.registrationNumber ?? '—'),
     fleetNumber: row.fleetNumber != null ? String(row.fleetNumber) : null,
     makeModel: row.makeModel ? String(row.makeModel) : '—',
-    modelYear:
-      row.modelYear != null && row.modelYear !== '' && Number.isFinite(Number(row.modelYear))
-        ? Number(row.modelYear)
-        : null,
+    modelYear: parseOptionalModelYear(row.modelYear),
     vehicleCategory: row.vehicleCategory ? String(row.vehicleCategory) : 'vehicle',
     depotId: String(row.depotId ?? ''),
     depotName: String(row.depotName ?? '—'),
