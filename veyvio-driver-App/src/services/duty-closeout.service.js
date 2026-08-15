@@ -4,7 +4,7 @@ import {
   getCommandApiBaseUrl,
 } from "@/lib/command-api";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import { requireDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { enqueueOpsCommand } from "@/lib/driver-ops-outbox.storage";
 import { loadDriverBootstrap } from "@/services/driver-bootstrap.service";
 
@@ -60,7 +60,13 @@ export async function submitDutyCloseoutViaCommand(driver, session, jobId, paylo
   const token = await accessToken();
   if (!token) return { ok: false, message: "Not signed in." };
 
-  const { companyId, membershipId } = resolveDriverWorkspaceScope(driver, session);
+  let companyId;
+  let membershipId;
+  try {
+    ({ companyId, membershipId } = requireDriverWorkspaceScope(driver, session));
+  } catch (error) {
+    return { ok: false, queued: false, message: error.message, code: error.code };
+  }
   const dutyId = await resolveDutyIdForJob(jobId);
   const clientId = `closeout-${jobId}-${Date.now()}`;
   const input = {
@@ -72,7 +78,11 @@ export async function submitDutyCloseoutViaCommand(driver, session, jobId, paylo
   };
 
   if (isOffline()) {
-    enqueueOpsCommand(driver.id, { type: "duty_closeout", payload: input }, companyId, membershipId);
+    try {
+      await enqueueOpsCommand(driver.id, { type: "duty_closeout", payload: input }, companyId, membershipId);
+    } catch (error) {
+      return { ok: false, queued: false, message: error.message, code: error.code };
+    }
     return {
       ok: true,
       queued: true,
@@ -84,7 +94,11 @@ export async function submitDutyCloseoutViaCommand(driver, session, jobId, paylo
   if (result.ok) return { ok: true, closeout: result.closeout };
 
   if (shouldQueueOnFailure(result)) {
-    enqueueOpsCommand(driver.id, { type: "duty_closeout", payload: input }, companyId, membershipId);
+    try {
+      await enqueueOpsCommand(driver.id, { type: "duty_closeout", payload: input }, companyId, membershipId);
+    } catch (error) {
+      return { ok: false, queued: false, message: error.message, code: error.code };
+    }
     return {
       ok: true,
       queued: true,

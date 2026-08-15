@@ -36,12 +36,12 @@ export default function DriverSyncCentre() {
     [driver, session],
   );
 
-  const refreshQueue = useCallback(() => {
-    if (!driver?.id) {
+  const refreshQueue = useCallback(async () => {
+    if (!driver?.id || !workspace.companyId || !workspace.membershipId) {
       setOfflineQueue(emptyQueue());
       return emptyQueue();
     }
-    const next = describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId);
+    const next = await describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId);
     setOfflineQueue(next);
     return next;
   }, [driver?.id, workspace.companyId, workspace.membershipId]);
@@ -52,7 +52,7 @@ export default function DriverSyncCentre() {
     setFlushMsg("");
     try {
       const result = await flushOpsOutbox(driver, session);
-      const remaining = refreshQueue();
+      const remaining = await refreshQueue();
       if (result.synced > 0) {
         setFlushMsg(
           remaining.total === 0
@@ -73,7 +73,7 @@ export default function DriverSyncCentre() {
   }, [driver, session, refreshQueue]);
 
   useEffect(() => {
-    refreshQueue();
+    void refreshQueue();
   }, [refreshQueue]);
 
   useEffect(() => {
@@ -84,7 +84,7 @@ export default function DriverSyncCentre() {
       if (driver?.id && typeof navigator !== "undefined" && navigator.onLine !== false) {
         await runFlush().catch(() => {});
       } else {
-        refreshQueue();
+        await refreshQueue();
       }
       if (cancelled) return;
 
@@ -106,7 +106,7 @@ export default function DriverSyncCentre() {
       ]);
       if (cancelled) return;
 
-      refreshQueue();
+      await refreshQueue();
       if (!result.ok) {
         setError(result.message ?? "Sync failed");
         setTrainingProbe(training);

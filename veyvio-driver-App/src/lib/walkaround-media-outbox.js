@@ -2,20 +2,23 @@
  * Durable walkaround evidence store (IndexedDB blobs).
  * Survives process death; referenced from sync queue payloads via mediaRef.
  */
-import { driverWorkspaceStorageKey } from "@/lib/driver-workspace-storage";
+import { driverWorkspaceStorageKey, requireWorkspaceIds } from "@/lib/driver-workspace-storage";
+import { DurableStorageError } from "@/lib/driver-durable-kv";
 
 const DB_NAME = "veyvio_driver_media";
 const DB_VERSION = 1;
 const STORE = "media";
-
-const memoryFallback = new Map();
 
 function scopedPrefix(companyId, membershipId) {
   return driverWorkspaceStorageKey(companyId, membershipId, "media:");
 }
 
 function openDb() {
-  if (typeof indexedDB === "undefined") return Promise.resolve(null);
+  if (typeof indexedDB === "undefined") {
+    return Promise.reject(
+      new DurableStorageError("OFFLINE_STORAGE_UNAVAILABLE", "Required check evidence could not be saved on this device."),
+    );
+  }
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
@@ -31,21 +34,21 @@ function openDb() {
 
 async function putMedia(record) {
   const db = await openDb();
-  if (!db) {
-    memoryFallback.set(record.id, record);
-    return record.id;
-  }
-  return new Promise((resolve, reject) => {
+  await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).put(record, record.id);
     tx.oncomplete = () => resolve(record.id);
     tx.onerror = () => reject(tx.error ?? new Error("Could not persist media"));
   });
+  const stored = await getMedia(record.id);
+  if (!stored) {
+    throw new DurableStorageError("OFFLINE_STORAGE_WRITE_FAILED", "Required check evidence could not be confirmed on this device.");
+  }
+  return record.id;
 }
 
 async function getMedia(mediaId) {
   const db = await openDb();
-  if (!db) return memoryFallback.get(mediaId) ?? null;
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
     const request = tx.objectStore(STORE).get(mediaId);
@@ -56,10 +59,6 @@ async function getMedia(mediaId) {
 
 async function deleteMedia(mediaId) {
   const db = await openDb();
-  if (!db) {
-    memoryFallback.delete(mediaId);
-    return;
-  }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).delete(mediaId);
@@ -87,8 +86,9 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([bytes], { type: mime });
 }
 
-export function createMediaId(prefix = "media") {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+export function createMediaId(prefix = "media", companyId, membershipId) {
+  const scope = scopedPrefix(companyId, membershipId);
+  return `${scope}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export async function persistWalkaroundMediaDataUrl({
@@ -100,8 +100,11 @@ export async function persistWalkaroundMediaDataUrl({
   clientCheckId = null,
 }) {
   if (!dataUrl?.startsWith("data:")) return null;
-  const id = createMediaId(kind ?? "walkaround");
+  const { companyId: company, membershipId: membership } = requireWorkspaceIds(companyId, membershipId);
+  const id = createMediaId(kind ?? "walkaround", company, membership);
   const blob = dataUrlToBlob(dataUrl);
+  let checksum = 0;
+  for (let i = 0; i < dataUrl.length; i += 1) checksum = (checksum * 31 + dataUrl.charCodeAt(i)) >>> 0;
   await putMedia({
     id,
     companyId,
@@ -111,6 +114,7 @@ export async function persistWalkaroundMediaDataUrl({
     clientCheckId,
     mimeType: blob.type,
     bytes: blob.size,
+    checksum: String(checksum),
     blob,
     dataUrlCache: dataUrl,
     status: "queued",
@@ -231,11 +235,31 @@ export async function releaseWalkaroundPayloadMedia(payload) {
   await Promise.all([...refs].map((id) => deleteMedia(id)));
 }
 
-export function countPendingWalkaroundMedia(companyId, membershipId) {
+export async function countPendingWalkaroundMedia(companyId, membershipId) {
+  requireWorkspaceIds(companyId, membershipId);
   const prefix = scopedPrefix(companyId, membershipId);
-  let count = 0;
-  for (const key of memoryFallback.keys()) {
-    if (String(key).startsWith(prefix)) count += 1;
-  }
-  return count;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readonly");
+    const request = tx.objectStore(STORE).getAllKeys?.() ?? tx.objectStore(STORE).openCursor();
+    if (tx.objectStore(STORE).getAllKeys) {
+      request.onsuccess = () => {
+        const keys = request.result ?? [];
+        resolve(keys.filter((key) => String(key).startsWith(prefix)).length);
+      };
+      request.onerror = () => reject(request.error);
+      return;
+    }
+    let count = 0;
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(count);
+        return;
+      }
+      if (String(cursor.key).startsWith(prefix)) count += 1;
+      cursor.continue();
+    };
+    request.onerror = () => reject(request.error);
+  });
 }

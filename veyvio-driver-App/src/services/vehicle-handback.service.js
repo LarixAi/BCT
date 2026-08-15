@@ -107,7 +107,11 @@ export async function submitVehicleHandback({
 
   if (isOffline()) {
     if (!driverId) return { ok: false, message: "Driver session missing." };
-    enqueueOpsCommand(driverId, { type: "handback", payload }, companyId, membershipId);
+    try {
+      await enqueueOpsCommand(driverId, { type: "handback", payload }, companyId, membershipId);
+    } catch (error) {
+      return { ok: false, queued: false, message: error.message, code: error.code };
+    }
     if (companyId && membershipId && vehicleId) {
       clearHandbackDraft(companyId, membershipId, vehicleId);
     }
@@ -125,7 +129,11 @@ export async function submitVehicleHandback({
 
   if (!result.ok && getCommandApiBaseUrl() && shouldQueueOnFailure(result)) {
     if (!driverId) return result;
-    enqueueOpsCommand(driverId, { type: "handback", payload }, companyId, membershipId);
+    try {
+      await enqueueOpsCommand(driverId, { type: "handback", payload }, companyId, membershipId);
+    } catch (error) {
+      return { ok: false, queued: false, message: error.message, code: error.code };
+    }
     if (companyId && membershipId && vehicleId) {
       clearHandbackDraft(companyId, membershipId, vehicleId);
     }

@@ -32,6 +32,7 @@ export default function DriverMyDuty({ driver }) {
   const [actionBlocked, setActionBlocked] = useState(false);
   const [handbackRecorded, setHandbackRecorded] = useState(false);
   const [handbackLoading, setHandbackLoading] = useState(false);
+  const [pendingSignOn, setPendingSignOn] = useState(false);
   const depotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
 
   const reload = useCallback(async ({ force = false } = {}) => {
@@ -83,10 +84,22 @@ export default function DriverMyDuty({ driver }) {
   const workspace = resolveDriverWorkspaceScope(driver, session);
   const signOnBlockers = next ? getDutySignOnBlockers({ duty: next, bootstrap }) : [];
   const signOnAllowed = next ? canSignOnForDuty({ duty: next, bootstrap }) : false;
-  const pendingSignOn =
-    next?.id && driver?.id
-      ? hasPendingDutyOps(driver.id, next.id, workspace.companyId, workspace.membershipId)
-      : false;
+
+  useEffect(() => {
+    if (!next?.id || !driver?.id || !workspace.companyId || !workspace.membershipId) {
+      setPendingSignOn(false);
+      return;
+    }
+    let cancelled = false;
+    void hasPendingDutyOps(driver.id, next.id, workspace.companyId, workspace.membershipId).then((pending) => {
+      if (!cancelled) setPendingSignOn(Boolean(pending));
+    }).catch(() => {
+      if (!cancelled) setPendingSignOn(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [next?.id, driver?.id, workspace.companyId, workspace.membershipId]);
 
   useEffect(() => {
     const vehicle = next?.vehicle;

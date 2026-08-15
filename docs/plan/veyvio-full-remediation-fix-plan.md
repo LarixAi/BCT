@@ -342,8 +342,13 @@ This is the highest-risk product-engineering area discovered in the audit.
 ## FIX-P0-001 — Eliminate false-success offline queue writes
 
 **Severity:** P0 STOP-SHIP  
-**Status:** OPEN  
+**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
 **Area:** Driver offline mutation system
+
+### Evidence
+- Durable store: IndexedDB `veyvio_driver_durable` with put+get verify (`veyvio-driver-App/src/lib/driver-durable-kv.js`). localStorage is migration source only.
+- Tests: `driver-ops-outbox.storage.test.js` (restart reload, corrupt queue, tenant fail-closed), `driver-ops-outbox.service.test.js` (persist failure is not queued-success).
+- Driver `npm test`: 151 pass. `npm run typecheck` pass. Device restart not yet verified on handset.
 
 **Current risk:**
 
@@ -407,7 +412,7 @@ sync through Command
 ## FIX-P0-002 — Persistent dead-letter/reconciliation queue
 
 **Severity:** P0 STOP-SHIP  
-**Status:** OPEN  
+**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
 **Area:** Driver offline sync
 
 **Current risk:**
@@ -463,7 +468,7 @@ for safety/operational evidence.
 ## FIX-P0-003 — Remove unscoped Driver outbox fallback
 
 **Severity:** P0 STOP-SHIP  
-**Status:** OPEN  
+**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
 **Area:** Driver tenancy
 
 **Current risk:**
@@ -500,7 +505,7 @@ and persistence must be blocked.
 ## FIX-P0-004 — Replace mirrored tenant-storage tests
 
 **Severity:** P1 HIGH  
-**Status:** OPEN  
+**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
 **Area:** Driver tests
 
 **Problem:**
@@ -523,7 +528,7 @@ A tenant storage test reimplements the production workspace-key algorithm instea
 ## FIX-P1-005 — Harden Driver media durability
 
 **Severity:** P1 HIGH  
-**Status:** OPEN  
+**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
 **Area:** Driver offline media/evidence
 
 **Risk:**
@@ -548,7 +553,7 @@ Memory fallback cannot be described as durable because process termination loses
 ## FIX-P1-006 — Prove degraded Driver mode cannot bypass server safety gates
 
 **Severity:** P1 HIGH  
-**Status:** OPEN  
+**Status:** TESTED (Wave 2 — stop for architectural review; not ACCEPTED)  
 **Area:** Driver compliance / safety
 
 **Context:**
@@ -2064,6 +2069,8 @@ Do not run all fixes simultaneously.
 6. FIX-P1-006 server safety-gate proof
 
 **Exit:** no false queued-success and no silent offline discard.
+
+**Wave 2 implementation status:** TESTED locally (Driver 151 tests + typecheck). Not ACCEPTED until architectural review and GitHub required CI on this commit. Device restart of acknowledged queues is still a remaining limitation.
 
 ---
 

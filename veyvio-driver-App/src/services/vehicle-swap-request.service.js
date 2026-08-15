@@ -4,7 +4,7 @@ import {
   getCommandApiBaseUrl,
 } from "@/lib/command-api";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import { requireDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { enqueueOpsCommand } from "@/lib/driver-ops-outbox.storage";
 
 async function accessToken() {
@@ -54,14 +54,18 @@ export async function requestVehicleSwap(driver, session, input) {
   const token = await accessToken();
   if (!token) return { ok: false, message: "Not signed in." };
 
-  const { companyId, membershipId } = resolveDriverWorkspaceScope(driver, session);
+  const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
   const payload = {
     ...input,
     clientId: input.clientId ?? `swap-${input.dutyId}-${Date.now()}`,
   };
 
   if (isOffline()) {
-    enqueueOpsCommand(driver.id, { type: "vehicle_swap_request", payload }, companyId, membershipId);
+    try {
+      await enqueueOpsCommand(driver.id, { type: "vehicle_swap_request", payload }, companyId, membershipId);
+    } catch (error) {
+      return { ok: false, queued: false, message: error.message, code: error.code };
+    }
     return {
       ok: true,
       queued: true,
@@ -73,7 +77,11 @@ export async function requestVehicleSwap(driver, session, input) {
   if (result.ok) return result;
 
   if (shouldQueueOnFailure(result)) {
-    enqueueOpsCommand(driver.id, { type: "vehicle_swap_request", payload }, companyId, membershipId);
+    try {
+      await enqueueOpsCommand(driver.id, { type: "vehicle_swap_request", payload }, companyId, membershipId);
+    } catch (error) {
+      return { ok: false, queued: false, message: error.message, code: error.code };
+    }
     return {
       ok: true,
       queued: true,

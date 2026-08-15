@@ -119,7 +119,7 @@ export default function DriverWalkaroundFlow({ driver }) {
 
   useEffect(() => {
     void flushPendingWalkaroundSubmissions(driver);
-    setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
+    void getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId).then(setPendingSync);
   }, [driver, authSession, workspace.companyId, workspace.membershipId]);
 
   useEffect(() => {

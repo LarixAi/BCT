@@ -1,3 +1,4 @@
+import { requireWorkspaceIds } from "@/lib/driver-workspace-storage";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { loadFleetPingQueue } from "@/lib/fleet-tracking-queue.storage";
 import { loadOpsOutbox } from "@/lib/driver-ops-outbox.storage";
@@ -21,11 +22,34 @@ async function accessTokenFromSession(session) {
   return authSession?.access_token ?? null;
 }
 
+function emptyQueueSummary() {
+  return {
+    total: 0,
+    walkaroundChecks: 0,
+    locationPings: 0,
+    opsCommands: 0,
+    defects: 0,
+    incidents: 0,
+    messages: 0,
+    dutyOps: 0,
+    journeySteps: 0,
+    handbacks: 0,
+    dutyCloseouts: 0,
+    vehicleSwapRequests: 0,
+    jobExecution: 0,
+  };
+}
+
 /** Count all durable offline commands waiting to reach Command. */
-export function describeOfflineQueue(driverId, companyId, membershipId) {
-  const walkaroundChecks = loadSyncQueue(driverId, companyId, membershipId).length;
-  const locationPings = loadFleetPingQueue(driverId, companyId, membershipId).length;
-  const opsQueue = loadOpsOutbox(driverId, companyId, membershipId);
+export async function describeOfflineQueue(driverId, companyId, membershipId) {
+  try {
+    requireWorkspaceIds(companyId, membershipId);
+  } catch {
+    return emptyQueueSummary();
+  }
+  const walkaroundChecks = (await loadSyncQueue(driverId, companyId, membershipId)).length;
+  const locationPings = (await loadFleetPingQueue(driverId, companyId, membershipId)).length;
+  const opsQueue = await loadOpsOutbox(driverId, companyId, membershipId);
   const defects = opsQueue.filter((item) => item.type === "defect").length;
   const incidents = opsQueue.filter((item) => item.type === "incident").length;
   const messages = opsQueue.filter(
@@ -58,8 +82,8 @@ export function describeOfflineQueue(driverId, companyId, membershipId) {
   };
 }
 
-export function countPendingOfflineCommands(driverId, companyId, membershipId) {
-  return describeOfflineQueue(driverId, companyId, membershipId).total;
+export async function countPendingOfflineCommands(driverId, companyId, membershipId) {
+  return (await describeOfflineQueue(driverId, companyId, membershipId)).total;
 }
 
 function capabilityStatus(probe) {

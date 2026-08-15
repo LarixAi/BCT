@@ -4,7 +4,7 @@ import {
   getCommandApiBaseUrl,
 } from "@/lib/command-api";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import { requireDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { enqueueOpsCommand } from "@/lib/driver-ops-outbox.storage";
 import { loadDriverBootstrap } from "@/services/driver-bootstrap.service";
 
@@ -91,10 +91,14 @@ export async function recordJobExecutionAuthoritative(driver, session, input) {
     journeyId: dutyContext.journeyId ?? input.journeyId,
   });
 
-  const { companyId, membershipId } = resolveDriverWorkspaceScope(driver, session);
+  const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
 
   if (isOffline()) {
-    enqueueOpsCommand(driver.id, { type: "job_execution", payload }, companyId, membershipId);
+    try {
+      await enqueueOpsCommand(driver.id, { type: "job_execution", payload }, companyId, membershipId);
+    } catch (error) {
+      return { ok: false, queued: false, authoritative: true, message: error.message, code: error.code };
+    }
     return {
       ok: true,
       queued: true,
@@ -107,7 +111,11 @@ export async function recordJobExecutionAuthoritative(driver, session, input) {
   if (result.ok) return { ok: true, authoritative: true, event: result.event };
 
   if (shouldQueueOnFailure(result)) {
-    enqueueOpsCommand(driver.id, { type: "job_execution", payload }, companyId, membershipId);
+    try {
+      await enqueueOpsCommand(driver.id, { type: "job_execution", payload }, companyId, membershipId);
+    } catch (error) {
+      return { ok: false, queued: false, authoritative: true, message: error.message, code: error.code };
+    }
     return {
       ok: true,
       queued: true,

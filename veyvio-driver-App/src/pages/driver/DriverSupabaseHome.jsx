@@ -122,7 +122,7 @@ export default function DriverSupabaseHome({ driver }) {
       Boolean(fallbackBootstrap) || Boolean(walkaroundSafetyFromHomeSummary(fallbackSummary));
     if (!hadCommandPaint) setSafetyLoading(true);
     setBootstrapError("");
-    setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
+    void getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId).then(setPendingSync);
 
     const depotId = currentSession?.activeDepotId ?? currentSession?.depots?.[0]?.id ?? null;
     const boot = await loadDriverBootstrap({ depotId, force }).catch(() => null);
@@ -183,7 +183,7 @@ export default function DriverSupabaseHome({ driver }) {
     setDutyState(mergeDutyState(fromBootstrapDuty, duty));
     setNextLeave(leave);
     setRemovedTransfers(Array.isArray(removed) ? removed : []);
-    setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
+    void getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId).then(setPendingSync);
     setTrainingHome(training?.ok ? training : null);
   }, [driver, workspace.companyId, workspace.membershipId]);
 

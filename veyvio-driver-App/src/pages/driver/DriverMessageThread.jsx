@@ -49,7 +49,7 @@ export default function DriverMessageThread({ driver }) {
       if (!data) setError("Conversation not found.");
       else {
         setDetail(data);
-        setPendingMessages(listQueuedThreadMessages(driver, session, threadId));
+        setPendingMessages(await listQueuedThreadMessages(driver, session, threadId));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load conversation");

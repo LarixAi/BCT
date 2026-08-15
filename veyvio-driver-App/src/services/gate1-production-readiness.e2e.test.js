@@ -90,17 +90,17 @@ describe("gate1 production readiness e2e", () => {
     expect(await loadMessageDraft("co-a", "mem-1")).toBeNull();
   });
 
-  it("counts defects, incidents, and messages in the offline queue summary", () => {
-    enqueueOpsCommand("drv-1", { type: "defect", payload: {} }, "co-a", "mem-1");
-    enqueueOpsCommand("drv-1", { type: "incident", payload: {} }, "co-a", "mem-1");
-    enqueueOpsCommand(
+  it("counts defects, incidents, and messages in the offline queue summary", async () => {
+    await enqueueOpsCommand("drv-1", { type: "defect", payload: {} }, "co-a", "mem-1");
+    await enqueueOpsCommand("drv-1", { type: "incident", payload: {} }, "co-a", "mem-1");
+    await enqueueOpsCommand(
       "drv-1",
       { type: "message_reply", payload: { conversationId: "t1", body: "ok" } },
       "co-a",
       "mem-1",
     );
 
-    const summary = describeOfflineQueue("drv-1", "co-a", "mem-1");
+    const summary = await describeOfflineQueue("drv-1", "co-a", "mem-1");
     expect(summary.opsCommands).toBe(3);
     expect(summary.defects).toBe(1);
     expect(summary.incidents).toBe(1);

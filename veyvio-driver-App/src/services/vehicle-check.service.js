@@ -1,4 +1,4 @@
-import { countPendingOfflineCommands } from "@/services/driver-sync-status.service";
+import { requireDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { commandCreateSignedUrl, getCommandApiBaseUrl } from "@/lib/command-api";
 import {
   externalizeWalkaroundPayloadMedia,
@@ -15,6 +15,7 @@ import {
   dequeueWalkaroundSubmission,
   enqueueWalkaroundSubmission,
   loadSyncQueue,
+  markWalkaroundReconciliation,
 } from "@/lib/walkaround-sync.storage";
 import { getSelectedVehicleId, setSelectedVehicleId } from "@/lib/walkaround-vehicle.storage";
 import {
@@ -35,6 +36,8 @@ import {
   loadDriverBootstrap,
   walkaroundSafetyFromHomeSummary,
 } from "@/services/driver-bootstrap.service";
+import { isPermanentOpsFailure } from "@/services/driver-ops-outbox.service";
+import { countPendingOfflineCommands } from "@/services/driver-sync-status.service";
 import { validateVehicleSelection } from "@/lib/vehicle-swap-gate";
 
 export {
@@ -986,10 +989,18 @@ export async function submitWalkaroundCheck({
   };
 
   if (offlineSubmit || !navigator.onLine) {
-    const companyId = driver.organisation_id ?? driver.organisationId;
-    const membershipId = driver.user_id ?? driver.id;
-    const externalized = await externalizeWalkaroundPayloadMedia(payload, { companyId, membershipId });
-    enqueueWalkaroundSubmission(driver.id, externalized, companyId, membershipId);
+    try {
+      const { companyId, membershipId } = requireDriverWorkspaceScope(driver, null);
+      const externalized = await externalizeWalkaroundPayloadMedia(payload, { companyId, membershipId });
+      await enqueueWalkaroundSubmission(driver.id, externalized, companyId, membershipId);
+    } catch (error) {
+      return {
+        ok: false,
+        queued: false,
+        message: error.message ?? "Could not save this vehicle check on the device.",
+        code: error.code,
+      };
+    }
     discardWalkaroundDraft(driver, vehicle.id);
     const derived = deriveWalkaroundResult(responses);
     const bodyworkDamageCount = responses.filter(
@@ -1324,12 +1335,12 @@ async function insertWalkaroundCheck(payload) {
 
   if (checkError || !checkRow) {
     if (!navigator.onLine) {
-      enqueueWalkaroundSubmission(
-        driver.id,
-        payload,
-        driver.organisation_id ?? driver.organisationId,
-        driver.user_id ?? driver.id,
-      );
+      try {
+        const { companyId, membershipId } = requireDriverWorkspaceScope(driver, null);
+        await enqueueWalkaroundSubmission(driver.id, payload, companyId, membershipId);
+      } catch (error) {
+        return { ok: false, queued: false, message: error.message, code: error.code };
+      }
       discardWalkaroundDraft(driver, vehicle.id);
       return {
         ok: true,
@@ -1358,9 +1369,14 @@ async function insertWalkaroundCheck(payload) {
 }
 
 export async function flushPendingWalkaroundSubmissions(driver) {
-  const companyId = driver.organisation_id ?? driver.organisationId;
-  const membershipId = driver.user_id ?? driver.id;
-  const queue = loadSyncQueue(driver.id, companyId, membershipId);
+  let companyId;
+  let membershipId;
+  try {
+    ({ companyId, membershipId } = requireDriverWorkspaceScope(driver, null));
+  } catch {
+    return { synced: 0, remaining: 0 };
+  }
+  const queue = await loadSyncQueue(driver.id, companyId, membershipId);
   if (!queue.length || !navigator.onLine) {
     return { synced: 0, remaining: queue.length };
   }
@@ -1376,18 +1392,25 @@ export async function flushPendingWalkaroundSubmissions(driver) {
       result = await insertWalkaroundCheck(hydrated);
     }
     if (result.ok && !result.queued) {
-      dequeueWalkaroundSubmission(driver.id, item.id, companyId, membershipId);
+      await dequeueWalkaroundSubmission(driver.id, item.id, companyId, membershipId);
       await releaseWalkaroundPayloadMedia(item.payload).catch(() => {});
       synced += 1;
     } else if (!result.ok) {
+      if (isPermanentOpsFailure(result)) {
+        await markWalkaroundReconciliation(driver.id, item.id, companyId, membershipId, {
+          status: result.status,
+          message: result.message ?? "Command rejected this vehicle check.",
+        });
+        continue;
+      }
       break;
     }
   }
 
-  return { synced, remaining: loadSyncQueue(driver.id, companyId, membershipId).length };
+  return { synced, remaining: (await loadSyncQueue(driver.id, companyId, membershipId)).length };
 }
 
-export function getPendingSyncCount(driverId, companyId, membershipId) {
+export async function getPendingSyncCount(driverId, companyId, membershipId) {
   return countPendingOfflineCommands(driverId, companyId, membershipId);
 }
 

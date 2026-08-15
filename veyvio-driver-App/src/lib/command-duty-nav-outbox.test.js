@@ -12,7 +12,7 @@ vi.mock("@/lib/command-api", () => ({
 }));
 
 vi.mock("@/lib/driver-ops-outbox.storage", () => ({
-  enqueueOpsCommand: vi.fn(() => 1),
+  enqueueOpsCommand: vi.fn(async () => 1),
 }));
 
 vi.mock("@/lib/command-duty-nav-server", () => ({

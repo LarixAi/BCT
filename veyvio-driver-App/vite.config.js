@@ -86,6 +86,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    setupFiles: ["src/test/setup-durable-kv.js"],
     include: ["src/**/*.{test,e2e.test}.{js,jsx,ts,tsx}"],
   },
 })

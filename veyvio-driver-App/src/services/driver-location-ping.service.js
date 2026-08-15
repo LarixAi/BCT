@@ -109,7 +109,16 @@ export async function sendDriverLocationPing({
   }
 
   if (legacyError && !commandResult.ok) {
-    enqueueFleetPing(driverId, payload, companyId, membershipId);
+    try {
+      await enqueueFleetPing(driverId, payload, companyId, membershipId);
+    } catch (error) {
+      return {
+        ok: false,
+        queued: false,
+        message: error.message ?? commandResult.message ?? legacyError.message,
+        code: error.code,
+      };
+    }
     return {
       ok: false,
       message: commandResult.message || legacyError.message,
@@ -128,7 +137,7 @@ export async function sendDriverLocationPing({
 }
 
 export async function flushFleetPingQueue(driverId, companyId, membershipId) {
-  const queue = loadFleetPingQueue(driverId, companyId, membershipId);
+  const queue = await loadFleetPingQueue(driverId, companyId, membershipId);
   if (queue.length === 0) return { flushed: 0 };
 
   const supabase = getSupabaseClient();
@@ -148,7 +157,7 @@ export async function flushFleetPingQueue(driverId, companyId, membershipId) {
     });
     const { error } = await supabase.from("driver_location_pings").insert(item.payload);
     if (error && !commandResult.ok) break;
-    dequeueFleetPing(driverId, item.id, scopeCompanyId, scopeMembershipId);
+    await dequeueFleetPing(driverId, item.id, scopeCompanyId, scopeMembershipId);
     flushed += 1;
     if (item.payload.session_id) {
       await incrementSessionPingStats(item.payload.session_id, item.payload.speed_mph);

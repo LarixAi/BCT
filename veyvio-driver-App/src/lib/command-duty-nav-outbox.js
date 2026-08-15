@@ -2,7 +2,7 @@
  * F-15 — queue duty journey steps when offline; flush via driver ops outbox.
  */
 import { getCommandApiBaseUrl } from "@/lib/command-api";
-import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import { requireDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { enqueueOpsCommand } from "@/lib/driver-ops-outbox.storage";
 import { applyDutyNavAction, validateDutyNavAction } from "@/lib/command-duty-nav-job";
 import { applyDutyNavActionAsync } from "@/lib/command-duty-nav-server";
@@ -57,9 +57,7 @@ export async function applyDutyNavActionWithOutbox(duty, action, opts = {}) {
 
   const driver = opts.driver;
   const session = opts.session;
-  const scope = driver ? resolveDriverWorkspaceScope(driver, session) : null;
   const driverId = driver?.id;
-  const { companyId, membershipId } = scope ?? {};
 
   if (
     !opts.forceLocal &&
@@ -71,12 +69,22 @@ export async function applyDutyNavActionWithOutbox(duty, action, opts = {}) {
   ) {
     const type = journeyQueueType(action);
     if (type) {
-      enqueueOpsCommand(
-        driverId,
-        { type, payload: buildJourneyPayload(duty, action, validation) },
-        companyId,
-        membershipId,
-      );
+      try {
+        const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+        await enqueueOpsCommand(
+          driverId,
+          { type, payload: buildJourneyPayload(duty, action, validation) },
+          companyId,
+          membershipId,
+        );
+      } catch (error) {
+        return {
+          ok: false,
+          queued: false,
+          code: error.code,
+          message: error.message ?? "Could not save this journey step on the device.",
+        };
+      }
       const local = applyDutyNavAction(duty, action);
       return {
         ...local,
