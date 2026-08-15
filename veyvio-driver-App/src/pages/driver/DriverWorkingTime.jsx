@@ -210,7 +210,7 @@ export default function DriverWorkingTime({ driver }) {
                         </p>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {item.serviceDate}
+                        {formatUkDate(item.serviceDate)}
                         {item.startAt
                           ? ` · ${formatUkTime(item.startAt)}`
                           : ""}

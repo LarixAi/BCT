@@ -14,6 +14,7 @@ function minimalDriver(overrides: Partial<DriverProfile> = {}): DriverProfile {
     firstName: 'Larone',
     lastName: 'Laing',
     preferredName: null,
+    photoUrl: null,
     dateOfBirth: null,
     email: 'larone@example.com',
     phone: null,

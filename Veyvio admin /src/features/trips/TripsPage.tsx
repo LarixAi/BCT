@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
-import { StatusPill } from '@/components/ui/status'
+import { StatusPill, formatDate } from '@/components/ui/status'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
 import { useOperationalContext } from '@/lib/context'
@@ -236,7 +236,7 @@ export function TripsPage() {
                           </Link>
                           <p className="text-xs text-muted">{row.routeName ?? '—'}</p>
                         </td>
-                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.serviceDate}</td>
+                        <td className="px-3 py-2.5 tabular-nums text-ink-soft">{formatDate(row.serviceDate)}</td>
                         <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.startTime}</td>
                         <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.endTime}</td>
                         <td className="px-3 py-2.5 text-ink-soft">{row.depotName}</td>

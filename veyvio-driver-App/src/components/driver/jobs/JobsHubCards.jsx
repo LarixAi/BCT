@@ -1,5 +1,6 @@
 import { ChevronRight, MapPin, Clock, Car } from "lucide-react";
 import { Link } from "react-router-dom";
+import { formatUkDate, formatUkTime } from "@/lib/uk-locale";
 
 const statusStyles = {
   in_progress: "bg-[#1eaeae]/10 text-[#158888] border-[#1eaeae]/25",
@@ -68,7 +69,7 @@ export function JobHubCard({
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-500">
               <span className="inline-flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
-                {job.startTime}
+                {formatUkTime(job.startTime)}
               </span>
               {job.vehicleRegistration ? (
                 <span className="inline-flex items-center gap-1">
@@ -112,7 +113,7 @@ export function OfferHubCard({ offer, onAccept, busy }) {
         <p className="font-bold text-black text-sm mt-1 leading-snug">{offer.routeName}</p>
         {offer.jobNumber ? <p className="text-xs text-gray-500 mt-0.5">{offer.jobNumber}</p> : null}
         <p className="text-xs text-gray-600 mt-2">
-          {offer.serviceDate} · {offer.startTime}
+          {formatUkDate(offer.serviceDate)} · {formatUkTime(offer.startTime)}
           {offer.passengerCount != null ? ` · ${offer.passengerCount} pax` : ""}
         </p>
         <button

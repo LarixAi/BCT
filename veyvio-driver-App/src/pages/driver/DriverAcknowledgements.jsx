@@ -6,6 +6,7 @@ import DriverEmptyState from "@/components/driver/operational/DriverEmptyState";
 import DriverOperationalHeader from "@/components/driver/operational/DriverOperationalHeader";
 import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
 import { op } from "@/lib/driver-operational-theme";
+import { formatUkDate } from "@/lib/uk-locale";
 import {
   acknowledgeCorrectiveAction,
   acknowledgeDebriefNotice,
@@ -222,7 +223,7 @@ export default function DriverAcknowledgements({ driver }) {
                     <p className="mt-2 text-sm text-muted-foreground">{a.description}</p>
                   ) : null}
                   {a.due_at ? (
-                    <p className="mt-2 text-xs text-amber-700">Due {a.due_at.slice(0, 10)}</p>
+                    <p className="mt-2 text-xs text-amber-700">Due {formatUkDate(a.due_at)}</p>
                   ) : null}
                   <Button
                     size="sm"

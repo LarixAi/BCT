@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
@@ -6,6 +7,7 @@ import { CHECK_TEMPLATE_AREAS, CHECK_TYPE_LABELS } from '@/lib/vehicles/checks'
 import type { VehicleCheckType, VehicleProfile } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
+import { formatUkDateTime } from '@/lib/uk-locale'
 
 
 export function VehicleChecksTab({
@@ -60,14 +62,31 @@ export function VehicleChecksTab({
             {vehicle.checks.map((c) => (
               <li key={c.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-medium">{CHECK_TYPE_LABELS[c.checkType] ?? c.checkType}</p>
-                  <StatusPill status={c.result === 'pass' ? 'compliant' : c.result === 'fail' ? 'non_compliant' : 'warning'} />
+                  <div className="min-w-0">
+                    <Link
+                      to={`/vehicle-checks/${c.id}`}
+                      className="font-medium text-command-700 hover:underline"
+                    >
+                      {CHECK_TYPE_LABELS[c.checkType] ?? c.checkType}
+                    </Link>
+                    <p className="text-ink-soft">
+                      {formatUkDateTime(c.checkDate)} · {c.performedBy} · {c.sourceApplication}
+                    </p>
+                    {c.mileage != null && (
+                      <p className="text-xs text-muted">Mileage: {c.mileage.toLocaleString('en-GB')} mi</p>
+                    )}
+                    {c.notes && <p className="text-xs text-muted">{c.notes}</p>}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <StatusPill status={c.result === 'pass' ? 'compliant' : c.result === 'fail' ? 'non_compliant' : 'warning'} />
+                    <Link
+                      to={`/vehicle-checks/${c.id}`}
+                      className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-command-700 hover:bg-surface-muted"
+                    >
+                      Open
+                    </Link>
+                  </div>
                 </div>
-                <p className="text-ink-soft">
-                  {new Date(c.checkDate).toLocaleString('en-GB')} · {c.performedBy} · {c.sourceApplication}
-                </p>
-                {c.mileage != null && <p className="text-xs text-muted">Mileage: {c.mileage.toLocaleString()} mi</p>}
-                {c.notes && <p className="text-xs text-muted">{c.notes}</p>}
               </li>
             ))}
           </ul>

@@ -92,6 +92,7 @@ function mapCommandSessionToDriver(commandSession, userId) {
     email: commandSession.email ?? "",
     phone: commandSession.mobile ?? "",
     date_of_birth: commandSession.dateOfBirth ?? null,
+    profile_photo_url: commandSession.profilePhotoUrl ?? null,
     onboarding_status: fields.onboarding_status,
     status: fields.status,
     home_depot_id: depot?.id ?? null,
@@ -418,9 +419,22 @@ export async function getDriverSessionContext() {
           ...refreshedDriver,
           fullName: bootstrap.driver.displayName,
           organisationName: bootstrap.operator?.companyName,
+          profilePhotoUrl:
+            bootstrap.driver.profilePhotoUrl ||
+            bootstrap.driver.profile_photo_url ||
+            refreshedDriver.profilePhotoUrl ||
+            null,
           operationalStatus,
         }
-      : { ...refreshedDriver, operationalStatus },
+      : {
+          ...refreshedDriver,
+          profilePhotoUrl:
+            bootstrap?.driver?.profilePhotoUrl ||
+            bootstrap?.driver?.profile_photo_url ||
+            refreshedDriver.profilePhotoUrl ||
+            null,
+          operationalStatus,
+        },
     driverRow,
     needsOnboarding: dispatchActivated ? false : needsOnboarding,
     restrictedMode,

@@ -359,6 +359,10 @@ export function normalizeChecksOperationalRow(
     registrationNumber: String(row.registrationNumber ?? '—'),
     fleetNumber: row.fleetNumber != null ? String(row.fleetNumber) : null,
     makeModel: row.makeModel ? String(row.makeModel) : '—',
+    modelYear:
+      row.modelYear != null && row.modelYear !== '' && Number.isFinite(Number(row.modelYear))
+        ? Number(row.modelYear)
+        : null,
     vehicleCategory: row.vehicleCategory ? String(row.vehicleCategory) : 'vehicle',
     depotId: String(row.depotId ?? ''),
     depotName: String(row.depotName ?? '—'),

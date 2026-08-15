@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { api } from '@/lib/api/client'
@@ -18,6 +18,7 @@ import {
   type JourneyRequestFields,
 } from '@/lib/interests/journey-request'
 import { InterestJourneyMap } from '@/features/interests/InterestJourneyMap'
+import { formatUkDate } from '@/lib/uk-locale'
 
 const EMPTY_SUMMARY: InterestSummary = {
   newToday: 0,
@@ -127,7 +128,7 @@ function JourneyTripCard({
       <InterestJourneyMap journey={journey} />
 
       <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Field label="Travel date" value={journey.travelDate} />
+        <Field label="Travel date" value={formatUkDate(journey.travelDate)} />
         <Field label="Preferred pickup time" value={journey.preferredPickupTime} />
         <Field label="Return time" value={journey.returnTime} />
         <Field label="Time flexibility" value={journey.timeFlexibility} />
@@ -324,7 +325,7 @@ export function IncomingInterestsPage() {
               <th className="px-3 py-2 font-medium">Access</th>
               <th className="px-3 py-2 font-medium">Source</th>
               <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Assigned</th>
+              <th className="px-3 py-2 font-medium">Owner</th>
               <th className="px-3 py-2 font-medium">Last activity</th>
             </tr>
           </thead>
@@ -387,7 +388,6 @@ function InterestRow({ item }: { item: InterestListItem }) {
 
 export function InterestDetailPage() {
   const { interestId = '' } = useParams()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<InterestStatus | ''>('')
   const [note, setNote] = useState('')
@@ -395,6 +395,8 @@ export function InterestDetailPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [driverId, setDriverId] = useState('')
+  const [vehicleId, setVehicleId] = useState('')
 
   const { data, isLoading, error } = useQuery({
     queryKey: tKey(['interests', interestId]),
@@ -405,6 +407,25 @@ export function InterestDetailPage() {
   const usersQuery = useQuery({
     queryKey: tKey(['company-users']),
     queryFn: () => api.getUsers(),
+  })
+
+  const tripId = data?.convertedTripId ?? null
+  const opsTripQuery = useQuery({
+    queryKey: tKey(['operational-trip', tripId]),
+    queryFn: () => api.getOperationalTrip(tripId!),
+    enabled: Boolean(tripId),
+  })
+
+  const driversQuery = useQuery({
+    queryKey: tKey(['drivers-list']),
+    queryFn: () => api.getDrivers(),
+    enabled: Boolean(tripId),
+  })
+
+  const vehiclesQuery = useQuery({
+    queryKey: tKey(['vehicles-list']),
+    queryFn: () => api.getVehicles(),
+    enabled: Boolean(tripId),
   })
 
   const patchMutation = useMutation({
@@ -433,15 +454,12 @@ export function InterestDetailPage() {
       setFormError(null)
       setActionMessage(
         result.alreadyConverted
-          ? 'Already accepted — opening Jobs.'
-          : `Accepted as job ${result.tripReference ?? ''}. Opening Jobs…`,
+          ? 'Already accepted — open Schedule below to assign a driver.'
+          : `Accepted as job ${result.tripReference ?? ''}. Assign a driver below or open Schedule.`,
       )
       await queryClient.invalidateQueries({ queryKey: tKey(['interests']) })
+      await queryClient.invalidateQueries({ queryKey: tKey(['interests', interestId]) })
       await queryClient.invalidateQueries({ queryKey: tKey(['operational-trips']) })
-      const path =
-        result.jobsPath ||
-        (result.serviceDate ? `/jobs?serviceDate=${encodeURIComponent(result.serviceDate)}` : '/jobs')
-      navigate(path)
     },
     onError: (err) => {
       setFormError(err instanceof Error ? err.message : 'Could not accept this journey as a job.')
@@ -472,6 +490,28 @@ export function InterestDetailPage() {
     },
   })
 
+  const assignDriverMutation = useMutation({
+    mutationFn: () =>
+      api.assignPlanningTrip(tripId!, {
+        driverId: driverId || null,
+        vehicleId: vehicleId || null,
+      }),
+    onSuccess: async (trip) => {
+      setFormError(null)
+      setActionMessage(
+        trip.driverName
+          ? `Driver ${trip.driverName} assigned${trip.vehicleRegistration ? ` · ${trip.vehicleRegistration}` : ''}. Publish from Schedule when ready.`
+          : 'Trip assignment saved.',
+      )
+      await queryClient.invalidateQueries({ queryKey: tKey(['operational-trip', tripId]) })
+      await queryClient.invalidateQueries({ queryKey: tKey(['operational-trips']) })
+      await queryClient.invalidateQueries({ queryKey: tKey(['interests', interestId]) })
+    },
+    onError: (err) => {
+      setFormError(err instanceof Error ? err.message : 'Could not assign driver to this job.')
+    },
+  })
+
   if (isLoading) {
     return <p className="text-sm text-ink-soft">Loading interest record…</p>
   }
@@ -486,12 +526,27 @@ export function InterestDetailPage() {
   const users = (Array.isArray(usersQuery.data) ? usersQuery.data : []) as Array<{
     user?: { id: string; firstName?: string; lastName?: string; email?: string }
   }>
+  const drivers = Array.isArray(driversQuery.data) ? driversQuery.data : []
+  const vehicles = Array.isArray(vehiclesQuery.data) ? vehiclesQuery.data : []
+  const opsTrip = opsTripQuery.data ?? null
   const journey = resolveJourneyRequest(data)
   const journeyMode = Boolean(journey) || isJourneyInterest(data)
   const canDecide =
     data.status !== 'converted' && data.status !== 'closed' && data.status !== 'spam'
   const canAcceptJob = journeyMode && Boolean(journey?.pickup || journey?.destination || data.message)
-  const busy = acceptMutation.isPending || rejectMutation.isPending || patchMutation.isPending
+  const serviceDate =
+    opsTrip?.serviceDate ??
+    journey?.travelDate ??
+    new Date().toISOString().slice(0, 10)
+  const serviceDateLabel = formatUkDate(serviceDate)
+  const scheduleHref = `/schedule?mode=planning&serviceDate=${encodeURIComponent(serviceDate)}${
+    tripId ? `&tripId=${encodeURIComponent(tripId)}` : ''
+  }`
+  const busy =
+    acceptMutation.isPending ||
+    rejectMutation.isPending ||
+    patchMutation.isPending ||
+    assignDriverMutation.isPending
 
   return (
     <div className="space-y-5">
@@ -532,7 +587,7 @@ export function InterestDetailPage() {
               <h2 className="text-base font-semibold text-ink">Decision</h2>
               <p className="mt-1 text-sm text-ink-soft">
                 {canAcceptJob
-                  ? 'Accept job creates a trackable job on the Jobs page for the travel date. Reject closes this request and emails the customer when an email is on file.'
+                  ? 'Accept job creates a booking and trip. Then assign a driver and schedule from this page.'
                   : 'Reject closes this request and emails the customer when an email is on file. Accept job needs a journey request with pickup and destination.'}
               </p>
             </div>
@@ -542,7 +597,7 @@ export function InterestDetailPage() {
                 disabled={busy || !canAcceptJob}
                 title={
                   canAcceptJob
-                    ? 'Create a job and open the Jobs page'
+                    ? 'Create a job and stay on this page to schedule'
                     : 'Only journey requests with pickup/destination can be accepted as jobs'
                 }
                 onClick={() => acceptMutation.mutate()}
@@ -570,17 +625,99 @@ export function InterestDetailPage() {
         </section>
       ) : null}
 
-      {data.status === 'converted' && data.convertedTripId ? (
-        <section className="rounded-xl border border-ready/30 bg-ready/5 px-4 py-3 text-sm text-ink">
-          Accepted as a job.{' '}
-          <Link
-            className="font-medium text-command-700 hover:underline"
-            to={`/jobs?serviceDate=${encodeURIComponent(
-              journey?.travelDate ?? new Date().toISOString().slice(0, 10),
-            )}`}
-          >
-            Open Jobs for this travel date →
-          </Link>
+      {data.status === 'converted' && tripId ? (
+        <section className="rounded-xl border border-command-300 bg-command-50 p-4 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Schedule job</h2>
+            <p className="mt-1 text-sm text-ink-soft">
+              Command owner ({data.assignedToName ?? 'unassigned'}) is staff ownership — not the trip
+              driver. Assign a driver/vehicle here, then open Schedule on the travel date ({serviceDateLabel})
+              to see the run and publish.
+            </p>
+          </div>
+
+          <dl className="grid gap-2 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-ink-soft">Trip</dt>
+              <dd className="font-medium tabular-nums text-ink">
+                {opsTrip?.reference ?? tripId}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-ink-soft">Driver</dt>
+              <dd className="font-medium text-ink">{opsTrip?.driverName ?? 'Unassigned'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-ink-soft">Vehicle</dt>
+              <dd className="font-medium text-ink">{opsTrip?.vehicleRegistration ?? 'Unassigned'}</dd>
+            </div>
+          </dl>
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <select
+              value={driverId}
+              onChange={(e) => setDriverId(e.target.value)}
+              className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Select driver</option>
+              {drivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {[driver.firstName, driver.lastName].filter(Boolean).join(' ') || driver.id}
+                  {driver.depotName ? ` · ${driver.depotName}` : ''}
+                </option>
+              ))}
+            </select>
+            <select
+              value={vehicleId}
+              onChange={(e) => setVehicleId(e.target.value)}
+              className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Select vehicle (optional)</option>
+              {vehicles.map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id}>
+                  {vehicle.registrationNumber}
+                  {vehicle.depotName ? ` · ${vehicle.depotName}` : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={busy || !driverId}
+              onClick={() => assignDriverMutation.mutate()}
+              className="rounded-lg bg-command-600 px-4 py-2 text-sm font-semibold text-white hover:bg-command-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {assignDriverMutation.isPending ? 'Assigning…' : 'Assign driver'}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to={scheduleHref}
+              className="rounded-lg border border-command-400 bg-white px-3 py-2 text-sm font-medium text-command-800 hover:bg-command-100"
+            >
+              Open Schedule for {serviceDateLabel} →
+            </Link>
+            <Link
+              to={`/trips/${tripId}?tab=assignments`}
+              className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium hover:bg-surface-muted"
+            >
+              Open trip assignments →
+            </Link>
+            {data.convertedBookingId ? (
+              <Link
+                to={`/bookings/${data.convertedBookingId}`}
+                className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium hover:bg-surface-muted"
+              >
+                Open booking →
+              </Link>
+            ) : null}
+            <Link
+              to={`/jobs?serviceDate=${encodeURIComponent(serviceDate)}`}
+              className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium hover:bg-surface-muted"
+            >
+              Open Jobs →
+            </Link>
+          </div>
         </section>
       ) : null}
 
@@ -632,7 +769,10 @@ export function InterestDetailPage() {
           <section className="rounded-xl border border-border bg-surface p-5 space-y-3">
             <div>
               <h2 className="text-base font-semibold text-ink">Update workflow</h2>
-              <p className="text-sm text-ink-soft">Assign an owner, change status, or leave a staff note.</p>
+              <p className="text-sm text-ink-soft">
+                Assign a Command owner (staff), change status, or leave a staff note. This is not driver
+                assignment.
+              </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
               <select

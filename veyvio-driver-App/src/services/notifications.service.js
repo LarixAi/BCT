@@ -36,6 +36,18 @@ function normalizeRow(row) {
   };
 }
 
+/** Keep Driver inbox to operational driver types (exclude Command staff fan-out). */
+export function isDriverFacingNotification(row) {
+  const value = String(row?.notificationType ?? row?.notification_type ?? "").toLowerCase();
+  if (!value) return false;
+  if (value.startsWith("driver.")) return true;
+  if (value.startsWith("document.")) return true;
+  if (value.startsWith("training.")) return true;
+  if (value.startsWith("journey_sequence")) return true;
+  if (value.startsWith("phv_trip")) return true;
+  return false;
+}
+
 /** Map Command / admin action URLs + notification type onto Driver app routes. */
 export function resolveDriverNotificationPath(actionUrl, notification = null) {
   const type = String(
@@ -118,7 +130,9 @@ export async function getDriverNotifications(userId) {
   const token = await accessToken();
   if (token) {
     const result = await commandListNotifications(token);
-    if (result.ok) return (result.notifications ?? []).map(normalizeRow);
+    if (result.ok) {
+      return (result.notifications ?? []).map(normalizeRow).filter(isDriverFacingNotification);
+    }
   }
 
   if (!userId) return [];
@@ -141,9 +155,9 @@ export async function getDriverNotifications(userId) {
       .order("created_at", { ascending: false })
       .limit(50);
     if (retry.error) throw new Error(retry.error.message);
-    return (retry.data ?? []).map(normalizeRow);
+    return (retry.data ?? []).map(normalizeRow).filter(isDriverFacingNotification);
   }
-  return (data ?? []).map(normalizeRow);
+  return (data ?? []).map(normalizeRow).filter(isDriverFacingNotification);
 }
 
 export async function countUnread(userId) {

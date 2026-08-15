@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ArrowUpRight, MoreVertical, User } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, ArrowUpRight, Camera, MoreVertical, User } from 'lucide-react'
 import { formatDate } from '@/components/ui/status'
 import {
   ACCOUNT_STATUS_LABELS,
@@ -12,12 +13,17 @@ import {
 import type { DriverProfile } from '@/lib/drivers/types'
 import { countDocumentsPendingAdminReview } from '@/lib/drivers/compliance'
 import { cn } from '@/lib/cn'
+import { api } from '@/lib/api/client'
+import { useAuth } from '@/lib/auth-context'
+import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 export type DriverLeaveSummary = {
   remainingLabel: string
   pendingCount: number
   yearLabel: string
 }
+
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024
 
 export function DriverProfileHeader({
   driver,
@@ -26,6 +32,7 @@ export function DriverProfileHeader({
   todayDuties = 0,
   leaveSummary,
   onNavigateTab,
+  canEditPhoto = false,
 }: {
   driver: DriverProfile
   actions?: React.ReactNode
@@ -33,8 +40,16 @@ export function DriverProfileHeader({
   todayDuties?: number
   leaveSummary?: DriverLeaveSummary | null
   onNavigateTab?: (tab: string) => void
+  canEditPhoto?: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const actorName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || user?.email || 'Administrator'
+
   const displayName = driver.preferredName
     ? `${driver.preferredName} (${driver.firstName} ${driver.lastName})`
     : `${driver.firstName} ${driver.lastName}`
@@ -47,6 +62,50 @@ export function DriverProfileHeader({
     driver.eligibility.operationalEligibility === 'eligible' ||
     driver.eligibility.operationalEligibility === 'eligible_with_warning' ||
     driver.eligibility.operationalEligibility === 'emergency_override_active'
+
+  const uploadPhoto = useMutation({
+    mutationFn: (input: { fileName: string; fileBase64: string; mimeType: string }) =>
+      api.uploadDriverPhoto(driver.id, input, actorName),
+    onSuccess: (profile) => {
+      setPhotoError('')
+      queryClient.setQueryData(tKey(['driver-profile', driver.id]), profile)
+      void queryClient.invalidateQueries({ queryKey: tKey(['driver-profiles']) })
+      void queryClient.invalidateQueries({ queryKey: tKey(['driver-profile', driver.id]) })
+    },
+    onError: (error) => {
+      setPhotoError(error instanceof Error ? error.message : 'Photo could not be saved')
+    },
+  })
+
+  const onPickPhoto = (file: File | null) => {
+    setPhotoError('')
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Choose a JPEG, PNG, or WebP image')
+      return
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError('Photo must be under 2 MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const fileBase64 = typeof reader.result === 'string' ? reader.result : ''
+      if (!fileBase64) {
+        setPhotoError('Could not read that image')
+        return
+      }
+      uploadPhoto.mutate({
+        fileName: file.name || 'profile.jpg',
+        fileBase64,
+        mimeType: file.type || 'image/jpeg',
+      })
+    }
+    reader.onerror = () => setPhotoError('Could not read that image')
+    reader.readAsDataURL(file)
+  }
+
+  const initials = `${driver.firstName?.[0] ?? ''}${driver.lastName?.[0] ?? ''}`.toUpperCase() || '?'
 
   return (
     <div className="space-y-6">
@@ -99,9 +158,18 @@ export function DriverProfileHeader({
 
           <div className="p-5 sm:p-6">
             <div className="flex items-start gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border bg-surface-muted text-xl font-semibold text-ink-soft">
-                {driver.firstName[0]}
-                {driver.lastName[0]}
+              <div className="relative shrink-0">
+                {driver.photoUrl ? (
+                  <img
+                    src={driver.photoUrl}
+                    alt=""
+                    className="h-20 w-20 rounded-full border border-border object-cover"
+                  />
+                ) : (
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full border border-border bg-surface-muted text-xl font-semibold text-ink-soft">
+                    {initials}
+                  </div>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="truncate text-lg font-semibold text-ink">{displayName}</h3>
@@ -127,6 +195,35 @@ export function DriverProfileHeader({
                   {driver.depotName ? <Tag>{driver.depotName}</Tag> : null}
                   {driver.employeeNumber ? <Tag>{driver.employeeNumber}</Tag> : null}
                 </div>
+                {canEditPhoto ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/*"
+                      className="sr-only"
+                      onChange={(e) => {
+                        onPickPhoto(e.target.files?.[0] ?? null)
+                        e.target.value = ''
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadPhoto.isPending}
+                      className="inline-flex h-10 items-center gap-2 rounded-lg border border-command-600 bg-command-50 px-3.5 text-sm font-semibold text-command-700 hover:bg-command-100 disabled:opacity-60"
+                    >
+                      <Camera className="h-4 w-4" aria-hidden />
+                      {uploadPhoto.isPending
+                        ? 'Saving photo…'
+                        : driver.photoUrl
+                          ? 'Change photo'
+                          : 'Add photo'}
+                    </button>
+                    <span className="text-xs text-muted">JPEG, PNG or WebP · under 2 MB</span>
+                  </div>
+                ) : null}
+                {photoError ? <p className="mt-1 text-xs text-red-700">{photoError}</p> : null}
               </div>
             </div>
 

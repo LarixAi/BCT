@@ -6,6 +6,7 @@ import {
   getOfferSecondsRemaining,
 } from "@/services/job-offers.service";
 import { op } from "@/lib/driver-operational-theme";
+import { formatUkDate } from "@/lib/uk-locale";
 
 export default function DriverIncomingOffer() {
   const { offerId } = useParams();
@@ -90,7 +91,7 @@ export default function DriverIncomingOffer() {
         <p className="text-xs font-bold uppercase text-muted-foreground">Incoming job offer</p>
         <h1 className="mt-1 text-xl font-bold">{job.route_name}</h1>
         {job.job_number ? <p className="text-sm text-muted-foreground">{job.job_number}</p> : null}
-        <p className="mt-3 text-sm">{job.service_date}</p>
+        <p className="mt-3 text-sm">{formatUkDate(job.service_date)}</p>
         {secondsLeft != null ? (
           <p className={`mt-2 text-sm font-semibold ${expired ? "text-destructive" : op.tealAccent}`}>
             {expired ? "Offer expired" : `Respond within ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`}

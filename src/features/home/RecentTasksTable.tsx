@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowUpDown, Filter, MoreHorizontal, Search } from "lucide-react";
 import type { YardTask, YardTaskStatus } from "@/types/tasks";
+import { formatUkDate } from "@/lib/uk-locale";
 import { StatusPill, ThickProgressBar } from "./HomeDashboardPrimitives";
 
 type Props = {
@@ -51,10 +52,7 @@ function taskProject(task: YardTask): string {
 }
 
 function formatDueDate(dueAt?: string): string {
-  if (!dueAt) return "—";
-  const d = new Date(dueAt);
-  if (Number.isNaN(d.getTime())) return dueAt;
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return formatUkDate(dueAt);
 }
 
 function initials(name?: string): string {

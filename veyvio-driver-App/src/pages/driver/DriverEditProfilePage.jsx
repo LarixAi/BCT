@@ -71,9 +71,17 @@ export default function DriverEditProfilePage({ driver }) {
 
       <div className="mx-auto max-w-lg px-4 pb-4">
         <div className="flex flex-col items-center pt-2">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[var(--ridova-navy)] text-2xl font-bold text-white">
-            {initials}
-          </div>
+          {driver.profilePhotoUrl ? (
+            <img
+              src={driver.profilePhotoUrl}
+              alt=""
+              className="h-24 w-24 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[var(--ridova-navy)] text-2xl font-bold text-white">
+              {initials}
+            </div>
+          )}
           <p className="mt-3 text-sm text-muted-foreground">{organisationName}</p>
         </div>
 

@@ -109,6 +109,7 @@ function normalizeOperationalTrip(
     vehicleRegistration: trip.vehicleRegistration ?? null,
     depotId: trip.depotId ?? null,
     depotName: trip.depotName ?? null,
+    dispatcherName: trip.dispatcherName ?? null,
     assignmentStatus: trip.assignmentStatus ?? (trip.driverId ? 'assigned' : 'unassigned'),
     acceptedAt: trip.acceptedAt ?? null,
     acknowledgedAt: trip.acknowledgedAt ?? null,
@@ -881,6 +882,13 @@ export class ApiClient {
     }).then((profile) => normalizeDriverProfileDocuments(profile))
   }
 
+  uploadDriverPhoto(id: string, input: import('@/lib/drivers/types').UploadDriverPhotoInput, actorName: string) {
+    return this.fetch<import('@/lib/drivers/types').DriverProfile>(`/drivers/${id}/photo`, {
+      method: 'POST',
+      body: JSON.stringify({ ...input, actorName }),
+    }).then((profile) => normalizeDriverProfileDocuments(profile))
+  }
+
   getDriverDocumentDownloadUrl(driverId: string, documentId: string) {
     return this.fetch<{ url: string; fileName: string; mimeType: string; label: string | null }>(
       `/drivers/${driverId}/documents/${documentId}/download`,
@@ -1074,6 +1082,22 @@ export class ApiClient {
     return this.fetch<import('@/lib/vehicles/types').VehicleProfile>('/vehicles', {
       method: 'POST',
       body: JSON.stringify({ ...input, actorName }),
+    })
+  }
+
+  importVehicles(
+    vehicles: import('@/lib/vehicles/vehicle-csv-import').VehicleImportParsedRow[],
+    actorName: string,
+  ) {
+    return this.fetch<{
+      rowsRead: number
+      created: number
+      skippedDuplicates: number
+      failed: Array<{ row: number; registrationNumber: string; reason: string }>
+      createdIds: string[]
+    }>('/vehicles/import', {
+      method: 'POST',
+      body: JSON.stringify({ vehicles, actorName }),
     })
   }
 
@@ -1751,7 +1775,7 @@ export class ApiClient {
     return this.fetch<import('@/lib/fleet-resources/types').FleetResourcesHubData>('/fleet-resources/hub')
   }
 
-  /** Attendance hub — live Command API only; fail-closed empty hub when unavailable. */
+  /** Attendance hub — live Command API; fail-closed empty hub when unavailable. */
   async getAttendanceHub() {
     const { emptyAttendanceHub, emptyAttendanceTrends } = await import('@/lib/attendance/empty-hub')
     try {
@@ -1764,14 +1788,30 @@ export class ApiClient {
         !Array.isArray(data.board) ||
         !Array.isArray(data.leaveRequests)
       ) {
-        return emptyAttendanceHub()
+        const empty = emptyAttendanceHub()
+        return {
+          ...empty,
+          trends: {
+            ...empty.trends,
+            mondayFridayPatternNote:
+              'Attendance response was incomplete — showing an empty board until Command returns a full hub.',
+          },
+        }
       }
       return {
         ...data,
         trends: data.trends ?? emptyAttendanceTrends(),
       }
-    } catch {
-      return emptyAttendanceHub()
+    } catch (error) {
+      const empty = emptyAttendanceHub()
+      const detail = error instanceof Error ? error.message : 'Command attendance hub unavailable'
+      return {
+        ...empty,
+        trends: {
+          ...empty.trends,
+          mondayFridayPatternNote: `Could not load live attendance (${detail}).`,
+        },
+      }
     }
   }
 
@@ -2014,6 +2054,25 @@ export class ApiClient {
   }) {
     return this.fetch<import('@/lib/fleet-resources/types').EquipmentAsset>(
       '/fleet-resources/equipment/assign',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    )
+  }
+
+  createResourceEquipment(input: {
+    name: string
+    category?: string
+    vehicleId?: string | null
+    qrCode?: string | null
+    serialNumber?: string | null
+    expiryDate?: string | null
+    requiredForDuty?: boolean
+    actorName: string
+  }) {
+    return this.fetch<import('@/lib/fleet-resources/types').EquipmentAsset>(
+      '/fleet-resources/equipment',
       {
         method: 'POST',
         body: JSON.stringify(input),
@@ -2819,7 +2878,7 @@ export class ApiClient {
     return this.fetch<import('@/lib/transfers/types').OperationalTrip>(
       `/operational-trips/${tripId}/assign`,
       { method: 'POST', body: JSON.stringify(input) },
-    )
+    ).then((raw) => normalizeOperationalTrip(raw as import('@/lib/transfers/types').OperationalTrip))
   }
 
   movePlanningJob(jobId: string, targetTripId: string) {
@@ -3003,7 +3062,9 @@ export class ApiClient {
   }
 
   getAssignmentHistory(tripId: string) {
-    return this.fetch<import('@/lib/transfers/types').AssignmentHistoryEntry[]>(`/operational-trips/${tripId}/assignment-history`)
+    return this.fetch<import('@/lib/transfers/types').AssignmentHistoryEntry[]>(
+      `/operational-trips/${tripId}/assignment-history`,
+    ).then((raw) => (Array.isArray(raw) ? raw : []))
   }
 
   getOperationalTripsByBooking(bookingId: string) {

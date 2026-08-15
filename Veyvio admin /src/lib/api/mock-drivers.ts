@@ -23,6 +23,7 @@ import type {
   UnlockDriverInput,
   UpdateDriverInput,
   UploadDriverDocumentInput,
+  UploadDriverPhotoInput,
 } from '@/lib/drivers/types'
 
 const now = () => new Date().toISOString()
@@ -173,6 +174,7 @@ function buildProfile(
     | 'documentVersions'
     | 'eligibilityOverrides'
     | 'dateOfBirth'
+    | 'photoUrl'
     | 'operationalStatus'
     | 'licenceCountry'
     | 'licenceCategories'
@@ -187,6 +189,7 @@ function buildProfile(
       Pick<
         DriverProfile,
         | 'dateOfBirth'
+        | 'photoUrl'
         | 'operationalStatus'
         | 'licenceCountry'
         | 'licenceCategories'
@@ -206,6 +209,7 @@ function buildProfile(
   const nearest = nearestExpiry(partial)
   const withDefaults = {
     dateOfBirth: partial.dateOfBirth ?? null,
+    photoUrl: partial.photoUrl ?? null,
     operationalStatus: partial.operationalStatus ?? 'eligible',
     licenceCountry: partial.licenceCountry ?? 'GB',
     licenceCategories: partial.licenceCategories ?? null,
@@ -1485,6 +1489,34 @@ export const mockDriversApi = {
       reason: input.fileName,
     })
 
+    profiles[idx] = updated
+    return updated
+  },
+
+  uploadPhoto(id: string, input: UploadDriverPhotoInput, actorName: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    const current = profiles[idx]!
+    const ts = now()
+    const raw = String(input.fileBase64 ?? '').trim()
+    const photoUrl = raw.startsWith('data:')
+      ? raw
+      : `data:${input.mimeType || 'image/jpeg'};base64,${raw}`
+
+    const updated = syncProfileEligibility({
+      ...current,
+      photoUrl,
+      updatedAt: ts,
+    })
+    appendAudit(updated, {
+      action: 'Profile photo updated',
+      actor: actorName,
+      actorRole: 'Transport manager',
+      createdAt: ts,
+      previousValue: current.photoUrl ? 'photo on file' : null,
+      newValue: input.fileName,
+      reason: null,
+    })
     profiles[idx] = updated
     return updated
   },

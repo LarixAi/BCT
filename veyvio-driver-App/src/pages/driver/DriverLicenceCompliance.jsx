@@ -7,6 +7,7 @@ import {
   recordDriverLicenceConsent,
 } from "@/services/licence-compliance.service";
 import { op } from "@/lib/driver-operational-theme";
+import { formatUkDate } from "@/lib/uk-locale";
 
 export default function DriverLicenceCompliance() {
   const { driver, session } = useDriverSupabaseAuth();
@@ -45,8 +46,8 @@ export default function DriverLicenceCompliance() {
           <p className="text-sm font-mono">********{summary.licence.licence_number_last4}</p>
         ) : null}
         <p className={`text-xs ${op.muted}`}>
-          Last checked: {summary?.licence?.last_checked_at?.slice(0, 10) ?? "—"} · Next due:{" "}
-          {summary?.licence?.next_check_due_at?.slice(0, 10) ?? "—"}
+          Last checked: {formatUkDate(summary?.licence?.last_checked_at)} · Next due:{" "}
+          {formatUkDate(summary?.licence?.next_check_due_at)}
         </p>
       </section>
 

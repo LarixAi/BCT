@@ -15,6 +15,7 @@ import {
   User,
 } from "lucide-react";
 import { getJobExecutionState } from "@/lib/jobExecutionState";
+import { formatUkDate, formatUkTime } from "@/lib/uk-locale";
 import {
   buildActionButtonLabel,
   formatEtaDistance,
@@ -445,7 +446,7 @@ function SheetLevel3({
           {job.serviceDate ? (
             <span className="inline-flex items-center gap-1 text-xs text-gray-600">
               <Clock className="w-3.5 h-3.5" />
-              {job.serviceDate} · {job.startTime}
+              {formatUkDate(job.serviceDate)} · {formatUkTime(job.startTime)}
             </span>
           ) : null}
         </div>

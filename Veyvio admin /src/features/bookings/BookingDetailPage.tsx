@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
-import { StatusPill } from '@/components/ui/status'
+import { StatusPill, formatDate } from '@/components/ui/status'
 import { ValidationList } from '@/features/bookings/components/BookingWizardUi'
 import { CancelBookingDialog } from '@/features/bookings/CancelBookingDialog'
 import { VEYVIO_TERMS } from '@/lib/terminology'
@@ -85,7 +85,7 @@ export function BookingDetailPage() {
                 <p className="font-medium text-ink">{trip.label}</p>
                 <StatusPill status={trip.status} />
               </div>
-              <p className="text-xs text-muted">{trip.pickupDate}</p>
+              <p className="text-xs text-muted">{formatDate(trip.pickupDate)}</p>
               <ol className="mt-2 space-y-1 border-l-2 border-border pl-4">
                 {(trip.stops ?? []).map((stop) => (
                   <li key={stop.id} className="text-sm">

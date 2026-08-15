@@ -50,26 +50,60 @@ const TABS = [
 ] as const
 
 const TAB_QUERY_MAP: Record<string, (typeof TABS)[number]> = {
-  documents: 'Documents',
-  damage: 'Damage & media',
-  equipment: 'Equipment',
+  overview: 'Overview',
+  compliance: 'Compliance',
+  allocations: 'Allocations',
   checks: 'Checks & inspections',
-  maintenance: 'Maintenance',
+  'checks & inspections': 'Checks & inspections',
   defects: 'Defects',
-  wheels: 'Wheels & tyres',
-  adblue: 'Fuel & AdBlue',
+  damage: 'Damage & media',
+  'damage & media': 'Damage & media',
   reports: 'Report history',
+  'report history': 'Report history',
+  adblue: 'Fuel & AdBlue',
+  'fuel & adblue': 'Fuel & AdBlue',
+  maintenance: 'Maintenance',
   costs: 'Costs',
+  wheels: 'Wheels & tyres',
+  'wheels & tyres': 'Wheels & tyres',
+  equipment: 'Equipment',
+  documents: 'Documents',
+  timeline: 'Timeline & audit',
+  'timeline & audit': 'Timeline & audit',
+}
+
+const TAB_TO_QUERY: Record<(typeof TABS)[number], string> = {
+  Overview: 'overview',
+  Compliance: 'compliance',
+  Allocations: 'allocations',
+  'Checks & inspections': 'checks',
+  Defects: 'defects',
+  'Damage & media': 'damage',
+  'Report history': 'reports',
+  'Fuel & AdBlue': 'adblue',
+  Maintenance: 'maintenance',
+  Costs: 'costs',
+  'Wheels & tyres': 'wheels',
+  Equipment: 'equipment',
+  Documents: 'documents',
+  'Timeline & audit': 'timeline',
+}
+
+function resolveVehicleTab(raw: string | null): (typeof TABS)[number] {
+  if (!raw) return 'Overview'
+  const key = raw.trim().toLowerCase()
+  if (TAB_QUERY_MAP[key]) return TAB_QUERY_MAP[key]!
+  const exact = TABS.find((t) => t.toLowerCase() === key)
+  return exact ?? 'Overview'
 }
 
 export function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const tabFromQuery = searchParams.get('tab')
-  const initialTab = tabFromQuery && TAB_QUERY_MAP[tabFromQuery] ? TAB_QUERY_MAP[tabFromQuery] : 'Overview'
-  const [tab, setTab] = useState<(typeof TABS)[number]>(initialTab)
+  const [tab, setTab] = useState<(typeof TABS)[number]>(() => resolveVehicleTab(tabFromQuery))
   const [showRelease, setShowRelease] = useState(false)
   const [releaseReason, setReleaseReason] = useState('')
   const [workPerformed, setWorkPerformed] = useState('')
@@ -95,10 +129,20 @@ export function VehicleDetailPage() {
   })
 
   useEffect(() => {
-    if (tabFromQuery && TAB_QUERY_MAP[tabFromQuery]) {
-      setTab(TAB_QUERY_MAP[tabFromQuery])
-    }
+    setTab(resolveVehicleTab(tabFromQuery))
   }, [tabFromQuery])
+
+  const selectTab = (next: (typeof TABS)[number]) => {
+    setTab(next)
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        params.set('tab', TAB_TO_QUERY[next])
+        return params
+      },
+      { replace: true },
+    )
+  }
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', id]) })
@@ -160,7 +204,7 @@ export function VehicleDetailPage() {
               </Link>
             )}
             {canVor && vehicle.operationalStatus !== 'vor' && (
-              <button type="button" onClick={() => setTab('Defects')} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">
+              <button type="button" onClick={() => selectTab('Defects')} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">
                 Mark VOR
               </button>
             )}
@@ -297,7 +341,7 @@ export function VehicleDetailPage() {
           <button
             key={t}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => selectTab(t)}
             className={`rounded-t-lg px-3 py-2 text-sm font-medium ${tab === t ? 'bg-surface text-command-700 ring-1 ring-border' : 'text-ink-soft hover:text-ink'}`}
           >
             {t}
@@ -322,7 +366,7 @@ export function VehicleDetailPage() {
                 <span className="text-muted"> — {vehicle.openDefectCount} open · condition {vehicle.conditionStatus.replace(/_/g, ' ')}</span>
               </li>
               <li>
-                <Link to={`/maintenance`} className="font-medium text-command-600 hover:underline">
+                <Link to={`/vehicles/${vehicle.id}?tab=maintenance`} className="font-medium text-command-600 hover:underline">
                   Maintenance
                 </Link>
                 <span className="text-muted"> — work orders and PMI programme</span>
@@ -337,16 +381,23 @@ export function VehicleDetailPage() {
           </SectionCard>
           <SectionCard title="Current operation">
             <dl className="space-y-2 text-sm">
-              <Row label="Driver" value={vehicle.currentDriverName ?? '—'} />
-              <Row label="Run" value={vehicle.currentRunReference ?? '—'} />
+              <Row label="Driver" value={vehicle.currentDriverName ?? 'Not allocated'} />
+              <Row label="Run" value={vehicle.currentRunReference ?? 'Not allocated'} />
               <Row label="Location" value={vehicle.currentLocationLabel ?? '—'} />
-              <Row label="Mileage" value={vehicle.mileage != null ? `${vehicle.mileage.toLocaleString()} mi` : '—'} />
+              <Row
+                label="Mileage"
+                value={
+                  vehicle.mileage != null
+                    ? `${vehicle.mileage.toLocaleString('en-GB')} mi`
+                    : 'No odometer on file'
+                }
+              />
             </dl>
           </SectionCard>
           <SectionCard title="Upcoming">
             <dl className="space-y-2 text-sm">
-              <Row label="Next driver" value={vehicle.nextDriverName ?? '—'} />
-              <Row label="Next run" value={vehicle.nextRunReference ?? '—'} />
+              <Row label="Next driver" value={vehicle.nextDriverName ?? 'None scheduled'} />
+              <Row label="Next run" value={vehicle.nextRunReference ?? 'None scheduled'} />
               <Row label="Departure" value={vehicle.nextDepartureTime ?? '—'} />
             </dl>
           </SectionCard>

@@ -1056,8 +1056,9 @@ export async function commandListNotifications(accessToken, { unreadOnly = false
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };
 
-  const qs = unreadOnly ? "?unread_only=true" : "";
-  const response = await fetch(`${base}/notifications${qs}`, {
+  const params = new URLSearchParams({ audience: "driver" });
+  if (unreadOnly) params.set("unread_only", "true");
+  const response = await fetch(`${base}/notifications?${params.toString()}`, {
     method: "GET",
     credentials: "omit",
     headers: bearerHeaders(accessToken),
@@ -1078,7 +1079,7 @@ export async function commandNotificationUnreadCount(accessToken) {
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };
 
-  const response = await fetch(`${base}/notifications/unread-count`, {
+  const response = await fetch(`${base}/notifications/unread-count?audience=driver`, {
     method: "GET",
     credentials: "omit",
     headers: bearerHeaders(accessToken),

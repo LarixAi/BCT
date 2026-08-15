@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { SectionCard } from '@/components/ui'
-import { StatusPill } from '@/components/ui/status'
+import { StatusPill, formatDate } from '@/components/ui/status'
 import { ATTENTION_CARDS, PRIORITY_GROUP_LABELS, SUMMARY_CARD_GROUPS } from '@/lib/maintenance/constants'
 import { filterFleetRows } from '@/lib/maintenance/aggregate'
 import { MAINTENANCE_STATUS_LABELS } from '@/lib/maintenance/constants'
@@ -268,7 +268,7 @@ export function MaintenanceOverviewTab({
                     <StatusPill status={r.maintenanceStatus ?? r.operationalStatus ?? 'unknown'} />
                   </td>
                   <td className="py-2 pr-3 text-ink-soft">{r.currentIssue ?? '—'}</td>
-                  <td className="py-2 pr-3 text-xs text-ink-soft">{r.nextServiceDate?.slice(0, 10) ?? '—'}</td>
+                  <td className="py-2 pr-3 text-xs text-ink-soft">{formatDate(r.nextServiceDate)}</td>
                   <td className="py-2 tabular-nums">{r.openWorkOrders}</td>
                 </tr>
               ))}

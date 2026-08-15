@@ -10,6 +10,7 @@ import {
   ResolveImpactPanel,
   SuspiciousFlagsPanel,
 } from './components/CheckWorkflowPanels'
+import { VehicleThumb } from '@/features/vehicles/components/VehicleThumb'
 import { api } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
@@ -53,18 +54,27 @@ export function CheckDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link to="/vehicle-checks" className="text-sm text-command-600 hover:underline">
-            ← Vehicle Checks
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold text-ink">{check.registrationNumber}</h1>
-          <p className="text-sm text-ink-soft">
-            {check.makeModel} · {check.fleetNumber} · {check.checkTypeLabel}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <StatusPill status={check.operationalStatus} />
-            <StatusPill status={check.lifecycleStatus} />
-            {check.result && <StatusPill status={check.result} />}
+        <div className="flex gap-4">
+          <VehicleThumb
+            registrationNumber={check.registrationNumber}
+            vehicleCategory={check.vehicleCategory}
+            makeModel={check.makeModel}
+            modelYear={check.modelYear}
+            size="lg"
+          />
+          <div>
+            <Link to="/vehicle-checks" className="text-sm text-command-600 hover:underline">
+              ← Vehicle Checks
+            </Link>
+            <h1 className="mt-1 text-2xl font-semibold text-ink">{check.registrationNumber}</h1>
+            <p className="text-sm text-ink-soft">
+              {check.makeModel} · {check.fleetNumber} · {check.checkTypeLabel}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <StatusPill status={check.operationalStatus} />
+              <StatusPill status={check.lifecycleStatus} />
+              {check.result && <StatusPill status={check.result} />}
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

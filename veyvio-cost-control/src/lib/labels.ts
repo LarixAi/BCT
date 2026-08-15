@@ -124,9 +124,11 @@ export function validationLabel(s: ValidationState): string {
 }
 
 export function formatDate(isoDate: string): string {
-  const d = new Date(isoDate.includes('T') ? isoDate : `${isoDate}T00:00:00`)
+  if (!isoDate) return '—'
+  const raw = String(isoDate).trim()
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T12:00:00` : raw.includes('T') ? raw : `${raw}T12:00:00`)
   if (Number.isNaN(d.getTime())) return isoDate
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/London' })
 }
 
 export function formatPeriod(period: string): string {

@@ -9,12 +9,14 @@ import type { OutboxMutationType } from "@/types/sync";
 export async function enqueueYardMutation(type: OutboxMutationType, payload: unknown): Promise<void> {
   const tenancy = getTenancySnapshot();
   const session = getSessionSnapshot();
-  if (!tenancy.companyId || !tenancy.depotId || !session.user?.id) return;
+  // companyId + user are required; depotId is preferred but must not silently drop
+  // durable writes (equipment.assign was never reaching Command when depot context lagged).
+  if (!tenancy.companyId || !session.user?.id) return;
 
   await useSyncStore.getState().enqueue({
     type,
     companyId: tenancy.companyId,
-    depotId: tenancy.depotId,
+    depotId: tenancy.depotId || "unknown-depot",
     userId: session.user.id,
     payload,
   });

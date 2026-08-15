@@ -9,6 +9,9 @@ import {
   VEHICLE_CATEGORY_LABELS,
 } from '@/lib/vehicles/constants'
 import type { VehicleProfile } from '@/lib/vehicles/types'
+import { vehiclesToExportCsv } from '@/lib/vehicles/vehicle-csv-import'
+import { VehicleThumb } from '@/features/vehicles/components/VehicleThumb'
+import { VehicleImportPanel } from '@/features/vehicles/components/VehicleImportPanel'
 import { api } from '@/lib/api/client'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
@@ -33,6 +36,7 @@ export function VehiclesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [stubNotice, setStubNotice] = useState<string | null>(null)
+  const [showImport, setShowImport] = useState(false)
   const filter = (searchParams.get('filter') as ListFilter) || 'all'
 
   function showStub(message: string) {
@@ -51,6 +55,17 @@ export function VehiclesPage() {
   })
 
   const filtered = useMemo(() => filterVehicles(vehicles, filter, search), [vehicles, filter, search])
+
+  function exportFleetCsv() {
+    const csv = vehiclesToExportCsv(vehicles)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `veyvio-fleet-export-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   function setFilter(next: ListFilter) {
     if (next === 'all') {
@@ -80,14 +95,17 @@ export function VehiclesPage() {
           </Link>
           <button
             type="button"
-            onClick={() => showStub('Import will land in a later release.')}
+            onClick={() => {
+              setStubNotice(null)
+              setShowImport((v) => !v)
+            }}
             className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
-            Import
+            {showImport ? 'Close import' : 'Import'}
           </button>
           <button
             type="button"
-            onClick={() => showStub('Export will land in a later release.')}
+            onClick={() => exportFleetCsv()}
             className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
           >
             Export
@@ -117,6 +135,8 @@ export function VehiclesPage() {
       {stubNotice && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{stubNotice}</div>
       )}
+
+      {showImport && <VehicleImportPanel onClose={() => setShowImport(false)} />}
 
       {summary && (
         <>
@@ -229,16 +249,28 @@ function VehicleRow({ vehicle }: { vehicle: VehicleProfile }) {
   return (
     <tr className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
       <td className="py-2.5 pr-3">
-        <Link to={`/vehicles/${vehicle.id}`} className="font-medium text-command-600 hover:underline">
-          {vehicle.registrationNumber}
-        </Link>
-        <p className="text-xs text-muted">
-          {vehicle.fleetNumber ? `${vehicle.fleetNumber} · ` : ''}
-          {vehicle.reference}
-        </p>
-        <p className="text-xs text-muted">
-          {vehicle.make} {vehicle.model}
-        </p>
+        <div className="flex items-center gap-3">
+          <VehicleThumb
+            registrationNumber={vehicle.registrationNumber}
+            vehicleCategory={vehicle.vehicleCategory}
+            make={vehicle.make}
+            model={vehicle.model}
+            modelYear={vehicle.modelYear}
+            size="sm"
+          />
+          <div>
+            <Link to={`/vehicles/${vehicle.id}`} className="font-medium text-command-600 hover:underline">
+              {vehicle.registrationNumber}
+            </Link>
+            <p className="text-xs text-muted">
+              {vehicle.fleetNumber ? `${vehicle.fleetNumber} · ` : ''}
+              {vehicle.reference}
+            </p>
+            <p className="text-xs text-muted">
+              {vehicle.make} {vehicle.model}
+            </p>
+          </div>
+        </div>
       </td>
       <td className="py-2.5 pr-3 text-ink-soft">{VEHICLE_CATEGORY_LABELS[vehicle.vehicleCategory]}</td>
       <td className="py-2.5 pr-3 text-ink-soft">{vehicle.currentDepotName}</td>

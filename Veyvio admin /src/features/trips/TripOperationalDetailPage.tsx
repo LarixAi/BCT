@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
+import { formatUkDate } from '@/lib/uk-locale'
 import { JourneySequencePanel } from '@/features/journey-sequence/JourneySequencePanel'
 import { AssignmentHistoryPanel } from '@/features/transfers/AssignmentHistoryPanel'
 import { ManageAssignmentDrawer } from '@/features/transfers/ManageAssignmentDrawer'
@@ -92,7 +93,7 @@ export function TripOperationalDetailPage({ trip, tab: controlledTab, onTabChang
         <p className="mt-1 text-sm text-ink-soft">
           {trip.routeName ?? 'Operational trip'}
           {trip.runReference ? ` · Run ${trip.runReference}` : ''}
-          {duty?.dutyDate ? ` · ${duty.dutyDate}` : ''}
+          {duty?.dutyDate ? ` · ${formatUkDate(duty.dutyDate)}` : ''}
         </p>
       </div>
 

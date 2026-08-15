@@ -21,6 +21,7 @@ export function mapDriverRowToRecord(row, opts = {}) {
     fullName: row.full_name,
     email: row.email ?? "",
     phone: row.phone ?? "",
+    profilePhotoUrl: row.profile_photo_url ?? row.profilePhotoUrl ?? null,
     licenceExpiryDate: dateField(row, "licence_expiry_date", "license_expiry", "licence_expiry"),
     dqcExpiryDate: dateField(row, "cpc_expiry_date", "cpc_expiry", "dqc_expiry"),
     dbsRequired: Boolean(row.can_do_school_runs) || workKeys.includes("school"),

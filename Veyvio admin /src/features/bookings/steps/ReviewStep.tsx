@@ -1,4 +1,5 @@
 import { SectionCard } from '@/components/ui'
+import { formatUkDate } from '@/lib/uk-locale'
 import { ValidationList } from '@/features/bookings/components/BookingWizardUi'
 import { DispatchStep } from '@/features/bookings/steps/DispatchStep'
 import { buildJobPreview, countJobsToGenerate, FUNDING_TYPE_OPTIONS } from '@/lib/bookings/booking-journey-utils'
@@ -47,7 +48,7 @@ export function ReviewStep({
                 : '—'
             }
           />
-          <Row label="Journey" value={trip ? `${trip.pickupDate} · ${trip.label}` : '—'} />
+          <Row label="Journey" value={trip ? `${formatUkDate(trip.pickupDate)} · ${trip.label}` : '—'} />
           <Row label="Pickup" value={`${trip?.calculatedPickupTime ?? trip?.requestedPickupTime ?? '—'} — ${pickup?.address || '—'}`} />
           <Row label="Drop-off" value={`${trip?.calculatedArrivalTime ?? trip?.requiredArrivalTime ?? '—'} — ${dropoff?.address || '—'}`} />
           <Row

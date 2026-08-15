@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
@@ -64,11 +64,17 @@ export function SchedulePage() {
   const { operationalDateIso } = useOperationalContext()
   const [searchParams, setSearchParams] = useSearchParams()
   const workspaceMode = (searchParams.get('mode') as ScheduleWorkspaceMode) || 'planning'
+  const serviceDateFromUrl = searchParams.get('serviceDate')
   const { user } = useAuth()
   const actorName =
     [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || user?.email || 'Operations'
   const queryClient = useQueryClient()
-  const [anchor, setAnchor] = useState(operationalDateIso)
+  const [anchor, setAnchor] = useState(serviceDateFromUrl || operationalDateIso)
+
+  useEffect(() => {
+    if (serviceDateFromUrl) setAnchor(serviceDateFromUrl)
+  }, [serviceDateFromUrl])
+
   const [view, setView] = useState<ScheduleView>('day')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [attFilter, setAttFilter] = useState<ScheduleAttendanceFilter>('all')

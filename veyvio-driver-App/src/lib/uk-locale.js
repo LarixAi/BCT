@@ -13,7 +13,14 @@ const UK_DATETIME_OPTS = { ...UK_DATE_SHORT_OPTS, ...UK_TIME_OPTS };
 
 export function parseUkInstant(value) {
   if (value == null || value === "") return null;
-  const d = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const raw = String(value).trim();
+  // Date-only ISO must not shift day under UK timezone (UTC midnight → previous evening).
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const d = new Date(`${raw}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 

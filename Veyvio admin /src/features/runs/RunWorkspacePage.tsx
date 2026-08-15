@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { LiveVehicleMap, type MapStopMarker } from '@/components/map/LiveVehicleMap'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
+import { formatUkDate } from '@/lib/uk-locale'
 import { JourneySequencePanel } from '@/features/journey-sequence/JourneySequencePanel'
 import { AssignmentHistoryPanel } from '@/features/transfers/AssignmentHistoryPanel'
 import { ManageAssignmentButton } from '@/features/transfers/ManageAssignmentButton'
@@ -157,7 +158,7 @@ export function RunWorkspacePage({
           </span>
         </div>
         <p className="mt-1 text-sm text-ink-soft">
-          {duty.route?.name ?? 'No route'} · {duty.dutyDate} · {formatWorkingTime(runWorkingTimeMinutes(duty))} duty
+          {duty.route?.name ?? 'No route'} · {formatUkDate(duty.dutyDate)} · {formatWorkingTime(runWorkingTimeMinutes(duty))} duty
         </p>
       </div>
 

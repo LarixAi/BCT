@@ -348,6 +348,13 @@ export interface UploadDriverDocumentInput {
   notes?: string | null
 }
 
+/** Command uploads a driver profile photo (JPEG/PNG/WebP, base64 or data URL). */
+export interface UploadDriverPhotoInput {
+  fileName: string
+  fileBase64: string
+  mimeType?: string | null
+}
+
 /** Admin records a completed (or cleared) training course against the catalogue. */
 export interface RecordDriverTrainingInput {
   trainingKey: string
@@ -601,6 +608,8 @@ export interface DriverProfile {
   firstName: string
   lastName: string
   preferredName: string | null
+  /** Signed URL for the driver profile photo (Command-managed). */
+  photoUrl: string | null
   dateOfBirth: string | null
   /** Legacy field — mirrors dutyStatus for dispatch dropdowns */
   status?: string

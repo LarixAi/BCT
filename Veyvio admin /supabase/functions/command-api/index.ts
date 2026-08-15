@@ -26,10 +26,12 @@ import {
   projectOperationalTripByDuty,
   projectOperationalTrips,
   projectOperationalTripsByBooking,
+  projectAssignmentHistory,
   projectSchoolRouteList,
   projectSchoolRouteSummary,
   projectVehicleProfile,
   recordDriverVehicleHandbackReport,
+  signedDriverProfilePhotoUrl,
   summariseDrivers,
   summariseVehicles,
   toOperationalPosition,
@@ -99,6 +101,7 @@ import {
 } from '../_shared/driver-write-guards.ts'
 import {
   DRIVER_ONBOARDING_NOTIFICATION,
+  filterDriverFacingNotifications,
   notifyCompanyAdmins,
 } from '../_shared/notifications.ts'
 import { seedDemoCompany } from '../_shared/seed-demo.ts'
@@ -237,6 +240,7 @@ import {
   commitJourneySequenceMove,
   listJourneySequenceDestinations,
 } from '../_shared/journey-sequence-move.ts'
+import { assignOperationalTrip } from '../_shared/operational-trip-assign.ts'
 import {
   advanceJourneySequenceAcknowledgement,
   driverAdvanceJourneySequenceAcknowledgement,
@@ -1661,7 +1665,7 @@ async function driverSession(request: Request) {
     admin
       .from('drivers')
       .select(
-        'id, onboarding_step, operational_status, staff_members(first_name, last_name, email, phone, date_of_birth, home_address, emergency_contact)',
+        'id, onboarding_step, operational_status, profile_photo_storage_key, staff_members(first_name, last_name, email, phone, date_of_birth, home_address, emergency_contact)',
       )
       .eq('id', appAccount.driver_id)
       .eq('company_id', context.companyId)
@@ -1680,6 +1684,10 @@ async function driverSession(request: Request) {
   const driverId = String(appAccount.driver_id)
   const operationalStatus = String(driver?.operational_status ?? 'draft')
   const onboardingStep = String(driver?.onboarding_step ?? '')
+  const profilePhotoUrl = await signedDriverProfilePhotoUrl(
+    context.companyId,
+    driver?.profile_photo_storage_key,
+  )
 
   // Resolve phase + depots in parallel — keep driver-session under client timeouts.
   const activationPhasePromise = resolveDriverActivationPhase(
@@ -1740,6 +1748,7 @@ async function driverSession(request: Request) {
     dateOfBirth: staff?.date_of_birth ? String(staff.date_of_birth).slice(0, 10) : undefined,
     homeAddress: staff?.home_address ? String(staff.home_address) : undefined,
     emergencyContact: staff?.emergency_contact ? String(staff.emergency_contact) : undefined,
+    profilePhotoUrl: profilePhotoUrl ?? undefined,
     depots: depotRows.map((depot) => ({
       id: String(depot.id),
       companyId: String(depot.company_id ?? context.companyId),
@@ -1785,7 +1794,7 @@ async function driverBootstrap(request: Request) {
   const [{ data: driver }, { data: company }, { data: membership }] = await Promise.all([
     admin
       .from('drivers')
-      .select('id, staff_members(first_name, last_name, email, phone)')
+      .select('id, profile_photo_storage_key, staff_members(first_name, last_name, email, phone)')
       .eq('id', appAccount.driver_id)
       .eq('company_id', context.companyId)
       .maybeSingle(),
@@ -1846,6 +1855,10 @@ async function driverBootstrap(request: Request) {
   const email = String(staff?.email ?? context.user.email ?? '')
   const serverTime = new Date().toISOString()
   const accessStatus = mapDriverBootstrapAccessStatus(appAccount.account_status)
+  const profilePhotoUrl = await signedDriverProfilePhotoUrl(
+    context.companyId,
+    driver?.profile_photo_storage_key,
+  )
 
   let publishedDuties: Row[] = []
   try {
@@ -2020,6 +2033,8 @@ async function driverBootstrap(request: Request) {
       driverId,
       displayName,
       email: email || undefined,
+      profilePhotoUrl: profilePhotoUrl ?? undefined,
+      profile_photo_url: profilePhotoUrl ?? undefined,
     },
     duties: publishedDuties,
     vehicleChecks,
@@ -4353,7 +4368,7 @@ async function listYardDriverMessages(request: Request) {
   const { data, error } = await admin
     .from('messages')
     .select(
-      'id, conversation_id, sender_id, recipient_user_id, driver_id, subject, body, sent_at, read_at, source_app, created_at, status, audience, drivers(staff_members(first_name, last_name))',
+      'id, conversation_id, sender_id, recipient_user_id, driver_id, subject, body, sent_at, read_at, source_app, created_at, status, audience, drivers(profile_photo_storage_key, staff_members(first_name, last_name))',
     )
     .eq('company_id', context.companyId)
     .in('audience', ['yard', 'both'])
@@ -4366,15 +4381,27 @@ async function listYardDriverMessages(request: Request) {
     (data ?? []).flatMap((row: Row) => [String(row.sender_id ?? ''), String(row.recipient_user_id ?? '')]),
   )
 
+  const photoByDriver = new Map<string, string | null>()
+  await Promise.all(
+    (data ?? []).map(async (row: Row) => {
+      const id = row.driver_id ? String(row.driver_id) : ''
+      if (!id || photoByDriver.has(id)) return
+      const key = (row.drivers as Row | null)?.profile_photo_storage_key
+      photoByDriver.set(id, await signedDriverProfilePhotoUrl(context.companyId, key))
+    }),
+  )
+
   return json(
     (data ?? []).map((row: Row) => {
       const mapped = mapOpsMessageRecord(row, people)
       const staff = ((row.drivers as Row | null)?.staff_members as Row | null) ?? null
+      const driverId = row.driver_id ? String(row.driver_id) : null
       return {
         ...mapped,
         driverName: staff
           ? [staff.first_name, staff.last_name].filter(Boolean).join(' ').trim() || null
           : null,
+        driverPhotoUrl: driverId ? photoByDriver.get(driverId) ?? null : null,
       }
     }),
   )
@@ -5066,6 +5093,10 @@ async function listResource(request: Request, resource: string, id?: string) {
   const { data, error } = await query.order('created_at', { ascending: false })
   if (error) return apiError(500, error.message, 'database_error')
   if (id && !data?.length) return apiError(404, 'Record not found', 'not_found')
+  const audience = url.searchParams.get('audience')
+  if (resource === 'notifications' && audience === 'driver' && !id) {
+    return json(expandRow(filterDriverFacingNotifications(data ?? [])))
+  }
   return json(id ? expandRow(data?.[0]) : expandRow(data ?? []))
 }
 
@@ -5162,13 +5193,18 @@ async function company(request: Request) {
 
 async function unreadCount(request: Request) {
   const context = await authenticate(request)
-  const { count } = await admin
+  const audience = new URL(request.url).searchParams.get('audience')
+  const { data, error } = await admin
     .from('notifications')
-    .select('*', { count: 'exact', head: true })
+    .select('id, notification_type')
     .eq('company_id', context.companyId)
     .eq('recipient_user_id', context.user.id)
     .is('read_at', null)
-  return json({ count: count ?? 0 })
+  if (error) return apiError(500, error.message)
+  const rows = data ?? []
+  const count =
+    audience === 'driver' ? filterDriverFacingNotifications(rows).length : rows.length
+  return json({ count })
 }
 
 async function updateNotification(request: Request, id?: string) {
@@ -7115,6 +7151,7 @@ function projectCheckDetailFromRow(row: Row) {
     registrationNumber: String(vehicle.registration ?? '—'),
     fleetNumber: vehicle.fleet_number ? String(vehicle.fleet_number) : null,
     makeModel: [vehicle.make, vehicle.model].filter(Boolean).join(' ') || '—',
+    modelYear: vehicle.year != null && Number.isFinite(Number(vehicle.year)) ? Number(vehicle.year) : null,
     vehicleCategory: String(vehicle.vehicle_class ?? 'vehicle'),
     depotId: vehicle.primary_depot_id ? String(vehicle.primary_depot_id) : '',
     depotName: String(depot.name ?? '—'),
@@ -7194,7 +7231,7 @@ async function getCheckDetail(request: Request, checkId: string) {
   const { data, error } = await admin
     .from('vehicle_checks')
     .select(
-      'id, vehicle_id, driver_id, duty_id, check_type, template_version, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, created_at, checklist, evidence, source_app, vehicles(id, registration, fleet_number, make, model, vehicle_class, primary_depot_id, depots(id, name)), drivers(staff_members(first_name, last_name))',
+      'id, vehicle_id, driver_id, duty_id, check_type, template_version, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, created_at, checklist, evidence, source_app, vehicles(id, registration, fleet_number, make, model, year, vehicle_class, primary_depot_id, depots(id, name)), drivers(staff_members(first_name, last_name))',
     )
     .eq('company_id', context.companyId)
     .eq('id', checkId)
@@ -7907,6 +7944,17 @@ async function operationalTripForDuty(request: Request, dutyId: string) {
     return json(trip)
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'Duty trip projection failed')
+  }
+}
+
+async function operationalTripAssignmentHistory(request: Request, tripId: string) {
+  const context = await authenticate(request)
+  try {
+    const history = await projectAssignmentHistory(context.companyId, tripId)
+    if (history === null) return apiError(404, 'Trip not found', 'not_found')
+    return json(history)
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Assignment history failed')
   }
 }
 
@@ -9076,6 +9124,109 @@ async function driverIncidents(request: Request, driverId: string) {
   )
 }
 
+async function uploadDriverPhoto(request: Request, driverId: string) {
+  const context = await authenticate(request)
+  try {
+    await assertCompanyScopedDriver(driverId, context.companyId)
+  } catch (error) {
+    return toApiErrorResponse(error, 'Driver not found')
+  }
+
+  const input = await readJson<Row>(request)
+  const fileName = String(input.fileName ?? 'profile.jpg').trim() || 'profile.jpg'
+  const mimeType = normalizeDriverDocumentMimeType(
+    input.mimeType ? String(input.mimeType) : null,
+    fileName,
+  )
+  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp'])
+  if (!allowed.has(mimeType)) {
+    return apiError(400, 'Use a JPEG, PNG, or WebP image for the driver photo')
+  }
+
+  const fileBytes = input.fileBase64 ? decodeBase64FilePayload(String(input.fileBase64)) : null
+  if (!fileBytes?.length) {
+    return apiError(400, 'Choose a photo to upload')
+  }
+  if (fileBytes.length > 2 * 1024 * 1024) {
+    return apiError(400, 'Driver photo must be under 2 MB')
+  }
+
+  const { buildTenantStoragePath } = await import('../_shared/signed-storage.ts')
+  const ext =
+    mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg'
+  const storageKey = buildTenantStoragePath(
+    context.companyId,
+    'drivers',
+    driverId,
+    'profile',
+    `avatar.${ext}`,
+  )
+  const bucket = 'driver-documents'
+
+  const { error: uploadError } = await admin.storage.from(bucket).upload(storageKey, fileBytes, {
+    contentType: mimeType,
+    upsert: true,
+  })
+  if (uploadError) return apiError(400, uploadError.message)
+
+  const checksum = await sha256Hex(fileBytes)
+  const now = new Date().toISOString()
+  const { data: fileRow, error: fileError } = await admin
+    .from('file_objects')
+    .insert({
+      company_id: context.companyId,
+      storage_key: storageKey,
+      original_filename: fileName,
+      mime_type: mimeType,
+      size: fileBytes.length,
+      checksum,
+      uploaded_by: context.user.id,
+      classification: 'identity',
+      source_app: 'COMMAND',
+      created_by: context.user.id,
+      updated_by: context.user.id,
+      updated_at: now,
+    })
+    .select('id')
+    .single()
+
+  if (fileError) {
+    console.error('driver photo file_objects insert failed', fileError)
+  }
+
+  const { data: before } = await admin
+    .from('drivers')
+    .select('id, profile_photo_storage_key, profile_photo_file_object_id')
+    .eq('id', driverId)
+    .eq('company_id', context.companyId)
+    .maybeSingle()
+
+  const { error: updateError } = await admin
+    .from('drivers')
+    .update({
+      profile_photo_storage_key: storageKey,
+      profile_photo_file_object_id: fileRow?.id ? String(fileRow.id) : null,
+      profile_photo_updated_at: now,
+      updated_at: now,
+      updated_by: context.user.id,
+    })
+    .eq('id', driverId)
+    .eq('company_id', context.companyId)
+
+  if (updateError) return apiError(400, updateError.message)
+
+  await auditDriver(
+    context.companyId,
+    context.user.id,
+    'driver.profile_photo_uploaded',
+    driverId,
+    before,
+    { storageKey, fileName, mimeType },
+  )
+
+  return json(await projectDriverProfile(context.companyId, driverId))
+}
+
 async function uploadDriverDocument(request: Request, driverId: string) {
   const context = await authenticate(request)
   const input = await readJson<Row>(request)
@@ -9526,6 +9677,8 @@ async function createVehicle(request: Request) {
       registration,
       make: input.make ?? null,
       model: input.model ?? null,
+      year: input.modelYear ?? null,
+      colour: input.colour ?? null,
       vehicle_class: input.vehicleCategory ?? 'minibus',
       fuel_type: input.fuelType ?? 'diesel',
       seat_capacity: input.seatingCapacity ?? 0,
@@ -9534,6 +9687,11 @@ async function createVehicle(request: Request) {
       operational_status: 'onboarding',
       ownership_type: input.ownershipType ?? 'owned',
       status: 'active',
+      mot_expiry: dateOrNull(input.motExpiry),
+      insurance_expiry: dateOrNull(input.insuranceExpiry),
+      tax_expiry: dateOrNull(input.taxExpiry),
+      tachograph_calibration_expiry: dateOrNull(input.tachographCalibrationExpiry),
+      pmi_due_at: dateOrNull(input.pmiDueAt ?? input.nextMaintenanceDate),
       created_by: context.user.id,
       updated_by: context.user.id,
       source_app: 'COMMAND',
@@ -9543,6 +9701,217 @@ async function createVehicle(request: Request) {
   if (error || !vehicle) return apiError(400, error?.message ?? 'Vehicle create failed')
   const profile = await projectVehicleProfile(context.companyId, vehicle.id as string)
   return json(profile, 201)
+}
+
+function dateOrNull(value: unknown): string | null {
+  if (value == null || value === '') return null
+  const raw = String(value).slice(0, 10)
+  return Number.isNaN(new Date(raw).getTime()) ? null : raw
+}
+
+async function importVehicles(request: Request) {
+  const context = await authenticate(request)
+  const input = await readJson<{ vehicles?: Row[]; actorName?: string }>(request)
+  const rows = Array.isArray(input.vehicles) ? input.vehicles : []
+  if (!rows.length) return apiError(400, 'No vehicles to import')
+
+  const { data: depots } = await admin.from('depots').select('id, name').eq('company_id', context.companyId)
+  const depotByName = new Map<string, string>()
+  for (const depot of depots ?? []) {
+    depotByName.set(String(depot.name ?? '').trim().toLowerCase(), String(depot.id))
+  }
+  const defaultDepotId = depots?.[0]?.id ? String(depots[0].id) : null
+
+  const { data: existing } = await admin
+    .from('vehicles')
+    .select('id, registration')
+    .eq('company_id', context.companyId)
+  const existingRegs = new Set(
+    (existing ?? []).map((row) => String(row.registration ?? '').replace(/\s+/g, ' ').trim().toUpperCase()),
+  )
+
+  let created = 0
+  let skippedDuplicates = 0
+  const createdIds: string[] = []
+  const failed: Array<{ row: number; registrationNumber: string; reason: string }> = []
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!
+    const registration = String(row.registrationNumber ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase()
+    const rowNumber = Number(row.rowNumber ?? i + 1)
+    if (!registration) {
+      failed.push({ row: rowNumber, registrationNumber: '—', reason: 'Registration is required' })
+      continue
+    }
+    if (existingRegs.has(registration)) {
+      skippedDuplicates += 1
+      continue
+    }
+
+    let homeDepotId = row.homeDepotId ? String(row.homeDepotId) : null
+    if (!homeDepotId && row.homeDepotName) {
+      homeDepotId = depotByName.get(String(row.homeDepotName).trim().toLowerCase()) ?? null
+    }
+    if (!homeDepotId) homeDepotId = defaultDepotId
+
+    const fleetNumber = String(row.fleetNumber ?? '').trim() || `F-${crypto.randomUUID().slice(0, 4).toUpperCase()}`
+    const { data: vehicle, error } = await admin
+      .from('vehicles')
+      .insert({
+        company_id: context.companyId,
+        fleet_number: fleetNumber,
+        registration,
+        make: row.make ?? null,
+        model: row.model ?? null,
+        year: row.modelYear ?? null,
+        colour: row.colour ?? null,
+        vehicle_class: row.vehicleCategory ?? 'minibus',
+        fuel_type: row.fuelType ?? 'diesel',
+        seat_capacity: row.seatingCapacity ?? 0,
+        wheelchair_capacity: row.wheelchairCapacity ?? 0,
+        primary_depot_id: homeDepotId,
+        operational_status: 'onboarding',
+        ownership_type: row.ownershipType ?? 'owned',
+        status: 'active',
+        mot_expiry: dateOrNull(row.motExpiry),
+        insurance_expiry: dateOrNull(row.insuranceExpiry),
+        tax_expiry: dateOrNull(row.taxExpiry),
+        tachograph_calibration_expiry: dateOrNull(row.tachographCalibrationExpiry),
+        pmi_due_at: dateOrNull(row.pmiDueAt),
+        created_by: context.user.id,
+        updated_by: context.user.id,
+        source_app: 'COMMAND',
+      })
+      .select('id')
+      .single()
+
+    if (error || !vehicle) {
+      failed.push({
+        row: rowNumber,
+        registrationNumber: registration,
+        reason: error?.message ?? 'Create failed',
+      })
+      continue
+    }
+
+    existingRegs.add(registration)
+    createdIds.push(String(vehicle.id))
+    created += 1
+  }
+
+  return json({
+    rowsRead: rows.length,
+    created,
+    skippedDuplicates,
+    failed,
+    createdIds,
+  })
+}
+
+async function updateVehicle(request: Request, vehicleId: string) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  const patch: Row = {
+    updated_by: context.user.id,
+    updated_at: new Date().toISOString(),
+  }
+
+  if ('registrationNumber' in input) patch.registration = String(input.registrationNumber ?? '').trim() || null
+  if ('fleetNumber' in input) patch.fleet_number = String(input.fleetNumber ?? '').trim() || null
+  if ('make' in input) patch.make = input.make ?? null
+  if ('model' in input) patch.model = input.model ?? null
+  if ('modelYear' in input) patch.year = input.modelYear ?? null
+  if ('colour' in input) patch.colour = input.colour ?? null
+  if ('vehicleCategory' in input) patch.vehicle_class = input.vehicleCategory ?? null
+  if ('homeDepotId' in input) patch.primary_depot_id = input.homeDepotId ?? null
+  if ('seatingCapacity' in input) patch.seat_capacity = input.seatingCapacity ?? 0
+  if ('wheelchairCapacity' in input) patch.wheelchair_capacity = input.wheelchairCapacity ?? 0
+  if ('standingCapacity' in input) patch.standing_capacity = input.standingCapacity ?? 0
+  if ('fuelType' in input) patch.fuel_type = input.fuelType ?? null
+  if ('ownershipType' in input) patch.ownership_type = input.ownershipType ?? null
+  if ('motExpiry' in input) patch.mot_expiry = dateOrNull(input.motExpiry)
+  if ('insuranceExpiry' in input) patch.insurance_expiry = dateOrNull(input.insuranceExpiry)
+  if ('taxExpiry' in input) patch.tax_expiry = dateOrNull(input.taxExpiry)
+  if ('tachographCalibrationExpiry' in input) {
+    patch.tachograph_calibration_expiry = dateOrNull(input.tachographCalibrationExpiry)
+  }
+  // nextMaintenanceDate is the Command schedule field; persists as pmi_due_at.
+  if ('nextMaintenanceDate' in input || 'pmiDueAt' in input) {
+    patch.pmi_due_at = dateOrNull(input.nextMaintenanceDate ?? input.pmiDueAt)
+  }
+  if ('nextServiceDueAt' in input) patch.next_service_due_at = dateOrNull(input.nextServiceDueAt)
+
+  const { data: existing, error: findError } = await admin
+    .from('vehicles')
+    .select('id')
+    .eq('company_id', context.companyId)
+    .eq('id', vehicleId)
+    .maybeSingle()
+  if (findError) return apiError(400, findError.message)
+  if (!existing) return apiError(404, 'Vehicle not found')
+
+  const { error } = await admin.from('vehicles').update(patch).eq('id', vehicleId).eq('company_id', context.companyId)
+  if (error) return apiError(400, error.message)
+
+  const profile = await projectVehicleProfile(context.companyId, vehicleId)
+  if (!profile) return apiError(404, 'Vehicle not found')
+  return json(profile)
+}
+
+const VEHICLE_DOC_DATE_COLUMNS: Record<string, string> = {
+  mot: 'mot_expiry',
+  insurance: 'insurance_expiry',
+  tax: 'tax_expiry',
+  tachograph_calibration: 'tachograph_calibration_expiry',
+  pmi: 'pmi_due_at',
+  service: 'next_service_due_at',
+}
+
+async function uploadVehicleDocument(request: Request, vehicleId: string) {
+  const context = await authenticate(request)
+  const input = await readJson<Row>(request)
+  const requirementType = String(input.requirementType ?? '')
+  const column = VEHICLE_DOC_DATE_COLUMNS[requirementType]
+  if (!column) {
+    return apiError(400, 'Unsupported document type — use MOT, insurance, tax, tachograph, PMI or service')
+  }
+  const expiryDate = dateOrNull(input.expiryDate)
+  if (!expiryDate) return apiError(400, 'Expiry date is required for vehicle compliance documents')
+
+  const { data: existing, error: findError } = await admin
+    .from('vehicles')
+    .select('id')
+    .eq('company_id', context.companyId)
+    .eq('id', vehicleId)
+    .maybeSingle()
+  if (findError) return apiError(400, findError.message)
+  if (!existing) return apiError(404, 'Vehicle not found')
+
+  const { error } = await admin
+    .from('vehicles')
+    .update({
+      [column]: expiryDate,
+      updated_by: context.user.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', vehicleId)
+    .eq('company_id', context.companyId)
+  if (error) return apiError(400, error.message)
+
+  const profile = await projectVehicleProfile(context.companyId, vehicleId)
+  if (!profile) return apiError(404, 'Vehicle not found')
+  return json(profile)
+}
+
+async function verifyVehicleDocument(request: Request, vehicleId: string, _documentId: string) {
+  const context = await authenticate(request)
+  // Schedule-derived documents are already treated as verified in the projection.
+  const profile = await projectVehicleProfile(context.companyId, vehicleId)
+  if (!profile) return apiError(404, 'Vehicle not found')
+  return json(profile)
 }
 
 async function ensureSeed(request: Request) {
@@ -11082,6 +11451,9 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (segments[0] === 'drivers' && segments[2] === 'documents' && request.method === 'POST') {
     return uploadDriverDocument(request, segments[1])
   }
+  if (segments[0] === 'drivers' && segments[2] === 'photo' && request.method === 'POST') {
+    return uploadDriverPhoto(request, segments[1])
+  }
   if (segments[0] === 'drivers' && segments[2] === 'training' && request.method === 'POST') {
     return recordDriverTraining(request, segments[1])
   }
@@ -11175,7 +11547,30 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (segments[0] === 'vehicles' && segments[1] && segments[2] === 'equipment' && request.method === 'PATCH') {
     return patchVehicleEquipment(request, segments[1])
   }
+  if (
+    segments[0] === 'vehicles' &&
+    segments[1] &&
+    segments[2] === 'documents' &&
+    !segments[3] &&
+    request.method === 'POST'
+  ) {
+    return uploadVehicleDocument(request, segments[1])
+  }
+  if (
+    segments[0] === 'vehicles' &&
+    segments[1] &&
+    segments[2] === 'documents' &&
+    segments[3] &&
+    segments[4] === 'verify' &&
+    request.method === 'POST'
+  ) {
+    return verifyVehicleDocument(request, segments[1], segments[3])
+  }
+  if (segments[0] === 'vehicles' && segments[1] && !segments[2] && request.method === 'PATCH') {
+    return updateVehicle(request, segments[1])
+  }
   if (path === 'vehicles' && request.method === 'POST') return createVehicle(request)
+  if (path === 'vehicles/import' && request.method === 'POST') return importVehicles(request)
   if (path === 'vehicles' && request.method === 'GET') {
     const context = await authenticate(request)
     const profiles = (await projectVehicleProfile(context.companyId)) as Row[]
@@ -11371,6 +11766,23 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   }
   if (segments[0] === 'operational-trips' && segments[1] && !segments[2] && request.method === 'GET') {
     return operationalTrips(request, segments[1])
+  }
+  if (
+    segments[0] === 'operational-trips' &&
+    segments[1] &&
+    segments[2] === 'assignment-history' &&
+    request.method === 'GET'
+  ) {
+    return operationalTripAssignmentHistory(request, segments[1])
+  }
+  if (
+    segments[0] === 'operational-trips' &&
+    segments[1] &&
+    segments[2] === 'assign' &&
+    request.method === 'POST'
+  ) {
+    const context = await authenticate(request)
+    return assignOperationalTrip(context, segments[1], request)
   }
   if (
     segments[0] === 'operational-trips' &&

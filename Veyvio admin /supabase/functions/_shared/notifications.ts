@@ -58,13 +58,34 @@ export async function resolveCompanyAdminUserIds(companyId: string): Promise<str
   const ids = memberships
     .filter((m) => {
       const memberRoles = Array.isArray(m.role_ids) ? m.role_ids.map(String) : []
-      if (adminRoleIds.size === 0) return m.status === 'active'
+      // Never fan out to every active member — that floods driver dual-role accounts.
+      if (adminRoleIds.size === 0) return false
       return memberRoles.some((id) => adminRoleIds.has(id))
     })
     .map((m) => String(m.user_id))
     .filter(Boolean)
 
   return [...new Set(ids)]
+}
+
+/** Types shown in the Driver app inbox (Command staff noise is excluded). */
+export function isDriverFacingNotificationType(type: unknown): boolean {
+  const value = String(type ?? '').toLowerCase()
+  if (!value) return false
+  if (value.startsWith('driver.')) return true
+  if (value.startsWith('document.')) return true
+  if (value.startsWith('training.')) return true
+  if (value.startsWith('journey_sequence')) return true
+  if (value.startsWith('phv_trip')) return true
+  return false
+}
+
+export function filterDriverFacingNotifications<T extends { notification_type?: unknown; notificationType?: unknown }>(
+  rows: T[],
+): T[] {
+  return rows.filter((row) =>
+    isDriverFacingNotificationType(row.notification_type ?? row.notificationType),
+  )
 }
 
 export async function notifyCompanyAdmins(input: {

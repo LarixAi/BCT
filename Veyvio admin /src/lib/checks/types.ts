@@ -58,6 +58,7 @@ export interface ChecksOperationalRow {
   registrationNumber: string
   fleetNumber: string | null
   makeModel: string
+  modelYear: number | null
   vehicleCategory: string
   depotId: string
   depotName: string

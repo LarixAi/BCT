@@ -1578,6 +1578,11 @@ export class MockApiClient {
     return mockDriversApi.uploadDocument(id, input, actorName)
   }
 
+  async uploadDriverPhoto(id: string, input: import('@/lib/drivers/types').UploadDriverPhotoInput, actorName: string) {
+    await delay(100)
+    return mockDriversApi.uploadPhoto(id, input, actorName)
+  }
+
   async recordDriverTraining(
     id: string,
     input: import('@/lib/drivers/types').RecordDriverTrainingInput,
@@ -1746,6 +1751,45 @@ export class MockApiClient {
   async createVehicle(input: CreateVehicleInput, actorName: string): Promise<VehicleProfile> {
     await delay(120)
     return mockVehiclesApi.create(input, actorName)
+  }
+
+  async importVehicles(
+    vehicles: import('@/lib/vehicles/vehicle-csv-import').VehicleImportParsedRow[],
+    _actorName: string,
+  ) {
+    await delay(120)
+    let created = 0
+    let skippedDuplicates = 0
+    const failed: Array<{ row: number; registrationNumber: string; reason: string }> = []
+    const createdIds: string[] = []
+    for (const row of vehicles) {
+      try {
+        const profile = mockVehiclesApi.create(
+          {
+            registrationNumber: row.registrationNumber,
+            fleetNumber: row.fleetNumber ?? undefined,
+            make: row.make,
+            model: row.model,
+            modelYear: row.modelYear,
+            vehicleCategory: row.vehicleCategory as CreateVehicleInput['vehicleCategory'],
+            homeDepotId: row.homeDepotId ?? 'depot-wembley',
+            seatingCapacity: row.seatingCapacity,
+            wheelchairCapacity: row.wheelchairCapacity,
+            fuelType: row.fuelType as CreateVehicleInput['fuelType'],
+            ownershipType: row.ownershipType as CreateVehicleInput['ownershipType'],
+            colour: row.colour,
+          },
+          _actorName,
+        )
+        created += 1
+        createdIds.push(profile.id)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Create failed'
+        if (/already|exists|duplicate/i.test(message)) skippedDuplicates += 1
+        else failed.push({ row: row.rowNumber, registrationNumber: row.registrationNumber, reason: message })
+      }
+    }
+    return { rowsRead: vehicles.length, created, skippedDuplicates, failed, createdIds }
   }
 
   async updateVehicle(id: string, input: UpdateVehicleInput, actorName: string): Promise<VehicleProfile> {
@@ -2505,6 +2549,20 @@ export class MockApiClient {
   }) {
     await delay(60)
     return mockFleetResourcesApi.assignEquipment(input)
+  }
+
+  async createResourceEquipment(input: {
+    name: string
+    category?: string
+    vehicleId?: string | null
+    qrCode?: string | null
+    serialNumber?: string | null
+    expiryDate?: string | null
+    requiredForDuty?: boolean
+    actorName: string
+  }) {
+    await delay(80)
+    return mockFleetResourcesApi.createEquipment(input)
   }
 
   async transferResourceStock(input: {
