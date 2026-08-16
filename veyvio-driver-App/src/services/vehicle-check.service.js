@@ -1215,7 +1215,10 @@ async function insertWalkaroundCheckViaCommand(payload) {
   });
 
   if (!submitted.ok) {
-    // Prefer Command when the driver is on published duties — do not silently write to Ridova.
+    // Prefer Command when it is configured — do not silently write to Ridova.
+    if (getCommandApiBaseUrl()) {
+      return { ok: false, skipLegacy: true, message: submitted.message };
+    }
     const commandVehicles = await listAssignableVehiclesFromCommand();
     if (commandVehicles.length > 0) {
       return { ok: false, skipLegacy: true, message: submitted.message };

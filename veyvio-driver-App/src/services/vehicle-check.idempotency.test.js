@@ -20,6 +20,11 @@ vi.mock("@/services/command-driver-ops.service", () => ({
   listVehicleCheckHistoryViaCommand: async () => ({ ok: true, checks: [] }),
 }));
 
+vi.mock("@/lib/supabase/env", () => ({
+  getSupabaseUrl: () => "https://example.supabase.co",
+  getSupabaseAnonKey: () => "ci-anon-key",
+}));
+
 vi.mock("@/lib/command-api", async (importOriginal) => {
   const actual = await importOriginal();
   return {
