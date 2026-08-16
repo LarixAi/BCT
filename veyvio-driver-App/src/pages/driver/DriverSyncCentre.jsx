@@ -7,7 +7,9 @@ import { op } from "@/lib/driver-operational-theme";
 import { refreshCommandBootstrap } from "@/services/command-driver-ops.service";
 import {
   describeOfflineQueue,
+  listItemsNeedingAttention,
   probeDriverCommandCapabilities,
+  reviewAndRetryQueuedItem,
 } from "@/services/driver-sync-status.service";
 import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
 import { probeDriverTrainingConnection } from "@/services/training.service";
@@ -40,6 +42,8 @@ export default function DriverSyncCentre() {
   const [loading, setLoading] = useState(true);
   const [flushMsg, setFlushMsg] = useState("");
   const [offlineQueue, setOfflineQueue] = useState(emptyQueue);
+  const [attentionItems, setAttentionItems] = useState([]);
+  const [retryingId, setRetryingId] = useState(null);
   const [syncing, setSyncing] = useState(false);
 
   const workspace = useMemo(
@@ -50,10 +54,15 @@ export default function DriverSyncCentre() {
   const refreshQueue = useCallback(async () => {
     if (!driver?.id || !workspace.companyId || !workspace.membershipId) {
       setOfflineQueue(unavailableQueue());
+      setAttentionItems([]);
       return unavailableQueue();
     }
-    const next = await describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId);
+    const [next, attention] = await Promise.all([
+      describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId),
+      listItemsNeedingAttention(driver.id, workspace.companyId, workspace.membershipId),
+    ]);
     setOfflineQueue(next);
+    setAttentionItems(attention);
     return next;
   }, [driver?.id, workspace.companyId, workspace.membershipId]);
 
@@ -84,6 +93,30 @@ export default function DriverSyncCentre() {
       setSyncing(false);
     }
   }, [driver, session, refreshQueue]);
+
+  const reviewAndRetry = useCallback(
+    async (item) => {
+      if (!driver?.id || !workspace.companyId || !workspace.membershipId) return;
+      setRetryingId(item.id);
+      setFlushMsg("");
+      try {
+        await reviewAndRetryQueuedItem({
+          driverId: driver.id,
+          companyId: workspace.companyId,
+          membershipId: workspace.membershipId,
+          queueType: item.queueType,
+          itemId: item.id,
+        });
+        await refreshQueue();
+        setFlushMsg("Ready to retry. It will sync when you are online, or tap Sync now.");
+      } catch (error) {
+        setFlushMsg(error?.message ?? "Could not mark this item to retry.");
+      } finally {
+        setRetryingId(null);
+      }
+    },
+    [driver?.id, workspace.companyId, workspace.membershipId, refreshQueue],
+  );
 
   useEffect(() => {
     void refreshQueue();
@@ -196,6 +229,30 @@ export default function DriverSyncCentre() {
         <InfoRow label={`Published duties cached · ${dutyCount}`} to="/jobs" />
         <InfoRow label={pendingLabel} to={offlineQueue.total > 0 ? "/check" : "/contact"} />
       </div>
+
+      {attentionItems.length > 0 ? (
+        <div className="mt-4 space-y-3 px-1">
+          <p className="text-sm font-semibold text-amber-950">Needs attention</p>
+          <p className="text-xs text-muted-foreground">
+            Command rejected these. Opening this screen does not retry them — tap Review and retry for the item you
+            have checked.
+          </p>
+          {attentionItems.map((item) => (
+            <div key={`${item.queueType}:${item.id}`} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+              <p className="text-sm font-semibold text-amber-950">{item.label}</p>
+              <p className="mt-1 text-xs leading-5 text-amber-900">{item.message}</p>
+              <button
+                type="button"
+                disabled={retryingId === item.id}
+                onClick={() => void reviewAndRetry(item)}
+                className={`mt-3 h-11 w-full rounded-xl text-sm font-semibold ${op.primaryBtn} disabled:opacity-45`}
+              >
+                {retryingId === item.id ? "Preparing retry…" : "Review and retry"}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {offlineQueue.total > 0 || flushMsg ? (
         <div className="mt-4 space-y-2 px-1">

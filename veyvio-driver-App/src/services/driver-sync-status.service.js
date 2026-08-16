@@ -1,8 +1,9 @@
 import { requireWorkspaceIds } from "@/lib/driver-workspace-storage";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { loadFleetPingQueue } from "@/lib/fleet-tracking-queue.storage";
-import { loadOpsOutbox } from "@/lib/driver-ops-outbox.storage";
-import { loadSyncQueue } from "@/lib/walkaround-sync.storage";
+import { loadOpsOutbox, revalidateOpsCommand } from "@/lib/driver-ops-outbox.storage";
+import { loadSyncQueue, revalidateWalkaroundSubmission } from "@/lib/walkaround-sync.storage";
+import { ITEM_RECONCILIATION, QUEUE_OPS, QUEUE_WALKAROUND } from "@/lib/driver-durable-queue";
 import {
   getCommandApiBaseUrl,
   commandListDocuments,
@@ -39,6 +40,7 @@ function unavailableQueueSummary() {
     dutyCloseouts: null,
     vehicleSwapRequests: null,
     jobExecution: null,
+    needsAttention: null,
   };
 }
 
@@ -59,6 +61,7 @@ function emptyQueueSummary() {
     dutyCloseouts: 0,
     vehicleSwapRequests: 0,
     jobExecution: 0,
+    needsAttention: 0,
   };
 }
 
@@ -69,7 +72,8 @@ export async function describeOfflineQueue(driverId, companyId, membershipId) {
   } catch {
     return unavailableQueueSummary();
   }
-  const walkaroundChecks = (await loadSyncQueue(driverId, companyId, membershipId)).length;
+  const walkaroundQueue = await loadSyncQueue(driverId, companyId, membershipId);
+  const walkaroundChecks = walkaroundQueue.length;
   const locationPings = (await loadFleetPingQueue(driverId, companyId, membershipId)).length;
   const opsQueue = await loadOpsOutbox(driverId, companyId, membershipId);
   const defects = opsQueue.filter((item) => item.type === "defect").length;
@@ -87,6 +91,9 @@ export async function describeOfflineQueue(driverId, companyId, membershipId) {
   const jobExecution = opsQueue.filter((item) => item.type === "job_execution").length;
   const opsCommands =
     defects + incidents + messages + dutyOps + journeySteps + handbacks + dutyCloseouts + vehicleSwapRequests + jobExecution;
+  const needsAttention =
+    walkaroundQueue.filter((item) => item.status === ITEM_RECONCILIATION).length +
+    opsQueue.filter((item) => item.status === ITEM_RECONCILIATION).length;
   return {
     status: "READY",
     code: null,
@@ -103,7 +110,64 @@ export async function describeOfflineQueue(driverId, companyId, membershipId) {
     dutyCloseouts,
     vehicleSwapRequests,
     jobExecution,
+    needsAttention,
   };
+}
+
+function walkaroundAttentionLabel(item) {
+  const registration = item?.payload?.vehicle?.registration ?? item?.payload?.profile?.registration;
+  return registration ? `Vehicle check · ${registration}` : "Vehicle check";
+}
+
+function opsAttentionLabel(item) {
+  const type = String(item?.type ?? "report").replace(/_/g, " ");
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+/** Items Command rejected permanently. Listing them does not revalidate. */
+export async function listItemsNeedingAttention(driverId, companyId, membershipId) {
+  try {
+    requireWorkspaceIds(companyId, membershipId);
+  } catch {
+    return [];
+  }
+  const walkaround = await loadSyncQueue(driverId, companyId, membershipId);
+  const ops = await loadOpsOutbox(driverId, companyId, membershipId);
+  return [
+    ...walkaround
+      .filter((item) => item.status === ITEM_RECONCILIATION)
+      .map((item) => ({
+        id: item.id,
+        queueType: QUEUE_WALKAROUND,
+        label: walkaroundAttentionLabel(item),
+        message: item.lastError?.message ?? "Command rejected this check. Review it before retrying.",
+        status: item.status,
+      })),
+    ...ops
+      .filter((item) => item.status === ITEM_RECONCILIATION)
+      .map((item) => ({
+        id: item.id,
+        queueType: QUEUE_OPS,
+        label: opsAttentionLabel(item),
+        message: item.lastError?.message ?? "Command rejected this report. Review it before retrying.",
+        status: item.status,
+      })),
+  ];
+}
+
+/**
+ * Deliberate driver action: clear RECONCILIATION_REQUIRED for one tenant-scoped item
+ * so automatic replay may try it again. Opening a screen is not enough.
+ */
+export async function reviewAndRetryQueuedItem({ driverId, companyId, membershipId, queueType, itemId }) {
+  requireWorkspaceIds(companyId, membershipId);
+  if (queueType === QUEUE_WALKAROUND) {
+    return revalidateWalkaroundSubmission(driverId, itemId, companyId, membershipId);
+  }
+  if (queueType === QUEUE_OPS) {
+    return revalidateOpsCommand(driverId, itemId, companyId, membershipId);
+  }
+  throw new Error("That saved item cannot be retried from this screen.");
 }
 
 export async function countPendingOfflineCommands(driverId, companyId, membershipId) {

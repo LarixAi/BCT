@@ -106,9 +106,16 @@ export async function markOpsCommandRetryable(driverId, pendingId, companyId, me
 }
 
 export async function revalidateOpsCommand(driverId, pendingId, companyId, membershipId) {
+  requireWorkspaceIds(companyId, membershipId)
+  const current = (await listQueueItems(companyId, membershipId, QUEUE_OPS)).find((item) => item.id === pendingId)
+  if (!current) {
+    throw new Error("That saved report is not in this workspace.")
+  }
+  if (current.status !== ITEM_RECONCILIATION) return current
   return patchQueueItem(companyId, membershipId, QUEUE_OPS, pendingId, {
     status: ITEM_PENDING,
     revalidatedAt: new Date().toISOString(),
+    revalidationCount: Number(current.revalidationCount ?? 0) + 1,
   })
 }
 

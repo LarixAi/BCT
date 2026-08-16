@@ -40,9 +40,9 @@ import { getTachographReminders } from "@/services/tachograph-reminders.service"
 import { useDriverUnreadNotificationCount } from "@/hooks/useDriverUnreadNotificationCount";
 import { getPendingJobOffers } from "@/services/job-offers.service";
 import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
+import { describeOfflineQueue } from "@/services/driver-sync-status.service";
 import {
   flushPendingWalkaroundSubmissions,
-  getPendingSyncCount,
   getWalkaroundSafetyStatus,
 } from "@/services/vehicle-check.service";
 import { getDriverDutyState } from "@/services/duty-timeline.service";
@@ -78,6 +78,7 @@ export default function DriverSupabaseHome({ driver }) {
     () => !walkaroundSafetyFromHomeSummary(sessionHomeSummary),
   );
   const [pendingSync, setPendingSync] = useState(0);
+  const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
   const [pendingOffer, setPendingOffer] = useState(null);
   const [workingTime, setWorkingTime] = useState(null);
   // Paint Command sign-on immediately — do not wait for slow Ridova lookups.
@@ -123,7 +124,11 @@ export default function DriverSupabaseHome({ driver }) {
       Boolean(fallbackBootstrap) || Boolean(walkaroundSafetyFromHomeSummary(fallbackSummary));
     if (!hadCommandPaint) setSafetyLoading(true);
     setBootstrapError("");
-    void getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId).then(setPendingSync);
+    void describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId).then((summary) => {
+      if (summary.status === "CONTEXT_UNAVAILABLE") return;
+      setPendingSync(summary.total);
+      setNeedsAttentionCount(summary.needsAttention ?? 0);
+    });
 
     const depotId = currentSession?.activeDepotId ?? currentSession?.depots?.[0]?.id ?? null;
     const boot = await loadDriverBootstrap({ depotId, force }).catch(() => null);
@@ -184,7 +189,11 @@ export default function DriverSupabaseHome({ driver }) {
     setDutyState(mergeDutyState(fromBootstrapDuty, duty));
     setNextLeave(leave);
     setRemovedTransfers(Array.isArray(removed) ? removed : []);
-    void getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId).then(setPendingSync);
+    void describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId).then((summary) => {
+      if (summary.status === "CONTEXT_UNAVAILABLE") return;
+      setPendingSync(summary.total);
+      setNeedsAttentionCount(summary.needsAttention ?? 0);
+    });
     setTrainingHome(training?.ok ? training : null);
   }, [driver, workspace.companyId, workspace.membershipId]);
 
@@ -378,7 +387,7 @@ export default function DriverSupabaseHome({ driver }) {
           </DriverStatusBanner>
         ) : null}
 
-        <DriverSyncBanner pendingCount={pendingSync} />
+        <DriverSyncBanner pendingCount={pendingSync} needsAttentionCount={needsAttentionCount} />
 
         <RemovedJobNotice transfers={removedTransfers} />
 

@@ -60,7 +60,7 @@ export default function DriverOfflineRecoveryScreen({ session, onRetry, onSignOu
             ) : null}
             {pendingReconciliation > 0 ? (
               <p>
-                <span className="font-semibold">{pendingReconciliation}</span> saved {pluralise(pendingReconciliation, "item")} need{pendingReconciliation === 1 ? "s" : ""} attention
+                <span className="font-semibold">{pendingReconciliation}</span> saved {pluralise(pendingReconciliation, "item")} need{pendingReconciliation === 1 ? "s" : ""} attention. Reconnect, then use Review and retry on Offline & sync.
               </p>
             ) : null}
           </div>

@@ -89,6 +89,20 @@ export async function markWalkaroundReconciliation(driverId, pendingId, companyI
   })
 }
 
+export async function revalidateWalkaroundSubmission(driverId, pendingId, companyId, membershipId) {
+  requireWorkspaceIds(companyId, membershipId)
+  const current = (await listQueueItems(companyId, membershipId, QUEUE_WALKAROUND)).find((item) => item.id === pendingId)
+  if (!current) {
+    throw new Error("That saved check is not in this workspace.")
+  }
+  if (current.status !== ITEM_RECONCILIATION) return current
+  return patchQueueItem(companyId, membershipId, QUEUE_WALKAROUND, pendingId, {
+    status: ITEM_PENDING,
+    revalidatedAt: new Date().toISOString(),
+    revalidationCount: Number(current.revalidationCount ?? 0) + 1,
+  })
+}
+
 export function isWalkaroundAutoReplayEligible(item) {
   return (item?.status ?? ITEM_PENDING) !== ITEM_RECONCILIATION
 }

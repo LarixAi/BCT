@@ -35,6 +35,7 @@ describe("driver-sync-status.service", () => {
       dutyCloseouts: 0,
       vehicleSwapRequests: 0,
       jobExecution: 0,
+      needsAttention: 0,
     });
   });
 

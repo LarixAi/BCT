@@ -142,7 +142,7 @@ export default function DriverMorePage({ driver, onLogout }) {
           }
           badge={unreadMessageCount > 0 ? unreadMessageCount : null}
         />
-        <Row to="/sync" icon={Wifi} label="Offline & sync" description="Command bootstrap status" />
+        <Row to="/sync" icon={Wifi} label="Offline & sync" description="Saved work, connection, and items that need attention" />
         <Row
           to="/profile/details"
           icon={User}
