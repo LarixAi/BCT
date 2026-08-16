@@ -610,8 +610,8 @@ export function VeyvioSidebar({
                       if (action.action === "profile") navigate("/profile");
                       if (action.action === "settings") navigate("/settings/company");
                       if (action.action === "switch-company") {
-                        const token = api.getToken();
-                        if (token) api.setToken(token, false);
+                        if (typeof api.clearTenantFlag === "function") api.clearTenantFlag();
+                        else api.setToken(api.getToken(), false);
                         navigate("/select-company");
                       }
                     }}

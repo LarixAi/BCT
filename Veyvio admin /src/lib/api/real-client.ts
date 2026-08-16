@@ -52,21 +52,29 @@ import { normalizeDriverProfileDocuments } from '@/lib/drivers/document-display'
 import { normalizeBookingRecord } from '@/lib/bookings/normalize-booking'
 import { safeMaintenanceHub } from '@/lib/api/safe-hubs'
 
-const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
-const TOKEN_KEY = 'access_token'
-const REFRESH_TOKEN_KEY = 'refresh_token'
+/**
+ * Wave 3E-1: production SPA talks only to the same-origin Pages Functions BFF.
+ * Credentials live in HttpOnly cookies — never in localStorage/sessionStorage.
+ */
+const API_URL = (import.meta.env.VITE_API_URL ?? '/api/command').replace(/\/$/, '')
 const MEMBERSHIPS_KEY = 'pending_memberships'
+const HAS_TENANT_KEY = 'has_tenant'
 
-import { isAccessTokenExpired, resolveSupabaseProjectUrl } from './auth-session'
-
-/** Resolve `/api/...` against either a Nest-style origin or a Supabase Edge Function base URL. */
+/** Command data plane via same-origin BFF proxy (or legacy direct URL in non-prod). */
 function apiUrl(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`
+  if (API_URL.startsWith('/')) {
+    return `${API_URL}${normalized}`
+  }
   if (API_URL.includes('/functions/v1/')) {
     return `${API_URL}/api${normalized}`
   }
   return `${API_URL}/api${normalized}`
+}
+
+function sessionUrl(path: string): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return `/api/session${normalized}`
 }
 
 function apiErrorMessage(err: { message?: string | string[] }, fallback: string): string {
@@ -153,46 +161,55 @@ function normalizeOperationalPosition(
 }
 
 export class ApiClient implements ExceptionsPort {
-  private accessToken: string | null = null
+  /** In-memory only — never holds access/refresh credential material. */
+  private sessionActive = false
 
-  setToken(token: string | null, hasTenant = true) {
-    this.accessToken = token
+  /**
+   * @deprecated Wave 3E-1 — cookies hold credentials. Prefer markSession / clearSession.
+   * Kept so call sites can clear or mark tenant without touching tokens.
+   */
+  setToken(_token: string | null, hasTenant = true) {
+    if (_token) this.markSession(hasTenant)
+    else this.clearSession()
+  }
+
+  markSession(hasTenant = true) {
+    this.sessionActive = true
     if (typeof window === 'undefined') return
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token)
-      if (hasTenant) {
-        sessionStorage.setItem('has_tenant', '1')
-      } else {
-        sessionStorage.removeItem('has_tenant')
-      }
-    } else {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(REFRESH_TOKEN_KEY)
-      sessionStorage.removeItem('has_tenant')
-      sessionStorage.removeItem(MEMBERSHIPS_KEY)
-    }
+    if (hasTenant) sessionStorage.setItem(HAS_TENANT_KEY, '1')
+    else sessionStorage.removeItem(HAS_TENANT_KEY)
+  }
+
+  clearTenantFlag() {
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem(HAS_TENANT_KEY)
   }
 
   clearToken() {
-    this.setToken(null)
+    this.clearSession()
   }
 
+  clearSession() {
+    this.sessionActive = false
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem(HAS_TENANT_KEY)
+    sessionStorage.removeItem(MEMBERSHIPS_KEY)
+    // Purge any pre-3E-1 credential leftovers.
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+  }
+
+  /** Session gate only — never returns a real Bearer credential. */
   getToken(): string | null {
-    if (this.accessToken) return this.accessToken
-    if (typeof window === 'undefined') return null
-    const stored = localStorage.getItem(TOKEN_KEY)
-    if (stored) this.accessToken = stored
-    return stored
+    return this.sessionActive ? 'cookie-session' : null
   }
 
   hasTenant(): boolean {
-    return typeof window !== 'undefined' && sessionStorage.getItem('has_tenant') === '1'
+    return typeof window !== 'undefined' && sessionStorage.getItem(HAS_TENANT_KEY) === '1'
   }
 
-  /** True when we can call authenticated APIs (access token and/or refresh token). */
   hasAuthSession(): boolean {
-    if (this.getToken()) return true
-    return typeof window !== 'undefined' && Boolean(localStorage.getItem(REFRESH_TOKEN_KEY))
+    return this.sessionActive
   }
 
   setPendingMemberships(memberships: TenantMembershipOption[]) {
@@ -214,77 +231,70 @@ export class ApiClient implements ExceptionsPort {
     }
   }
 
+  /** Server-side refresh via Pages Functions BFF (rotates HttpOnly cookies). */
   async refreshAccessToken(): Promise<string> {
-    if (typeof window === 'undefined') {
+    const res = await fetch(sessionUrl('/refresh'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    if (!res.ok) {
+      this.clearSession()
       throw new Error('Session expired — sign in again')
     }
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
-    if (!refreshToken) throw new Error('Session expired — sign in again')
-
-    const supabaseUrl = resolveSupabaseProjectUrl(API_URL)
-    if (!supabaseUrl || !SUPABASE_ANON_KEY) {
-      throw new Error('Sign-in service is not configured')
-    }
-
-    const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    })
-
-    if (!res.ok) throw new Error('Session expired — sign in again')
-    const data = (await res.json()) as { access_token?: string; refresh_token?: string }
-    if (!data.access_token) throw new Error('Session expired — sign in again')
-
-    this.setToken(data.access_token, this.hasTenant())
-    if (data.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token)
-    return data.access_token
+    this.markSession(this.hasTenant())
+    return 'cookie-session'
   }
 
   async ensureValidAccessToken(options?: { force?: boolean }): Promise<string | null> {
-    const hasRefresh =
-      typeof window !== 'undefined' && Boolean(localStorage.getItem(REFRESH_TOKEN_KEY))
-    const token = this.getToken()
-
-    if (!token) {
-      if (!hasRefresh) return null
-      return this.refreshAccessToken()
+    if (!this.sessionActive && !this.hasTenant()) {
+      // Cold start may still have HttpOnly cookies — probe status when forced.
+      if (!options?.force) return null
     }
+    if (options?.force) {
+      await this.refreshAccessToken()
+    }
+    return this.sessionActive ? 'cookie-session' : null
+  }
 
-    if (!options?.force && !isAccessTokenExpired(token)) return token
-    if (!hasRefresh) throw new Error('Session expired — sign in again')
-    return this.refreshAccessToken()
+  async getSessionStatus(): Promise<{ authenticated: boolean; hasTenant: boolean }> {
+    const res = await fetch(sessionUrl('/status'), {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    })
+    if (!res.ok) {
+      this.clearSession()
+      return { authenticated: false, hasTenant: false }
+    }
+    const data = (await res.json()) as { authenticated?: boolean; hasTenant?: boolean }
+    if (data.authenticated) this.markSession(Boolean(data.hasTenant))
+    else this.clearSession()
+    return {
+      authenticated: Boolean(data.authenticated),
+      hasTenant: Boolean(data.hasTenant),
+    }
   }
 
   async listMemberships() {
-    await this.ensureValidAccessToken()
     const data = await this.fetch<{ memberships?: TenantMembershipOption[] }>('/auth/memberships')
     return Array.isArray(data.memberships) ? data.memberships : []
   }
 
   async fetch<T = unknown>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
-    const token = this.getToken()
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> | undefined),
     }
-    if (SUPABASE_ANON_KEY) {
-      headers.apikey = SUPABASE_ANON_KEY
-    }
-    if (token) {
-      headers.Authorization = `Bearer ${token}`
-    } else if (SUPABASE_ANON_KEY) {
-      // Supabase gateway still expects a Bearer token on public Edge Function routes.
-      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`
-    }
 
     let res: Response
     try {
-      res = await fetch(apiUrl(path), { ...options, headers })
+      res = await fetch(apiUrl(path), {
+        ...options,
+        headers,
+        credentials: 'include',
+      })
     } catch (error) {
       // Safari reports CORS/network failures as TypeError: "Load failed"
       const raw = error instanceof Error ? error.message : 'Network request failed'
@@ -295,13 +305,7 @@ export class ApiClient implements ExceptionsPort {
     }
 
     if (!res.ok) {
-      if (
-        res.status === 401 &&
-        token &&
-        !retried &&
-        typeof window !== 'undefined' &&
-        localStorage.getItem(REFRESH_TOKEN_KEY)
-      ) {
+      if (res.status === 401 && this.sessionActive && !retried) {
         try {
           await this.refreshAccessToken()
           return this.fetch<T>(path, options, true)
@@ -309,8 +313,8 @@ export class ApiClient implements ExceptionsPort {
           // Fall through to session expiry handling.
         }
       }
-      if (res.status === 401 && token) {
-        this.clearToken()
+      if (res.status === 401 && this.sessionActive) {
+        this.clearSession()
         if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
           window.location.assign('/session-expired')
         }
@@ -326,24 +330,13 @@ export class ApiClient implements ExceptionsPort {
   }
 
   async login(email: string, password: string, rememberMe = false) {
-    // Drop any previous session so a new sign-in cannot inherit stale tokens.
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(REFRESH_TOKEN_KEY)
-      sessionStorage.removeItem(MEMBERSHIPS_KEY)
-      sessionStorage.removeItem('has_tenant')
-      this.accessToken = null
-    }
+    // Clear prior SPA workspace state; BFF login replaces HttpOnly cookies.
+    this.clearSession()
 
-    // Public auth: never attach a leftover session token on login.
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (SUPABASE_ANON_KEY) {
-      headers.apikey = SUPABASE_ANON_KEY
-      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`
-    }
-    const res = await fetch(apiUrl('/auth/login'), {
+    const res = await fetch(sessionUrl('/login'), {
       method: 'POST',
-      headers,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, rememberMe }),
     })
     if (!res.ok) {
@@ -351,23 +344,45 @@ export class ApiClient implements ExceptionsPort {
       throw new Error(apiErrorMessage(err, res.statusText || 'Request failed'))
     }
     const result = (await res.json()) as LoginResponse
-    if (result.refreshToken && typeof window !== 'undefined') {
-      localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken)
+    if (result.requiresMfaChallenge) {
+      return result
     }
+    if (result.requiresTenantSelection) {
+      this.markSession(false)
+      return result
+    }
+    // Fully signed in with company — cookies set by BFF; no tokens in body.
+    this.markSession(true)
     return result
   }
 
   async selectTenant(tenantId: string) {
-    await this.ensureValidAccessToken()
-    const refreshToken = typeof window === 'undefined' ? null : localStorage.getItem(REFRESH_TOKEN_KEY)
-    const result = await this.fetch<AuthTokensResponse>('/auth/select-tenant', {
+    const res = await fetch(sessionUrl('/select-tenant'), {
       method: 'POST',
-      body: JSON.stringify({ tenantId, refreshToken }),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId }),
     })
-    if (result.refreshToken && typeof window !== 'undefined') {
-      localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken)
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: res.statusText }))
+      throw new Error(apiErrorMessage(err, res.statusText || 'Request failed'))
     }
+    const result = (await res.json()) as AuthTokensResponse
+    this.markSession(true)
     return result
+  }
+
+  async logoutRemote() {
+    try {
+      await fetch(sessionUrl('/logout'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+    } finally {
+      this.clearSession()
+    }
   }
 
   signupCompany(input: {
@@ -494,19 +509,10 @@ export class ApiClient implements ExceptionsPort {
     code: string
     companyId?: string
   }) {
-    // Same public-auth fetch pattern as login. Avoid "/mfa/" and "/factor" in the path —
-    // Safari / privacy filters often block those and surface TypeError "Load failed".
-    // No session bearer to send — the challengeId + code is the whole credential;
-    // the backend holds the pending session against the challenge itself.
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (SUPABASE_ANON_KEY) {
-      headers.apikey = SUPABASE_ANON_KEY
-      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`
-    }
-
-    return fetch(apiUrl('/auth/login/confirm'), {
+    return fetch(sessionUrl('/confirm'), {
       method: 'POST',
-      headers,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         challengeId: input.challengeId,
         code: input.code,
@@ -524,11 +530,10 @@ export class ApiClient implements ExceptionsPort {
         }>
       })
       .then((result) => {
-        if (typeof window !== 'undefined') {
-          if (result.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken)
-          if (result.accessToken) {
-            this.setToken(result.accessToken, false)
-          }
+        if (result.requiresTenantSelection) {
+          this.markSession(false)
+        } else {
+          this.markSession(true)
         }
         return result
       })

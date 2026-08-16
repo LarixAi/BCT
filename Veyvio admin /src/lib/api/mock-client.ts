@@ -92,7 +92,7 @@ function getMockVehicles(): VehicleRecord[] {
   return mockVehiclesApi.list().map(profileToLegacyVehicleRecord)
 }
 
-const TOKEN_KEY = 'access_token'
+const TOKEN_KEY = 'mock_access_token'
 const MEMBERSHIPS_KEY = 'pending_memberships'
 export const MOCK_TOKEN = 'mock-demo-token'
 
@@ -810,11 +810,11 @@ export class MockApiClient implements ExceptionsPort {
     this.accessToken = token
     if (typeof window === 'undefined') return
     if (token) {
-      localStorage.setItem(TOKEN_KEY, token)
+      sessionStorage.setItem(TOKEN_KEY, token)
       if (hasTenant) sessionStorage.setItem('has_tenant', '1')
       else sessionStorage.removeItem('has_tenant')
     } else {
-      localStorage.removeItem(TOKEN_KEY)
+      sessionStorage.removeItem(TOKEN_KEY)
       sessionStorage.removeItem('has_tenant')
       sessionStorage.removeItem(MEMBERSHIPS_KEY)
     }
@@ -824,10 +824,15 @@ export class MockApiClient implements ExceptionsPort {
     this.setToken(null)
   }
 
+  clearTenantFlag() {
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem('has_tenant')
+  }
+
   getToken(): string | null {
     if (this.accessToken) return this.accessToken
     if (typeof window === 'undefined') return null
-    const stored = localStorage.getItem(TOKEN_KEY)
+    const stored = sessionStorage.getItem(TOKEN_KEY)
     if (stored) this.accessToken = stored
     return stored
   }
@@ -838,6 +843,15 @@ export class MockApiClient implements ExceptionsPort {
 
   hasAuthSession(): boolean {
     return Boolean(this.getToken())
+  }
+
+  async getSessionStatus() {
+    const token = this.getToken()
+    return { authenticated: Boolean(token), hasTenant: this.hasTenant() }
+  }
+
+  async logoutRemote() {
+    this.clearToken()
   }
 
   setPendingMemberships(memberships: TenantMembershipOption[]) {

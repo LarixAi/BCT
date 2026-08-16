@@ -202,12 +202,17 @@ export function SelectCompanyPage() {
 
     async function bootstrap() {
       try {
-        // Revive access token from refresh when the JWT has expired mid-flow.
-        const token = await api.ensureValidAccessToken()
+        const status =
+          typeof api.getSessionStatus === 'function'
+            ? await api.getSessionStatus()
+            : {
+                authenticated: Boolean(await api.ensureValidAccessToken()),
+                hasTenant: api.hasTenant(),
+              }
         if (cancelled) return
 
-        if (!token) {
-          // Company list left in sessionStorage without tokens is unusable — clean up.
+        if (!status.authenticated) {
+          // Company list left in sessionStorage without a session is unusable — clean up.
           api.clearPendingMemberships()
           setMemberships([])
           setSessionReady(false)

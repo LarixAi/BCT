@@ -106,6 +106,7 @@ jobs:
       - name: Build
         env:
           CI: "true"
+          VITE_API_URL: /api/command
         run: |
           cd "Veyvio admin "
           npm run build

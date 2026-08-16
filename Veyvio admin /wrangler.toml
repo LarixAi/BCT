@@ -1,0 +1,12 @@
+# Cloudflare Pages — Veyvio Command Admin + Session BFF (Wave 3E-1)
+name = "veyvio-admin"
+compatibility_date = "2025-08-01"
+pages_build_output_dir = "dist"
+
+# Non-secret defaults. Set secrets in the Pages dashboard or via:
+#   npx wrangler pages secret put COMMAND_API_URL --project-name=veyvio-admin
+#   npx wrangler pages secret put SUPABASE_URL --project-name=veyvio-admin
+#   npx wrangler pages secret put SUPABASE_ANON_KEY --project-name=veyvio-admin
+[vars]
+VEYVIO_COMMAND_CANONICAL_HOST = "command.veyvio.co.uk"
+VEYVIO_COMMAND_ENFORCE_CANONICAL_HOST = "1"

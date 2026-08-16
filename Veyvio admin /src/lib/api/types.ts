@@ -155,8 +155,9 @@ export interface LoginResponse {
 }
 
 export interface AuthTokensResponse {
-  accessToken: string
-  refreshToken: string
+  /** Wave 3E-1: omitted when cookies hold the session. */
+  accessToken?: string
+  refreshToken?: string
   user: AuthUser
 }
 
