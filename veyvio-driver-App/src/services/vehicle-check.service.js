@@ -878,6 +878,18 @@ function buildResponses({ items, answers }) {
   });
 }
 
+export function hasRequiredFailPhotoEvidence(response, answer) {
+  if (response?.photoPath) return true;
+  if (String(response?.photoDataUrl ?? "").startsWith("data:")) return true;
+  if (String(answer?.photoDataUrl ?? "").startsWith("data:")) return true;
+  if (answer?.photoMediaRef) return true;
+  return false;
+}
+
+export function shouldUploadWalkaroundPhotoNow() {
+  return typeof navigator === "undefined" || navigator.onLine !== false;
+}
+
 export async function uploadWalkaroundPhoto({ driver, vehicleId, itemId, file }) {
   const supabase = getSupabaseClient();
   const buffer = await readFileAsArrayBuffer(file);
@@ -966,7 +978,7 @@ export async function submitWalkaroundCheck({
       return { ok: false, message: `Add a note for failed item: ${r.questionTitle}` };
     }
     const item = items.find((i) => i.id === r.itemId);
-    if (item?.requiresPhotoOnFail && !r.photoPath) {
+    if (item?.requiresPhotoOnFail && !hasRequiredFailPhotoEvidence(r, answers?.[r.itemId])) {
       return { ok: false, message: `Photo required for: ${r.questionTitle}` };
     }
   }

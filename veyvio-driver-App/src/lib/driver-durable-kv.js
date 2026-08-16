@@ -17,6 +17,12 @@ export const QUEUE_ITEMS_STORE = "queue_items"
 
 let dbPromise = null
 let openDbHandle = null
+const memoryIndexedDbResetHooks = new Set()
+
+/** Test-only: extra cleanup when the in-memory IndexedDB mock is reinstalled. */
+export function onMemoryIndexedDbReset(hook) {
+  if (typeof hook === "function") memoryIndexedDbResetHooks.add(hook)
+}
 
 function rejectUnavailable() {
   return Promise.reject(
@@ -207,6 +213,9 @@ export function installMemoryIndexedDbForTests() {
         const fakeDb = {
           objectStoreNames: {
             contains: (storeName) => record.stores.has(storeName),
+            *[Symbol.iterator]() {
+              yield* record.stores.keys()
+            },
           },
           createObjectStore(storeName) {
             ensureStore(storeName)
@@ -214,8 +223,17 @@ export function installMemoryIndexedDbForTests() {
           },
           close() {},
           onversionchange: null,
+          get version() {
+            return record.version
+          },
           transaction(storeName) {
-            ensureStore(storeName)
+            if (!record.stores.has(storeName)) {
+              const error = new Error(
+                "Failed to execute 'transaction' on 'IDBDatabase': One of the specified object stores was not found.",
+              )
+              error.name = "NotFoundError"
+              throw error
+            }
             const map = record.stores.get(storeName)
             const tx = { error: null, _pending: 0, _armed: false }
             const arm = () => {
@@ -281,5 +299,12 @@ export function installMemoryIndexedDbForTests() {
 }
 
 export function resetMemoryIndexedDbForTests() {
+  for (const hook of memoryIndexedDbResetHooks) {
+    try {
+      hook()
+    } catch {
+      /* ignore */
+    }
+  }
   installMemoryIndexedDbForTests()
 }

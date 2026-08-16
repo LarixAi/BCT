@@ -3,33 +3,132 @@
  * Survives process death; referenced from sync queue payloads via mediaRef.
  */
 import { driverWorkspaceStorageKey, requireWorkspaceIds } from "@/lib/driver-workspace-storage";
-import { DurableStorageError } from "@/lib/driver-durable-kv";
+import { DurableStorageError, onMemoryIndexedDbReset } from "@/lib/driver-durable-kv";
 
-const DB_NAME = "veyvio_driver_media";
-const DB_VERSION = 1;
+export const MEDIA_DB_NAME = "veyvio_driver_media";
+export const MEDIA_DB_VERSION = 2;
 const STORE = "media";
+
+let mediaDbPromise = null;
+let mediaDbHandle = null;
 
 function scopedPrefix(companyId, membershipId) {
   return driverWorkspaceStorageKey(companyId, membershipId, "media:");
 }
 
-function openDb() {
+function resetMediaConnection() {
+  try {
+    mediaDbHandle?.close();
+  } catch {
+    /* already closed */
+  }
+  mediaDbHandle = null;
+  mediaDbPromise = null;
+}
+
+export function closeWalkaroundMediaConnection() {
+  resetMediaConnection();
+}
+
+onMemoryIndexedDbReset(resetMediaConnection);
+
+function schemaError(code, message) {
+  return new DurableStorageError(code, message);
+}
+
+function assertMediaStore(db) {
+  if (db?.objectStoreNames?.contains?.(STORE)) return;
+  try {
+    db?.close();
+  } catch {
+    /* ignore */
+  }
+  resetMediaConnection();
+  throw schemaError(
+    "OFFLINE_STORAGE_SCHEMA_INVALID",
+    "Required check evidence could not be saved on this device.",
+  );
+}
+
+function openMediaDatabase() {
   if (typeof indexedDB === "undefined") {
     return Promise.reject(
-      new DurableStorageError("OFFLINE_STORAGE_UNAVAILABLE", "Required check evidence could not be saved on this device."),
+      schemaError("OFFLINE_STORAGE_UNAVAILABLE", "Required check evidence could not be saved on this device."),
     );
   }
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      resetMediaConnection();
+      reject(
+        error instanceof DurableStorageError
+          ? error
+          : schemaError("OFFLINE_STORAGE_UNAVAILABLE", "Required check evidence could not be saved on this device."),
+      );
+    };
+    const request = indexedDB.open(MEDIA_DB_NAME, MEDIA_DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE);
       }
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB unavailable"));
+    request.onsuccess = () => {
+      if (settled) {
+        try {
+          request.result?.close();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      const db = request.result;
+      try {
+        assertMediaStore(db);
+      } catch (error) {
+        fail(error);
+        return;
+      }
+      db.onversionchange = () => {
+        try {
+          db.close();
+        } catch {
+          /* ignore */
+        }
+        resetMediaConnection();
+      };
+      settled = true;
+      resolve(db);
+    };
+    request.onerror = () =>
+      fail(request.error ?? schemaError("OFFLINE_STORAGE_UNAVAILABLE", "Required check evidence could not be saved on this device."));
+    request.onblocked = () =>
+      fail(
+        schemaError(
+          "OFFLINE_STORAGE_SCHEMA_BLOCKED",
+          "Required check evidence could not be saved on this device.",
+        ),
+      );
   });
+}
+
+async function openDb() {
+  if (!mediaDbPromise) {
+    mediaDbPromise = openMediaDatabase()
+      .then((db) => {
+        mediaDbHandle = db;
+        return db;
+      })
+      .catch((error) => {
+        mediaDbPromise = null;
+        throw error;
+      });
+  }
+  const db = await mediaDbPromise;
+  assertMediaStore(db);
+  return db;
 }
 
 async function putMedia(record) {
@@ -41,12 +140,18 @@ async function putMedia(record) {
     blobBytes: Array.from(bytes),
   }
   const db = await openDb();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(storedRecord, storedRecord.id);
-    tx.oncomplete = () => resolve(storedRecord.id);
-    tx.onerror = () => reject(tx.error ?? new Error("Could not persist media"));
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(storedRecord, storedRecord.id);
+      tx.oncomplete = () => resolve(storedRecord.id);
+      tx.onerror = () =>
+        reject(tx.error ?? schemaError("OFFLINE_STORAGE_WRITE_FAILED", "Required check evidence could not be saved on this device."));
+    });
+  } catch (error) {
+    if (error instanceof DurableStorageError) throw error;
+    throw schemaError("OFFLINE_STORAGE_WRITE_FAILED", "Required check evidence could not be saved on this device.");
+  }
   const stored = await getMedia(record.id);
   if (!stored) {
     throw new DurableStorageError("OFFLINE_STORAGE_WRITE_FAILED", "Required check evidence could not be confirmed on this device.");

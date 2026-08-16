@@ -2070,7 +2070,42 @@ Do not run all fixes simultaneously.
 
 **Exit:** no false queued-success and no silent offline discard.
 
-**Wave 2 implementation status:** TESTED locally after acceptance-hardening (item-per-record queues, Command membershipId, provenance-aware migration, CONTEXT_UNAVAILABLE, no automatic RECONCILIATION replay). Not ACCEPTED until architectural re-review and physical-device restart proof.
+**Wave 2 gate:** Architecture APPROVED. Implementation TESTED — DEVICE BLOCKER FOUND. `e6bf354` failed the device evidence gate (`veyvio_driver_media` v1 with zero stores; walkaround did not false-succeed). DEVICE_VERIFIED OPEN. ACCEPTED NO. Wave 3 BLOCKED. Narrow media-schema / offline-submit patch only; preserve the handset empty v1 media DB as the migration fixture. Do not change storage architecture.
+
+### Handset acceptance evidence to capture
+
+Record facts, not screenshots-only:
+
+- Driver build / git SHA
+- Device and OS
+- Authenticated `auth/driver-session` (or `driver/session`) payload: `userId`, `companyId`, `membershipId` (= `company_memberships.id`), `driverId`
+- Proof that invalid/missing membership yields `OFFLINE_CONTEXT_NOT_READY` (no fallback storage identity)
+- Queued mutation idempotency keys (defect + evidenced vehicle check)
+- Force-stop and reboot: both queue items and media still present
+- After reconnect/flush: Command record IDs; one authoritative row per idempotency key; local drop only after server acceptance
+- Separate 403 path: status `RECONCILIATION_REQUIRED` after force-stop and reboot; no automatic Command call until explicit revalidate → `PENDING`
+
+Invariant: once Driver says an operational action is saved on the device, that action and required evidence survive process death/reboot until Command accepts it or it remains visibly recoverable as reconciliation-required.
+
+### Device verification protocol (required before ACCEPTED)
+
+Prerequisites: deploy `command-api` from `e6bf354` to the handset environment; confirm `GET auth/driver-session` (and `driver/session`) returns real `userId`, `companyId`, `membershipId` (`company_memberships.id`), `driverId`; confirm missing membership cannot obtain offline storage context.
+
+Handset sequence (one defect **and** one vehicle check with image/signature):
+
+1. ONLINE — sign in; confirm company + membership.
+2. AIRPLANE MODE — submit defect; UI must say saved on device. Submit vehicle check with evidence; UI must say saved on device.
+3. FORCE STOP — reopen; both records and media still exist.
+4. REBOOT — reopen; both still exist.
+5. RECONNECT — flush; Command has exactly one authoritative record per idempotency key; local items drop only after server acceptance.
+6. Separate 403 path — queued op rejected as VOR/ineligible → `RECONCILIATION_REQUIRED` survives force-stop and reboot; automatic sync must not call Command for it; explicit `revalidateOpsCommand` returns it to `PENDING`.
+7. Storage-failure (if practical) — IDB/media write fail must show could-not-save, never queued-success.
+
+### Non-blocking follow-ups (do not reopen Wave 2 architecture)
+
+- FIX-P2-W2-A — `session.service.js` currently repeats `userId` on the returned session object; remove the duplicate key.
+- FIX-P1-W2-B — make destructive media helpers tenant-explicit (delete currently keyed mainly by media id).
+- FIX-P2-W2-C — persist media as Blob/Uint8Array via IDB structured clone instead of a JS number array, if large photos hit quota/memory on device.
 
 ---
 

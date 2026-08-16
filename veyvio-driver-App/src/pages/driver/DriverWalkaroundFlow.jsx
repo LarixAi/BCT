@@ -14,6 +14,7 @@ import {
   previewWalkaroundSessionFromBootstrap,
   submitWalkaroundCheck,
   uploadWalkaroundPhoto,
+  shouldUploadWalkaroundPhotoNow,
 } from "@/services/vehicle-check.service";
 import { signOnDutyAfterVehicleCheck } from "@/services/command-driver-ops.service";
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
@@ -396,17 +397,19 @@ export default function DriverWalkaroundFlow({ driver }) {
     let photoPath = null;
     let photoDataUrl = null;
     if (data.photoFile && session?.vehicle?.id) {
-      const uploaded = await uploadWalkaroundPhoto({
-        driver,
-        vehicleId: session.vehicle.id,
-        itemId: `${item.id}_advisory`,
-        file: data.photoFile,
-      });
-      if (!uploaded.ok) {
-        setError(uploaded.message);
-        return;
+      if (shouldUploadWalkaroundPhotoNow()) {
+        const uploaded = await uploadWalkaroundPhoto({
+          driver,
+          vehicleId: session.vehicle.id,
+          itemId: `${item.id}_advisory`,
+          file: data.photoFile,
+        });
+        if (!uploaded.ok) {
+          setError(uploaded.message);
+          return;
+        }
+        photoPath = uploaded.path;
       }
-      photoPath = uploaded.path;
       try {
         photoDataUrl = await compressImageToDataUrl(data.photoFile, 1280, 0.72);
       } catch {
@@ -433,17 +436,19 @@ export default function DriverWalkaroundFlow({ driver }) {
     let photoPath = failData.photoPath ?? null;
     let photoDataUrl = null;
     if (failData.photoFile && session?.vehicle?.id) {
-      const uploaded = await uploadWalkaroundPhoto({
-        driver,
-        vehicleId: session.vehicle.id,
-        itemId: item.id,
-        file: failData.photoFile,
-      });
-      if (!uploaded.ok) {
-        setError(uploaded.message);
-        return;
+      if (shouldUploadWalkaroundPhotoNow()) {
+        const uploaded = await uploadWalkaroundPhoto({
+          driver,
+          vehicleId: session.vehicle.id,
+          itemId: item.id,
+          file: failData.photoFile,
+        });
+        if (!uploaded.ok) {
+          setError(uploaded.message);
+          return;
+        }
+        photoPath = uploaded.path;
       }
-      photoPath = uploaded.path;
       try {
         photoDataUrl = await compressImageToDataUrl(failData.photoFile, 1280, 0.72);
       } catch {
@@ -480,7 +485,7 @@ export default function DriverWalkaroundFlow({ driver }) {
         setStep("confirm");
         return;
       }
-      if (odometerPhotoFile && session?.vehicle?.id) {
+      if (odometerPhotoFile && session?.vehicle?.id && shouldUploadWalkaroundPhotoNow()) {
         await uploadWalkaroundPhoto({
           driver,
           vehicleId: session.vehicle.id,
