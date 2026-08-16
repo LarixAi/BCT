@@ -1,18 +1,34 @@
 import DriverMobileAuthLayout, { DriverAuthPrimaryButton, driverAuthLinkClass } from "@/components/driver/auth/DriverMobileAuthLayout"
 
+const REVIEW_STATUSES = new Set(["RECONCILIATION_REQUIRED", "MIGRATION_REVIEW_REQUIRED"])
+
+function pluralise(count, singular, plural = `${singular}s`) {
+  return count === 1 ? singular : plural
+}
+
+function recoveryStatusLabel(status) {
+  return REVIEW_STATUSES.has(status) ? "Needs attention" : "Waiting to sync"
+}
+
+function evidenceLabel(item) {
+  if (item?.odometerPresent && item?.signaturePresent) {
+    return "Photo and signature saved on this device."
+  }
+  return "Saved evidence will be checked when you reconnect."
+}
+
 export default function DriverOfflineRecoveryScreen({ session, onRetry, onSignOut }) {
   const recovery = session?.recovery ?? {}
   const walkarounds = recovery.walkarounds ?? []
-  const pendingChecks = recovery.pendingChecks ?? 0
-  const pendingDefects = recovery.pendingDefects ?? 0
-  const pendingReconciliation = recovery.pendingReconciliation ?? 0
-  const displayName = session?.driver?.fullName ?? "Driver"
-  const organisation = session?.organisationName || session?.driver?.organisationName || ""
+  const pendingChecks = Number(recovery.pendingChecks ?? 0)
+  const pendingDefects = Number(recovery.pendingDefects ?? 0)
+  const pendingReconciliation = Number(recovery.pendingReconciliation ?? 0)
+  const hasSavedWork = pendingChecks > 0 || pendingDefects > 0 || pendingReconciliation > 0 || walkarounds.length > 0
 
   return (
     <DriverMobileAuthLayout
       title="Offline"
-      subtitle="Command cannot be reached. Saved work is still on this device. This is not a live duty session."
+      subtitle="You're offline. Saved work will stay on this device until you're connected again."
       centerContent={false}
       stickyFooter={
         <div className="space-y-3">
@@ -27,36 +43,48 @@ export default function DriverOfflineRecoveryScreen({ session, onRetry, onSignOu
     >
       <div className="space-y-4 text-left">
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          Offline recovery only. Sign-on, dispatch, tenant switching, and vehicle assignment stay blocked until Command
-          confirms your session.
+          Reconnect to continue driver tasks. Anything already saved here will remain on this device until it can sync.
         </p>
-        <p className="text-sm text-slate-700">
-          {displayName}
-          {organisation ? ` · ${organisation}` : ""}
-        </p>
-        <ul className="space-y-1 text-sm text-slate-800">
-          <li>Pending vehicle checks: {pendingChecks}</li>
-          <li>Pending defects: {pendingDefects}</li>
-          <li>Needs review: {pendingReconciliation}</li>
-        </ul>
+
+        {hasSavedWork ? (
+          <div className="space-y-2 text-sm text-slate-800">
+            {pendingChecks > 0 ? (
+              <p>
+                <span className="font-semibold">{pendingChecks}</span> vehicle {pluralise(pendingChecks, "check")} waiting to sync
+              </p>
+            ) : null}
+            {pendingDefects > 0 ? (
+              <p>
+                <span className="font-semibold">{pendingDefects}</span> defect {pluralise(pendingDefects, "report")} waiting to sync
+              </p>
+            ) : null}
+            {pendingReconciliation > 0 ? (
+              <p>
+                <span className="font-semibold">{pendingReconciliation}</span> saved {pluralise(pendingReconciliation, "item")} need{pendingReconciliation === 1 ? "s" : ""} attention
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-600">No saved work is waiting to sync.</p>
+        )}
+
         {walkarounds.length ? (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Saved vehicle checks</p>
-            {walkarounds.map((item) => (
-              <div key={item.clientCheckId} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-                <p className="font-medium text-slate-900">{item.status}</p>
-                <p className="mt-1 break-all text-xs text-slate-600">{item.clientCheckId}</p>
-                <p className="mt-1 text-xs text-slate-700">
-                  Evidence on this device: odometer {item.odometerPresent ? "present" : "missing"} · signature{" "}
-                  {item.signaturePresent ? "present" : "missing"} · {item.mediaPresentCount} media record
-                  {item.mediaPresentCount === 1 ? "" : "s"}
-                </p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Saved work</p>
+            {walkarounds.map((item, index) => (
+              <div
+                key={item.clientCheckId || `saved-check-${index}`}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="font-medium text-slate-900">Vehicle check</p>
+                  <p className="text-xs font-medium text-slate-600">{recoveryStatusLabel(item.status)}</p>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-600">{evidenceLabel(item)}</p>
               </div>
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-slate-600">No queued vehicle checks on this device.</p>
-        )}
+        ) : null}
       </div>
     </DriverMobileAuthLayout>
   )

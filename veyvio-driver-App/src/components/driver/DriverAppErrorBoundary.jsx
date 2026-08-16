@@ -20,11 +20,8 @@ export default class DriverAppErrorBoundary extends Component {
       return (
         <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-6 text-center">
           <h1 className="text-lg font-bold text-foreground">Something went wrong</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            The driver app hit an unexpected error. Try again or return home.
-          </p>
-          <p className="mt-4 max-w-sm break-words text-xs text-muted-foreground">
-            {this.state.error.message}
+          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+            Reload the app to continue. Saved work already stored on this device will remain available.
           </p>
           <Button
             type="button"
