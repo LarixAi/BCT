@@ -81,6 +81,22 @@ export function declarationForCheckType(checkType) {
 }
 export { getSelectedVehicleId, setSelectedVehicleId };
 
+export function createWalkaroundClientCheckId({ driverId, vehicleId } = {}) {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `chk_${driverId ?? "driver"}_${vehicleId ?? "vehicle"}_${Date.now()}`;
+}
+
+export function resolveWalkaroundClientCheckId(payload) {
+  const existing = String(payload?.clientCheckId ?? payload?.clientId ?? "").trim();
+  if (existing) return existing;
+  return createWalkaroundClientCheckId({
+    driverId: payload?.driver?.id,
+    vehicleId: payload?.vehicle?.id,
+  });
+}
+
 const VEHICLE_SELECT = `
   id, registration, make, model, vehicle_type, seats, wheelchair_accessible,
   odometer, service_status, current_depot_id,
@@ -954,6 +970,7 @@ export async function submitWalkaroundCheck({
   driverSignatureDataUrl,
   offlineSubmit = false,
   session = null,
+  clientCheckId: providedClientCheckId = null,
 }) {
   if (!vehicle?.id) return { ok: false, message: "No vehicle selected." };
   if (!vehicleConfirmed) return { ok: false, message: "Confirm this is your vehicle before submitting." };
@@ -1001,6 +1018,11 @@ export async function submitWalkaroundCheck({
     startedAt,
     driverSignatureDataUrl,
     session,
+    clientCheckId: resolveWalkaroundClientCheckId({
+      clientCheckId: providedClientCheckId,
+      driver,
+      vehicle,
+    }),
   };
 
   if (offlineSubmit || !navigator.onLine) {
@@ -1146,10 +1168,7 @@ async function insertWalkaroundCheckViaCommand(payload) {
     });
   }
 
-  const clientCheckId =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `chk_${driver.id}_${vehicle.id}_${Date.now()}`;
+  const clientCheckId = resolveWalkaroundClientCheckId(payload);
 
   const submitted = await submitVehicleCheckViaCommand({
     vehicleId: vehicle.id,

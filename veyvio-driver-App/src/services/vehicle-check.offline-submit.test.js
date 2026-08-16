@@ -74,6 +74,8 @@ describe("offline walkaround submit", () => {
     const queue = await loadSyncQueue("drv-1", "co-a", "mem-1");
     expect(queue).toHaveLength(1);
     expect(queue[0].idempotencyKey).toBeTruthy();
+    expect(queue[0].payload.clientCheckId).toBe(queue[0].idempotencyKey);
+    expect(queue[0].id).toBe(queue[0].idempotencyKey);
     expect(queue[0].payload.odometerPhotoMediaRef).toBeTruthy();
     expect(queue[0].payload.driverSignatureMediaRef).toBeTruthy();
   });

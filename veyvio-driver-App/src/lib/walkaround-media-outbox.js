@@ -293,9 +293,8 @@ function answerMediaFields(answer) {
 
 export async function externalizeWalkaroundPayloadMedia(payload, { companyId, membershipId }) {
   if (!payload) return payload;
-  const clientCheckId =
-    payload.clientCheckId ??
-    `chk_${payload.driver?.id ?? "driver"}_${payload.vehicle?.id ?? "vehicle"}_${Date.now()}`;
+  const clientCheckId = String(payload.clientCheckId ?? payload.clientId ?? "").trim()
+    || `chk_${payload.driver?.id ?? "driver"}_${payload.vehicle?.id ?? "vehicle"}_${Date.now()}`;
   const next = { ...payload, clientCheckId, mediaRefs: [...(payload.mediaRefs ?? [])] };
 
   const externalizeDataUrl = async (dataUrl, kind, itemKey = null) => {

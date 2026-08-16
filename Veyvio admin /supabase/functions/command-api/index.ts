@@ -1899,7 +1899,7 @@ async function driverBootstrap(request: Request) {
     const { data, error: checksError } = await admin
       .from('vehicle_checks')
       .select(
-        'id, vehicle_id, duty_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration)',
+        'id, vehicle_id, duty_id, client_check_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration)',
       )
       .eq('company_id', context.companyId)
       .eq('driver_id', driverId)
@@ -3315,6 +3315,7 @@ function mapDriverVehicleCheckRow(row: Row) {
   const vehicle = (row.vehicles as Row | null) ?? null
   return {
     id: String(row.id),
+    clientCheckId: row.client_check_id ? String(row.client_check_id) : null,
     vehicleId: row.vehicle_id ? String(row.vehicle_id) : null,
     dutyId: row.duty_id ? String(row.duty_id) : null,
     checkType: String(row.check_type ?? 'driver_pre_use'),
@@ -3343,7 +3344,7 @@ async function driverListVehicleChecks(request: Request) {
   let query = admin
     .from('vehicle_checks')
     .select(
-      'id, vehicle_id, duty_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration, make, model)',
+        'id, vehicle_id, duty_id, client_check_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration, make, model)',
     )
     .eq('company_id', context.companyId)
     .eq('driver_id', String(appAccount.driver_id))
@@ -3443,7 +3444,7 @@ async function driverSubmitVehicleCheck(request: Request) {
     const { data: existing } = await admin
       .from('vehicle_checks')
       .select(
-        'id, vehicle_id, duty_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration)',
+        'id, vehicle_id, duty_id, client_check_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration)',
       )
       .eq('company_id', context.companyId)
       .eq('client_check_id', clientCheckId)
@@ -3478,7 +3479,7 @@ async function driverSubmitVehicleCheck(request: Request) {
       updated_by: context.user.id,
     })
     .select(
-      'id, vehicle_id, duty_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration)',
+      'id, vehicle_id, duty_id, client_check_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration)',
     )
     .single()
 
@@ -3487,7 +3488,7 @@ async function driverSubmitVehicleCheck(request: Request) {
       const { data: existing } = await admin
         .from('vehicle_checks')
         .select(
-          'id, vehicle_id, duty_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration)',
+          'id, vehicle_id, duty_id, client_check_id, check_type, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, checklist, evidence, vehicles(registration)',
         )
         .eq('company_id', context.companyId)
         .eq('client_check_id', clientCheckId)
@@ -7167,6 +7168,7 @@ function projectCheckDetailFromRow(row: Row) {
 
   return {
     checkId: String(row.id),
+    clientCheckId: row.client_check_id ? String(row.client_check_id) : null,
     vehicleId: String(row.vehicle_id ?? ''),
     registrationNumber: String(vehicle.registration ?? '—'),
     fleetNumber: vehicle.fleet_number ? String(vehicle.fleet_number) : null,
@@ -7251,7 +7253,7 @@ async function getCheckDetail(request: Request, checkId: string) {
   const { data, error } = await admin
     .from('vehicle_checks')
     .select(
-      'id, vehicle_id, driver_id, duty_id, check_type, template_version, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, created_at, checklist, evidence, source_app, vehicles(id, registration, fleet_number, make, model, year, vehicle_class, primary_depot_id, depots(id, name)), drivers(staff_members(first_name, last_name))',
+      'id, vehicle_id, driver_id, duty_id, client_check_id, check_type, template_version, result, ops_outcome, odometer, fuel_level, started_at, submitted_at, created_at, checklist, evidence, source_app, vehicles(id, registration, fleet_number, make, model, year, vehicle_class, primary_depot_id, depots(id, name)), drivers(staff_members(first_name, last_name))',
     )
     .eq('company_id', context.companyId)
     .eq('id', checkId)

@@ -57,7 +57,8 @@ export async function saveSyncQueue(driverId, queue, companyId, membershipId) {
 export async function enqueueWalkaroundSubmission(driverId, payload, companyId, membershipId, userId = null) {
   requireWorkspaceIds(companyId, membershipId)
   await ensureMigrated(driverId, companyId, membershipId, userId)
-  const id = payload?.clientId ?? payload?.clientCheckId ?? `pending-${Date.now()}`
+  const clientCheckId = String(payload?.clientCheckId ?? payload?.clientId ?? "").trim()
+  const id = clientCheckId || `pending-${Date.now()}`
   await putQueueItem({
     id,
     createdAt: new Date().toISOString(),
@@ -66,8 +67,11 @@ export async function enqueueWalkaroundSubmission(driverId, payload, companyId, 
     driverId,
     queueType: QUEUE_WALKAROUND,
     status: ITEM_PENDING,
-    idempotencyKey: payload?.clientId ?? payload?.clientCheckId ?? id,
-    payload,
+    idempotencyKey: id,
+    payload: {
+      ...payload,
+      clientCheckId: id,
+    },
   })
   return (await listQueueItems(companyId, membershipId, QUEUE_WALKAROUND)).length
 }
