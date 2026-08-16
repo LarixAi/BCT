@@ -494,8 +494,10 @@ function finalizeWalkaroundSession({
 
   if (safety.checkComplete && safety.result !== "failed") {
     if (draft) {
-      clearWalkaroundDraft(driver.id, vehicle.id);
-      draft = null;
+      // Completed check supersedes an in-progress draft. Only drop the draft
+      // from session state after clear verifies — never pretend it is gone.
+      const cleared = clearWalkaroundDraft(driver.id, vehicle.id);
+      if (cleared.ok) draft = null;
     }
   } else if (draft?.answers && checklist.items.length > 0) {
     const normalized = normalizeChecklistProgress(checklist.items, draft.answers, draft.currentIndex ?? 0);
@@ -849,7 +851,7 @@ export function persistWalkaroundDraft(driver, vehicleId, draft) {
 }
 
 export function discardWalkaroundDraft(driver, vehicleId) {
-  clearWalkaroundDraft(driver.id, vehicleId);
+  return clearWalkaroundDraft(driver.id, vehicleId);
 }
 
 function buildResponses({ items, answers }) {

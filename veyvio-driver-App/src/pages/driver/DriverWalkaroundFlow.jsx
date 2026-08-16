@@ -277,7 +277,7 @@ export default function DriverWalkaroundFlow({ driver }) {
   };
 
   const persistDraft = (patch = {}) => {
-    if (!session?.vehicle?.id) return;
+    if (!session?.vehicle?.id) return false;
     const draft = {
       answers: patch.answers ?? answers,
       odometer: patch.odometer ?? odometer,
@@ -287,8 +287,16 @@ export default function DriverWalkaroundFlow({ driver }) {
       startedAt,
       vehicleConfirmed: patch.vehicleConfirmed ?? vehicleConfirmed,
     };
-    persistWalkaroundDraft(driver, session.vehicle.id, draft);
-    setSyncHint("Saved on this device");
+    const result = persistWalkaroundDraft(driver, session.vehicle.id, draft);
+    if (result?.ok) {
+      setSyncHint("Saved on this device");
+      setError("");
+      return true;
+    }
+    // Fail closed: never show a saved hint when write/readback did not verify.
+    setSyncHint(null);
+    setError(result?.message ?? "Draft could not be saved on this device.");
+    return false;
   };
 
   const advanceAfterAnswer = (nextAnswers) => {
@@ -673,11 +681,18 @@ export default function DriverWalkaroundFlow({ driver }) {
         syncHint={syncHint}
         pendingSync={pendingSync}
         onDiscardDraft={() => {
-          if (session?.vehicle?.id) discardWalkaroundDraft(driver, session.vehicle.id);
+          if (session?.vehicle?.id) {
+            const cleared = discardWalkaroundDraft(driver, session.vehicle.id);
+            if (!cleared?.ok) {
+              setError(cleared?.message ?? "Draft could not be discarded on this device.");
+              return;
+            }
+          }
           setAnswers({});
           setCurrentIndex(0);
           setStartedAt(null);
           setSyncHint(null);
+          setError("");
           setStep("confirm");
           flowInProgressRef.current = false;
         }}
