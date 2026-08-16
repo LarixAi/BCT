@@ -11,7 +11,7 @@ import {
   probeDriverCommandCapabilities,
   reviewAndRetryQueuedItem,
 } from "@/services/driver-sync-status.service";
-import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
+import { flushDriverOfflineQueues } from "@/services/driver-offline-flush";
 import { probeDriverTrainingConnection } from "@/services/training.service";
 import { formatUkDateTime } from "@/lib/uk-locale";
 import { withTimeout } from "@/lib/withTimeout";
@@ -71,7 +71,7 @@ export default function DriverSyncCentre() {
     setSyncing(true);
     setFlushMsg("");
     try {
-      const result = await flushOpsOutbox(driver, session);
+      const result = await flushDriverOfflineQueues(driver, session);
       const remaining = await refreshQueue();
       if (result.status === "CONTEXT_UNAVAILABLE" || remaining.status === "CONTEXT_UNAVAILABLE") {
         setFlushMsg("Offline work cannot currently be inspected. Restore your account context before syncing.");

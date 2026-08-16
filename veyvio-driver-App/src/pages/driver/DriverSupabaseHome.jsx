@@ -39,12 +39,9 @@ import { getDriverWorkingTimeSummary } from "@/services/working-time.service";
 import { getTachographReminders } from "@/services/tachograph-reminders.service";
 import { useDriverUnreadNotificationCount } from "@/hooks/useDriverUnreadNotificationCount";
 import { getPendingJobOffers } from "@/services/job-offers.service";
-import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
+import { flushDriverOfflineQueues } from "@/services/driver-offline-flush";
 import { describeOfflineQueue } from "@/services/driver-sync-status.service";
-import {
-  flushPendingWalkaroundSubmissions,
-  getWalkaroundSafetyStatus,
-} from "@/services/vehicle-check.service";
+import { getWalkaroundSafetyStatus } from "@/services/vehicle-check.service";
 import { getDriverDutyState } from "@/services/duty-timeline.service";
 import { getNextApprovedLeave } from "@/services/time-off.service";
 import { getRecentRemovedTransfers } from "@/services/jobs.service";
@@ -219,10 +216,9 @@ export default function DriverSupabaseHome({ driver }) {
   }, [sessionHomeSummary, sessionBootstrap]);
 
   useEffect(() => {
-    void Promise.all([flushPendingWalkaroundSubmissions(driver, session), flushOpsOutbox(driver, session)])
-      .then((results) => {
-        const synced = results.reduce((sum, row) => sum + (row?.synced ?? 0), 0);
-        if (synced > 0) void reloadHomeData({ force: true });
+    void flushDriverOfflineQueues(driver, session)
+      .then((result) => {
+        if ((result?.synced ?? 0) > 0) void reloadHomeData({ force: true });
       })
       .catch(() => {});
     void reloadHomeData({ force: false });
