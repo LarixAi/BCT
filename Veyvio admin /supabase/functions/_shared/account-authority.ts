@@ -183,10 +183,17 @@ export function decideInvitationAuthority(input: {
 }
 
 /**
- * Compatibility mapping for memberships created before explicit application
- * access records. New decisions use membership_application_access first.
+ * Historical role → app mapping used only for one-time backfill migrations.
+ * Runtime authorization must use membership_application_access via
+ * decideExplicitApplicationScopes — never this helper.
+ *
+ * @deprecated Runtime auth fallback removed in Wave 3B.
  */
 export function legacyApplicationsForRoles(roleKeys: readonly string[]): Set<VeyvioAppType> {
+  return appsInferredFromRolesForBackfillCompat(roleKeys)
+}
+
+function appsInferredFromRolesForBackfillCompat(roleKeys: readonly string[]): Set<VeyvioAppType> {
   const apps = new Set<VeyvioAppType>()
   for (const rawRole of roleKeys) {
     const role = normalizeRoleKey(rawRole)

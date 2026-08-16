@@ -159,6 +159,32 @@ async function seedOne(org: IsolationOrg) {
     .eq('user_id', userId)
     .maybeSingle()
 
+  if (membershipRow?.id) {
+    // Wave 3B: isolation orgs must have explicit COMMAND (+ EXECUTIVE) grants.
+    // Role inference is no longer a runtime fallback.
+    await admin.from('membership_application_access').upsert(
+      [
+        {
+          company_id: companyId,
+          membership_id: membershipRow.id,
+          app_type: 'EXECUTIVE',
+          access_level: 'admin',
+          status: 'active',
+          granted_by: userId,
+        },
+        {
+          company_id: companyId,
+          membership_id: membershipRow.id,
+          app_type: 'COMMAND',
+          access_level: 'oversight',
+          status: 'active',
+          granted_by: userId,
+        },
+      ],
+      { onConflict: 'membership_id,app_type' },
+    )
+  }
+
   let { data: depot } = await admin
     .from('depots')
     .select('id')

@@ -72,8 +72,7 @@ assert.equal(roleBelongsToApp('finance_admin', 'FINANCE'), true)
 assert.equal(rolesAllowedForApp('HR').includes('hr_officer'), true)
 assert.equal(normalizeAppType(' finance '), 'FINANCE')
 
-// Existing memberships receive the correct compatibility scopes until explicit
-// application grants have been backfilled.
+// Backfill mapping parity (migration helper only — not a runtime auth fallback).
 assert.deepEqual(
   [...legacyApplicationsForRoles(['company_owner'])].sort(),
   ['COMMAND', 'EXECUTIVE'],

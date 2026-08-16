@@ -1,14 +1,12 @@
 /**
  * Blueprint Part F — application access scopes (deny-by-default).
+ * Wave 3B: explicit membership_application_access (+ support grant path) only.
  */
 import { HttpError } from './http.ts'
 import { admin, type RequestContext } from './supabase.ts'
 import { recordSecurityEvent } from './tenant-auth.ts'
-import {
-  legacyApplicationsForRoles,
-  normalizeAppType,
-  type VeyvioAppType,
-} from './account-authority.ts'
+import { normalizeAppType, type VeyvioAppType } from './account-authority.ts'
+import { decideExplicitApplicationScopes } from './explicit-application-scopes.ts'
 import {
   type ApplicationScope,
   isIntegrationIntakePath,
@@ -32,31 +30,15 @@ export {
   scopesSatisfyRequirement,
   stripApiVersionPrefix,
 }
+export { decideExplicitApplicationScopes } from './explicit-application-scopes.ts'
 
 export async function resolveApplicationScopes(
   context: RequestContext,
+  options: { clientClaimedApps?: readonly string[] | null } = {},
 ): Promise<Set<ApplicationScope>> {
-  const scopes = new Set<ApplicationScope>()
+  let explicitAppTypes: string[] = []
 
-  if (context.platformRole) {
-    scopes.add('PLATFORM')
-    // Platform operators with an active company context can use Command/Yard APIs for that tenant.
-    if (context.companyId) {
-      scopes.add('COMMAND')
-      scopes.add('YARD')
-    }
-  }
-
-  if (context.isSupportSession) {
-    scopes.add('COMMAND')
-    scopes.add('YARD')
-    return scopes
-  }
-
-  if (!context.companyId) return scopes
-
-  let explicitAccessFound = false
-  if (context.membershipId) {
+  if (context.companyId && context.membershipId && !context.isSupportSession) {
     const { data: accessRows, error: accessError } = await admin
       .from('membership_application_access')
       .select('app_type')
@@ -65,33 +47,20 @@ export async function resolveApplicationScopes(
       .eq('status', 'active')
 
     if (!accessError && accessRows?.length) {
-      explicitAccessFound = true
-      for (const row of accessRows) {
-        const appType = normalizeAppType(String(row.app_type ?? ''))
-        if (appType) scopes.add(appType)
-      }
+      explicitAppTypes = accessRows
+        .map((row) => normalizeAppType(String(row.app_type ?? '')))
+        .filter((app): app is VeyvioAppType => Boolean(app))
     }
   }
 
-  const { data: driverAccount } = await admin
-    .from('driver_app_accounts')
-    .select('id')
-    .eq('company_id', context.companyId)
-    .eq('user_id', context.user.id)
-    .maybeSingle()
-
-  if (driverAccount?.id) {
-    scopes.add('DRIVER')
-  }
-
-  if (!explicitAccessFound) {
-    const roleKeys = context.roleKeys?.length ? context.roleKeys : [context.roleKey]
-    for (const scope of legacyApplicationsForRoles(roleKeys)) {
-      scopes.add(scope)
-    }
-  }
-
-  return scopes
+  return decideExplicitApplicationScopes({
+    platformRole: context.platformRole,
+    isSupportSession: context.isSupportSession,
+    companyId: context.companyId,
+    membershipId: context.membershipId,
+    explicitAppTypes,
+    clientClaimedApps: options.clientClaimedApps,
+  })
 }
 
 /**
