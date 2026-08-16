@@ -4,10 +4,16 @@ import { resolveEntitlements, resolvePlatformRole, type EntitlementSnapshot } fr
 import { enforceTenantLifecycle, recordSecurityEvent } from './tenant-auth.ts'
 import {
   assertSupportGrantWrite,
+  ensureOpenSupportSession,
   resolveActiveSupportGrant,
   type ActiveSupportGrant,
 } from './support-access.ts'
 import { decideTenantMembershipAccess } from './membership-access.ts'
+import {
+  decideMembershipWorkspaceIdentity,
+  decideSupportWorkspaceIdentity,
+  type WorkspaceAuthority,
+} from './support-workspace.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
@@ -34,7 +40,13 @@ export type RequestContext = {
   companyId: string
   /** @deprecated alias for companyId — kept for gradual migration */
   tenantId: string
-  membershipId: string
+  /**
+   * Company membership id when workspaceAuthority === 'membership'.
+   * Null when workspaceAuthority === 'support' (never a placeholder UUID).
+   */
+  membershipId: string | null
+  /** Explicit provenance: ordinary membership vs support grant vs no tenant. */
+  workspaceAuthority: WorkspaceAuthority
   /** All active roles on the membership. Never authorise from array order. */
   roleKeys: string[]
   /** Primary display role retained for older clients. */
@@ -43,8 +55,10 @@ export type RequestContext = {
   platformRole: string | null
   entitlements: EntitlementSnapshot | null
   tenantStatus: string
+  /** True only when workspaceAuthority === 'support'. */
   isSupportSession: boolean
   supportGrantId: string | null
+  supportSessionId: string | null
   supportGrant: ActiveSupportGrant | null
   db: SupabaseClient
 }
@@ -79,6 +93,30 @@ export async function ensurePlatformUser(user: User) {
   if (error) throw new Error(error.message)
 }
 
+function emptyContext(
+  user: User,
+  platformRole: string | null,
+): RequestContext {
+  return {
+    user,
+    companyId: '',
+    tenantId: '',
+    membershipId: null,
+    workspaceAuthority: 'none',
+    roleKeys: [],
+    roleKey: '',
+    permissions: [],
+    platformRole,
+    entitlements: null,
+    tenantStatus: '',
+    isSupportSession: false,
+    supportGrantId: null,
+    supportSessionId: null,
+    supportGrant: null,
+    db: admin,
+  }
+}
+
 export async function authenticate(request: Request, requireCompany = true): Promise<RequestContext> {
   const header = request.headers.get('Authorization')
   if (!header?.startsWith('Bearer ')) {
@@ -101,23 +139,13 @@ export async function authenticate(request: Request, requireCompany = true): Pro
   const platformRole = await resolvePlatformRole(data.user.id)
 
   if (!companyId) {
-    return {
-      user: data.user,
-      companyId: '',
-      tenantId: '',
-      membershipId: '',
-      roleKeys: [],
-      roleKey: '',
-      permissions: [],
-      platformRole,
-      entitlements: null,
-      tenantStatus: '',
-      isSupportSession: false,
-      supportGrantId: null,
-      supportGrant: null,
-      db: admin,
-    }
+    return emptyContext(data.user, platformRole)
   }
+
+  // Client-supplied membership claims (if any header/query) must never authorize.
+  const clientMembershipId =
+    request.headers.get('x-veyvio-membership-id') ??
+    new URL(request.url).searchParams.get('membershipId')
 
   const { data: membership, error: membershipError } = await admin
     .from('company_memberships')
@@ -135,7 +163,6 @@ export async function authenticate(request: Request, requireCompany = true): Pro
     membership: membershipError ? null : membership,
     hasSupportGrant: Boolean(supportGrant),
   })
-  const hasActiveMembership = access.allow && access.via === 'membership'
 
   if (!access.allow) {
     await recordSecurityEvent({
@@ -149,25 +176,78 @@ export async function authenticate(request: Request, requireCompany = true): Pro
     throw new HttpError(403, 'Company access is unavailable', 'forbidden')
   }
 
-  if (access.via === 'support' && supportGrant) {
+  if (access.via === 'support') {
+    const decision = decideSupportWorkspaceIdentity({
+      platformRole,
+      jwtCompanyId: companyId,
+      grant: supportGrant,
+      clientMembershipId,
+    })
+    if (!decision.ok) {
+      await recordSecurityEvent({
+        companyId,
+        actorUserId: data.user.id,
+        eventType: 'support.access_denied',
+        message: decision.message,
+        severity: 'attention',
+        metadata: { code: decision.code, clientMembershipId: clientMembershipId || null },
+      }).catch(() => undefined)
+      throw new HttpError(403, decision.message, decision.code)
+    }
+
     assertSupportGrantWrite(supportGrant, request.method)
+    const supportSessionId = await ensureOpenSupportSession({
+      grantId: decision.supportGrantId,
+      companyId: decision.companyId,
+      supportUserId: data.user.id,
+    })
+
     await recordSecurityEvent({
-      companyId,
+      companyId: decision.companyId,
       actorUserId: data.user.id,
       eventType: 'support.access_used',
       message: 'Support grant used for tenant API access',
       severity: 'attention',
-      metadata: { grantId: supportGrant.id, method: request.method, path: new URL(request.url).pathname },
+      metadata: {
+        workspaceAuthority: 'support',
+        grantId: decision.supportGrantId,
+        supportSessionId,
+        method: request.method,
+        path: new URL(request.url).pathname,
+        membershipId: null,
+      },
     }).catch(() => undefined)
+
+    const entitlements = await resolveEntitlements(decision.companyId)
+
+    return {
+      user: data.user,
+      companyId: decision.companyId,
+      tenantId: decision.companyId,
+      membershipId: null,
+      workspaceAuthority: 'support',
+      roleKeys: [...decision.roleKeys],
+      roleKey: decision.roleKey,
+      permissions: [...decision.permissions],
+      platformRole,
+      entitlements,
+      tenantStatus: entitlements?.tenantStatus ?? '',
+      isSupportSession: true,
+      supportGrantId: decision.supportGrantId,
+      supportSessionId,
+      supportGrant,
+      db: admin,
+    }
   }
 
-  const entitlements = companyId ? await resolveEntitlements(companyId) : null
-  if (entitlements && hasActiveMembership) {
-    enforceTenantLifecycle(entitlements.tenantStatus, request.method)
+  // Ordinary membership path — never mix support grant roles/grants.
+  const membershipId = String(membership?.id ?? '')
+  if (!membershipId) {
+    throw new HttpError(403, 'Company access is unavailable', 'forbidden')
   }
 
   const roleIds = (membership?.role_ids as string[] | null) ?? []
-  let roleKeys = supportGrant ? ['support'] : []
+  let roleKeys: string[] = []
   if (roleIds.length) {
     const { data: roles } = await admin.from('roles').select('id, name').in('id', roleIds)
     const roleNameById = new Map((roles ?? []).map((role) => [String(role.id), String(role.name)]))
@@ -175,23 +255,35 @@ export async function authenticate(request: Request, requireCompany = true): Pro
       .map((roleId) => roleNameById.get(String(roleId)))
       .filter((role): role is string => Boolean(role))
   }
-  const roleKey = roleKeys[0] ?? (supportGrant ? 'support' : 'member')
   const permissions = roleIds.length ? await resolvePermissions(roleIds) : []
+  const identity = decideMembershipWorkspaceIdentity({
+    companyId,
+    membershipId,
+    roleKeys,
+    permissions,
+  })
+
+  const entitlements = await resolveEntitlements(companyId)
+  if (entitlements) {
+    enforceTenantLifecycle(entitlements.tenantStatus, request.method)
+  }
 
   return {
     user: data.user,
-    companyId,
-    tenantId: companyId,
-    membershipId: membership?.id ?? '',
-    roleKeys,
-    roleKey,
-    permissions,
+    companyId: identity.companyId,
+    tenantId: identity.companyId,
+    membershipId: identity.membershipId,
+    workspaceAuthority: 'membership',
+    roleKeys: identity.roleKeys,
+    roleKey: identity.roleKey,
+    permissions: identity.permissions,
     platformRole,
     entitlements,
     tenantStatus: entitlements?.tenantStatus ?? '',
-    isSupportSession: Boolean(supportGrant),
-    supportGrantId: supportGrant?.id ?? null,
-    supportGrant,
+    isSupportSession: false,
+    supportGrantId: null,
+    supportSessionId: null,
+    supportGrant: null,
     db: admin,
   }
 }

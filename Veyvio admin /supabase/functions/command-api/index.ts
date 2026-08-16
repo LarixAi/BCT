@@ -105,7 +105,7 @@ import {
   notifyCompanyAdmins,
 } from '../_shared/notifications.ts'
 import { seedDemoCompany } from '../_shared/seed-demo.ts'
-import { resolveEntitlements } from '../_shared/entitlements.ts'
+import { resolveEntitlements, resolvePlatformRole } from '../_shared/entitlements.ts'
 import {
   assertCompanyScopedDefect,
   assertCompanyScopedDriver,
@@ -167,6 +167,11 @@ import {
   platformSupportGrantsList,
 } from '../_shared/platform-admin.ts'
 import { admin, authenticate, ensurePlatformUser, publicClient } from '../_shared/supabase.ts'
+import {
+  ensureOpenSupportSession,
+  resolveActiveSupportGrant,
+} from '../_shared/support-access.ts'
+import { decideSupportWorkspaceIdentity } from '../_shared/support-workspace.ts'
 import {
   loadYardLayoutForDepot,
   loadVehicleLocationsForDepot,
@@ -626,7 +631,25 @@ async function activateCompany(
     .eq('status', 'active')
     .maybeSingle()
 
-  if (!membership) return apiError(403, 'You do not have access to this company', 'company_access_denied')
+  let supportGrant: Awaited<ReturnType<typeof resolveActiveSupportGrant>> = null
+  let workspaceAuthority: 'membership' | 'support' = 'membership'
+  if (!membership) {
+    const platformRole = await resolvePlatformRole(userId)
+    if (!platformRole) {
+      return apiError(403, 'You do not have access to this company', 'company_access_denied')
+    }
+    supportGrant = await resolveActiveSupportGrant(userId, companyId)
+    const decision = decideSupportWorkspaceIdentity({
+      platformRole,
+      jwtCompanyId: companyId,
+      grant: supportGrant,
+      clientMembershipId: null,
+    })
+    if (!decision.ok) {
+      return apiError(403, decision.message, decision.code)
+    }
+    workspaceAuthority = 'support'
+  }
   if (!refreshToken) return apiError(400, 'A refresh token is required to select a company', 'refresh_token_required')
 
   const { data: company } = await admin
@@ -669,10 +692,19 @@ async function activateCompany(
     return apiError(401, 'Sign in again to select this company', 'session_refresh_failed')
   }
 
+  let supportSessionId: string | null = null
+  if (workspaceAuthority === 'support' && supportGrant) {
+    supportSessionId = await ensureOpenSupportSession({
+      grantId: supportGrant.id,
+      companyId,
+      supportUserId: userId,
+    })
+  }
+
   const veyvioSession = await createUserSession({
     userId,
     companyId,
-    membershipId: membership.id as string,
+    membershipId: membership?.id ? String(membership.id) : null,
     authStrength,
     ipAddress: request?.headers.get('x-forwarded-for'),
     userAgent: request?.headers.get('user-agent'),
@@ -683,10 +715,19 @@ async function activateCompany(
   await recordSecurityEvent({
     companyId,
     actorUserId: userId,
-    eventType: 'auth.company_selected',
-    message: `Active company set to ${company?.trading_name ?? companyId}`,
+    eventType: workspaceAuthority === 'support' ? 'support.company_selected' : 'auth.company_selected',
+    message:
+      workspaceAuthority === 'support'
+        ? `Support workspace opened for ${company?.trading_name ?? companyId}`
+        : `Active company set to ${company?.trading_name ?? companyId}`,
     ipAddress: request?.headers.get('x-forwarded-for'),
     userAgent: request?.headers.get('user-agent'),
+    metadata: {
+      workspaceAuthority,
+      membershipId: membership?.id ?? null,
+      supportGrantId: supportGrant?.id ?? null,
+      supportSessionId,
+    },
   })
 
   const user = await authUser(refreshed.data.user!, companyId)
@@ -695,6 +736,9 @@ async function activateCompany(
     refreshToken: refreshed.data.session.refresh_token,
     user,
     veyvioSession,
+    workspaceAuthority,
+    supportGrantId: supportGrant?.id ?? null,
+    supportSessionId,
   })
 }
 
@@ -6697,7 +6741,8 @@ async function applyYardMutationRoute(request: Request) {
   }
 }
 
-async function loadMembershipDepots(context: { companyId: string; membershipId: string }): Promise<Row[]> {
+async function loadMembershipDepots(context: { companyId: string; membershipId: string | null }): Promise<Row[]> {
+  if (!context.membershipId) return []
   const { data: accessRows } = await admin
     .from('depot_access')
     .select('depot_id, depots(id, company_id, name, code, address, status)')

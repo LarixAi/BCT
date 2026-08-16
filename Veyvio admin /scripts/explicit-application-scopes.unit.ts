@@ -119,7 +119,7 @@ assert.deepEqual(
     decideExplicitApplicationScopes({
       isSupportSession: true,
       companyId: 'co-a',
-      membershipId: '',
+      membershipId: null,
       explicitAppTypes: ['DRIVER'], // membership grants must not widen support path
       clientClaimedApps: ['EXECUTIVE'],
     }),

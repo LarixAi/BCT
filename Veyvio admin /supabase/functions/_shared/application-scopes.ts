@@ -38,7 +38,7 @@ export async function resolveApplicationScopes(
 ): Promise<Set<ApplicationScope>> {
   let explicitAppTypes: string[] = []
 
-  if (context.companyId && context.membershipId && !context.isSupportSession) {
+  if (context.companyId && context.membershipId && context.workspaceAuthority === 'membership') {
     const { data: accessRows, error: accessError } = await admin
       .from('membership_application_access')
       .select('app_type')
@@ -55,7 +55,7 @@ export async function resolveApplicationScopes(
 
   return decideExplicitApplicationScopes({
     platformRole: context.platformRole,
-    isSupportSession: context.isSupportSession,
+    isSupportSession: context.workspaceAuthority === 'support' || context.isSupportSession,
     companyId: context.companyId,
     membershipId: context.membershipId,
     explicitAppTypes,
@@ -71,7 +71,12 @@ export async function assertExplicitApplicationAccess(
   context: RequestContext,
   appType: VeyvioAppType,
 ): Promise<void> {
-  if (!context.companyId || !context.membershipId || context.isSupportSession) {
+  if (
+    !context.companyId ||
+    !context.membershipId ||
+    context.workspaceAuthority === 'support' ||
+    context.isSupportSession
+  ) {
     throw new HttpError(
       403,
       `An active ${appType} application grant is required.`,

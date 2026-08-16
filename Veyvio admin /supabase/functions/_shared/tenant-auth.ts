@@ -469,7 +469,7 @@ export function enforceTenantLifecycle(tenantStatus: string, method: string): vo
 export async function createUserSession(input: {
   userId: string
   companyId: string
-  membershipId: string
+  membershipId?: string | null
   authStrength?: 'password' | 'password_mfa' | 'passkey' | 'phishing_resistant_mfa'
   ipAddress?: string | null
   userAgent?: string | null
@@ -482,12 +482,13 @@ export async function createUserSession(input: {
   const expiresAt = new Date(
     Date.now() + (executiveStrength ? 8 : 12) * 60 * 60_000,
   ).toISOString()
+  const membershipId = String(input.membershipId ?? '').trim() || null
   const { data, error } = await admin
     .from('user_sessions')
     .insert({
       user_id: input.userId,
       active_company_id: input.companyId,
-      membership_id: input.membershipId,
+      membership_id: membershipId,
       auth_method: 'password',
       auth_strength: input.authStrength ?? 'password',
       expires_at: expiresAt,
@@ -543,8 +544,11 @@ export async function validateExecutiveUserSession(input: {
   sessionId: string
   userId: string
   companyId: string
-  membershipId: string
+  membershipId: string | null
 }) {
+  if (!input.membershipId) {
+    throw new HttpError(403, 'Executive session requires a company membership', 'executive_membership_required')
+  }
   const { data: session, error } = await admin
     .from('user_sessions')
     .select('id, user_id, active_company_id, membership_id, auth_strength, created_at, last_used_at, expires_at, revoked_at')
