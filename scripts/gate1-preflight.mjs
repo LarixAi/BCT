@@ -96,7 +96,7 @@ function main() {
   runStep("Admin explicit application scopes", "npx tsx scripts/explicit-application-scopes.unit.ts", adminRoot);
   runStep("Admin support workspace", "npx tsx scripts/support-workspace.unit.ts", adminRoot);
   runStep("Admin membership access", "npx tsx scripts/membership-access.unit.ts", adminRoot);
-  runStep("Admin yard permissions", "node scripts/yard-permissions.unit.mjs", adminRoot);
+  runStep("Admin yard permissions", "npx tsx scripts/yard-permissions.unit.ts", adminRoot);
   runStep("Admin yard mutation inventory (P0-02)", "node scripts/yard-mutation-inventory.unit.mjs", adminRoot);
   runStep("Admin driver write guards", "npx tsx scripts/driver-write-guards.unit.ts", adminRoot);
 

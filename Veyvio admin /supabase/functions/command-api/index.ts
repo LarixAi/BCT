@@ -88,9 +88,10 @@ import {
 } from '../_shared/body-condition.ts'
 import { linkBodyworkDefectToDamageCase } from '../_shared/defect-damage-link.ts'
 import {
+  decideYardActionAuthorization,
+  resolveYardEffectivePermissions,
   yardPermissionDeniedResponse,
   yardPermissionForMutationType,
-  yardPermissionsForRole,
 } from '../_shared/yard-permissions.ts'
 import { applyPendingYardMutation } from '../_shared/yard-mutation-handlers.ts'
 import {
@@ -6192,7 +6193,12 @@ async function yardHubData(context: Awaited<ReturnType<typeof authenticate>>, re
     depotName: activeDepot.name,
     depotCode: activeDepot.code || null,
     roleKey: context.roleKey,
-    permissions: yardPermissionsForRole(context.roleKey),
+    roleKeys: context.roleKeys,
+    permissions: resolveYardEffectivePermissions({
+      workspaceAuthority: context.workspaceAuthority,
+      roleKeys: context.roleKeys,
+      explicitPermissions: context.permissions,
+    }),
     yardMapEnabled: layoutResult.yardMapEnabled,
     yardLayout: layoutResult.layout,
     shiftLabel: 'Day shift',
@@ -6632,7 +6638,21 @@ async function applyYardMutationRoute(request: Request) {
 
     const requiredPermission = yardPermissionForMutationType(type, payload)
     if (requiredPermission) {
-      const denied = yardPermissionDeniedResponse(context.roleKey, requiredPermission)
+      const applicationScopes = await resolveApplicationScopes(context)
+      const decision = decideYardActionAuthorization({
+        workspaceAuthority: context.workspaceAuthority,
+        roleKeys: context.roleKeys,
+        explicitPermissions: context.permissions,
+        applicationScopes,
+        requiredPermission,
+        // Client-forged role claims are never consulted.
+        clientClaimedRoleKeys: Array.isArray(input.roleKeys)
+          ? (input.roleKeys as string[])
+          : Array.isArray(payload.roleKeys)
+            ? (payload.roleKeys as string[])
+            : null,
+      })
+      const denied = yardPermissionDeniedResponse(decision, requiredPermission)
       if (denied) return denied
     }
 
