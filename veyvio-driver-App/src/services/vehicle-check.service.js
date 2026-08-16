@@ -10,6 +10,11 @@ import { unwrapRelation } from "@/lib/supabase/relations";
 import { localToday } from "@/lib/local-date";
 import { formatUkDateTime } from "@/lib/uk-locale";
 import { clearWalkaroundDraft, loadWalkaroundDraft, saveWalkaroundDraft } from "@/lib/walkaround-draft.storage";
+import {
+  clearWalkaroundDraftEvidence,
+  loadWalkaroundDraftEvidence,
+  saveWalkaroundDraftEvidence,
+} from "@/lib/walkaround-draft-evidence.storage";
 import { isChecklistFullyAnswered, normalizeChecklistProgress } from "@/lib/walkaround-progress";
 import {
   dequeueWalkaroundSubmission,
@@ -497,7 +502,16 @@ function finalizeWalkaroundSession({
       // Completed check supersedes an in-progress draft. Only drop the draft
       // from session state after clear verifies — never pretend it is gone.
       const cleared = clearWalkaroundDraft(driver.id, vehicle.id);
-      if (cleared.ok) draft = null;
+      if (cleared.ok) {
+        draft = null;
+        // Obsolete pre-Submit evidence cleanup is best-effort (not a "saved" claim).
+        void clearWalkaroundDraftEvidence({
+          companyId: driver?.organisation_id ?? driver?.organisationId,
+          membershipId: driver?.membership_id ?? driver?.membershipId,
+          driverId: driver.id,
+          vehicleId: vehicle.id,
+        }).catch(() => null);
+      }
     }
   } else if (draft?.answers && checklist.items.length > 0) {
     const normalized = normalizeChecklistProgress(checklist.items, draft.answers, draft.currentIndex ?? 0);
@@ -852,6 +866,50 @@ export function persistWalkaroundDraft(driver, vehicleId, draft) {
 
 export function discardWalkaroundDraft(driver, vehicleId) {
   return clearWalkaroundDraft(driver.id, vehicleId);
+}
+
+/** Pre-Submit odometer/signature evidence — separate from submission media-outbox. */
+export async function persistWalkaroundDraftEvidence(driver, vehicleId, patch, session) {
+  const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+  return saveWalkaroundDraftEvidence({
+    companyId,
+    membershipId,
+    driverId: driver.id,
+    vehicleId,
+    ...patch,
+  });
+}
+
+export async function loadPersistedWalkaroundDraftEvidence(driver, vehicleId, session) {
+  try {
+    const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+    return loadWalkaroundDraftEvidence({
+      companyId,
+      membershipId,
+      driverId: driver.id,
+      vehicleId,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function discardWalkaroundDraftEvidence(driver, vehicleId, session) {
+  try {
+    const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+    return clearWalkaroundDraftEvidence({
+      companyId,
+      membershipId,
+      driverId: driver.id,
+      vehicleId,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      code: error?.code ?? "OFFLINE_CONTEXT_NOT_READY",
+      message: error?.message ?? "Check evidence could not be discarded on this device.",
+    };
+  }
 }
 
 function buildResponses({ items, answers }) {

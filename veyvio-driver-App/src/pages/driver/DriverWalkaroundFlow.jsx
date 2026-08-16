@@ -6,11 +6,14 @@ import {
   CHECK_TYPES,
   declarationForCheckType,
   discardWalkaroundDraft,
+  discardWalkaroundDraftEvidence,
   flushPendingWalkaroundSubmissions,
   getDriverCheckHistory,
   getPendingSyncCount,
+  loadPersistedWalkaroundDraftEvidence,
   loadWalkaroundSession,
   persistWalkaroundDraft,
+  persistWalkaroundDraftEvidence,
   previewWalkaroundSessionFromBootstrap,
   submitWalkaroundCheck,
   uploadWalkaroundPhoto,
@@ -165,12 +168,33 @@ export default function DriverWalkaroundFlow({ driver }) {
       setSyncHint,
     };
 
+    const restoreDraftEvidence = async (vehicleId, hasDraft) => {
+      if (!vehicleId || !hasDraft) return null;
+      const evidence = await loadPersistedWalkaroundDraftEvidence(driver, vehicleId, authSession);
+      if (cancelled) return null;
+      if (evidence?.odometerPhotoDataUrl) {
+        setOdometerPhotoFile(null);
+        setOdometerPhotoDataUrl(evidence.odometerPhotoDataUrl);
+        setOdometerPhotoPreview(evidence.odometerPhotoDataUrl);
+      }
+      if (evidence?.signatureDataUrl) {
+        setSignatureDataUrl(evidence.signatureDataUrl);
+      }
+      return evidence;
+    };
+
     // Paint from bootstrap cache while network enrichment runs.
     if (!submittedRef.current && !flowInProgressRef.current) {
       const instant = previewWalkaroundSessionFromBootstrap(driver, bootstrap, { checkType });
       if (instant?.ok) {
         setSession(instant);
         const { goReview } = applyDraftToFlow(instant, setters);
+        void restoreDraftEvidence(instant.vehicle?.id, Boolean(instant.draft)).then((evidence) => {
+          if (cancelled) return;
+          if (instant.draft && !evidence?.odometerPhotoDataUrl && (instant.draft.startedAt || instant.draft.odometer)) {
+            setError("Odometer photo was not saved on this device — photograph the odometer again.");
+          }
+        });
         if (goReview) {
           flowInProgressRef.current = true;
           suppressAutoReviewRef.current = false;
@@ -209,6 +233,11 @@ export default function DriverWalkaroundFlow({ driver }) {
         }
 
         const { goReview } = applyDraftToFlow(data, setters);
+        const evidence = await restoreDraftEvidence(data.vehicle?.id, Boolean(data.draft));
+        if (cancelled) return;
+        if (data.draft && !evidence?.odometerPhotoDataUrl && (data.draft.startedAt || data.draft.odometer)) {
+          setError("Odometer photo was not saved on this device — photograph the odometer again.");
+        }
         if (goReview) {
           flowInProgressRef.current = true;
           suppressAutoReviewRef.current = false;
@@ -229,7 +258,7 @@ export default function DriverWalkaroundFlow({ driver }) {
     return () => {
       cancelled = true;
     };
-  }, [bootstrap, checkType, driver]);
+  }, [authSession, bootstrap, checkType, driver]);
 
   const isEndOfDutyCheck =
     checkType === CHECK_TYPES.end_of_duty.id || checkType === CHECK_TYPES.post_journey.id;
@@ -326,19 +355,94 @@ export default function DriverWalkaroundFlow({ driver }) {
       URL.revokeObjectURL(odometerPhotoPreview);
     }
     if (!file) {
+      if (session?.vehicle?.id) {
+        const cleared = await persistWalkaroundDraftEvidence(
+          driver,
+          session.vehicle.id,
+          { odometerPhotoDataUrl: null },
+          authSession,
+        );
+        if (!cleared?.ok) {
+          setError(cleared?.message ?? "Odometer photo could not be discarded on this device.");
+          return;
+        }
+      }
       setOdometerPhotoFile(null);
       setOdometerPhotoPreview(null);
       setOdometerPhotoDataUrl(null);
       return;
     }
-    setOdometerPhotoFile(file);
-    setOdometerPhotoPreview(URL.createObjectURL(file));
+    let dataUrl = null;
     try {
-      const dataUrl = await compressImageToDataUrl(file, 1280, 0.72);
-      setOdometerPhotoDataUrl(dataUrl);
+      dataUrl = await compressImageToDataUrl(file, 1280, 0.72);
     } catch {
+      setOdometerPhotoFile(null);
+      setOdometerPhotoPreview(null);
       setOdometerPhotoDataUrl(null);
+      setError("Odometer photo could not be prepared on this device.");
+      return;
     }
+    if (!session?.vehicle?.id) {
+      setOdometerPhotoFile(null);
+      setOdometerPhotoPreview(null);
+      setOdometerPhotoDataUrl(null);
+      setError("Odometer photo could not be saved — vehicle context is missing.");
+      return;
+    }
+    const persisted = await persistWalkaroundDraftEvidence(
+      driver,
+      session.vehicle.id,
+      { odometerPhotoDataUrl: dataUrl },
+      authSession,
+    );
+    if (!persisted?.ok) {
+      // Fail closed: never keep a recoverable-looking preview when persistence did not verify.
+      setOdometerPhotoFile(null);
+      setOdometerPhotoPreview(null);
+      setOdometerPhotoDataUrl(null);
+      setError(persisted?.message ?? "Odometer photo could not be saved on this device.");
+      return;
+    }
+    setOdometerPhotoFile(file);
+    setOdometerPhotoDataUrl(dataUrl);
+    setOdometerPhotoPreview(dataUrl);
+    setError("");
+  };
+
+  const setSignature = async (dataUrl) => {
+    if (!session?.vehicle?.id) {
+      setSignatureDataUrl(null);
+      setError("Signature could not be saved — vehicle context is missing.");
+      return;
+    }
+    if (!dataUrl) {
+      const cleared = await persistWalkaroundDraftEvidence(
+        driver,
+        session.vehicle.id,
+        { signatureDataUrl: null },
+        authSession,
+      );
+      if (!cleared?.ok) {
+        setError(cleared?.message ?? "Signature could not be discarded on this device.");
+        return;
+      }
+      setSignatureDataUrl(null);
+      setError("");
+      return;
+    }
+    const persisted = await persistWalkaroundDraftEvidence(
+      driver,
+      session.vehicle.id,
+      { signatureDataUrl: dataUrl },
+      authSession,
+    );
+    if (!persisted?.ok) {
+      setSignatureDataUrl(null);
+      setError(persisted?.message ?? "Signature could not be saved on this device.");
+      return;
+    }
+    setSignatureDataUrl(dataUrl);
+    setError("");
   };
 
   const ensureOdometerPhoto = async () => {
@@ -526,6 +630,11 @@ export default function DriverWalkaroundFlow({ driver }) {
         return;
       }
 
+      // Authoritative/queued submit succeeded — clear obsolete pre-Submit evidence.
+      if (session?.vehicle?.id) {
+        await discardWalkaroundDraftEvidence(driver, session.vehicle.id, authSession);
+      }
+
       let signedOn = null;
       const shouldAttemptSignOn =
         checkType === CHECK_TYPES.daily.id || checkType === "driver_pre_use";
@@ -648,7 +757,7 @@ export default function DriverWalkaroundFlow({ driver }) {
         onDeclarationChange={setDeclarationSigned}
         declarationText={declarationForCheckType(checkType)}
         signatureDataUrl={signatureDataUrl}
-        onSignatureChange={setSignatureDataUrl}
+        onSignatureChange={(next) => void setSignature(next)}
         error={error}
         saving={saving}
         onBack={backFromReview}
@@ -681,20 +790,41 @@ export default function DriverWalkaroundFlow({ driver }) {
         syncHint={syncHint}
         pendingSync={pendingSync}
         onDiscardDraft={() => {
-          if (session?.vehicle?.id) {
-            const cleared = discardWalkaroundDraft(driver, session.vehicle.id);
-            if (!cleared?.ok) {
-              setError(cleared?.message ?? "Draft could not be discarded on this device.");
-              return;
+          void (async () => {
+            if (session?.vehicle?.id) {
+              const cleared = discardWalkaroundDraft(driver, session.vehicle.id);
+              if (!cleared?.ok) {
+                setError(cleared?.message ?? "Draft could not be discarded on this device.");
+                return;
+              }
+              const evidenceCleared = await discardWalkaroundDraftEvidence(
+                driver,
+                session.vehicle.id,
+                authSession,
+              );
+              if (!evidenceCleared?.ok) {
+                setError(
+                  evidenceCleared?.message ?? "Check evidence could not be discarded on this device.",
+                );
+                return;
+              }
             }
-          }
-          setAnswers({});
-          setCurrentIndex(0);
-          setStartedAt(null);
-          setSyncHint(null);
-          setError("");
-          setStep("confirm");
-          flowInProgressRef.current = false;
+            if (odometerPhotoPreview?.startsWith("blob:")) {
+              URL.revokeObjectURL(odometerPhotoPreview);
+            }
+            setAnswers({});
+            setCurrentIndex(0);
+            setStartedAt(null);
+            setOdometerPhotoFile(null);
+            setOdometerPhotoPreview(null);
+            setOdometerPhotoDataUrl(null);
+            setSignatureDataUrl(null);
+            setDeclarationSigned(false);
+            setSyncHint(null);
+            setError("");
+            setStep("confirm");
+            flowInProgressRef.current = false;
+          })();
         }}
         draftComplete={session?.draft?.allItemsAnswered || isChecklistFullyAnswered(session?.checklist?.items ?? [], answers)}
         onContinueReview={() => {
