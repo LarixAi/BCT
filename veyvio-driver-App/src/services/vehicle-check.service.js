@@ -499,18 +499,25 @@ function finalizeWalkaroundSession({
 
   if (safety.checkComplete && safety.result !== "failed") {
     if (draft) {
-      // Completed check supersedes an in-progress draft. Only drop the draft
-      // from session state after clear verifies — never pretend it is gone.
-      const cleared = clearWalkaroundDraft(driver.id, vehicle.id);
-      if (cleared.ok) {
-        draft = null;
-        // Obsolete pre-Submit evidence cleanup is best-effort (not a "saved" claim).
-        void clearWalkaroundDraftEvidence({
-          companyId: driver?.organisation_id ?? driver?.organisationId,
-          membershipId: driver?.membership_id ?? driver?.membershipId,
-          driverId: driver.id,
-          vehicleId: vehicle.id,
-        }).catch(() => null);
+      // A completed daily/pre-use check supersedes only a daily/pre-use draft.
+      // Follow-on checks (in-service, changeover, end-of-duty) must keep their
+      // in-progress draft + pre-Submit evidence across session reloads / process death.
+      const draftType = String(draft.checkType ?? CHECK_TYPES.daily.id);
+      const isDailyDraft =
+        draftType === CHECK_TYPES.daily.id || draftType === "driver_pre_use";
+      if (isDailyDraft) {
+        // Only drop the draft from session state after clear verifies — never pretend it is gone.
+        const cleared = clearWalkaroundDraft(driver.id, vehicle.id);
+        if (cleared.ok) {
+          draft = null;
+          // Obsolete pre-Submit evidence cleanup is best-effort (not a "saved" claim).
+          void clearWalkaroundDraftEvidence({
+            companyId: driver?.organisation_id ?? driver?.organisationId,
+            membershipId: driver?.membership_id ?? driver?.membershipId,
+            driverId: driver.id,
+            vehicleId: vehicle.id,
+          }).catch(() => null);
+        }
       }
     }
   } else if (draft?.answers && checklist.items.length > 0) {

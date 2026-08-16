@@ -183,36 +183,37 @@ export default function DriverWalkaroundFlow({ driver }) {
       return evidence;
     };
 
-    // Paint from bootstrap cache while network enrichment runs.
-    if (!submittedRef.current && !flowInProgressRef.current) {
-      const instant = previewWalkaroundSessionFromBootstrap(driver, bootstrap, { checkType });
-      if (instant?.ok) {
-        setSession(instant);
-        const { goReview } = applyDraftToFlow(instant, setters);
-        void restoreDraftEvidence(instant.vehicle?.id, Boolean(instant.draft)).then((evidence) => {
+    void (async () => {
+      setError("");
+
+      // Bootstrap paint, but await evidence before opening review so signature/photo
+      // are in React state before the review screen mounts.
+      if (!submittedRef.current && !flowInProgressRef.current) {
+        const instant = previewWalkaroundSessionFromBootstrap(driver, bootstrap, { checkType });
+        if (instant?.ok) {
+          setSession(instant);
+          const { goReview } = applyDraftToFlow(instant, setters);
+          const evidence = await restoreDraftEvidence(instant.vehicle?.id, Boolean(instant.draft));
           if (cancelled) return;
           if (instant.draft && !evidence?.odometerPhotoDataUrl && (instant.draft.startedAt || instant.draft.odometer)) {
             setError("Odometer photo was not saved on this device — photograph the odometer again.");
           }
-        });
-        if (goReview) {
-          flowInProgressRef.current = true;
-          suppressAutoReviewRef.current = false;
-          setStep("review");
+          if (goReview) {
+            flowInProgressRef.current = true;
+            suppressAutoReviewRef.current = false;
+            setStep("review");
+          } else {
+            setStep("confirm");
+          }
         } else {
-          setStep("confirm");
+          setStep((current) =>
+            current === "review" || current === "checklist" || current === "result"
+              ? current
+              : "loading",
+          );
         }
-      } else {
-        setStep((current) =>
-          current === "review" || current === "checklist" || current === "result"
-            ? current
-            : "loading",
-        );
       }
-    }
 
-    void (async () => {
-      setError("");
       try {
         const data = await loadWalkaroundSession(driver, { checkType, bootstrap });
         if (cancelled) return;
@@ -227,6 +228,13 @@ export default function DriverWalkaroundFlow({ driver }) {
         }
 
         setSession(data);
+
+        // Always re-apply durable evidence after reload — even if checklist UI already
+        // opened — so process-death restore cannot skip photo/signature.
+        if (data.vehicle?.id && data.draft) {
+          await restoreDraftEvidence(data.vehicle.id, true);
+          if (cancelled) return;
+        }
 
         if (submittedRef.current || flowInProgressRef.current) {
           return;
