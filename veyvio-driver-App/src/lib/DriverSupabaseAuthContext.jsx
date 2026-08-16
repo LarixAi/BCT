@@ -87,7 +87,11 @@ export function DriverSupabaseAuthProvider({ children }) {
       // session — otherwise walkaround offline drops to "Sign-in could not finish".
       if (isReachabilitySessionError(ctx)) {
         const prior = sessionRef.current;
-        if (prior?.driver && prior.routeTarget !== "session_error" && prior.routeTarget !== "not_driver") {
+        if (
+          prior?.driver &&
+          prior.routeTarget !== "session_error" &&
+          prior.routeTarget !== "not_driver"
+        ) {
           return prior;
         }
       }

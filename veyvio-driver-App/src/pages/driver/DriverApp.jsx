@@ -76,6 +76,7 @@ const DriverOnboardingRouter = lazy(() => import("./onboarding/DriverOnboardingR
 const DriverPendingApprovalScreen = lazy(() => import("./onboarding/DriverPendingApprovalScreen"));
 const DriverRestrictedScreen = lazy(() => import("./onboarding/DriverRestrictedScreen"));
 const DriverWalkaroundFlow = lazy(() => import("./DriverWalkaroundFlow"));
+const DriverOfflineRecoveryScreen = lazy(() => import("./DriverOfflineRecoveryScreen"));
 const DriverChangeVehicle = lazy(() => import("./DriverChangeVehicle"));
 const DriverCheckHistory = lazy(() => import("./DriverCheckHistory"));
 const DriverCheckDetail = lazy(() => import("./DriverCheckDetail"));
@@ -138,7 +139,9 @@ function DriverSupabaseRouter() {
     driverId: driver?.id ?? null,
     userId: session?.userId ?? null,
     organisationId: session?.organisationId ?? null,
-    active: Boolean(session?.userId && driver?.id && screen !== "login"),
+    active: Boolean(
+      session?.userId && driver?.id && screen !== "login" && session?.routeTarget !== "offline_recovery",
+    ),
   });
 
   const lockActive = Boolean(driver?.id && screen !== "login" && !onAuthCallbackRoute);
@@ -169,6 +172,14 @@ function DriverSupabaseRouter() {
         onRetry={() => void refresh()}
         onSignOut={() => void logout()}
       />
+    );
+  }
+
+  if (session?.routeTarget === "offline_recovery") {
+    return (
+      <Suspense fallback={<DriverPageLoader />}>
+        <DriverOfflineRecoveryScreen session={session} onRetry={() => void refresh()} onSignOut={() => void logout()} />
+      </Suspense>
     );
   }
 

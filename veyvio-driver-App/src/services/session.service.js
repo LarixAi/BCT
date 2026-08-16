@@ -16,6 +16,11 @@ import {
 import { withTimeout } from "@/lib/withTimeout";
 import { findEnabledBiometricEnrollment } from "@/features/auth/biometrics/biometric-preference";
 import { rebindBiometricCredentialIfEnabled } from "@/features/auth/biometrics/biometric-enrollment";
+import {
+  buildOfflineRecoverySession,
+  clearVerifiedRecoveryContext,
+  saveVerifiedRecoveryContext,
+} from "@/lib/driver-offline-recovery";
 
 /** Native/web storage can stall — never block the Signing in… spinner forever. */
 const APPLY_TOKENS_TIMEOUT_MS = 8000;
@@ -242,6 +247,8 @@ export async function getDriverSessionContext() {
       };
     }
     if (sessionResult.status === 0) {
+      const recovered = await buildOfflineRecoverySession(user.id).catch(() => ({ ok: false }))
+      if (recovered?.ok) return recovered.session
       return {
         userId: user.id,
         routeTarget: "session_error",
@@ -409,7 +416,7 @@ export async function getDriverSessionContext() {
     routeTarget = "home";
   }
 
-  return {
+  const liveContext = {
     userId: user.id,
     accessToken: ensured.accessToken ?? authSession.access_token,
     driverId: refreshedDriver.id,
@@ -455,6 +462,8 @@ export async function getDriverSessionContext() {
     homeSummary: bootstrap?.legacy?.homeSummary ?? null,
     activeDepotId,
   };
+  await saveVerifiedRecoveryContext(liveContext).catch(() => ({ ok: false }));
+  return liveContext;
 }
 
 export async function applyCommandTokens(supabase, accessToken, refreshToken) {
@@ -642,6 +651,7 @@ function clearLocalSupabaseSession(supabase) {
 
 export async function signOutDriver() {
   invalidateDriverBootstrapCache();
+  await clearVerifiedRecoveryContext().catch(() => undefined);
   const supabase = getSupabaseClient();
 
   const enrollment = await findEnabledBiometricEnrollment();

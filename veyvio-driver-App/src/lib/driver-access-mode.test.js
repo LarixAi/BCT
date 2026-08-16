@@ -40,6 +40,14 @@ describe("resolveDriverAccessMode — post-auth gates", () => {
 });
 
 describe("buildAccessContext", () => {
+  it("maps offline_recovery to the limited recovery shell", () => {
+    const access = buildAccessContext(
+      { userId: "u1", routeTarget: "offline_recovery", recoveryOnly: true },
+      { id: "d1", fullName: "Driver" },
+    );
+    expect(access.mode).toBe("offline_recovery");
+  });
+
   it("maps session_error to the unlinked recovery screen", () => {
     const access = buildAccessContext(
       { userId: "u1", routeTarget: "session_error", linkError: "timed out" },

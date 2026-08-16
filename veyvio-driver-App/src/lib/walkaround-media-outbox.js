@@ -257,6 +257,13 @@ export async function persistWalkaroundMediaDataUrl({
   return id;
 }
 
+export async function hasWalkaroundMediaRecord(mediaId, { companyId, membershipId } = {}) {
+  requireWorkspaceIds(companyId, membershipId);
+  const record = await getMedia(mediaId);
+  if (!record) return false;
+  return String(record.companyId) === String(companyId) && String(record.membershipId) === String(membershipId);
+}
+
 export async function loadWalkaroundMediaDataUrl(mediaId, { companyId, membershipId } = {}) {
   requireWorkspaceIds(companyId, membershipId);
   const record = await getMedia(mediaId);
