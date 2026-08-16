@@ -561,7 +561,7 @@ export async function completeDriverSignIn() {
   // Never await unbounded supabase.auth.signOut() here — on native it can hang
   // forever after a timed-out session load and leave "Signing in…" stuck.
   async function clearFailedSignIn() {
-    clearLocalSupabaseSession(supabase);
+    await clearLocalSupabaseSession(supabase);
     await withTimeout(supabase.auth.signOut({ scope: "local" }), LOCAL_SIGNOUT_TIMEOUT_MS, null);
   }
 
@@ -696,26 +696,19 @@ export async function signInDriver(email, password) {
 }
 
 /**
- * Clear the persisted Supabase session from local storage WITHOUT calling the
- * server `/logout` endpoint. `supabase.auth.signOut()` — even with scope:'local' —
- * POSTs `/logout` and revokes the current session's refresh token on the server,
- * which is the exact token fingerprint unlock later replays (causing
- * `refresh_token_not_found`). The client re-reads the session from storage on every
- * call, so removing the stored entry logs the user out locally while the refresh
- * token stays valid server-side for biometric sign-in.
+ * Clear the persisted Supabase session WITHOUT calling the server `/logout`
+ * endpoint. `supabase.auth.signOut()` — even with scope:'local' — POSTs `/logout`
+ * and revokes the current session's refresh token on the server, which is the
+ * exact token fingerprint unlock later replays (causing `refresh_token_not_found`).
+ * Removing the stored entry logs the user out locally while the refresh token
+ * stays valid server-side for biometric sign-in.
+ *
+ * Wave 3E-2: clears native secure storage (and any legacy WebView localStorage copies).
  */
-function clearLocalSupabaseSession(supabase) {
+async function clearLocalSupabaseSession(supabase) {
   try {
-    const storage = globalThis.localStorage;
-    if (!storage) return;
-    const keys = new Set();
-    const explicitKey = supabase?.auth?.storageKey;
-    if (typeof explicitKey === "string" && explicitKey) keys.add(explicitKey);
-    for (let i = storage.length - 1; i >= 0; i -= 1) {
-      const key = storage.key(i);
-      if (key && /^sb-.*-auth-token$/.test(key)) keys.add(key);
-    }
-    for (const key of keys) storage.removeItem(key);
+    const { clearPersistedSupabaseAuth } = await import("@/lib/supabase/client");
+    await clearPersistedSupabaseAuth(supabase);
   } catch {
     // Best-effort — the auth context has already dropped the in-memory session.
   }
@@ -732,7 +725,7 @@ export async function signOutDriver() {
     // clear the session locally only — never hit the server logout, which would
     // revoke that token and force "set up fingerprint again".
     await rebindBiometricCredentialIfEnabled(enrollment.driverId).catch(() => undefined);
-    clearLocalSupabaseSession(supabase);
+    await clearLocalSupabaseSession(supabase);
     return;
   }
 

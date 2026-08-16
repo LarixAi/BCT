@@ -5,26 +5,52 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import DriverMobileAuthLayout, { DriverAuthPrimaryButton } from "@/components/driver/auth/DriverMobileAuthLayout";
 
 const PENDING_MEMBERSHIPS_KEY = "driver_pending_memberships";
-const PENDING_TOKENS_KEY = "driver_pending_auth_tokens";
+
+/**
+ * Wave 3E-2: pending access/refresh for company pick stay in process memory only.
+ * Memberships (non-secret) may remain in sessionStorage for UI restore.
+ */
+let pendingTokensMemory = { accessToken: null, refreshToken: null };
 
 export function savePendingCompanySelection({ memberships, accessToken, refreshToken }) {
   sessionStorage.setItem(PENDING_MEMBERSHIPS_KEY, JSON.stringify(memberships ?? []));
-  sessionStorage.setItem(PENDING_TOKENS_KEY, JSON.stringify({ accessToken, refreshToken }));
+  pendingTokensMemory = {
+    accessToken: accessToken ?? null,
+    refreshToken: refreshToken ?? null,
+  };
+  // Purge any pre-3E-2 credential leftovers from sessionStorage.
+  try {
+    sessionStorage.removeItem("driver_pending_auth_tokens");
+  } catch {
+    // ignore
+  }
 }
 
 export function loadPendingCompanySelection() {
   try {
     const memberships = JSON.parse(sessionStorage.getItem(PENDING_MEMBERSHIPS_KEY) ?? "[]");
-    const tokens = JSON.parse(sessionStorage.getItem(PENDING_TOKENS_KEY) ?? "{}");
-    return { memberships, ...tokens };
+    return {
+      memberships,
+      accessToken: pendingTokensMemory.accessToken,
+      refreshToken: pendingTokensMemory.refreshToken,
+    };
   } catch {
-    return { memberships: [], accessToken: null, refreshToken: null };
+    return {
+      memberships: [],
+      accessToken: pendingTokensMemory.accessToken,
+      refreshToken: pendingTokensMemory.refreshToken,
+    };
   }
 }
 
 export function clearPendingCompanySelection() {
   sessionStorage.removeItem(PENDING_MEMBERSHIPS_KEY);
-  sessionStorage.removeItem(PENDING_TOKENS_KEY);
+  try {
+    sessionStorage.removeItem("driver_pending_auth_tokens");
+  } catch {
+    // ignore
+  }
+  pendingTokensMemory = { accessToken: null, refreshToken: null };
 }
 
 export default function DriverAuthSelectCompany({ onComplete }) {
@@ -35,7 +61,8 @@ export default function DriverAuthSelectCompany({ onComplete }) {
 
   async function handleSelect(membership) {
     const companyId = membership.companyId ?? membership.tenantId;
-    if (!companyId || !pending.accessToken || !pending.refreshToken) {
+    const latest = loadPendingCompanySelection();
+    if (!companyId || !latest.accessToken || !latest.refreshToken) {
       setError("Session expired. Sign in again.");
       return;
     }
@@ -43,8 +70,8 @@ export default function DriverAuthSelectCompany({ onComplete }) {
     setLoading(companyId);
     try {
       const selected = await commandSelectTenant(
-        pending.accessToken,
-        pending.refreshToken,
+        latest.accessToken,
+        latest.refreshToken,
         companyId,
       );
       if (!selected.ok || !selected.accessToken) {
@@ -55,7 +82,7 @@ export default function DriverAuthSelectCompany({ onComplete }) {
       const applied = await applyCommandTokens(
         supabase,
         selected.accessToken,
-        selected.refreshToken ?? pending.refreshToken,
+        selected.refreshToken ?? latest.refreshToken,
       );
       if (!applied.ok) {
         setError(applied.message ?? "Could not apply company session.");
