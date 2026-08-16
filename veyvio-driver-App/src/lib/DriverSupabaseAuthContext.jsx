@@ -85,6 +85,17 @@ export function DriverSupabaseAuthProvider({ children }) {
       const guarded = resolveRefreshedSession(ctx, sessionRef.current);
       if (guarded.keptPrior) return guarded.session;
 
+      if (ctx?.requiresCompanySelection) {
+        savePendingCompanySelection({
+          memberships: ctx.memberships ?? [],
+          accessToken: ctx.accessToken,
+          refreshToken: ctx.refreshToken,
+        });
+        setPendingCompanySelection(true);
+        setSession(null);
+        return ctx;
+      }
+
       const driverId = ctx?.driver?.id;
       if (driverId) {
         const security = await withTimeout(
@@ -295,7 +306,13 @@ export function DriverSupabaseAuthProvider({ children }) {
       refreshGeneration.current += 1;
       resetBiometricLockOnSignOut();
       const scope = resolveDriverWorkspaceScope(
-        { id: session?.driverId, organisation_id: session?.activeCompanyId ?? session?.companyId },
+        {
+          id: session?.driverId,
+          organisation_id: session?.organisationId ?? session?.activeCompanyId ?? session?.companyId,
+          organisationId: session?.organisationId ?? session?.activeCompanyId ?? session?.companyId,
+          membership_id: session?.membershipId,
+          membershipId: session?.membershipId,
+        },
         session,
       );
       if (scope.companyId && scope.membershipId) {

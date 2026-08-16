@@ -7,6 +7,7 @@ import {
   resolveActiveSupportGrant,
   type ActiveSupportGrant,
 } from './support-access.ts'
+import { decideTenantMembershipAccess } from './membership-access.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
@@ -125,23 +126,30 @@ export async function authenticate(request: Request, requireCompany = true): Pro
     .eq('user_id', data.user.id)
     .maybeSingle()
 
-  const hasActiveMembership = !membershipError && membership?.status === 'active'
   let supportGrant: ActiveSupportGrant | null = null
+  if (platformRole && (membershipError || membership?.status !== 'active')) {
+    supportGrant = await resolveActiveSupportGrant(data.user.id, companyId)
+  }
 
-  if (!hasActiveMembership) {
-    if (platformRole) {
-      supportGrant = await resolveActiveSupportGrant(data.user.id, companyId)
-    }
-    if (!supportGrant) {
-      await recordSecurityEvent({
-        companyId,
-        actorUserId: data.user.id,
-        eventType: 'auth.membership_denied',
-        message: 'Tenant access denied — no active membership or support grant',
-        severity: 'attention',
-      }).catch(() => undefined)
-      throw new HttpError(403, 'Company access is unavailable', 'forbidden')
-    }
+  const access = decideTenantMembershipAccess({
+    membership: membershipError ? null : membership,
+    hasSupportGrant: Boolean(supportGrant),
+  })
+  const hasActiveMembership = access.allow && access.via === 'membership'
+
+  if (!access.allow) {
+    await recordSecurityEvent({
+      companyId,
+      actorUserId: data.user.id,
+      eventType: 'auth.membership_denied',
+      message: 'Tenant access denied — no active membership or support grant',
+      severity: 'attention',
+      metadata: { reason: access.reason },
+    }).catch(() => undefined)
+    throw new HttpError(403, 'Company access is unavailable', 'forbidden')
+  }
+
+  if (access.via === 'support' && supportGrant) {
     assertSupportGrantWrite(supportGrant, request.method)
     await recordSecurityEvent({
       companyId,

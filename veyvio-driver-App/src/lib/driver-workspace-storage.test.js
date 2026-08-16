@@ -64,4 +64,13 @@ describe("driver-workspace-storage", () => {
       ),
     ).toEqual({ companyId: "co-a", membershipId: "mem-real" });
   });
+
+  it("resolves company from session.organisationId when activeCompanyId is absent", () => {
+    expect(
+      resolveDriverWorkspaceScope(
+        { id: "drv-1", organisation_id: "co-driver" },
+        { organisationId: "co-session", membershipId: "mem-session" },
+      ),
+    ).toEqual({ companyId: "co-session", membershipId: "mem-session" });
+  });
 });

@@ -34,6 +34,7 @@ export function resolveDriverWorkspaceScope(driver, session) {
   const companyId =
     session?.activeCompanyId ??
     session?.companyId ??
+    session?.organisationId ??
     driver?.organisation_id ??
     driver?.organisationId ??
     null

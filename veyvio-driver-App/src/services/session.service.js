@@ -21,6 +21,10 @@ import {
   clearVerifiedRecoveryContext,
   saveVerifiedRecoveryContext,
 } from "@/lib/driver-offline-recovery";
+import {
+  assertDriverTenantContextReady,
+  resolveCompanyAutoActivationPolicy,
+} from "@/lib/driver-tenant-context";
 
 /** Native/web storage can stall — never block the Signing in… spinner forever. */
 const APPLY_TOKENS_TIMEOUT_MS = 8000;
@@ -174,35 +178,54 @@ async function ensureCompanyOnSession(supabase, accessToken, refreshToken) {
       4000,
       { data: null, error: { message: "timeout" } },
     );
-    const memberships = membershipsResult?.data ?? null;
+    const membershipRows = membershipsResult?.data ?? [];
+    const companyIds = membershipRows.map((row) => String(row.company_id));
+    const policy = resolveCompanyAutoActivationPolicy(companyIds);
 
-    const companyIds = (memberships ?? []).map((row) => String(row.company_id));
-    for (const companyId of companyIds) {
+    // Wave 3A: never silently iterate “first company that works”.
+    if (policy.action === "require_selection") {
+      const memberships = membershipRows.map((row) => ({
+        companyId: String(row.company_id),
+        tenantId: String(row.company_id),
+        companyName: String(row.company_id),
+        name: String(row.company_id),
+      }));
+      return {
+        accessToken,
+        refreshToken,
+        sessionResult,
+        requiresCompanySelection: true,
+        memberships,
+      };
+    }
+
+    if (policy.action === "activate") {
+      const companyId = policy.companyId;
       const selected = await withTimeout(
         commandSelectTenant(accessToken, refreshToken, companyId),
         12000,
         { ok: false },
       );
-      if (!selected.ok || !selected.accessToken) continue;
+      if (selected.ok && selected.accessToken) {
+        await withTimeout(
+          supabase.auth.setSession({
+            access_token: selected.accessToken,
+            refresh_token: selected.refreshToken ?? refreshToken,
+          }),
+          APPLY_TOKENS_TIMEOUT_MS,
+          null,
+        );
 
-      await withTimeout(
-        supabase.auth.setSession({
-          access_token: selected.accessToken,
-          refresh_token: selected.refreshToken ?? refreshToken,
-        }),
-        APPLY_TOKENS_TIMEOUT_MS,
-        null,
-      );
-
-      const retry = await fetchDriverSessionWithRetry(selected.accessToken);
-      if (retry.ok) {
-        return {
-          accessToken: selected.accessToken,
-          refreshToken: selected.refreshToken ?? refreshToken,
-          sessionResult: retry,
-        };
+        const retry = await fetchDriverSessionWithRetry(selected.accessToken);
+        if (retry.ok) {
+          return {
+            accessToken: selected.accessToken,
+            refreshToken: selected.refreshToken ?? refreshToken,
+            sessionResult: retry,
+          };
+        }
+        sessionResult = retry;
       }
-      sessionResult = retry;
     }
   }
 
@@ -235,6 +258,19 @@ export async function getDriverSessionContext() {
     authSession.refresh_token,
   );
   const { sessionResult } = ensured;
+
+  if (ensured.requiresCompanySelection) {
+    return {
+      userId: user.id,
+      routeTarget: "select_company",
+      driver: null,
+      requiresCompanySelection: true,
+      memberships: ensured.memberships ?? [],
+      accessToken: ensured.accessToken,
+      refreshToken: ensured.refreshToken,
+      linkError: "Select a company before continuing.",
+    };
+  }
 
   if (!sessionResult.ok) {
     if (sessionResult.status === 403) {
@@ -273,6 +309,20 @@ export async function getDriverSessionContext() {
   }
 
   const mapped = mapCommandSessionToDriver(sessionResult.session, user.id);
+  const tenantReady = assertDriverTenantContextReady({
+    companyId: mapped.organisationId,
+    membershipId: mapped.membershipId,
+    userId: user.id,
+    driverId: mapped.driverRow?.id,
+  });
+  if (!tenantReady.ok) {
+    return {
+      userId: user.id,
+      routeTarget: "not_driver",
+      driver: null,
+      linkError: tenantReady.message,
+    };
+  }
   const driverRow = mapped.driverRow;
   const driver = mapped.driver;
 
@@ -375,10 +425,13 @@ export async function getDriverSessionContext() {
   const enabledModules = Array.isArray(bootstrap?.entitlements?.enabledModules)
     ? bootstrap.entitlements.enabledModules
     : null;
-  // Soft-open until entitlements are present; then require workforce for Driver surface.
   const entitlementsMod = await withTimeout(import("@veyvio/entitlements"), 3000, null);
-  const canUse = entitlementsMod?.canUse ?? (() => true);
-  const moduleBlocked = !canUse(enabledModules, "workforce");
+  // Fail closed when the helper is unavailable; soft-open only when bootstrap itself never arrived.
+  const canUse = entitlementsMod?.canUse ?? (() => false);
+  const moduleBlocked =
+    enabledModules == null
+      ? Boolean(bootstrap)
+      : !canUse(enabledModules, "workforce");
 
   let routeTarget = "home";
   const activationPhase = sessionResult.session?.activationPhase;
@@ -420,13 +473,18 @@ export async function getDriverSessionContext() {
     userId: user.id,
     accessToken: ensured.accessToken ?? authSession.access_token,
     driverId: refreshedDriver.id,
-    organisationId: mapped.organisationId,
+    organisationId: tenantReady.tenant.organisationId,
     organisationName: mapped.organisationName,
-    membershipId: mapped.membershipId,
-    userId: user.id,
+    companyId: tenantReady.tenant.companyId,
+    activeCompanyId: tenantReady.tenant.activeCompanyId,
+    membershipId: tenantReady.tenant.membershipId,
     driver: bootstrap?.driver?.displayName
       ? {
           ...refreshedDriver,
+          organisationId: tenantReady.tenant.organisationId,
+          organisation_id: tenantReady.tenant.organisationId,
+          membershipId: tenantReady.tenant.membershipId,
+          membership_id: tenantReady.tenant.membershipId,
           fullName: bootstrap.driver.displayName,
           organisationName: bootstrap.operator?.companyName,
           profilePhotoUrl:
@@ -438,6 +496,10 @@ export async function getDriverSessionContext() {
         }
       : {
           ...refreshedDriver,
+          organisationId: tenantReady.tenant.organisationId,
+          organisation_id: tenantReady.tenant.organisationId,
+          membershipId: tenantReady.tenant.membershipId,
+          membership_id: tenantReady.tenant.membershipId,
           profilePhotoUrl:
             bootstrap?.driver?.profilePhotoUrl ||
             bootstrap?.driver?.profile_photo_url ||
@@ -508,6 +570,16 @@ export async function completeDriverSignIn() {
     return {
       ok: false,
       message: context.linkError ?? "Could not finish signing in. Check your connection and try again.",
+    };
+  }
+  if (context?.requiresCompanySelection || context?.routeTarget === "select_company") {
+    return {
+      ok: false,
+      requiresCompanySelection: true,
+      memberships: context.memberships ?? [],
+      accessToken: context.accessToken,
+      refreshToken: context.refreshToken,
+      message: context.linkError ?? "Select a company before continuing.",
     };
   }
   if (context?.routeTarget === "not_driver") {
