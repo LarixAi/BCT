@@ -3,10 +3,10 @@ name = "veyvio-admin"
 compatibility_date = "2025-08-01"
 pages_build_output_dir = "dist"
 
-# Non-secret defaults. Set secrets in the Pages dashboard or via:
-#   npx wrangler pages secret put COMMAND_API_URL --project-name=veyvio-admin
-#   npx wrangler pages secret put SUPABASE_URL --project-name=veyvio-admin
+# Non-secret upstream endpoints (anon key remains a Pages secret).
 #   npx wrangler pages secret put SUPABASE_ANON_KEY --project-name=veyvio-admin
 [vars]
+COMMAND_API_URL = "https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api"
+SUPABASE_URL = "https://qeckgqjrfbdyxchuncdt.supabase.co"
 VEYVIO_COMMAND_CANONICAL_HOST = "command.veyvio.co.uk"
 VEYVIO_COMMAND_ENFORCE_CANONICAL_HOST = "1"
