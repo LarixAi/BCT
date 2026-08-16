@@ -16,6 +16,8 @@ import {
 import { enforceRemoteDeviceSecurity } from "@/features/auth/biometrics/biometric-security-sync";
 import { clearDriverSensitiveWorkspace } from "@/lib/driver-sensitive-storage";
 import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import { OFFLINE_RECOVERY_ROUTE } from "@/lib/driver-offline-recovery";
+import { resolveRefreshedSession } from "@/lib/driver-session-refresh-guard";
 
 const DriverSupabaseAuthContext = createContext(null);
 
@@ -38,12 +40,6 @@ const BOOT_ESCAPE_MS = 12000;
  * app a moment to finish launching before treating TOKEN_REFRESHED as safe to act on.
  */
 const HAS_BOOTED_MS = 4000;
-
-function isReachabilitySessionError(ctx) {
-  if (!ctx || ctx.routeTarget !== "session_error") return false;
-  const msg = String(ctx.linkError ?? "");
-  return /timed out|check your connection|could not reach|could not restore/i.test(msg);
-}
 
 export function DriverSupabaseAuthProvider({ children }) {
   const [session, setSession] = useState(null);
@@ -82,19 +78,12 @@ export function DriverSupabaseAuthProvider({ children }) {
         return sessionRef.current;
       }
 
-      // Airplane / patchy 4G: Command timed out inside getDriverSessionContext and
-      // returned session_error. That must NOT replace an already-good operational
-      // session — otherwise walkaround offline drops to "Sign-in could not finish".
-      if (isReachabilitySessionError(ctx)) {
-        const prior = sessionRef.current;
-        if (
-          prior?.driver &&
-          prior.routeTarget !== "session_error" &&
-          prior.routeTarget !== "not_driver"
-        ) {
-          return prior;
-        }
-      }
+      // Airplane / patchy 4G: Command is unreachable, so getDriverSessionContext
+      // returns session_error or the cached-identity recovery shell. Neither may
+      // replace an already-good operational session — that drops the driver out of a
+      // walkaround in progress and loses evidence held in memory until submit.
+      const guarded = resolveRefreshedSession(ctx, sessionRef.current);
+      if (guarded.keptPrior) return guarded.session;
 
       const driverId = ctx?.driver?.id;
       if (driverId) {
@@ -138,6 +127,16 @@ export function DriverSupabaseAuthProvider({ children }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Recovery shell must not need a manual tap to leave once the network is back.
+  useEffect(() => {
+    if (session?.routeTarget !== OFFLINE_RECOVERY_ROUTE) return undefined;
+    const onOnline = () => {
+      void refresh();
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [refresh, session?.routeTarget]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
