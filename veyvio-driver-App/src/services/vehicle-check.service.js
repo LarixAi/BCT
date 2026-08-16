@@ -1058,7 +1058,12 @@ export async function submitWalkaroundCheck({
   const commandResult = await insertWalkaroundCheckViaCommand(payload);
   if (commandResult.ok) return commandResult;
   if (getCommandApiBaseUrl() || commandResult.skipLegacy) {
-    return { ok: false, message: commandResult.message ?? "Vehicle check could not be submitted." };
+    return {
+      ok: false,
+      message: commandResult.message ?? "Vehicle check could not be submitted.",
+      status: commandResult.status,
+      code: commandResult.code,
+    };
   }
 
   return insertWalkaroundCheck(payload);
@@ -1215,15 +1220,21 @@ async function insertWalkaroundCheckViaCommand(payload) {
   });
 
   if (!submitted.ok) {
+    const failure = {
+      ok: false,
+      message: submitted.message,
+      status: submitted.status,
+      code: submitted.code,
+    };
     // Prefer Command when it is configured — do not silently write to Ridova.
     if (getCommandApiBaseUrl()) {
-      return { ok: false, skipLegacy: true, message: submitted.message };
+      return { ...failure, skipLegacy: true };
     }
     const commandVehicles = await listAssignableVehiclesFromCommand();
     if (commandVehicles.length > 0) {
-      return { ok: false, skipLegacy: true, message: submitted.message };
+      return { ...failure, skipLegacy: true };
     }
-    return { ok: false, skipLegacy: false, message: submitted.message };
+    return { ...failure, skipLegacy: false };
   }
 
   discardWalkaroundDraft(driver, vehicle.id);
@@ -1438,6 +1449,7 @@ export async function flushPendingWalkaroundSubmissions(driver, session = null) 
       if (isPermanentOpsFailure(result)) {
         await markWalkaroundReconciliation(driver.id, item.id, companyId, membershipId, {
           status: result.status,
+          code: result.code ?? null,
           message: result.message ?? "Command rejected this vehicle check.",
         });
         continue;

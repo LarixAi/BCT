@@ -6,6 +6,7 @@ import {
 } from "@/lib/driver-durable-kv";
 import { closeWalkaroundMediaConnection, countPendingWalkaroundMedia } from "@/lib/walkaround-media-outbox";
 import { loadSyncQueue } from "@/lib/walkaround-sync.storage";
+import { ITEM_PENDING, ITEM_RECONCILIATION } from "@/lib/driver-durable-queue";
 import { commandSubmitVehicleCheck } from "@/lib/command-api";
 import {
   flushPendingWalkaroundSubmissions,
@@ -154,6 +155,67 @@ describe("walkaround clientCheckId idempotency", () => {
     expect(await loadSyncQueue("drv-1", "co-a", "mem-1")).toHaveLength(1);
     expect(await countPendingWalkaroundMedia("co-a", "mem-1")).toBe(2);
   });
+
+  it("moves a 403 vehicle_check_forbidden replay to reconciliation and skips later automatic flush", async () => {
+    await submitWalkaroundCheck(baseInput());
+    const queued = await loadSyncQueue("drv-1", "co-a", "mem-1");
+    const K = queued[0].id;
+    vi.stubGlobal("navigator", { onLine: true });
+    submitVehicleCheckViaCommand.mockResolvedValue({
+      ok: false,
+      status: 403,
+      code: "vehicle_check_forbidden",
+      message: "Vehicle check is not authorised.",
+    });
+
+    const first = await flushPendingWalkaroundSubmissions(
+      { id: "drv-1", organisation_id: "co-a", membership_id: "mem-1" },
+      { membershipId: "mem-1", activeCompanyId: "co-a", companyId: "co-a" },
+    );
+    expect(first.synced).toBe(0);
+    expect(submitVehicleCheckViaCommand).toHaveBeenCalledTimes(1);
+
+    const held = await loadSyncQueue("drv-1", "co-a", "mem-1");
+    expect(held).toHaveLength(1);
+    expect(held[0].id).toBe(K);
+    expect(held[0].status).toBe(ITEM_RECONCILIATION);
+    expect(held[0].lastError).toMatchObject({
+      status: 403,
+      code: "vehicle_check_forbidden",
+    });
+    expect(held[0].revalidatedAt).toBeUndefined();
+    expect(held[0].revalidationCount ?? 0).toBe(0);
+    expect(await countPendingWalkaroundMedia("co-a", "mem-1")).toBe(2);
+
+    const second = await flushPendingWalkaroundSubmissions(
+      { id: "drv-1", organisation_id: "co-a", membership_id: "mem-1" },
+      { membershipId: "mem-1", activeCompanyId: "co-a", companyId: "co-a" },
+    );
+    expect(second.synced).toBe(0);
+    expect(submitVehicleCheckViaCommand).toHaveBeenCalledTimes(1);
+    expect((await loadSyncQueue("drv-1", "co-a", "mem-1"))[0].status).toBe(ITEM_RECONCILIATION);
+  });
+
+  it.each([
+    [401, "session expired"],
+    [429, "rate limited"],
+  ])("does not treat HTTP %s as permanent walkaround reconciliation", async (status, message) => {
+    await submitWalkaroundCheck(baseInput());
+    vi.stubGlobal("navigator", { onLine: true });
+    submitVehicleCheckViaCommand.mockResolvedValue({
+      ok: false,
+      status,
+      message,
+    });
+    await flushPendingWalkaroundSubmissions(
+      { id: "drv-1", organisation_id: "co-a", membership_id: "mem-1" },
+      { membershipId: "mem-1", activeCompanyId: "co-a", companyId: "co-a" },
+    );
+    const queued = await loadSyncQueue("drv-1", "co-a", "mem-1");
+    expect(queued).toHaveLength(1);
+    expect(queued[0].status).toBe(ITEM_PENDING);
+    expect(await countPendingWalkaroundMedia("co-a", "mem-1")).toBe(2);
+  });
 });
 
 describe("Command duplicate vehicle-check POST", () => {
@@ -173,6 +235,31 @@ describe("Command duplicate vehicle-check POST", () => {
     expect(first.check.id).toBe("record-r");
     expect(second.check.id).toBe("record-r");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("returns status and code from a 403 vehicle_check_forbidden response", async () => {
+    vi.stubEnv("VITE_COMMAND_API_BASE_URL", "https://example.supabase.co/functions/v1/command-api");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 403,
+        json: async () => ({
+          statusCode: 403,
+          code: "vehicle_check_forbidden",
+          message: "Vehicle check is not authorised.",
+        }),
+      })),
+    );
+    const result = await commandSubmitVehicleCheck("token", { clientCheckId: "j-new", vehicleId: "veh-1" });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 403,
+      code: "vehicle_check_forbidden",
+      message: "Vehicle check is not authorised.",
+    });
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });

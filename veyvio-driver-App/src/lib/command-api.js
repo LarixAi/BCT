@@ -680,7 +680,8 @@ export async function commandSubmitVehicleCheck(accessToken, input) {
   });
 
   if (!response.ok) {
-    return { ok: false, message: await readError(response, "Vehicle check could not be submitted.") };
+    const failure = await readApiFailure(response, "Vehicle check could not be submitted.");
+    return { ok: false, ...failure };
   }
 
   return { ok: true, check: await response.json() };
