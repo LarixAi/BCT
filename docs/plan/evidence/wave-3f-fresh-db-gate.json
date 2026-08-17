@@ -2,7 +2,14 @@
   "generated_at": "2026-08-17T06:29:42.777Z",
   "fix": "FIX-P1-048",
   "status": "PASS",
-  "environment": "local (qeckgqjrfbdyxchuncdt)",
+  "environment": "GitHub Actions + local",
+  "ci_run": {
+    "workflow": "32002475034",
+    "job": "Admin fresh-DB gate (FIX-P1-048)",
+    "base_branch": "phase0/reproducibility",
+    "pr": 3,
+    "duration_seconds": 194
+  },
   "steps": [
     "supabase start (cost_control schema excluded until reset)",
     "supabase db reset",
@@ -22,8 +29,7 @@
     "same_company_triggers": {
       "total": 13,
       "pass": 13,
-      "fail": 0,
-      "acceptance": "23514 cross-tenant link refused on service_role forge"
+      "fail": 0
     },
     "jwt_matrix": {
       "total": 72,
@@ -31,7 +37,6 @@
       "fail": 0
     }
   },
-  "storage": "explicit separate slice — not in this gate",
-  "hosted_migrations": "202608170001–004 local only until CI green on main",
-  "ci_job": "admin-fresh-db (.github/workflows/ci.yml) — pending first green GitHub Actions run"
+  "storage": "explicit separate slice — wave-3fe-storage-isolation.json (not in this gate)",
+  "hosted_migrations": "202608170001–004 held until FIX-P0-011 lock reassessment"
 }
