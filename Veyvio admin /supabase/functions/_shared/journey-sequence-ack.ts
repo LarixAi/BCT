@@ -1,7 +1,7 @@
 /**
  * Durable journey-sequence acknowledgements for Command + Driver (F-03).
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import { notifyDriverJourneySequenceChanged } from './driver-ops-notifications.ts'
@@ -14,6 +14,10 @@ import {
   type JourneyDeclineReason,
 } from './journey-sequence-ack.mapping.ts'
 
+function ackDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'journey_sequence_ack')
+}
+
 async function resolveDriverIdForAck(input: {
   companyId: string
   dutyId?: string | null
@@ -22,7 +26,7 @@ async function resolveDriverIdForAck(input: {
 }): Promise<string | null> {
   const dutyId = input.dutyId ?? parseDutyTripSyntheticId(input.tripKey)
   if (dutyId) {
-    const { data: duty } = await admin
+    const { data: duty } = await ackDb(input.companyId)
       .from('duties')
       .select('driver_id')
       .eq('company_id', input.companyId)
@@ -31,7 +35,7 @@ async function resolveDriverIdForAck(input: {
     if (duty?.driver_id) return String(duty.driver_id)
   }
   if (input.runId) {
-    const { data: run } = await admin
+    const { data: run } = await ackDb(input.companyId)
       .from('runs')
       .select('driver_id')
       .eq('company_id', input.companyId)
@@ -39,14 +43,14 @@ async function resolveDriverIdForAck(input: {
       .maybeSingle()
     if (run?.driver_id) return String(run.driver_id)
 
-    const { data: link } = await admin
+    const { data: link } = await ackDb(input.companyId)
       .from('duty_runs')
       .select('duty_id')
       .eq('run_id', input.runId)
       .limit(1)
       .maybeSingle()
     if (link?.duty_id) {
-      const { data: duty } = await admin
+      const { data: duty } = await ackDb(input.companyId)
         .from('duties')
         .select('driver_id')
         .eq('company_id', input.companyId)
@@ -62,7 +66,7 @@ export async function getJourneySequenceAcknowledgement(input: {
   companyId: string
   tripKey: string
 }) {
-  const { data, error } = await admin
+  const { data, error } = await ackDb(input.companyId)
     .from('journey_sequence_acknowledgements')
     .select('*')
     .eq('company_id', input.companyId)
@@ -98,7 +102,7 @@ export async function ensureJourneySequenceAcknowledgement(input: {
 
   const now = new Date().toISOString()
   const dutyId = input.dutyId ?? parseDutyTripSyntheticId(input.tripKey)
-  const { data, error } = await admin
+  const { data, error } = await ackDb(input.companyId)
     .from('journey_sequence_acknowledgements')
     .upsert(
       {
@@ -157,7 +161,7 @@ export async function advanceJourneySequenceAcknowledgement(input: {
   nextStatus: 'viewed' | 'acknowledged' | 'declined' | 'delivered'
   declineReason?: JourneyDeclineReason | null
 }) {
-  const { data: row, error } = await admin
+  const { data: row, error } = await ackDb(input.companyId)
     .from('journey_sequence_acknowledgements')
     .select('*')
     .eq('company_id', input.companyId)
@@ -195,7 +199,7 @@ export async function advanceJourneySequenceAcknowledgement(input: {
     patch.decline_reason = input.declineReason ?? 'other'
   }
 
-  const { data: updated, error: updateError } = await admin
+  const { data: updated, error: updateError } = await ackDb(input.companyId)
     .from('journey_sequence_acknowledgements')
     .update(patch)
     .eq('company_id', input.companyId)
@@ -246,7 +250,7 @@ export async function listPendingJourneySequenceAcksForDriver(input: {
   companyId: string
   driverId: string
 }) {
-  const { data: duties, error: dutyError } = await admin
+  const { data: duties, error: dutyError } = await ackDb(input.companyId)
     .from('duties')
     .select('id')
     .eq('company_id', input.companyId)
@@ -255,7 +259,7 @@ export async function listPendingJourneySequenceAcksForDriver(input: {
   const dutyIds = (duties ?? []).map((d) => String(d.id))
 
   const runIdSet = new Set<string>()
-  const { data: runs, error: runError } = await admin
+  const { data: runs, error: runError } = await ackDb(input.companyId)
     .from('runs')
     .select('id')
     .eq('company_id', input.companyId)
@@ -264,7 +268,7 @@ export async function listPendingJourneySequenceAcksForDriver(input: {
   for (const run of runs ?? []) runIdSet.add(String(run.id))
 
   if (dutyIds.length) {
-    const { data: links, error: linkError } = await admin
+    const { data: links, error: linkError } = await ackDb(input.companyId)
       .from('duty_runs')
       .select('run_id')
       .in('duty_id', dutyIds)
@@ -277,7 +281,7 @@ export async function listPendingJourneySequenceAcksForDriver(input: {
 
   if (!dutyIds.length && !runIds.length) return []
 
-  const { data, error } = await admin
+  const { data, error } = await ackDb(input.companyId)
     .from('journey_sequence_acknowledgements')
     .select('*')
     .eq('company_id', input.companyId)
@@ -305,7 +309,7 @@ export async function driverAdvanceJourneySequenceAcknowledgement(input: {
   nextStatus: 'viewed' | 'acknowledged' | 'declined' | 'delivered'
   declineReason?: JourneyDeclineReason | null
 }) {
-  const { data: row, error } = await admin
+  const { data: row, error } = await ackDb(input.companyId)
     .from('journey_sequence_acknowledgements')
     .select('*')
     .eq('company_id', input.companyId)
