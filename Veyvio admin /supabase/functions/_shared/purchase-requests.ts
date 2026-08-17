@@ -1,7 +1,7 @@
 /**
  * Durable purchase requests — Command write path (F-18 / TD-027).
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -13,9 +13,13 @@ import {
 
 type Row = Record<string, unknown>
 
+function purchaseDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'purchase_requests')
+}
+
 async function loadPurchase(companyId: string, purchaseId: string): Promise<Row | null> {
   if (!isUuid(purchaseId)) return null
-  const { data, error } = await admin
+  const { data, error } = await purchaseDb(companyId)
     .from('purchase_requests')
     .select('*, vehicles(registration), depots(name)')
     .eq('company_id', companyId)
@@ -35,7 +39,7 @@ function mapLoaded(row: Row) {
 }
 
 export async function listPurchaseRequests(companyId: string) {
-  const { data, error } = await admin
+  const { data, error } = await purchaseDb(companyId)
     .from('purchase_requests')
     .select('*, vehicles(registration), depots(name)')
     .eq('company_id', companyId)
@@ -59,6 +63,7 @@ export async function createPurchaseRequest(input: {
   urgency?: string
   neededBy?: string | null
 }) {
+  const companyId = input.companyId
   const resourceName = String(input.resourceName ?? '').trim()
   if (!resourceName) throw new HttpError(400, 'resourceName is required')
   const quantity = Number(input.quantity)
@@ -87,7 +92,7 @@ export async function createPurchaseRequest(input: {
     updated_at: now,
   }
 
-  const { data, error } = await admin.from('purchase_requests').insert(insert).select('id').single()
+  const { data, error } = await purchaseDb(companyId).from('purchase_requests').insert(insert).select('id').single()
   if (error || !data) throw new Error(error?.message ?? 'Purchase request create failed')
 
   await writeImmutableAudit({
@@ -110,7 +115,8 @@ export async function approvePurchaseRequest(input: {
   actorName: string
   purchaseId: string
 }) {
-  const row = await loadPurchase(input.companyId, input.purchaseId)
+  const companyId = input.companyId
+  const row = await loadPurchase(companyId, input.purchaseId)
   if (!row) throw new HttpError(404, 'Purchase request not found')
 
   const mapped = mapLoaded(row)
@@ -124,7 +130,7 @@ export async function approvePurchaseRequest(input: {
   if (!gate.ok) throw new HttpError(403, gate.reason)
 
   const now = new Date().toISOString()
-  const { error } = await admin
+  const { error } = await purchaseDb(companyId)
     .from('purchase_requests')
     .update({
       status: 'approved',
