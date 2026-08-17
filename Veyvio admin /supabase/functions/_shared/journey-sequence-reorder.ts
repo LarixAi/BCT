@@ -2,7 +2,7 @@
  * Durable journey-sequence reorder for Command (F-03).
  * Updates run_trips.sequence or trips.passenger_ids, bumps versions, audits.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -13,6 +13,10 @@ import {
 } from './journey-sequence-reorder.mapping.ts'
 
 type Row = Record<string, unknown>
+
+function reorderDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'journey_sequence_reorder')
+}
 
 const REASONS = new Set([
   'traffic_or_road_closure',
@@ -27,8 +31,8 @@ const REASONS = new Set([
   'other',
 ])
 
-async function loadRunTripOrder(runId: string): Promise<Array<{ tripId: string; sequence: number }>> {
-  const { data, error } = await admin
+async function loadRunTripOrder(companyId: string, runId: string): Promise<Array<{ tripId: string; sequence: number }>> {
+  const { data, error } = await reorderDb(companyId)
     .from('run_trips')
     .select('trip_id, sequence')
     .eq('run_id', runId)
@@ -40,10 +44,10 @@ async function loadRunTripOrder(runId: string): Promise<Array<{ tripId: string; 
   }))
 }
 
-async function applyRunTripOrder(runId: string, orderedTripIds: string[]) {
+async function applyRunTripOrder(companyId: string, runId: string, orderedTripIds: string[]) {
   // Unique (run_id, sequence) — move to temporary negative sequences first.
   for (let i = 0; i < orderedTripIds.length; i++) {
-    const { error } = await admin
+    const { error } = await reorderDb(companyId)
       .from('run_trips')
       .update({ sequence: -(i + 1) })
       .eq('run_id', runId)
@@ -51,7 +55,7 @@ async function applyRunTripOrder(runId: string, orderedTripIds: string[]) {
     if (error) throw new Error(error.message)
   }
   for (let i = 0; i < orderedTripIds.length; i++) {
-    const { error } = await admin
+    const { error } = await reorderDb(companyId)
       .from('run_trips')
       .update({ sequence: i + 1 })
       .eq('run_id', runId)
@@ -61,7 +65,7 @@ async function applyRunTripOrder(runId: string, orderedTripIds: string[]) {
 }
 
 async function resolveDutyContext(companyId: string, dutyId: string) {
-  const { data: duty, error } = await admin
+  const { data: duty, error } = await reorderDb(companyId)
     .from('duties')
     .select('id, company_id, status, version')
     .eq('company_id', companyId)
@@ -70,7 +74,7 @@ async function resolveDutyContext(companyId: string, dutyId: string) {
   if (error) throw new Error(error.message)
   if (!duty) throw new HttpError(404, 'Duty not found', 'not_found')
 
-  const { data: dutyRuns, error: dutyRunError } = await admin
+  const { data: dutyRuns, error: dutyRunError } = await reorderDb(companyId)
     .from('duty_runs')
     .select('run_id, sequence')
     .eq('duty_id', dutyId)
@@ -83,7 +87,7 @@ async function resolveDutyContext(companyId: string, dutyId: string) {
 }
 
 async function resolveTripRow(companyId: string, tripId: string) {
-  const { data, error } = await admin
+  const { data, error } = await reorderDb(companyId)
     .from('trips')
     .select('id, company_id, status, version, passenger_ids, planned_pickup_at')
     .eq('company_id', companyId)
@@ -112,6 +116,7 @@ export async function commitJourneySequenceReorder(input: {
   changed: boolean
   auditId: string
 }> {
+  const companyId = input.companyId
   const reason = String(input.reason ?? '').trim()
   if (!REASONS.has(reason)) {
     throw new HttpError(400, 'A recognised reorganise reason is required', 'invalid_reason')
@@ -128,7 +133,7 @@ export async function commitJourneySequenceReorder(input: {
     if (!canReorderTripStatus(mapDutyStatus(String(duty.status)))) {
       throw new HttpError(409, 'This duty cannot be reorganised in its current status', 'reorder_blocked')
     }
-    const current = await loadRunTripOrder(runId)
+    const current = await loadRunTripOrder(companyId, runId)
     if (current.length < 2) {
       throw new HttpError(409, 'Need at least two pickup trips on the run to reorder', 'insufficient_pickups')
     }
@@ -137,9 +142,9 @@ export async function commitJourneySequenceReorder(input: {
       orderedPickupJobIds: input.orderedPickupJobIds,
     })
     if (plan.changed) {
-      await applyRunTripOrder(runId, plan.orderedTripIds)
-      const { data: runRow } = await admin.from('runs').select('version').eq('id', runId).maybeSingle()
-      await admin
+      await applyRunTripOrder(companyId, runId, plan.orderedTripIds)
+      const { data: runRow } = await reorderDb(companyId).from('runs').select('version').eq('id', runId).maybeSingle()
+      await reorderDb(companyId)
         .from('runs')
         .update({
           updated_at: new Date().toISOString(),
@@ -147,7 +152,7 @@ export async function commitJourneySequenceReorder(input: {
         })
         .eq('id', runId)
         .eq('company_id', input.companyId)
-      await admin
+      await reorderDb(companyId)
         .from('duties')
         .update({
           updated_at: new Date().toISOString(),
@@ -191,7 +196,7 @@ export async function commitJourneySequenceReorder(input: {
     throw new HttpError(409, 'This trip cannot be reorganised in its current status', 'reorder_blocked')
   }
 
-  const { data: runLink } = await admin
+  const { data: runLink } = await reorderDb(companyId)
     .from('run_trips')
     .select('run_id, sequence')
     .eq('trip_id', input.tripId)
@@ -199,13 +204,13 @@ export async function commitJourneySequenceReorder(input: {
 
   if (runLink?.run_id) {
     const runId = String(runLink.run_id)
-    const current = await loadRunTripOrder(runId)
+    const current = await loadRunTripOrder(companyId, runId)
     if (current.length >= 2) {
       const plan = planRunTripReorder({
         currentTripIdsInSequence: current.map((row) => row.tripId),
         orderedPickupJobIds: input.orderedPickupJobIds,
       })
-      if (plan.changed) await applyRunTripOrder(runId, plan.orderedTripIds)
+      if (plan.changed) await applyRunTripOrder(companyId, runId, plan.orderedTripIds)
       const audit = await writeImmutableAudit({
         companyId: input.companyId,
         actorUserId: input.actorUserId,
@@ -223,7 +228,7 @@ export async function commitJourneySequenceReorder(input: {
         },
       })
       if (plan.changed) {
-        await admin
+        await reorderDb(companyId)
           .from('trips')
           .update({
             updated_at: new Date().toISOString(),
@@ -249,7 +254,7 @@ export async function commitJourneySequenceReorder(input: {
     orderedPickupJobIds: input.orderedPickupJobIds,
   })
   if (plan.changed) {
-    const { error } = await admin
+    const { error } = await reorderDb(companyId)
       .from('trips')
       .update({
         passenger_ids: plan.orderedPassengerIds,

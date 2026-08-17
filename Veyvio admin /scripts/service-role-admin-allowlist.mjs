@@ -53,7 +53,6 @@ export const SERVICE_ROLE_ADMIN_ALLOWLIST = Object.freeze({
   'supabase/functions/_shared/journey-handlers.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/journey-sequence-ack.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/journey-sequence-move.ts': 'company_scoped_service_role',
-  'supabase/functions/_shared/journey-sequence-reorder.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/notifications.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/operational-exceptions.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/operational-trip-assign.ts': 'company_scoped_service_role',
