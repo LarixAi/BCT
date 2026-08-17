@@ -1,0 +1,105 @@
+{
+  "generated_at": "2026-08-17T17:32:51.044Z",
+  "fix": "Wave-3F-hosted-verification",
+  "target": "https://qeckgqjrfbdyxchuncdt.supabase.co",
+  "status": "FAIL",
+  "importers": "FIX-P1-012 frozen until this gate is PASS without migration/inventory skips",
+  "summary": {
+    "total": 15,
+    "pass": 14,
+    "fail": 1,
+    "skip": 0
+  },
+  "results": [
+    {
+      "phase": "meta",
+      "name": "gate",
+      "ok": true,
+      "detail": "Wave 3F hosted verification — run after db push; importers stay frozen until green"
+    },
+    {
+      "phase": "migrations",
+      "name": "hosted_wave3f_migrations_applied",
+      "ok": true,
+      "detail": "202608170001, 202608170002, 202608170003, 202608170004"
+    },
+    {
+      "phase": "inventory",
+      "name": "hosted_public_force_rls",
+      "ok": true,
+      "detail": "public not forced=0 (expect 0)"
+    },
+    {
+      "phase": "inventory",
+      "name": "hosted_cost_control_force_rls",
+      "ok": true,
+      "detail": "cost_control not forced=0 (expect 0)"
+    },
+    {
+      "phase": "inventory",
+      "name": "hosted_zero_policy_tenant_tables",
+      "ok": true,
+      "detail": "zero-policy company_id tables=0 (expect 0)"
+    },
+    {
+      "phase": "postgrest",
+      "name": "seed_isolation_fixtures",
+      "ok": "51273289-396b-4e50-97ce-031389dd9a81",
+      "detail": "A=ae3b90f5-17b8-44e3-b157-909f6a7cc6e5 B vehicle=51273289-396b-4e50-97ce-031389dd9a81"
+    },
+    {
+      "phase": "postgrest",
+      "name": "isolation_jwt_login",
+      "ok": true,
+      "detail": "A=200 B=200"
+    },
+    {
+      "phase": "postgrest",
+      "name": "A_select_own_vehicle",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "postgrest",
+      "name": "A_cannot_select_B_vehicle",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "postgrest",
+      "name": "A_cannot_select_cost_control_via_postgrest",
+      "ok": true,
+      "detail": "status=403 (BFF/service boundary until 3G)"
+    },
+    {
+      "phase": "postgrest",
+      "name": "A_cannot_insert_into_B_company",
+      "ok": true,
+      "detail": "status=403"
+    },
+    {
+      "phase": "storage",
+      "name": "B_cannot_list_A_storage_prefix",
+      "ok": true,
+      "detail": "status=200 names=[]"
+    },
+    {
+      "phase": "storage",
+      "name": "A_list_own_storage_prefix",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "storage",
+      "name": "A_cannot_sign_B_storage_path",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "command_api",
+      "name": "tenant_isolation_smoke",
+      "ok": false,
+      "detail": "exit 1"
+    }
+  ]
+}

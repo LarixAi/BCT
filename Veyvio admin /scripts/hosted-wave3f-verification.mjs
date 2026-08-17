@@ -58,11 +58,24 @@ function record(row) {
 }
 
 function psql(sql) {
-  if (!DB_URL) throw new Error('SUPABASE_DB_URL not set')
-  return execSync(`psql "${DB_URL}" -At -c ${JSON.stringify(sql)}`, {
+  const compact = String(sql).replace(/\s+/g, ' ').trim()
+  if (DB_URL) {
+    return execSync(`psql "${DB_URL}" -At -c ${JSON.stringify(compact)}`, {
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
+    }).trim()
+  }
+  const raw = execSync(`npx supabase db query --linked --output-format json ${JSON.stringify(compact)}`, {
+    cwd: ADMIN_ROOT,
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
-  }).trim()
+  })
+  const parsed = JSON.parse(raw)
+  const rows = parsed.rows || []
+  if (!rows.length) return ''
+  const keys = Object.keys(rows[0])
+  if (keys.length === 1) return rows.map((row) => String(row[keys[0]] ?? '')).join('\n')
+  return rows.map((row) => Object.values(row).join('|')).join('\n')
 }
 
 async function commandLogin(email, password) {
@@ -118,7 +131,7 @@ function expectDenied(status) {
 }
 
 async function phaseMigrations() {
-  if (DB_URL) {
+  try {
     const rows = psql(
       `select version from supabase_migrations.schema_migrations where version like '20260817%' order by version;`,
     )
@@ -131,41 +144,32 @@ async function phaseMigrations() {
       detail: missing.length ? `missing ${missing.join(', ')}; found ${found.join(', ') || 'none'}` : found.join(', '),
     })
     return
-  }
-  const listed = spawnSync('npx', ['supabase', 'migration', 'list'], {
-    cwd: ADMIN_ROOT,
-    encoding: 'utf8',
-  })
-  if (listed.status !== 0) {
+  } catch (e) {
+    const listed = spawnSync('npx', ['supabase', 'migration', 'list'], {
+      cwd: ADMIN_ROOT,
+      encoding: 'utf8',
+    })
+    if (listed.status !== 0) {
+      record({
+        phase: 'migrations',
+        name: 'hosted_wave3f_migrations_applied',
+        ok: false,
+        skipped: true,
+        detail: `SQL check failed (${String(e.message || e).slice(0, 80)}); CLI list also failed`,
+      })
+      return
+    }
+    const missing = REQUIRED_MIGRATION_VERSIONS.filter((v) => !listed.stdout.includes(v))
     record({
       phase: 'migrations',
       name: 'hosted_wave3f_migrations_applied',
-      ok: false,
-      skipped: true,
-      detail: 'Set SUPABASE_DB_URL or link Supabase CLI (supabase link) for migration verification',
+      ok: missing.length === 0,
+      detail: missing.length ? `missing ${missing.join(', ')}` : 'all 202608170001–004 present (CLI list)',
     })
-    return
   }
-  const missing = REQUIRED_MIGRATION_VERSIONS.filter((v) => !listed.stdout.includes(v))
-  record({
-    phase: 'migrations',
-    name: 'hosted_wave3f_migrations_applied',
-    ok: missing.length === 0,
-    detail: missing.length ? `missing ${missing.join(', ')}` : 'all 202608170001–004 present (CLI list)',
-  })
 }
 
 async function phaseSqlPosture() {
-  if (!DB_URL) {
-    record({
-      phase: 'inventory',
-      name: 'hosted_force_rls_and_zero_policy',
-      ok: false,
-      skipped: true,
-      detail: 'Set SUPABASE_DB_URL for hosted FORCE RLS / zero-policy SQL check',
-    })
-    return
-  }
   const publicNotForced = psql(`
     select count(*)::text from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
