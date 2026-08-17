@@ -35,7 +35,6 @@ export const SERVICE_ROLE_ADMIN_ALLOWLIST = Object.freeze({
   'supabase/functions/_shared/body-condition.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/compliance-engine.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/defect-automation.ts': 'company_scoped_service_role',
-  'supabase/functions/_shared/defect-damage-link.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/dispatch-assignment-gates.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/document-expiry-notifications.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/domain-events.ts': 'company_scoped_service_role',

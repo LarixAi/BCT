@@ -1,9 +1,13 @@
 /**
  * Unifies operational `defects` with long-lived `vehicle_damage_cases` (Blueprint A §8.6).
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 
 type Row = Record<string, unknown>
+
+function damageLinkDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'defect_damage_link')
+}
 
 function buildDamageReference(year: number, caseSeq: number, observationSeq: number): string {
   return `BD-${year}-${String(caseSeq).padStart(5, '0')}-${String(observationSeq).padStart(2, '0')}`
@@ -24,7 +28,7 @@ function isBodyworkDefectCategory(category: string): boolean {
 async function nextInspectionReference(companyId: string): Promise<string> {
   const year = new Date().getFullYear()
   const prefix = `BI-${year}-`
-  const { count } = await admin
+  const { count } = await damageLinkDb(companyId)
     .from('body_inspections')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
@@ -35,7 +39,7 @@ async function nextInspectionReference(companyId: string): Promise<string> {
 
 async function nextDamageCaseReference(companyId: string): Promise<string> {
   const year = new Date().getFullYear()
-  const { count } = await admin
+  const { count } = await damageLinkDb(companyId)
     .from('vehicle_damage_cases')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
@@ -44,7 +48,7 @@ async function nextDamageCaseReference(companyId: string): Promise<string> {
 }
 
 async function loadDefect(companyId: string, defectId: string): Promise<Row | null> {
-  const { data, error } = await admin
+  const { data, error } = await damageLinkDb(companyId)
     .from('defects')
     .select(
       'id, company_id, vehicle_id, defect_reference, category, component, severity, description, location_on_vehicle, reported_at, reported_by, created_by, evidence, damage_case_id',
@@ -65,7 +69,8 @@ export async function linkBodyworkDefectToDamageCase(input: {
   damageType?: string | null
   severity?: string | null
 }): Promise<{ damageCaseId: string | null; linked: boolean }> {
-  const defect = await loadDefect(input.companyId, input.defectId)
+  const companyId = input.companyId
+  const defect = await loadDefect(companyId, input.defectId)
   if (!defect) return { damageCaseId: null, linked: false }
 
   if (defect.damage_case_id) {
@@ -96,7 +101,7 @@ export async function linkBodyworkDefectToDamageCase(input: {
   const clientInspectionId = `defect_${input.defectId}`
 
   let inspectionId: string | null = null
-  const { data: existingInspection } = await admin
+  const { data: existingInspection } = await damageLinkDb(companyId)
     .from('body_inspections')
     .select('id')
     .eq('company_id', input.companyId)
@@ -106,7 +111,7 @@ export async function linkBodyworkDefectToDamageCase(input: {
     inspectionId = String(existingInspection.id)
   } else {
     const inspectionRef = await nextInspectionReference(input.companyId)
-    const { data: inspection, error: inspectionError } = await admin
+    const { data: inspection, error: inspectionError } = await damageLinkDb(companyId)
       .from('body_inspections')
       .insert({
         company_id: input.companyId,
@@ -133,14 +138,14 @@ export async function linkBodyworkDefectToDamageCase(input: {
     inspectionId = String(inspection.id)
   }
 
-  const { data: existingCase } = await admin
+  const { data: existingCase } = await damageLinkDb(companyId)
     .from('vehicle_damage_cases')
     .select('id')
     .eq('company_id', input.companyId)
     .eq('linked_defect_id', input.defectId)
     .maybeSingle()
   if (existingCase?.id) {
-    await admin
+    await damageLinkDb(companyId)
       .from('defects')
       .update({ damage_case_id: existingCase.id, updated_at: new Date().toISOString() })
       .eq('company_id', input.companyId)
@@ -150,7 +155,7 @@ export async function linkBodyworkDefectToDamageCase(input: {
 
   const referenceNumber = await nextDamageCaseReference(input.companyId)
   const isCritical = severity === 'critical'
-  const { data: damageCase, error: caseError } = await admin
+  const { data: damageCase, error: caseError } = await damageLinkDb(companyId)
     .from('vehicle_damage_cases')
     .insert({
       company_id: input.companyId,
@@ -180,7 +185,7 @@ export async function linkBodyworkDefectToDamageCase(input: {
 
   const damageCaseId = String(damageCase.id)
 
-  await admin.from('damage_observations').insert({
+  await damageLinkDb(companyId).from('damage_observations').insert({
     company_id: input.companyId,
     damage_case_id: damageCaseId,
     inspection_id: inspectionId,
@@ -200,7 +205,7 @@ export async function linkBodyworkDefectToDamageCase(input: {
       : null
   const photoPath = evidence.photoPath ? String(evidence.photoPath) : null
   if (photoDataUrl || photoPath) {
-    await admin.from('body_inspection_media').insert({
+    await damageLinkDb(companyId).from('body_inspection_media').insert({
       company_id: input.companyId,
       inspection_id: inspectionId,
       vehicle_id: vehicleId,
@@ -220,7 +225,7 @@ export async function linkBodyworkDefectToDamageCase(input: {
     })
   }
 
-  await admin
+  await damageLinkDb(companyId)
     .from('defects')
     .update({
       damage_case_id: damageCaseId,
