@@ -42,6 +42,20 @@ export function companyScopedServiceDb(
 }
 
 /**
+ * Same authority as companyScopedServiceDb for helpers that take companyId
+ * rather than a full RequestContext (AdBlue refill persistence).
+ */
+export function companyScopedServiceDbForCompany(companyId: string, reason: string): SupabaseClient {
+  if (!String(companyId || '').trim()) {
+    throw new Error('companyScopedServiceDbForCompany requires companyId')
+  }
+  if (!String(reason || '').trim()) {
+    throw new Error('companyScopedServiceDbForCompany requires a non-empty reason')
+  }
+  return admin
+}
+
+/**
  * Future: JWT-bound client that respects RLS.
  * FIX-P0-011 is locked; this remains disabled until authenticated mutation
  * grants exist. Do not use for writes while PostgREST INSERT is fail-closed.

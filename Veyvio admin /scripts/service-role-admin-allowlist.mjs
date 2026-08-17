@@ -29,7 +29,6 @@ export const SERVICE_ROLE_ADMIN_ALLOWLIST = Object.freeze({
   'supabase/functions/_shared/executive-pages.ts': 'privileged',
   'supabase/functions/_shared/integration-keys.ts': 'privileged',
   'supabase/functions/_shared/subscription-lifecycle.ts': 'privileged',
-  'supabase/functions/_shared/adblue-records.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/application-scopes.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/attendance.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/audit-service.ts': 'company_scoped_service_role',

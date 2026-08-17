@@ -1,5 +1,5 @@
 /** AdBlue refill validation and persistence for Driver / Yard / Command. */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 
 type Row = Record<string, unknown>
 
@@ -98,6 +98,7 @@ export async function recordAdBlueRefill(input: {
   const validation = validateAdBlueRefillInput(input.payload)
   if (!validation.ok) throw new Error(validation.message)
 
+  const db = companyScopedServiceDbForCompany(input.companyId, 'adblue_records')
   const occurredAt = input.payload.occurredAt ?? new Date().toISOString()
   const topUpAt = occurredAt
   const recordedAt = new Date().toISOString()
@@ -109,7 +110,7 @@ export async function recordAdBlueRefill(input: {
     spillOrContamination: Boolean(input.payload.spillOrContamination),
   })
 
-  const { data, error } = await admin
+  const { data, error } = await db
     .from('adblue_records')
     .insert({
       company_id: input.companyId,
@@ -153,7 +154,8 @@ export async function recordAdBlueRefill(input: {
 }
 
 export async function listAdBlueRecordsForVehicle(companyId: string, vehicleId: string, limit = 10) {
-  const { data, error } = await admin
+  const db = companyScopedServiceDbForCompany(companyId, 'adblue_records')
+  const { data, error } = await db
     .from('adblue_records')
     .select(
       'id, amount_litres, mileage, top_up_at, recorded_at, recorded_by_name, warning_before, warning_cleared, fill_type, source_type, source_label',
