@@ -1,7 +1,7 @@
 /**
  * Durable equipment inventory — sole Command write path for kit assets (F-18 / TD-027).
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -19,6 +19,10 @@ import {
 
 type Row = Record<string, unknown>
 
+function equipmentDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'equipment_assets')
+}
+
 async function appendEvent(input: {
   companyId: string
   equipmentId: string
@@ -28,7 +32,7 @@ async function appendEvent(input: {
   body?: string | null
   payload?: Record<string, unknown>
 }) {
-  const { error } = await admin.from('equipment_asset_events').insert({
+  const { error } = await equipmentDb(input.companyId).from('equipment_asset_events').insert({
     company_id: input.companyId,
     equipment_id: input.equipmentId,
     event_type: input.eventType,
@@ -41,7 +45,7 @@ async function appendEvent(input: {
 }
 
 async function loadAsset(companyId: string, equipmentId: string): Promise<Row | null> {
-  const { data, error } = await admin
+  const { data, error } = await equipmentDb(companyId)
     .from('equipment_assets')
     .select('*, vehicles(registration), depots(name)')
     .eq('company_id', companyId)
@@ -61,7 +65,7 @@ function mapLoaded(row: Row) {
 }
 
 export async function listEquipmentAssets(companyId: string) {
-  const { data, error } = await admin
+  const { data, error } = await equipmentDb(companyId)
     .from('equipment_assets')
     .select('*, vehicles(registration), depots(name)')
     .eq('company_id', companyId)
@@ -72,7 +76,7 @@ export async function listEquipmentAssets(companyId: string) {
 }
 
 export async function listEquipmentRowsForCompany(companyId: string): Promise<Row[]> {
-  const { data, error } = await admin
+  const { data, error } = await equipmentDb(companyId)
     .from('equipment_assets')
     .select('*')
     .eq('company_id', companyId)
@@ -104,6 +108,7 @@ export async function createEquipmentAsset(input: {
   serviceable?: boolean
   inDate?: boolean
 }) {
+  const companyId = input.companyId
   const name = String(input.name ?? '').trim()
   if (!name) throw new HttpError(400, 'name is required')
 
@@ -135,7 +140,7 @@ export async function createEquipmentAsset(input: {
     updated_at: now,
   }
 
-  const { data, error } = await admin.from('equipment_assets').insert(insert).select('id').single()
+  const { data, error } = await equipmentDb(companyId).from('equipment_assets').insert(insert).select('id').single()
   if (error) throw new Error(error.message)
   const id = String(data.id)
 
@@ -181,10 +186,11 @@ export async function assignEquipmentAsset(input: {
   vehicleId: string | null
   depotId?: string | null
 }) {
+  const companyId = input.companyId
   const equipmentId = String(input.equipmentId)
   if (!equipmentId) throw new HttpError(400, 'equipmentId is required')
 
-  const existing = await loadAsset(input.companyId, equipmentId)
+  const existing = await loadAsset(companyId, equipmentId)
   if (!existing) throw new HttpError(404, 'Equipment asset not found')
 
   const previousVehicleId = existing.vehicle_id ? String(existing.vehicle_id) : null
@@ -194,7 +200,7 @@ export async function assignEquipmentAsset(input: {
   }
 
   if (nextVehicleId) {
-    const { data: vehicle, error } = await admin
+    const { data: vehicle, error } = await equipmentDb(companyId)
       .from('vehicles')
       .select('id, primary_depot_id')
       .eq('company_id', input.companyId)
@@ -218,7 +224,7 @@ export async function assignEquipmentAsset(input: {
     updated_at: now,
   }
 
-  const { error: updateError } = await admin
+  const { error: updateError } = await equipmentDb(companyId)
     .from('equipment_assets')
     .update(patch)
     .eq('company_id', input.companyId)
@@ -268,7 +274,8 @@ export async function updateVehicleEquipmentItem(input: {
   inDate?: boolean
   status?: string
 }) {
-  const existing = await loadAsset(input.companyId, input.equipmentId)
+  const companyId = input.companyId
+  const existing = await loadAsset(companyId, input.equipmentId)
   if (!existing) throw new HttpError(404, 'Equipment asset not found')
 
   const currentVehicle = existing.vehicle_id ? String(existing.vehicle_id) : null
@@ -299,7 +306,7 @@ export async function updateVehicleEquipmentItem(input: {
   else if (input.inDate === false) patch.status = 'expired'
 
   if (Object.keys(patch).length > 1) {
-    const { error } = await admin
+    const { error } = await equipmentDb(companyId)
       .from('equipment_assets')
       .update(patch)
       .eq('company_id', input.companyId)
@@ -329,7 +336,7 @@ export async function findEquipmentByClientId(
   if (isUuid(itemId)) {
     return loadAsset(companyId, itemId)
   }
-  const { data, error } = await admin
+  const { data, error } = await equipmentDb(companyId)
     .from('equipment_assets')
     .select('*, vehicles(registration), depots(name)')
     .eq('company_id', companyId)
