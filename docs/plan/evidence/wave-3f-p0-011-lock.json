@@ -25,7 +25,8 @@
     "storage_jwt": "66/66 (admin-storage-isolation CI)"
   },
   "merged_prs": [3, 4],
-  "hosted_migrations": "202608170001–004 push authorized at lock",
+  "hosted_migrations": "202608170001–004 push authorized at lock; apply via supabase db push",
+  "production_verification": "OUTSTANDING — run npm run test:hosted-wave3f-verification after db push (see wave-3f-hosted-verification-gate.md)",
   "frozen_until_hosted_verified": [
     "44 company-scoped service-role importers (FIX-P1-012 batches)"
   ],

@@ -26,6 +26,7 @@
     "test:fresh-db-gate": "node scripts/fresh-db-gate.mjs",
     "test:wave3f-storage-isolation": "node scripts/wave3f-storage-isolation.unit.mjs",
     "test:storage-isolation-gate": "node scripts/storage-isolation-gate.mjs",
+    "test:hosted-wave3f-verification": "node scripts/hosted-wave3f-verification.mjs",
     "test:dispatch-gates-live": "node scripts/dispatch-gates-live-smoke.mjs",
     "test:application-scopes": "npx tsx scripts/application-scopes.unit.ts",
     "test:explicit-application-scopes": "npx tsx scripts/explicit-application-scopes.unit.ts",

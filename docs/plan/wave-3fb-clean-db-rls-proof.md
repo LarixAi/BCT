@@ -145,6 +145,6 @@ Tenant isolation is proven for the current Wave 3F authority model through:
 
 Evidence: `docs/plan/evidence/wave-3f-p0-011-lock.json`.
 
-**Next:** push hosted migrations `202608170001`–`004` → hosted verification → controlled importer batches (44 frozen until verified).
+**Next:** push hosted migrations `202608170001`–`004` → **hosted verification gate** (`npm run test:hosted-wave3f-verification`) → controlled importer batches (44 frozen until verified).
 
-Wave 3F plan: `docs/plan/wave-3f-service-role-rls-isolation.md`.
+Hosted gate: `docs/plan/wave-3f-hosted-verification-gate.md`.
