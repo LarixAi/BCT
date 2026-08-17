@@ -1,12 +1,20 @@
 /**
  * Duty closeout records on Command (replaces Supabase-only job_stop_events for BCT path).
+ *
+ * PROD-1 Batch 01 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Writes still use company-scoped service-role
+ * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { emitDomainEvent } from './domain-events.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { guardDriverScopedWrite } from './driver-write-guards.ts'
 
 type Row = Record<string, unknown>
+
+function closeoutDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'duty_closeout')
+}
 
 export async function submitDutyCloseout(input: {
   companyId: string
@@ -18,7 +26,7 @@ export async function submitDutyCloseout(input: {
 }) {
   const clientGeneratedId = input.clientGeneratedId?.trim() || null
   if (clientGeneratedId) {
-    const { data: existing } = await admin
+    const { data: existing } = await closeoutDb(input.companyId)
       .from('duty_closeouts')
       .select('id, submitted_at, payload')
       .eq('company_id', input.companyId)
@@ -47,7 +55,7 @@ export async function submitDutyCloseout(input: {
     dutyId: guardDutyId,
   })
 
-  const { data, error } = await admin
+  const { data, error } = await closeoutDb(input.companyId)
     .from('duty_closeouts')
     .insert({
       company_id: input.companyId,
@@ -88,7 +96,7 @@ export async function submitDutyCloseout(input: {
 }
 
 export async function getDutyCloseout(companyId: string, input: { dutyId?: string; jobReference?: string }) {
-  let query = admin
+  let query = closeoutDb(companyId)
     .from('duty_closeouts')
     .select('id, submitted_at, payload, duty_id, job_reference')
     .eq('company_id', companyId)

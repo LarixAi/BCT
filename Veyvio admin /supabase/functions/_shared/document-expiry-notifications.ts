@@ -1,10 +1,18 @@
 /**
  * Gate 2 — document-expiry notification hook (in-app).
  * Scans driver compliance dates and emits `document.expiring` notifications.
+ *
+ * PROD-1 Batch 01 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Reads still use company-scoped service-role
+ * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { notifyDriverAppUser } from './notifications.ts'
 import { resolveNotificationTemplate } from './notification-rules.ts'
+
+function documentExpiryDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'document_expiry_notifications')
+}
 
 const EXPIRY_WINDOW_DAYS = 30
 
@@ -20,7 +28,7 @@ export async function notifyExpiringDriverDocuments(companyId: string): Promise<
   notified: number
 }> {
   const template = resolveNotificationTemplate('document.expiring')
-  const { data: drivers, error } = await admin
+  const { data: drivers, error } = await documentExpiryDb(companyId)
     .from('drivers')
     .select('id, licence_expiry_date, cpc_expiry_date, dbs_expiry_date, medical_expiry_date')
     .eq('company_id', companyId)

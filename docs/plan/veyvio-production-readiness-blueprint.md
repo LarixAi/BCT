@@ -372,18 +372,33 @@ Instead:
 
 Each exposes the minimum necessary capability.
 
-### Conversion batches (refined from source inventory)
+### Conversion batches (dependency-directed, 17 August 2026)
 
-Do not convert 31 modules in one PR. Do not mechanically follow this order until dependency direction is inspected. `command-api/index`, `audit-service`, `entitlements`, and `application-scopes` are central — changing them too early could affect many domains simultaneously.
+Do not convert 31 modules in one PR. Product grouping (1A–1F) is **not** the PR order.
 
-| Batch | Scope | Modules |
-|-------|--------|---------|
-| **PROD-1A** | Driver identity & workforce | `attendance`, `driver-activation-release`, `driver-devices`, `driver-requirements`, `driver-training-centre`, `holiday-balance` |
-| **PROD-1B** | Driver execution & duties | `driver-job-execution`, `driver-ops-notifications`, `duty-closeout`, `duty-publication`, `journey-handlers`, `journey-sequence-move` |
-| **PROD-1C** | Compliance & defects | `body-condition`, `compliance-engine`, `defect-automation`, `document-expiry-notifications`, `vehicle-reports` |
-| **PROD-1D** | Operations | `hubs`, `operational-exceptions`, `operational-trip-assign`, `yard-mutation-handlers` |
-| **PROD-1E** | Notifications / events | `domain-events`, `notifications`, `fcm-send`, `projections` |
-| **PROD-1F** | Authority-sensitive remaining | `application-scopes`, `audit-service`, `entitlements`, `interest-submissions`, `override-audit`, `command-api/index` |
+Call-path register: [prod-1-service-role-classification.md](./prod-1-service-role-classification.md).
+
+`userScopedDb` is disabled. Batches below are **companyScopedServiceDb\* wraps** (existing Wave 3F pattern), not RLS cutover.
+
+Do not start with `command-api/index`, `audit-service` as a generic admin leftover, `entitlements`, or `application-scopes`.
+
+| Batch | Modules | Why this order |
+|-------|---------|----------------|
+| **01** | `duty-closeout`, `driver-job-execution`, `document-expiry-notifications` | Small Type A leaves; `companyId` already in signature |
+| **02** | `compliance-engine`, `operational-exceptions`, `defect-automation` | Small; exceptions before yard |
+| **03** | `driver-devices`, `driver-activation-release`, `vehicle-reports`, `hubs` | Independent leaves |
+| **04** | `journey-sequence-move`, `journey-handlers` | Same family as already-wrapped sequence modules |
+| **05** | `yard-mutation-handlers` | After defect-automation |
+| **06** | `driver-training-centre` → `driver-requirements` | Training before requirements |
+| **07–09** | `attendance`, `holiday-balance`, `body-condition` | Large self-auth leaves; one PR each |
+| **10** | `notifications` then `driver-ops-notifications` | Helper hub (10 importers) |
+| **11** | `override-audit`, `duty-publication` | Publication has 4 importers |
+| **12** | `projections` | 3210 loc; own PR |
+| **13** | `operational-trip-assign` | After publication + projections |
+| **14** | named capabilities: `audit-service`, `domain-events`, `fcm-send` | ADR-PR-002 |
+| **15** | `interest-submissions` | Mixed domain + integration keys |
+| **16** | `application-scopes`, `entitlements` split | Request bootstrap |
+| **17** | `command-api/index` decomposed | AuthAdmin + StorageSigner + remaining Type A |
 
 Companion: [wave-3f-service-role-rls-isolation.md](./wave-3f-service-role-rls-isolation.md).
 

@@ -1,11 +1,19 @@
 /**
  * Server-enforced driver job execution events (Command source of truth when configured).
+ *
+ * PROD-1 Batch 01 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Writes still use company-scoped service-role
+ * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { guardDriverScopedWrite } from './driver-write-guards.ts'
 import { emitDomainEvent } from './domain-events.ts'
 
 type Row = Record<string, unknown>
+
+function jobExecutionDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'driver_job_execution')
+}
 
 const STOP_EVENT_TYPES = new Set(['arrived_stop', 'completed_stop'])
 
@@ -31,7 +39,7 @@ function mapStopStatus(eventType: string): string | null {
 export async function recordDriverJobExecutionEvent(input: JobExecutionEventInput) {
   const clientGeneratedId = input.clientGeneratedId?.trim() || null
   if (clientGeneratedId) {
-    const { data: existing } = await admin
+    const { data: existing } = await jobExecutionDb(input.companyId)
       .from('driver_job_execution_events')
       .select('id, event_type, occurred_at, payload')
       .eq('company_id', input.companyId)
@@ -51,7 +59,7 @@ export async function recordDriverJobExecutionEvent(input: JobExecutionEventInpu
   })
 
   const now = new Date().toISOString()
-  const { data, error } = await admin
+  const { data, error } = await jobExecutionDb(input.companyId)
     .from('driver_job_execution_events')
     .insert({
       company_id: input.companyId,
@@ -86,7 +94,7 @@ export async function recordDriverJobExecutionEvent(input: JobExecutionEventInpu
 }
 
 export async function getJobExecutionSnapshot(companyId: string, jobId: string) {
-  const { data, error } = await admin
+  const { data, error } = await jobExecutionDb(companyId)
     .from('driver_job_execution_events')
     .select('*')
     .eq('company_id', companyId)
