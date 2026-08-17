@@ -2,9 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - phase0/reproducibility
+      - 'wave3f/**'
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - phase0/reproducibility
+      - 'wave3f/**'
   workflow_dispatch:
 
 concurrency:
