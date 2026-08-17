@@ -2,7 +2,7 @@
 
 **Date:** 17 Aug 2026  
 **Branch / local stack:** `qeckgqjrfbdyxchuncdt` after `npm run backend:reset` + `202608170001` / `202608170002` / `202608170003`  
-**Status:** PARTIAL PASS — zero-policy **CLOSED**; JWT matrix **72/72**; FORCE RLS **CLOSED**; FIX-P1-013 first wave **CLOSED**; FIX-P1-048 **GREEN** (local + GitHub Actions `admin-fresh-db` on PR #3); Storage isolation **66/66 local** (Wave 3F-E, separate gate); FIX-P0-011 lock pending Storage CI + reassessment  
+**Status:** **LOCKED** — 17 Aug 2026 (Wave 3F proof chain complete; see lock decision below)  
 
 **Authority rule for this proof:** assertions use **authenticated JWT** only. `service_role` was used solely for fixture SETUP / post-check reads. Service-role bypass of RLS is expected and is **not** counted as FIX-P0-011 evidence.
 
@@ -39,7 +39,7 @@ Scripts:
 | RPC / function paths fail closed | **PARTIAL** — not exhaustively enumerated; `ensure_default_company_roles` used in SETUP only |
 | Identify app-filter / 3-trigger reliance | **PASS** — documented below |
 | service_role tests kept separate | **PASS** |
-| Lock FIX-P0-011 | **NO** — gaps blocking lock listed below |
+| Lock FIX-P0-011 | **YES** — locked 17 Aug 2026 (see below) |
 
 ### Local bootstrap note (ops, not a security waiver)
 
@@ -120,14 +120,31 @@ Evidence: `docs/plan/evidence/wave-3fb-rls-postgrest-isolation.json`, `docs/plan
 1. ~~**Add explicit policies for the 6 zero-policy tenant tables.**~~ **CLOSED 17 Aug 2026** — migration `202608170001`; JWT proof on those tables remains green.
 2. ~~**FORCE RLS** on remaining high-value tenant tables.~~ **CLOSED 17 Aug 2026** — `202608170003`: all `public` RLS tables FORCE (171/171); `cost_control` FORCE (34/34) + authenticated PostgREST revoked (BFF/service-role branch; no JWT→GUC bind).
 3. ~~**Expand same-company triggers** (FIX-P1-013) beyond the three join pairs.~~ **FIRST WAVE CLOSED 17 Aug 2026** — `202608170004`; forge `13/13`; JWT regression `72/72`. Residual dual-FK tables remain for later waves.
-4. ~~**Broaden authenticated deny matrix** beyond vehicles + the six classified tables: drivers, duties, defects, attendance, equipment/stock/tyres/purchase.~~ **CLOSED 17 Aug 2026** for Command tables (`202608170002` GRANT SELECT on fleet resources so own-reads hit RLS). `cost_control` JWT path classified as BFF/service-role boundary (`202608170003`). Storage objects still unprobed.
-5. ~~**CI fresh-DB gate (FIX-P1-048):** `npm run test:fresh-db-gate` wired in CI (`admin-fresh-db` job); includes cost_control bootstrap (config patch → reset → restore). Storage objects **explicit separate slice** — not in this gate.~~ **GREEN locally 17 Aug 2026** — inventory + forge `13/13` + JWT `72/72`; GitHub Actions `admin-fresh-db` pending first green run.
-6. **Do not migrate the 44 company-scoped service-role importers until** FIX-P1-048 CI is green on main and residual register accepted. `cost_control` stays PrivilegedDb / BFF until 3G.
+4. ~~**Broaden authenticated deny matrix** … Storage objects still unprobed.~~ **CLOSED 17 Aug 2026** — Wave 3F-E Storage JWT `66/66` + `admin-storage-isolation` CI green.
+5. ~~**CI fresh-DB gate (FIX-P1-048)** …~~ **CLOSED** — `admin-fresh-db` CI green (PR #3).
+6. ~~**Do not migrate the 44 company-scoped service-role importers until** FIX-P1-048 CI green …~~ **Importer freeze remains** until hosted migrations `202608170001`–`004` verified on production; then controlled FIX-P1-012 batches only.
 
 ---
 
 ## FIX-P0-011 lock decision
 
-**Not locked.** FORCE RLS closed. JWT deny matrix `72/72`. FIX-P1-013 first wave closed. FIX-P1-048 CI green (`admin-fresh-db`). Storage JWT matrix `66/66` local (Wave 3F-E). **Reassess lock after:** `admin-storage-isolation` CI green; explicit acceptance of classified `cost_control` BFF boundary until 3G; residual P1-013 later-wave register. Hosted migrations `202608170001`–`004` remain unpushed until lock decision.
+**LOCKED — 17 Aug 2026.**
+
+Tenant isolation is proven for the current Wave 3F authority model through:
+
+- Authenticated PostgREST JWT isolation (**72/72**)
+- **FORCE RLS** (public **171/171**; cost_control **34/34**)
+- Fresh-database reproducibility (**FIX-P1-048** — `admin-fresh-db` CI green)
+- First-wave same-company forge protection (**13/13** — service_role → `23514`)
+- **Storage** isolation (**66/66** — `admin-storage-isolation` CI green)
+
+### Accepted boundaries (not silent waivers)
+
+1. **`cost_control`** — deliberately excluded from direct authenticated PostgREST; remains behind the privileged BFF/service-role boundary until **Wave 3G**. Not an RLS tenant-read/write leak.
+2. **FIX-P1-013 later waves** — **40+** dual-FK relationships tracked in `wave-3fd-same-company-inventory.json`. First wave closed; residual is structural expansion, not cross-tenant read/write evidence.
+
+Evidence: `docs/plan/evidence/wave-3f-p0-011-lock.json`.
+
+**Next:** push hosted migrations `202608170001`–`004` → hosted verification → controlled importer batches (44 frozen until verified).
 
 Wave 3F plan: `docs/plan/wave-3f-service-role-rls-isolation.md`.

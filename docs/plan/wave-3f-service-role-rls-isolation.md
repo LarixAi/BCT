@@ -1,6 +1,6 @@
 # Wave 3F — Service-role usage + full RLS tenant-isolation proof
 
-**Status:** OPEN / IN PROGRESS (started 17 Aug 2026)  
+**Status:** LOCKED / IN PROGRESS — FIX-P0-011 **LOCKED** 17 Aug 2026; FIX-P1-012 importer batches remain frozen until hosted verification  
 **Depends on:** Wave 3E CLOSED / LOCKED  
 **Does not touch:** 3E-1 BFF cookies, 3E-2 native Driver custody, organisation_id (3G)
 
@@ -76,10 +76,9 @@ Browser / Driver / Yard / Command SPA
 - [x] FIX-P1-013 first-wave same-company triggers (`202608170004`) — forge `13/13`; JWT regression `72/72`
 - [x] FIX-P1-048 fresh-DB gate green locally (`npm run test:fresh-db-gate`) — inventory + forge `13/13` + JWT `72/72`
 - [x] FIX-P1-048 green on GitHub Actions (`admin-fresh-db` on PR #3, run `32002475034`)
-- [ ] Lock FIX-P0-011 only after Storage CI + reassessment (see 3F-F)
+- [x] Lock FIX-P0-011 — **LOCKED 17 Aug 2026** (see `wave-3f-p0-011-lock.json`)
 
-**Evidence:** `docs/plan/wave-3fb-clean-db-rls-proof.md` + `docs/plan/evidence/wave-3fb-*`  
-**Verdict:** PARTIAL PASS — FIX-P0-011 **not locked**.
+**Verdict:** FIX-P0-011 **LOCKED**. Importer migration (P1-012) remains gated on hosted verification.
 
 ### 3F-C — Zero-policy classification then broader JWT matrix
 
@@ -101,7 +100,7 @@ Browser / Driver / Yard / Command SPA
 - [x] `scripts/wave3f-storage-isolation.unit.mjs` — JWT Org A/B on tenant buckets + service-only buckets
 - [x] `scripts/storage-isolation-gate.mjs` — fresh DB bootstrap + storage matrix (not folded into FIX-P1-048)
 - [x] Local proof `66/66` — own-tenant read/list, cross-tenant deny, write/delete deny, cross-tenant sign deny, `org/{companyId}/` prefix, service signed-URL structural probe
-- [ ] CI job `admin-storage-isolation` green on GitHub Actions
+- [x] CI job `admin-storage-isolation` green on GitHub Actions (PR #4)
 - [x] `executive-documents` classified service/BFF-only (JWT read/list denied)
 
 ### 3F-E — Fresh-DB CI gate (FIX-P1-048)

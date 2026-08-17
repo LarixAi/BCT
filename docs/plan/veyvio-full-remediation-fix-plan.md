@@ -712,7 +712,7 @@ Recommended pattern:
 ## FIX-P0-011 — Prove complete RLS coverage from a clean database
 
 **Severity:** P0 STOP-SHIP  
-**Status:** OPEN  
+**Status:** **LOCKED** — 17 Aug 2026 (Wave 3F proof chain; accepted boundaries documented in `docs/plan/evidence/wave-3f-p0-011-lock.json`)  
 **Area:** Supabase/Postgres
 
 **Context:**
@@ -740,10 +740,17 @@ The remaining requirement is **complete proof**.
 
 **Acceptance criteria:**
 
-- [ ] Every tenant table has an explicit access classification.
-- [ ] Every tenant table has a negative cross-company test.
-- [ ] New tenant tables fail CI if RLS/access classification is missing.
-- [ ] Fresh migration produces the same security posture as long-lived environments.
+- [x] Every tenant table has an explicit access classification (inventory + zero-policy closed; evidence `wave-3fb-*`).
+- [x] Every tenant table has a negative cross-company test (PostgREST JWT 72/72 + Storage 66/66 + forge 13/13).
+- [x] New tenant tables fail CI if RLS/access classification is missing (`admin-fresh-db` inventory gate).
+- [x] Fresh migration produces the same security posture as long-lived environments (FIX-P1-048 CI green).
+
+**Accepted boundaries at lock (not failures):**
+
+- `cost_control` — BFF/service-role until Wave 3G (no authenticated PostgREST path).
+- FIX-P1-013 — 40+ dual-FK tables in later waves (first wave closed).
+
+**Non-blocking debt:** GitGuardian flags Supabase local demo keys in Wave 3F test scripts — track explicit cleanup ticket; does not reopen this fix.
 
 ---
 

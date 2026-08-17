@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-08-17T07:00:00.000Z",
+  "fix": "FIX-P0-011",
+  "verdict": "LOCKED",
+  "wave": "3F",
+  "lock_statement": "Tenant isolation is proven for the current Wave 3F authority model through authenticated PostgREST JWT isolation (72/72), FORCE RLS (public 171/171 + cost_control 34/34), fresh-database reproducibility (FIX-P1-048 CI green), first-wave same-company forge protection (13/13 service_role → 23514), and Storage isolation (66/66 JWT matrix, admin-storage-isolation CI green).",
+  "accepted_boundaries": [
+    {
+      "id": "cost_control-bff-until-3g",
+      "classification": "Privileged BFF/service-role boundary",
+      "detail": "cost_control is deliberately excluded from direct authenticated PostgREST access (FORCE RLS + revoke authenticated/anon). Finance API Edge continues via service_role. JWT claims are not bound into app.active_organisation_id. Not evidence of an RLS tenant-read/write leak — classified access architecture until Wave 3G."
+    },
+    {
+      "id": "p1-013-later-waves",
+      "classification": "Structural same-company residual register",
+      "detail": "40+ dual-FK relationships inventoried for later FIX-P1-013 waves. First wave closed (duties, defects, drivers, runs, trip_assignments, duty_live_positions, vehicle_swap_requests, fuel_records + join tables). Residual items are tracked expansion work, not evidence of cross-tenant read/write leakage."
+    }
+  ],
+  "proof_chain": {
+    "jwt_postgrest": "72/72",
+    "force_rls_public": "171/171",
+    "force_rls_cost_control": "34/34",
+    "fresh_db_gate": "PASS (admin-fresh-db CI)",
+    "same_company_forge": "13/13",
+    "storage_jwt": "66/66 (admin-storage-isolation CI)"
+  },
+  "merged_prs": [3, 4],
+  "hosted_migrations": "202608170001–004 push authorized at lock",
+  "frozen_until_hosted_verified": [
+    "44 company-scoped service-role importers (FIX-P1-012 batches)"
+  ],
+  "non_blocking_debt": [
+    {
+      "id": "gitguardian-test-keys",
+      "detail": "GitGuardian flags local Supabase demo keys in Wave 3F test scripts — explicit cleanup ticket; does not reopen FIX-P0-011."
+    }
+  ]
+}
