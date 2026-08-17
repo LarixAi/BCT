@@ -24,6 +24,8 @@
     "test:wave3f-force-rls": "node scripts/wave3f-force-rls.unit.mjs",
     "test:wave3f-same-company-triggers": "node scripts/wave3f-same-company-triggers-static.unit.mjs && node scripts/wave3f-same-company-triggers.unit.mjs",
     "test:fresh-db-gate": "node scripts/fresh-db-gate.mjs",
+    "test:wave3f-storage-isolation": "node scripts/wave3f-storage-isolation.unit.mjs",
+    "test:storage-isolation-gate": "node scripts/storage-isolation-gate.mjs",
     "test:dispatch-gates-live": "node scripts/dispatch-gates-live-smoke.mjs",
     "test:application-scopes": "npx tsx scripts/application-scopes.unit.ts",
     "test:explicit-application-scopes": "npx tsx scripts/explicit-application-scopes.unit.ts",

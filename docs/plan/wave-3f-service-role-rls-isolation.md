@@ -75,8 +75,8 @@ Browser / Driver / Yard / Command SPA
 - [x] FORCE RLS expansion (`202608170003`) — public 171/171 + cost_control 34/34 BFF/service-role branch
 - [x] FIX-P1-013 first-wave same-company triggers (`202608170004`) — forge `13/13`; JWT regression `72/72`
 - [x] FIX-P1-048 fresh-DB gate green locally (`npm run test:fresh-db-gate`) — inventory + forge `13/13` + JWT `72/72`
-- [ ] FIX-P1-048 green on GitHub Actions runners (`admin-fresh-db` job)
-- [ ] Lock FIX-P0-011 only after remaining list closed
+- [x] FIX-P1-048 green on GitHub Actions (`admin-fresh-db` on PR #3, run `32002475034`)
+- [ ] Lock FIX-P0-011 only after Storage CI + reassessment (see 3F-F)
 
 **Evidence:** `docs/plan/wave-3fb-clean-db-rls-proof.md` + `docs/plan/evidence/wave-3fb-*`  
 **Verdict:** PARTIAL PASS — FIX-P0-011 **not locked**.
@@ -87,7 +87,7 @@ Browser / Driver / Yard / Command SPA
 - [x] JWT Org A/B proof on those tables (`31/31` including vehicles sample)
 - [x] Broaden PostgREST JWT deny matrix: drivers, duties, defects, attendance, equipment/stock/tyres/purchase — Command tables green (`202608170002`); see `wave-3fc-jwt-matrix.json`
 - [x] `cost_control` classified as BFF/service-role boundary (`202608170003`): FORCE + revoke authenticated PostgREST; no JWT→GUC bind. JWT own-read is not an access path until 3G.
-- [ ] Storage objects JWT deny sample
+- [x] Storage objects JWT deny sample — see `wave-3fe-storage-isolation.json` (`66/66` local; CI `admin-storage-isolation` pending)
 - [ ] Keep existing `test:tenant-isolation` green (API path)
 
 ### 3F-D — Structural same-company (FIX-P1-013)
@@ -95,14 +95,21 @@ Browser / Driver / Yard / Command SPA
 - [x] Inventory dual-FK relationships missing `assert_same_company_pair` — see `docs/plan/evidence/wave-3fd-same-company-inventory.json`
 - [x] First-wave triggers + service_role forge tests (`202608170004`) — duties, defects, drivers, runs, trip_assignments, duty_live_positions, vehicle_swap_requests, fuel_records
 - [ ] Later-wave dual-FK tables (40+ inventoried residual)
-- [ ] Storage objects JWT deny sample (explicit separate slice from FIX-P1-048)
+
+### 3F-F — Storage tenant isolation (explicit slice)
+
+- [x] `scripts/wave3f-storage-isolation.unit.mjs` — JWT Org A/B on tenant buckets + service-only buckets
+- [x] `scripts/storage-isolation-gate.mjs` — fresh DB bootstrap + storage matrix (not folded into FIX-P1-048)
+- [x] Local proof `66/66` — own-tenant read/list, cross-tenant deny, write/delete deny, cross-tenant sign deny, `org/{companyId}/` prefix, service signed-URL structural probe
+- [ ] CI job `admin-storage-isolation` green on GitHub Actions
+- [x] `executive-documents` classified service/BFF-only (JWT read/list denied)
 
 ### 3F-E — Fresh-DB CI gate (FIX-P1-048)
 
 - [x] `scripts/fresh-db-gate.mjs` — cost_control bootstrap patch, reset, inventory assert, JWT + structural proofs
 - [x] CI job `admin-fresh-db` in `.github/workflows/ci.yml`
 - [x] Green run locally (17 Aug 2026)
-- [ ] Green run on GitHub Actions main/PR
+- [x] Green run on GitHub Actions (PR #3, `admin-fresh-db`)
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Date:** 17 Aug 2026  
 **Branch / local stack:** `qeckgqjrfbdyxchuncdt` after `npm run backend:reset` + `202608170001` / `202608170002` / `202608170003`  
-**Status:** PARTIAL PASS — zero-policy **CLOSED**; JWT matrix **72/72**; FORCE RLS **CLOSED**; FIX-P1-013 first wave **CLOSED locally**; FIX-P1-048 fresh-DB gate **GREEN locally**; FIX-P0-011 lock still **BLOCKED** by CI runner verification, unprobed Storage, classified `cost_control` access architecture, P1-013 later waves  
+**Status:** PARTIAL PASS — zero-policy **CLOSED**; JWT matrix **72/72**; FORCE RLS **CLOSED**; FIX-P1-013 first wave **CLOSED**; FIX-P1-048 **GREEN** (local + GitHub Actions `admin-fresh-db` on PR #3); Storage isolation **66/66 local** (Wave 3F-E, separate gate); FIX-P0-011 lock pending Storage CI + reassessment  
 
 **Authority rule for this proof:** assertions use **authenticated JWT** only. `service_role` was used solely for fixture SETUP / post-check reads. Service-role bypass of RLS is expected and is **not** counted as FIX-P0-011 evidence.
 
@@ -17,7 +17,8 @@ Artifacts:
 | `docs/plan/evidence/wave-3fd-force-rls.json` | FORCE RLS + cost_control BFF/service branch |
 | `docs/plan/evidence/wave-3fd-same-company-triggers.json` | FIX-P1-013 service_role forge results |
 | `docs/plan/evidence/wave-3fd-same-company-inventory.json` | First-wave trigger inventory + residual register |
-| `docs/plan/evidence/wave-3f-fresh-db-gate.json` | FIX-P1-048 fresh-DB gate summary (local PASS) |
+| `docs/plan/evidence/wave-3f-fresh-db-gate.json` | FIX-P1-048 fresh-DB gate summary (CI PASS) |
+| `docs/plan/evidence/wave-3fe-storage-isolation.json` | Wave 3F-E storage JWT matrix (`66/66`) |
 
 Scripts:
 
@@ -127,6 +128,6 @@ Evidence: `docs/plan/evidence/wave-3fb-rls-postgrest-isolation.json`, `docs/plan
 
 ## FIX-P0-011 lock decision
 
-**Not locked.** FORCE RLS closed. JWT deny matrix `72/72`. FIX-P1-013 first wave closed locally (forge + JWT regression). FIX-P1-048 fresh-DB gate green locally. Remaining blockers: `admin-fresh-db` CI green on GitHub Actions runners, unprobed Storage objects, classified `cost_control` access architecture until 3G, P1-013 later-wave dual-FK tables. Hosted migrations `202608170001`–`004` remain local until CI green.
+**Not locked.** FORCE RLS closed. JWT deny matrix `72/72`. FIX-P1-013 first wave closed. FIX-P1-048 CI green (`admin-fresh-db`). Storage JWT matrix `66/66` local (Wave 3F-E). **Reassess lock after:** `admin-storage-isolation` CI green; explicit acceptance of classified `cost_control` BFF boundary until 3G; residual P1-013 later-wave register. Hosted migrations `202608170001`–`004` remain unpushed until lock decision.
 
 Wave 3F plan: `docs/plan/wave-3f-service-role-rls-isolation.md`.
