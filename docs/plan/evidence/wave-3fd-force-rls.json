@@ -1,0 +1,34 @@
+{
+  "wave": "3F FORCE RLS",
+  "fix": "FIX-P0-011 remediation item 2",
+  "date": "2026-08-17",
+  "migration": "202608170003_wave3f_force_rls.sql",
+  "hosted": "local only — do not push with 202608170001 / 202608170002 until proof chain is green",
+  "jwt_proof": {
+    "script": "scripts/rls-postgrest-isolation.unit.mjs",
+    "result": "72/72 pass",
+    "artifact": "docs/plan/evidence/wave-3fb-rls-postgrest-isolation.json"
+  },
+  "branches": {
+    "command_public": {
+      "class": "force_existing_rls",
+      "result": "public relations with RLS: 171/171 FORCE",
+      "note": "postgres and service_role retain BYPASSRLS. Command API and migrations unchanged. FORCE constrains non-bypass roles and table-owner-without-bypass."
+    },
+    "cost_control": {
+      "class": "bff_service_role_boundary",
+      "until": "3G organisation_id",
+      "force_rls": true,
+      "authenticated_postgrest": "revoked (schema USAGE + table grants)",
+      "jwt_guc_bind": false,
+      "access_path": "finance-api service_role today; future non-bypass BFF role SET LOCAL app.active_organisation_id after privileged membership lookup",
+      "jwt_probes": "authenticated cannot SELECT own or foreign; INSERT/UPDATE denied (403 permission denied for schema cost_control)"
+    }
+  },
+  "residuals_for_p0_011": [
+    "cost_control access architecture (BFF SET LOCAL / service-role, not JWT) until 3G",
+    "unprobed Storage objects",
+    "FIX-P1-013 same-company triggers still only depot_access, duty_runs, run_trips",
+    "FIX-P1-048 fresh-DB CI + cost_control bootstrap"
+  ]
+}
