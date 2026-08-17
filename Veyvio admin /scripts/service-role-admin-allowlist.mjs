@@ -64,7 +64,6 @@ export const SERVICE_ROLE_ADMIN_ALLOWLIST = Object.freeze({
   'supabase/functions/_shared/override-audit.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/projections.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/purchase-requests.ts': 'company_scoped_service_role',
-  'supabase/functions/_shared/tyre-assets.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/vehicle-reports.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/vehicle-swap-workflow.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/yard-mutation-handlers.ts': 'company_scoped_service_role',

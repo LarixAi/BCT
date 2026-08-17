@@ -1,7 +1,7 @@
 /**
  * Durable tyre inventory — Command write path for fit / remove / rotate (F-18 / TD-027).
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -14,6 +14,10 @@ import {
 
 type Row = Record<string, unknown>
 
+function tyreDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'tyre_assets')
+}
+
 async function appendEvent(input: {
   companyId: string
   tyreId: string
@@ -23,7 +27,7 @@ async function appendEvent(input: {
   body?: string | null
   payload?: Record<string, unknown>
 }) {
-  const { error } = await admin.from('tyre_asset_events').insert({
+  const { error } = await tyreDb(input.companyId).from('tyre_asset_events').insert({
     company_id: input.companyId,
     tyre_id: input.tyreId,
     event_type: input.eventType,
@@ -37,7 +41,7 @@ async function appendEvent(input: {
 
 async function loadTyre(companyId: string, tyreId: string): Promise<Row | null> {
   if (!isUuid(tyreId)) return null
-  const { data, error } = await admin
+  const { data, error } = await tyreDb(companyId)
     .from('tyre_assets')
     .select('*, vehicles(registration), depots(name)')
     .eq('company_id', companyId)
@@ -57,7 +61,7 @@ function mapLoaded(row: Row) {
 }
 
 export async function listTyreAssets(companyId: string) {
-  const { data, error } = await admin
+  const { data, error } = await tyreDb(companyId)
     .from('tyre_assets')
     .select('*, vehicles(registration), depots(name)')
     .eq('company_id', companyId)
@@ -87,6 +91,7 @@ export async function createTyreAsset(input: {
   pressurePsi?: number | null
   unitCost?: number | null
 }) {
+  const companyId = input.companyId
   const internalId = String(input.internalId ?? '').trim()
   const brand = String(input.brand ?? '').trim()
   const size = String(input.size ?? '').trim()
@@ -112,7 +117,7 @@ export async function createTyreAsset(input: {
     updated_at: now,
   }
 
-  const { data, error } = await admin.from('tyre_assets').insert(insert).select('id').single()
+  const { data, error } = await tyreDb(companyId).from('tyre_assets').insert(insert).select('id').single()
   if (error) throw new Error(error.message)
   const id = String(data.id)
 
@@ -147,7 +152,8 @@ export async function fitTyreAsset(input: {
   positionLabel: string
   retorqueDueAt?: string | null
 }) {
-  const existing = await loadTyre(input.companyId, input.tyreId)
+  const companyId = input.companyId
+  const existing = await loadTyre(companyId, input.tyreId)
   if (!existing) throw new HttpError(404, 'Tyre asset not found')
 
   const vehicleId = String(input.vehicleId ?? '').trim()
@@ -156,7 +162,7 @@ export async function fitTyreAsset(input: {
   const positionLabel = String(input.positionLabel ?? position).trim()
   if (!position) throw new HttpError(400, 'position is required')
 
-  const { data: vehicle, error: vehicleError } = await admin
+  const { data: vehicle, error: vehicleError } = await tyreDb(companyId)
     .from('vehicles')
     .select('id, primary_depot_id')
     .eq('company_id', input.companyId)
@@ -166,7 +172,7 @@ export async function fitTyreAsset(input: {
   if (!vehicle) throw new HttpError(404, 'Vehicle not found')
 
   // One tyre per vehicle position.
-  const { data: occupant } = await admin
+  const { data: occupant } = await tyreDb(companyId)
     .from('tyre_assets')
     .select('id')
     .eq('company_id', input.companyId)
@@ -192,7 +198,7 @@ export async function fitTyreAsset(input: {
     updated_at: now,
   }
 
-  const { error } = await admin
+  const { error } = await tyreDb(companyId)
     .from('tyre_assets')
     .update(patch)
     .eq('company_id', input.companyId)
@@ -229,7 +235,8 @@ export async function removeTyreAsset(input: {
   tyreId: string
   quarantine?: boolean
 }) {
-  const existing = await loadTyre(input.companyId, input.tyreId)
+  const companyId = input.companyId
+  const existing = await loadTyre(companyId, input.tyreId)
   if (!existing) throw new HttpError(404, 'Tyre asset not found')
 
   const now = new Date().toISOString()
@@ -244,7 +251,7 @@ export async function removeTyreAsset(input: {
     updated_at: now,
   }
 
-  const { error } = await admin
+  const { error } = await tyreDb(companyId)
     .from('tyre_assets')
     .update(patch)
     .eq('company_id', input.companyId)
@@ -282,8 +289,9 @@ export async function rotateTyreAssets(input: {
   aTyreId: string
   bTyreId: string
 }) {
-  const a = await loadTyre(input.companyId, input.aTyreId)
-  const b = await loadTyre(input.companyId, input.bTyreId)
+  const companyId = input.companyId
+  const a = await loadTyre(companyId, input.aTyreId)
+  const b = await loadTyre(companyId, input.bTyreId)
   if (!a || !b) throw new HttpError(404, 'Tyre asset not found')
 
   const vehicleId = String(input.vehicleId)
@@ -301,7 +309,7 @@ export async function rotateTyreAssets(input: {
   if (!aPos || !bPos) throw new HttpError(400, 'Both tyres need positions to rotate')
 
   const now = new Date().toISOString()
-  const { error: errA } = await admin
+  const { error: errA } = await tyreDb(companyId)
     .from('tyre_assets')
     .update({
       position: bPos,
@@ -312,7 +320,7 @@ export async function rotateTyreAssets(input: {
     .eq('id', input.aTyreId)
   if (errA) throw new Error(errA.message)
 
-  const { error: errB } = await admin
+  const { error: errB } = await tyreDb(companyId)
     .from('tyre_assets')
     .update({
       position: aPos,
