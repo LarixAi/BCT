@@ -2,10 +2,14 @@
  * Shared driver eligibility + vehicle readiness gates for dispatch assignment and sign-on.
  * Blueprint Part F rule 6 — safety rules are hard gates, not yellow warnings only.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { projectDriverProfile, projectVehicleProfile } from './projections.ts'
 
 type Row = Record<string, unknown>
+
+function dispatchGateDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'dispatch_assignment_gates')
+}
 
 export type EligibilityResult = {
   status: 'eligible' | 'eligible_with_warnings' | 'blocked'
@@ -99,9 +103,10 @@ export async function appendVehicleReadinessGates(input: {
 
   if (!input.requireTodaysCheck || !input.driverId) return
 
+  const companyId = input.companyId
   const todayStart = new Date()
   todayStart.setUTCHours(0, 0, 0, 0)
-  const { data: check } = await admin
+  const { data: check } = await dispatchGateDb(companyId)
     .from('vehicle_checks')
     .select('result')
     .eq('company_id', input.companyId)
