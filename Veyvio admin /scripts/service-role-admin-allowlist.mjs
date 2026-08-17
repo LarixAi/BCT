@@ -43,7 +43,6 @@ export const SERVICE_ROLE_ADMIN_ALLOWLIST = Object.freeze({
   'supabase/functions/_shared/driver-ops-notifications.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/driver-requirements.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/driver-training-centre.ts': 'company_scoped_service_role',
-  'supabase/functions/_shared/driver-write-guards.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/duty-closeout.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/duty-publication.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/entitlements.ts': 'company_scoped_service_role',

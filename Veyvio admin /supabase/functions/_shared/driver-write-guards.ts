@@ -3,12 +3,16 @@
  */
 import { projectPublishedDutiesForDriver } from './duty-publication.ts'
 import { HttpError } from './http.ts'
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { assertRequestCompanyId } from './request-company-guard.ts'
 
 export { assertRequestCompanyId }
 
 type Row = Record<string, unknown>
+
+function driverGuardDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'driver_write_guards')
+}
 
 export async function resolveDriverAssignedVehicleIds(input: {
   companyId: string
@@ -99,7 +103,8 @@ export async function assertDriverConversation(input: {
   driverId: string
   conversationId: string
 }): Promise<void> {
-  const { data } = await admin
+  const companyId = input.companyId
+  const { data } = await driverGuardDb(companyId)
     .from('messages')
     .select('id')
     .eq('company_id', input.companyId)

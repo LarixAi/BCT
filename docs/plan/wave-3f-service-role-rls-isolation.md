@@ -63,7 +63,7 @@ Browser / Driver / Yard / Command SPA
 - [x] Baseline inventory of `admin` imports under `supabase/functions/`
 - [x] Frozen allowlist + unit test fails on new unlisted `admin` imports
 - [x] Introduce `db-authority` helpers (`privilegedDb(reason)`, company-scoped service wrapper)
-- [x] First importer batches: `fuel-records`, `adblue-records`, `depot-stock`, `equipment-assets`, `tyre-assets`, `purchase-requests`, `defect-damage-link`, `dispatch-assignment-gates` (36 company-scoped `admin` importers remain)
+- [x] First importer batches: `fuel-records`, `adblue-records`, `depot-stock`, `equipment-assets`, `tyre-assets`, `purchase-requests`, `defect-damage-link`, `dispatch-assignment-gates`, `driver-write-guards` (35 company-scoped `admin` importers remain)
 - [ ] Migrate remaining company-scoped modules in small domain batches
 - [ ] Prefer `tenantSelect` / `tenantInsert` for ordinary CRUD
 
