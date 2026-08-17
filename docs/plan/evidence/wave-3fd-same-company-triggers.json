@@ -1,0 +1,91 @@
+{
+  "generated_at": "2026-08-17T06:24:11.669Z",
+  "fix": "FIX-P1-013",
+  "api": "http://127.0.0.1:54321",
+  "summary": {
+    "total": 13,
+    "pass": 13,
+    "fail": 0
+  },
+  "results": [
+    {
+      "phase": "meta",
+      "name": "authority_note",
+      "ok": true,
+      "detail": "Structural forge uses service_role; cross-company INSERT/UPDATE must fail with 23514"
+    },
+    {
+      "phase": "setup",
+      "name": "seed_orgs",
+      "ok": true,
+      "detail": "A=b7d9fd0d-a3c3-4152-a878-43c4f276a20f B=f8415408-474b-4ab1-806c-b688e1f01bbd"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_duties_cross_company_driver",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"duties.driver_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_defects_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"defects.vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_drivers_cross_company_depot",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"drivers.primary_depot_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_runs_cross_company_driver",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"runs.driver_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_trip_assignments_cross_company_trip",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"trip_assignments.trip_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_duty_live_positions_cross_company_duty",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"duty_live_positions.duty_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_vehicle_swap_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"vehicle_swap_requests.requested_vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_fuel_records_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"fuel_records.vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_duty_runs_cross_company",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"duty_runs: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_run_trips_cross_company",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"run_trips: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "control",
+      "name": "same_company_duty_update_allowed",
+      "ok": true,
+      "detail": "status=200"
+    }
+  ],
+  "failures": []
+}

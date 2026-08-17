@@ -1,0 +1,63 @@
+{
+  "wave": "3F-C JWT matrix expansion",
+  "fix": "FIX-P0-011 broader authenticated Org A→B deny matrix",
+  "date": "2026-08-17",
+  "migration": "202608170002_wave3f_jwt_matrix_grants.sql",
+  "proof": {
+    "script": "scripts/rls-postgrest-isolation.unit.mjs",
+    "result": "72/72 pass after 202608170003 cost_control PostgREST revoke",
+    "artifact": "docs/plan/evidence/wave-3fb-rls-postgrest-isolation.json",
+    "authority": "authenticated JWT only; service_role SETUP/verify only"
+  },
+  "grant_alignment": {
+    "reason": "Fleet resource tables already had tenant ALL policies via private.user_has_company but authenticated lacked GRANT SELECT, so PostgREST failed 42501 before RLS and own-reads could not be proved.",
+    "authenticated": "SELECT only",
+    "service_role": "ALL",
+    "tables": [
+      "public.equipment_assets",
+      "public.equipment_asset_events",
+      "public.tyre_assets",
+      "public.tyre_asset_events",
+      "public.depot_stock_items",
+      "public.depot_stock_movements",
+      "public.purchase_requests"
+    ]
+  },
+  "domains": {
+    "drivers": { "tables": ["drivers"], "own_select": "PASS", "cross_tenant_select": "PASS", "cross_tenant_write": "PASS" },
+    "duties": { "tables": ["duties"], "own_select": "PASS", "cross_tenant_select": "PASS", "cross_tenant_write": "PASS" },
+    "defects": { "tables": ["defects"], "own_select": "PASS", "cross_tenant_select": "PASS", "cross_tenant_write": "PASS" },
+    "attendance": {
+      "tables": ["attendance_leave_requests", "attendance_notes"],
+      "own_select": "PASS",
+      "cross_tenant_select": "PASS",
+      "cross_tenant_write": "PASS"
+    },
+    "fleet": {
+      "tables": ["equipment_assets", "tyre_assets", "depot_stock_items", "purchase_requests"],
+      "own_select": "PASS",
+      "cross_tenant_select": "PASS",
+      "cross_tenant_write": "PASS"
+    },
+    "cost_control": {
+      "tables": ["organisations", "budgets", "cost_records"],
+      "class": "bff_service_role_boundary",
+      "own_select": "PASS_DENIED",
+      "cross_tenant_select": "PASS",
+      "cross_tenant_write": "PASS",
+      "note": "202608170003: FORCE RLS + revoke authenticated/anon. JWT own-read is not an access path. Do not bind JWT claims into app.active_organisation_id. BFF SET LOCAL / service-role until 3G."
+    }
+  },
+  "residuals": [
+    {
+      "tables": [
+        "cost_control.organisations",
+        "cost_control.budgets",
+        "cost_control.cost_records"
+      ],
+      "class": "bff_service_role_boundary",
+      "note": "Classified access architecture until 3G — not a JWT matrix failure. Finance API Edge uses service_role (BYPASSRLS). Future non-bypass BFF role must SET LOCAL after privileged membership lookup."
+    }
+  ],
+  "held": "44 company-scoped service-role importers remain frozen until FIX-P1-013 and fresh-DB CI land. cost_control stays PrivilegedDb/BFF until 3G."
+}

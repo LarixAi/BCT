@@ -1,0 +1,466 @@
+{
+  "generated_at": "2026-08-17T06:24:00.296Z",
+  "api": "http://127.0.0.1:54321",
+  "note": "FIX-P0-011 proof uses authenticated JWT probes; service_role is SETUP/verify only. Failures map to table/policy remediations, not API workarounds.",
+  "lock_criteria": {
+    "cross_tenant_select": "no protected rows",
+    "cross_tenant_write": "fail closed where no write policy, or WITH CHECK deny",
+    "own_tenant_select": "must still work",
+    "service_role": "outside RLS proof (SETUP/verify only)"
+  },
+  "orgs": {
+    "A": {
+      "companyId": "b7d9fd0d-a3c3-4152-a878-43c4f276a20f",
+      "vehicleId": "90e72c5a-4419-4289-b16b-f990feaf49d3",
+      "driverId": "73257c5a-f59f-4001-b142-eaebd4e0fee7",
+      "ccOrgId": "iso-cc-a"
+    },
+    "B": {
+      "companyId": "f8415408-474b-4ab1-806c-b688e1f01bbd",
+      "vehicleId": "28ec0775-b853-4057-8dbf-2c9d8ae64982",
+      "driverId": "7e6e99f4-67b8-449b-984a-c5a3d13676be",
+      "ccOrgId": "iso-cc-b"
+    }
+  },
+  "summary": {
+    "total": 72,
+    "pass": 72,
+    "fail": 0
+  },
+  "results": [
+    {
+      "phase": "meta",
+      "name": "authority_note",
+      "ok": true,
+      "detail": "Assertions use authenticated JWT only; service_role used solely for SETUP fixtures"
+    },
+    {
+      "phase": "meta",
+      "name": "postgrest_up",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "setup",
+      "name": "seed_orgs",
+      "ok": true,
+      "detail": "A=b7d9fd0d-a3c3-4152-a878-43c4f276a20f vehicle=90e72c5a-4419-4289-b16b-f990feaf49d3 driver=73257c5a-f59f-4001-b142-eaebd4e0fee7; B=f8415408-474b-4ab1-806c-b688e1f01bbd vehicle=28ec0775-b853-4057-8dbf-2c9d8ae64982 driver=7e6e99f4-67b8-449b-984a-c5a3d13676be"
+    },
+    {
+      "phase": "auth",
+      "name": "login_A",
+      "ok": true,
+      "detail": "jwt issued"
+    },
+    {
+      "phase": "auth",
+      "name": "login_B",
+      "ok": true,
+      "detail": "jwt issued"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_vehicles",
+      "ok": true,
+      "detail": "status=200 count=2"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_vehicle_by_id",
+      "ok": true,
+      "detail": "status=200 rows=[]"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_list_B_vehicles",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_depot",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_company_row",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_company_compliance_settings",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_company_compliance_settings",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_domain_events",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_domain_events",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_fuel_records",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_fuel_records",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_override_audit_events",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_override_audit_events",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_vehicle_equipment_checks",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_vehicle_equipment_checks",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_own_integration_api_keys_SERVICE_ROLE_ONLY",
+      "ok": true,
+      "detail": "status=403 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_integration_api_keys",
+      "ok": true,
+      "detail": "status=403 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_drivers",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_drivers",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_drivers_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.drivers TO authenticated;\",\"message\":\"perm"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_duties",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_duties",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_duties_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.duties TO authenticated;\",\"message\":\"permi"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_defects",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_defects",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_defects_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.defects TO authenticated;\",\"message\":\"perm"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_attendance_leave_requests",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_attendance_leave_requests",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_attendance_leave_requests_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.attendance_leave_requests TO authenticated"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_attendance_notes",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_attendance_notes",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_attendance_notes_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.attendance_notes TO authenticated;\",\"messa"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_equipment_assets",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_equipment_assets",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_equipment_assets_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.equipment_assets TO authenticated;\",\"messa"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_tyre_assets",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_tyre_assets",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_tyre_assets_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.tyre_assets TO authenticated;\",\"message\":\""
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_depot_stock_items",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_depot_stock_items",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_depot_stock_items_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.depot_stock_items TO authenticated;\",\"mess"
+    },
+    {
+      "phase": "select",
+      "name": "A_select_own_purchase_requests",
+      "ok": true,
+      "detail": "status=200 count=1"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_purchase_requests",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_purchase_requests_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.purchase_requests TO authenticated;\",\"mess"
+    },
+    {
+      "phase": "select",
+      "name": "B_cannot_select_A_driver_by_id",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "setup",
+      "name": "seed_cost_control",
+      "ok": true,
+      "detail": "A=iso-cc-a B=iso-cc-b"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_own_cost_control.organisations_BFF_SERVICE_BOUNDARY",
+      "ok": true,
+      "detail": "status=403 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_cost_control.organisations",
+      "ok": true,
+      "detail": "status=403 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_cost_control.organisations_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":null,\"message\":\"permission denied for schema cost_control\"}"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_own_cost_control.budgets_BFF_SERVICE_BOUNDARY",
+      "ok": true,
+      "detail": "status=403 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_cost_control.budgets",
+      "ok": true,
+      "detail": "status=403 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_cost_control.budgets_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":null,\"message\":\"permission denied for schema cost_control\"}"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_own_cost_control.cost_records_BFF_SERVICE_BOUNDARY",
+      "ok": true,
+      "detail": "status=403 count=0"
+    },
+    {
+      "phase": "select",
+      "name": "A_cannot_select_B_cost_control.cost_records",
+      "ok": true,
+      "detail": "status=403 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_cost_control.cost_records_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":null,\"message\":\"permission denied for schema cost_control\"}"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_vehicle_into_B",
+      "ok": true,
+      "detail": "status=403 body={\"code\":\"42501\",\"details\":null,\"hint\":\"Grant the required privileges to the current role with: GRANT INSERT ON public.vehicles TO authenticated;\",\"message\":\"permission denied for t"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_fuel_record_into_B",
+      "ok": true,
+      "detail": "status=403"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_domain_event_into_B",
+      "ok": true,
+      "detail": "status=403"
+    },
+    {
+      "phase": "insert",
+      "name": "A_cannot_insert_integration_api_key_into_B",
+      "ok": true,
+      "detail": "status=403"
+    },
+    {
+      "phase": "update",
+      "name": "A_cannot_update_B_vehicle",
+      "ok": true,
+      "detail": "status=403 returned=0 service_status=active"
+    },
+    {
+      "phase": "delete",
+      "name": "A_cannot_delete_B_vehicle",
+      "ok": true,
+      "detail": "status=403 returned=0 still_exists=1"
+    },
+    {
+      "phase": "update",
+      "name": "A_cannot_update_B_driver",
+      "ok": true,
+      "detail": "status=403 returned=0 service_status=active"
+    },
+    {
+      "phase": "update",
+      "name": "A_cannot_update_B_equipment_asset",
+      "ok": true,
+      "detail": "status=403 returned=0 service_status=available"
+    },
+    {
+      "phase": "update",
+      "name": "A_cannot_update_B_cost_control.budgets",
+      "ok": true,
+      "detail": "status=403 returned=0"
+    },
+    {
+      "phase": "select",
+      "name": "B_cannot_select_A_vehicle_by_id",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "structural",
+      "name": "duty_runs_cross_company_probe",
+      "ok": true,
+      "detail": "rejected as expected: service POST /rest/v1/duty_runs -> 400 {\"code\":\"PGRST204\",\"details\":null,\"hint\":null,\"message\":\"Could not find the 'company_id' column of 'duty_runs' in the sch"
+    },
+    {
+      "phase": "structural",
+      "name": "same_company_trigger_inventory",
+      "ok": true,
+      "detail": "first wave: drivers, duties, defects, runs, trip_assignments, duty_live_positions, vehicle_swap_requests, fuel_records; join: depot_access, duty_runs, run_trips"
+    }
+  ],
+  "failures": [],
+  "remediations": []
+}

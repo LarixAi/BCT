@@ -111,6 +111,36 @@ jobs:
           cd "Veyvio admin "
           npm run build
 
+  admin-fresh-db:
+    name: Admin fresh-DB gate (FIX-P1-048)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ format('{0} /package-lock.json', 'Veyvio admin') }}
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install Admin deps
+        run: |
+          cd "Veyvio admin "
+          npm ci
+
+      - name: Fresh-DB gate (reset, inventory, JWT + structural proofs)
+        run: |
+          cd "Veyvio admin "
+          npm run test:fresh-db-gate
+
   driver:
     name: Driver
     runs-on: ubuntu-latest
