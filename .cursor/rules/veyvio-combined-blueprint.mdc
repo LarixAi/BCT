@@ -14,8 +14,9 @@ This is the **only** product blueprint for Veyvio. Do not invent requirements, r
 
 1. Read the relevant blueprint section (see index below).
 2. Check alignment status in `docs/plan/veyvio-blueprint-alignment-plan.md`.
-3. Check execution tasks in `docs/plan/veyvio-production-gates.md` (Gates 0–6).
-4. If blueprint and code conflict, **treat the blueprint as target state** and record the gap in the alignment plan debt register — do not silently follow legacy/mock behaviour.
+3. For production-stabilisation work, follow `docs/plan/veyvio-production-readiness-blueprint.md` (`VEYVIO-PROD`, tracks PR-00–PR-12). Historical Gate 1–4 tasks remain in `docs/plan/veyvio-production-gates.md`.
+4. If Combined Blueprint and code conflict, **treat the Combined Blueprint as product target state** and record the gap in the alignment plan debt register — do not silently follow legacy/mock behaviour.
+5. If sequence or freeze conflict with older plan trackers, the Production Readiness Blueprint wins until `VEYVIO-PROD` closes.
 
 ## Blueprint sections (v2.0 — what to read when)
 
@@ -44,7 +45,7 @@ This is the **only** product blueprint for Veyvio. Do not invent requirements, r
 
 ## Execution order
 
-Follow §19 production gates. **Gate 1 before Gate 2** before store launch (Gate 3) and pilot acceptance (Gate 4). Map work to `veyvio-production-gates.md`. Do not start intelligence or commercial SaaS (Gate 6) until prior gates pass.
+Follow Combined Blueprint §19 production gates **and** the VEYVIO-PROD programme. Engineering sequence: PR-00/PR-01 first (control + repository authority), then Wave 3F + F-03, then reproducible CI/DB, then Gate A controlled pilot. Do not start Wave 3G, intelligence, or commercial SaaS until prior gates pass. Map remaining Gate 1–4 tasks to `veyvio-production-gates.md`.
 
 ## Preserve proven work
 

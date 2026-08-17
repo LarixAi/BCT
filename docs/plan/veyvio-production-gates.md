@@ -10,6 +10,7 @@
 | Document | Role |
 |----------|------|
 | [`Veyvio_Combined_Blueprint_v2.0.docx`](../blueprint/Veyvio_Combined_Blueprint_v2.0.docx) | **Product authority** (v2.0; supersedes v1.0) |
+| [veyvio-production-readiness-blueprint.md](./veyvio-production-readiness-blueprint.md) | **Engineering execution authority** — `VEYVIO-PROD`, tracks PR-00–PR-12, Gate A/B/C |
 | [`Veyvio_Combined_Blueprint_1.docx`](../blueprint/Veyvio_Combined_Blueprint_1.docx) | Superseded — do not use as sole authority |
 | [veyvio-blueprint-alignment-plan.md](./veyvio-blueprint-alignment-plan.md) | Blueprint → gates gap tracker and phase index |
 | [veyvio-phase0-freeze.md](./veyvio-phase0-freeze.md) | Phase 0 freeze and reproducibility recovery |

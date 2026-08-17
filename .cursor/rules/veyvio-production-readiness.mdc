@@ -1,0 +1,42 @@
+---
+description: VEYVIO-PROD production-readiness programme — freeze, tracks PR-00–PR-12, Gate A/B/C; consult before production, security, tenancy, or release work
+alwaysApply: true
+---
+
+# Veyvio Production Readiness Blueprint v1
+
+**Canonical file:** [`docs/plan/veyvio-production-readiness-blueprint.md`](docs/plan/veyvio-production-readiness-blueprint.md)
+
+This is the **engineering execution authority** for production stabilisation. Combined Blueprint v2.0 remains product authority. Where sequence or freeze conflict with older plan trackers, this programme wins until `VEYVIO-PROD` closes.
+
+## Freeze (until VEYVIO-PROD closes)
+
+Allowed: bug fixes, security fixes, production-readiness, tests, release engineering, necessary operational fixes.
+
+Blocked: new major modules, large redesigns, custom-service architecture, large navigation changes, new transport product areas, non-critical refactors.
+
+Do **not** rebuild Driver, Command, Yard, RLS, entitlements, Wave 3F tooling, F-03, or CI from scratch. Improve and close them.
+
+Wave 3G (`organisation_id`) starts only after Wave 3F is LOCKED. Do not mix tenancy redesign into production stabilisation.
+
+## Permanent architecture
+
+Ordinary tenant CRUD: authenticated request → `UserScopedDb` → RLS → tenant data.
+
+Privileged work only via named capabilities (`authAdmin`, `storageSigner`, `billingAdmin`, `platformAdmin`). Generic `admin.from(...)` in production modules is a CI failure.
+
+Unavailable real data must never become believable fake operational data (F-03).
+
+`main` + immutable release SHA define production. Released migrations are never edited.
+
+## Execution order
+
+Start at **PROD-0 / PROD-1**, not SaaS or mobile.
+
+Critical path: repository authority → Wave 3F + production truth → relational integrity → reproducible CI/DB → release candidate → (SaaS / mobile / reliability) → controlled pilot.
+
+Map work to tracks **PR-00–PR-12**. Every P0 needs an owner. Do not convert remaining privileged modules in one PR — batch and prove the security matrix each time.
+
+## Release evidence
+
+No percentage-ready claims. Dashboard counts and PASS/FAIL only. Gate A (pilot) before Gate B (first paying customer) before Gate C (GA).

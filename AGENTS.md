@@ -4,7 +4,7 @@
 
 **Combined Blueprint v2.0** ([`docs/blueprint/Veyvio_Combined_Blueprint_v2.0.docx`](docs/blueprint/Veyvio_Combined_Blueprint_v2.0.docx)) is the platform product and architecture authority. The v1 Combined Blueprint is superseded.
 
-Before cross-app or product work, read the relevant blueprint section and check [docs/plan/veyvio-blueprint-alignment-plan.md](docs/plan/veyvio-blueprint-alignment-plan.md). Execution tasks live in [docs/plan/veyvio-production-gates.md](docs/plan/veyvio-production-gates.md). Freeze / reproducibility: [docs/plan/veyvio-phase0-freeze.md](docs/plan/veyvio-phase0-freeze.md). Cursor rule: `.cursor/rules/veyvio-combined-blueprint.mdc`.
+Before cross-app or product work, read the relevant blueprint section and check [docs/plan/veyvio-blueprint-alignment-plan.md](docs/plan/veyvio-blueprint-alignment-plan.md). **Production engineering programme:** [docs/plan/veyvio-production-readiness-blueprint.md](docs/plan/veyvio-production-readiness-blueprint.md) (`VEYVIO-PROD`, tracks PR-00–PR-12). Historical gate tracker: [docs/plan/veyvio-production-gates.md](docs/plan/veyvio-production-gates.md). Freeze / reproducibility: [docs/plan/veyvio-phase0-freeze.md](docs/plan/veyvio-phase0-freeze.md). Cursor rules: `.cursor/rules/veyvio-combined-blueprint.mdc`, `.cursor/rules/veyvio-production-readiness.mdc`.
 
 App-level specs (Cost Control, Executive, Website) sit under `docs/blueprint/` and each app’s `docs/` and must not contradict Combined Blueprint v2.0 on tenancy, security, or Hard Rules.
 

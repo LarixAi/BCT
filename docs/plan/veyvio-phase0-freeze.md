@@ -21,8 +21,9 @@ Until Phase 0 closes **and** Phase 1 stop-ships (P0 security / durability findin
 | Layer | Authority |
 |-------|-----------|
 | Platform | [`Veyvio_Combined_Blueprint_v2.0.docx`](../blueprint/Veyvio_Combined_Blueprint_v2.0.docx) (v2.0) |
+| Production engineering | [veyvio-production-readiness-blueprint.md](./veyvio-production-readiness-blueprint.md) (`VEYVIO-PROD`) |
 | Gap tracker | [veyvio-blueprint-alignment-plan.md](./veyvio-blueprint-alignment-plan.md) |
-| Execution spine | [veyvio-production-gates.md](./veyvio-production-gates.md) |
+| Execution spine (historical) | [veyvio-production-gates.md](./veyvio-production-gates.md) |
 | App specs | Cost Control, Executive, Website blueprints / product docs under `docs/blueprint/` and app `docs/` |
 
 v1 Combined Blueprint is **superseded** and must not be cited as sole authority.

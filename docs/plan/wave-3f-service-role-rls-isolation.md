@@ -1,8 +1,9 @@
 # Wave 3F — Service-role usage + full RLS tenant-isolation proof
 
 **Status:** LOCKED / IN PROGRESS — FIX-P0-011 **LOCKED** 17 Aug 2026; FIX-P1-012 importer batches remain frozen until hosted verification  
+**Programme track:** Production Readiness **PR-02** ([veyvio-production-readiness-blueprint.md](./veyvio-production-readiness-blueprint.md))  
 **Depends on:** Wave 3E CLOSED / LOCKED  
-**Does not touch:** 3E-1 BFF cookies, 3E-2 native Driver custody, organisation_id (3G)
+**Does not touch:** 3E-1 BFF cookies, 3E-2 native Driver custody, organisation_id (3G — deferred until 3F LOCKED)
 
 **Anchors (remediation plan):**
 

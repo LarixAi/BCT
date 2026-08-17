@@ -3,8 +3,9 @@
 **Status:** Active — master index for aligning code to the Combined Blueprint  
 **Created:** 24 July 2026  
 **Blueprint:** [`docs/blueprint/Veyvio_Combined_Blueprint_v2.0.docx`](../blueprint/Veyvio_Combined_Blueprint_v2.0.docx) v2.0 (supersedes v1.0)  
-**Execution spine:** [veyvio-production-gates.md](./veyvio-production-gates.md) (Gates 1–4)  
-**Agent rule:** `.cursor/rules/veyvio-combined-blueprint.mdc`
+**Production engineering:** [veyvio-production-readiness-blueprint.md](./veyvio-production-readiness-blueprint.md) (`VEYVIO-PROD`, tracks PR-00–PR-12)  
+**Execution spine (historical):** [veyvio-production-gates.md](./veyvio-production-gates.md) (Gates 1–4)  
+**Agent rules:** `.cursor/rules/veyvio-combined-blueprint.mdc`, `.cursor/rules/veyvio-production-readiness.mdc`
 
 ---
 
@@ -12,7 +13,7 @@
 
 This document is the **hub** that connects the Combined Blueprint to what we build and ship. It does not duplicate the blueprint or the production-gates detail — it tracks **gaps**, **priority**, and **where to work next**.
 
-**Principle:** Blueprint = target state. Production gates = stop-ship sequence. Code changes must close a named gap here or in the gates tracker.
+**Principle:** Combined Blueprint = product target state. Production Readiness Blueprint = engineering freeze and sequence. Historical production gates = Gate 1–4 work already in flight. Code changes must close a named gap here, in the readiness tracks (PR-00–PR-12), or in the gates tracker.
 
 ### Portfolio apps (signed specs under Combined Blueprint v2.0)
 
