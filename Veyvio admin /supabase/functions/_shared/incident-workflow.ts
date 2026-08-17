@@ -1,7 +1,7 @@
 /**
  * P0-07 — incident acknowledgement, escalation, and driver receipt proof on Command.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { emitDomainEvent } from './domain-events.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { notifyCompanyAdmins } from './notifications.ts'
@@ -16,6 +16,10 @@ import {
 
 type Row = Record<string, unknown>
 
+function incidentDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'incident_workflow')
+}
+
 export {
   buildDriverIncidentMetadata,
   mapIncidentDetail,
@@ -25,7 +29,7 @@ export {
 } from './incident-workflow.mapping.ts'
 
 async function loadIncident(companyId: string, incidentId: string) {
-  const { data, error } = await admin
+  const { data, error } = await incidentDb(companyId)
     .from('incidents')
     .select('*, vehicles(registration, make, model), drivers(driver_number)')
     .eq('company_id', companyId)
@@ -38,7 +42,7 @@ async function loadIncident(companyId: string, incidentId: string) {
 export async function getIncidentDetail(companyId: string, incidentId: string) {
   const row = await loadIncident(companyId, incidentId)
   if (!row) return null
-  const { data: depot } = await admin
+  const { data: depot } = await incidentDb(companyId)
     .from('depots')
     .select('id, name')
     .eq('company_id', companyId)
@@ -54,12 +58,13 @@ export async function acknowledgeIncident(input: {
   actorName: string
   notes?: string | null
 }) {
-  const row = await loadIncident(input.companyId, input.incidentId)
+  const companyId = input.companyId
+  const row = await loadIncident(companyId, input.incidentId)
   if (!row) throw new Error('Incident not found')
 
   const meta = parseMetadata(row.metadata)
   if (meta.acknowledgedAt) {
-    const { data: depot } = await admin.from('depots').select('id, name').eq('company_id', input.companyId).limit(1).maybeSingle()
+    const { data: depot } = await incidentDb(companyId).from('depots').select('id, name').eq('company_id', input.companyId).limit(1).maybeSingle()
     return mapIncidentDetail(row, depot)
   }
 
@@ -79,7 +84,7 @@ export async function acknowledgeIncident(input: {
     acknowledgementNotes: input.notes?.trim() || null,
   }
 
-  const { data: updated, error } = await admin
+  const { data: updated, error } = await incidentDb(companyId)
     .from('incidents')
     .update({
       metadata: nextMeta,
@@ -112,7 +117,7 @@ export async function acknowledgeIncident(input: {
     payload: { notes: input.notes ?? null },
   }).catch(() => undefined)
 
-  const { data: depot } = await admin.from('depots').select('id, name').eq('company_id', input.companyId).limit(1).maybeSingle()
+  const { data: depot } = await incidentDb(companyId).from('depots').select('id, name').eq('company_id', input.companyId).limit(1).maybeSingle()
   return mapIncidentDetail(updated as Row, depot)
 }
 
@@ -124,7 +129,8 @@ export async function escalateIncident(input: {
   severity: string
   reason: string
 }) {
-  const row = await loadIncident(input.companyId, input.incidentId)
+  const companyId = input.companyId
+  const row = await loadIncident(companyId, input.incidentId)
   if (!row) throw new Error('Incident not found')
 
   const reason = String(input.reason ?? '').trim()
@@ -154,7 +160,7 @@ export async function escalateIncident(input: {
     escalationReason: reason,
   }
 
-  const { data: updated, error } = await admin
+  const { data: updated, error } = await incidentDb(companyId)
     .from('incidents')
     .update({
       metadata: nextMeta,
@@ -202,6 +208,6 @@ export async function escalateIncident(input: {
     })
   }
 
-  const { data: depot } = await admin.from('depots').select('id, name').eq('company_id', input.companyId).limit(1).maybeSingle()
+  const { data: depot } = await incidentDb(companyId).from('depots').select('id, name').eq('company_id', input.companyId).limit(1).maybeSingle()
   return mapIncidentDetail(updated as Row, depot)
 }

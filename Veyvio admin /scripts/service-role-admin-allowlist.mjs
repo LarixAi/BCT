@@ -49,7 +49,6 @@ export const SERVICE_ROLE_ADMIN_ALLOWLIST = Object.freeze({
   'supabase/functions/_shared/fcm-send.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/holiday-balance.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/hubs.ts': 'company_scoped_service_role',
-  'supabase/functions/_shared/incident-workflow.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/interest-submissions.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/journey-handlers.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/journey-sequence-ack.ts': 'company_scoped_service_role',
