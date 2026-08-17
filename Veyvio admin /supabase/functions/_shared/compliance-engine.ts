@@ -1,13 +1,21 @@
 /**
  * F-05 — company-configurable compliance rules (Gate 2 §4.3).
+ *
+ * PROD-1 Batch 02 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
+ * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import {
   appendDriverProfileGates,
   appendVehicleReadinessGates,
   finalizeEligibilityResult,
   type EligibilityResult,
 } from './dispatch-assignment-gates.ts'
+
+function complianceDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'compliance_engine')
+}
 
 export type ComplianceAutomationSettings = {
   blockExpiredLicence: boolean
@@ -44,7 +52,7 @@ export const DEFAULT_COMPLIANCE_SETTINGS: ComplianceAutomationSettings = {
 }
 
 export async function getComplianceSettings(companyId: string): Promise<ComplianceAutomationSettings> {
-  const { data } = await admin
+  const { data } = await complianceDb(companyId)
     .from('company_compliance_settings')
     .select('settings')
     .eq('company_id', companyId)
@@ -61,7 +69,7 @@ export async function upsertComplianceSettings(
 ): Promise<ComplianceAutomationSettings> {
   const current = await getComplianceSettings(companyId)
   const next = { ...current, ...patch }
-  const { error } = await admin.from('company_compliance_settings').upsert({
+  const { error } = await complianceDb(companyId).from('company_compliance_settings').upsert({
     company_id: companyId,
     settings: next,
     updated_at: new Date().toISOString(),
