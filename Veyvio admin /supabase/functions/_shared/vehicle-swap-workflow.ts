@@ -1,7 +1,7 @@
 /**
  * Ops-approved vehicle swap workflow on Command.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { emitDomainEvent } from './domain-events.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { notifyCompanyAdmins } from './notifications.ts'
@@ -10,6 +10,10 @@ import { recordDutyAssignmentEvent } from './duty-publication.ts'
 import { mapSwapRow } from './vehicle-swap-workflow.mapping.ts'
 
 type Row = Record<string, unknown>
+
+function swapDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'vehicle_swap_workflow')
+}
 
 export async function createVehicleSwapRequest(input: {
   companyId: string
@@ -20,6 +24,7 @@ export async function createVehicleSwapRequest(input: {
   reason: string
   clientGeneratedId?: string | null
 }) {
+  const companyId = input.companyId
   const reason = String(input.reason ?? '').trim()
   if (!reason) throw new Error('Explain why you need a different vehicle.')
 
@@ -36,7 +41,7 @@ export async function createVehicleSwapRequest(input: {
 
   const clientGeneratedId = input.clientGeneratedId?.trim() || null
   if (clientGeneratedId) {
-    const { data: existing } = await admin
+    const { data: existing } = await swapDb(companyId)
       .from('vehicle_swap_requests')
       .select('*')
       .eq('company_id', input.companyId)
@@ -45,7 +50,7 @@ export async function createVehicleSwapRequest(input: {
     if (existing) return mapSwapRow(existing as Row)
   }
 
-  const { data: pending } = await admin
+  const { data: pending } = await swapDb(companyId)
     .from('vehicle_swap_requests')
     .select('id')
     .eq('company_id', input.companyId)
@@ -54,7 +59,7 @@ export async function createVehicleSwapRequest(input: {
     .maybeSingle()
   if (pending?.id) throw new Error('A vehicle swap request is already waiting for dispatch.')
 
-  const { data, error } = await admin
+  const { data, error } = await swapDb(companyId)
     .from('vehicle_swap_requests')
     .insert({
       company_id: input.companyId,
@@ -107,7 +112,7 @@ export async function createVehicleSwapRequest(input: {
 }
 
 export async function listVehicleSwapRequests(companyId: string, status?: string) {
-  let query = admin
+  let query = swapDb(companyId)
     .from('vehicle_swap_requests')
     .select('*')
     .eq('company_id', companyId)
@@ -128,7 +133,8 @@ export async function resolveVehicleSwapRequest(input: {
   approve: boolean
   notes?: string | null
 }) {
-  const { data: row, error } = await admin
+  const companyId = input.companyId
+  const { data: row, error } = await swapDb(companyId)
     .from('vehicle_swap_requests')
     .select('*')
     .eq('company_id', input.companyId)
@@ -141,7 +147,7 @@ export async function resolveVehicleSwapRequest(input: {
   const now = new Date().toISOString()
   const nextStatus = input.approve ? 'approved' : 'rejected'
 
-  const { data: updated, error: updateError } = await admin
+  const { data: updated, error: updateError } = await swapDb(companyId)
     .from('vehicle_swap_requests')
     .update({
       status: nextStatus,
@@ -158,7 +164,7 @@ export async function resolveVehicleSwapRequest(input: {
   if (updateError || !updated) throw new Error(updateError?.message ?? 'Could not resolve swap request')
 
   if (input.approve) {
-    await admin
+    await swapDb(companyId)
       .from('duties')
       .update({
         vehicle_id: row.requested_vehicle_id,
@@ -204,7 +210,7 @@ export async function resolveVehicleSwapRequest(input: {
 }
 
 export async function listDriverSwapRequests(companyId: string, driverId: string) {
-  const { data, error } = await admin
+  const { data, error } = await swapDb(companyId)
     .from('vehicle_swap_requests')
     .select('*')
     .eq('company_id', companyId)
