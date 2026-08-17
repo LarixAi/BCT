@@ -757,7 +757,7 @@ The remaining requirement is **complete proof**.
 ## FIX-P1-012 — Reduce service-role blast radius in Command
 
 **Severity:** P1 HIGH  
-**Status:** OPEN  
+**Status:** IN PROGRESS — Wave 3F production verification CLOSED; first batch converted `fuel-records` to `companyScopedServiceDb`; 43 company-scoped modules remain  
 **Area:** Command backend
 
 **Current architecture:**

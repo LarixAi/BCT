@@ -63,7 +63,8 @@ Browser / Driver / Yard / Command SPA
 - [x] Baseline inventory of `admin` imports under `supabase/functions/`
 - [x] Frozen allowlist + unit test fails on new unlisted `admin` imports
 - [x] Introduce `db-authority` helpers (`privilegedDb(reason)`, company-scoped service wrapper)
-- [ ] Migrate high-risk modules onto explicit PrivilegedDb reasons
+- [x] First importer batch: `fuel-records` uses `companyScopedServiceDb` (43 company-scoped `admin` importers remain)
+- [ ] Migrate remaining company-scoped modules in small domain batches
 - [ ] Prefer `tenantSelect` / `tenantInsert` for ordinary CRUD
 
 ### 3F-B — Clean-DB RLS proof (FIX-P0-011)
@@ -77,8 +78,9 @@ Browser / Driver / Yard / Command SPA
 - [x] FIX-P1-048 fresh-DB gate green locally (`npm run test:fresh-db-gate`) — inventory + forge `13/13` + JWT `72/72`
 - [x] FIX-P1-048 green on GitHub Actions (`admin-fresh-db` on PR #3, run `32002475034`)
 - [x] Lock FIX-P0-011 — **LOCKED 17 Aug 2026** (see `wave-3f-p0-011-lock.json`)
+- [x] Hosted production verification **CLOSED** 17 Aug 2026 — `202608170001`–`004` on hosted; verification **15/15**; `command-api` smoke green
 
-**Verdict:** FIX-P0-011 **LOCKED**. Importer migration (P1-012) remains gated on hosted verification.
+**Verdict:** FIX-P0-011 **LOCKED**. Wave 3F production verification **CLOSED**. FIX-P1-012 importer conversion started (first batch: `fuel-records`).
 
 ### 3F-C — Zero-policy classification then broader JWT matrix
 

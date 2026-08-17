@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-08-17T17:32:51.044Z",
+  "generated_at": "2026-08-17T17:36:41.330Z",
   "fix": "Wave-3F-hosted-verification",
   "target": "https://qeckgqjrfbdyxchuncdt.supabase.co",
-  "status": "FAIL",
-  "importers": "FIX-P1-012 frozen until this gate is PASS without migration/inventory skips",
+  "status": "PASS",
+  "importers": "FIX-P1-012 unfrozen after this PASS — convert in small domain batches, not all 44 at once",
   "summary": {
     "total": 15,
-    "pass": 14,
-    "fail": 1,
+    "pass": 15,
+    "fail": 0,
     "skip": 0
   },
   "results": [
@@ -98,8 +98,8 @@
     {
       "phase": "command_api",
       "name": "tenant_isolation_smoke",
-      "ok": false,
-      "detail": "exit 1"
+      "ok": true,
+      "detail": "exit 0"
     }
   ]
 }

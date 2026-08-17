@@ -1,6 +1,6 @@
 # Wave 3F hosted verification gate
 
-**Status:** OUTSTANDING — repository FIX-P0-011 is **LOCKED**; production posture not verified until this gate is green.
+**Status:** **CLOSED** — 17 Aug 2026. Hosted migrations `202608170001`–`004` applied; hosted verification **15/15**; Command API smoke green after `command-api` redeploy.
 
 **Hard sequence:**
 

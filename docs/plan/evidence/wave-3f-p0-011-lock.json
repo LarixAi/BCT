@@ -25,11 +25,10 @@
     "storage_jwt": "66/66 (admin-storage-isolation CI)"
   },
   "merged_prs": [3, 4],
-  "hosted_migrations": "202608170001–004 push authorized at lock; apply via supabase db push",
-  "production_verification": "OUTSTANDING — run npm run test:hosted-wave3f-verification after db push (see wave-3f-hosted-verification-gate.md)",
-  "frozen_until_hosted_verified": [
-    "44 company-scoped service-role importers (FIX-P1-012 batches)"
-  ],
+  "hosted_migrations": "202608170001–004 applied on hosted qeckgqjrfbdyxchuncdt (supabase db push 17 Aug 2026)",
+  "production_verification": "CLOSED — hosted Wave 3F verification 15/15 PASS (wave-3ff-hosted-verification.json); command-api redeployed then tenant-isolation-smoke ok",
+  "frozen_until_hosted_verified": [],
+  "next": "FIX-P1-012 first controlled importer batch (companyScopedServiceDb); remaining 43 company-scoped modules still on bare admin",
   "non_blocking_debt": [
     {
       "id": "gitguardian-test-keys",
