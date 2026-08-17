@@ -757,7 +757,7 @@ The remaining requirement is **complete proof**.
 ## FIX-P1-012 — Reduce service-role blast radius in Command
 
 **Severity:** P1 HIGH  
-**Status:** IN PROGRESS — first batches: `fuel-records`, `adblue-records`; 42 company-scoped modules remain  
+**Status:** IN PROGRESS — batches: `fuel-records`, `adblue-records`, `depot-stock`; 41 company-scoped modules remain  
 **Area:** Command backend
 
 **Current architecture:**
