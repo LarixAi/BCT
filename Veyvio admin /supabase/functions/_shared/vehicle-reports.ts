@@ -1,12 +1,21 @@
 /**
  * Gate 2 — vehicle reports Command API helpers.
+ *
+ * PROD-1 Batch 04 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
+ * via companyScopedServiceDb; company_id filters remain defence-in-depth.
  */
-import { admin, type RequestContext } from './supabase.ts'
+import { type RequestContext } from './supabase.ts'
+import { companyScopedServiceDb } from './db-authority.ts'
 import { apiError, json, readJson, toCamelCase } from './http.ts'
 import { emitDomainEvent } from './domain-events.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 
 type Row = Record<string, unknown>
+
+function reportsDb(context: RequestContext) {
+  return companyScopedServiceDb(context, 'vehicle_reports')
+}
 
 function mapReport(row: Row, extras: { evidence?: Row[]; timeline?: Row[]; vehicle?: Row } = {}) {
   const vehicle = extras.vehicle ?? {}
@@ -25,7 +34,7 @@ function mapReport(row: Row, extras: { evidence?: Row[]; timeline?: Row[]; vehic
 export async function listVehicleReports(context: RequestContext, request: Request) {
   const url = new URL(request.url)
   const vehicleId = url.searchParams.get('vehicleId')
-  let query = admin
+  let query = reportsDb(context)
     .from('vehicle_reports')
     .select('*')
     .eq('company_id', context.companyId)
@@ -38,7 +47,7 @@ export async function listVehicleReports(context: RequestContext, request: Reque
 
   const vehicleIds = [...new Set((data ?? []).map((r) => String(r.vehicle_id)))]
   const { data: vehicles } = vehicleIds.length
-    ? await admin.from('vehicles').select('id, registration, fleet_number').in('id', vehicleIds)
+    ? await reportsDb(context).from('vehicles').select('id, registration, fleet_number').in('id', vehicleIds)
     : { data: [] as Row[] }
   const byId = new Map((vehicles ?? []).map((v) => [String(v.id), v]))
 
@@ -46,7 +55,7 @@ export async function listVehicleReports(context: RequestContext, request: Reque
 }
 
 export async function getVehicleReport(context: RequestContext, reportId: string) {
-  const { data, error } = await admin
+  const { data, error } = await reportsDb(context)
     .from('vehicle_reports')
     .select('*')
     .eq('company_id', context.companyId)
@@ -56,14 +65,14 @@ export async function getVehicleReport(context: RequestContext, reportId: string
   if (!data) return apiError(404, 'Vehicle report not found', 'not_found')
 
   const [{ data: evidence }, { data: timeline }, { data: vehicle }] = await Promise.all([
-    admin.from('vehicle_report_evidence').select('*').eq('report_id', reportId).eq('company_id', context.companyId),
-    admin
+    reportsDb(context).from('vehicle_report_evidence').select('*').eq('report_id', reportId).eq('company_id', context.companyId),
+    reportsDb(context)
       .from('vehicle_report_status_history')
       .select('*')
       .eq('report_id', reportId)
       .eq('company_id', context.companyId)
       .order('occurred_at', { ascending: true }),
-    admin
+    reportsDb(context)
       .from('vehicles')
       .select('id, registration, fleet_number')
       .eq('id', data.vehicle_id)
@@ -86,7 +95,7 @@ export async function createVehicleReport(context: RequestContext, request: Requ
     return apiError(400, 'vehicleId, reportType, title and description are required', 'invalid_input')
   }
 
-  const { data: vehicle } = await admin
+  const { data: vehicle } = await reportsDb(context)
     .from('vehicles')
     .select('id, registration, fleet_number, depot_id, operational_status')
     .eq('company_id', context.companyId)
@@ -95,7 +104,7 @@ export async function createVehicleReport(context: RequestContext, request: Requ
   if (!vehicle) return apiError(404, 'Vehicle not found', 'not_found')
 
   const reference = `VR-${Date.now().toString(36).toUpperCase()}`
-  const { data, error } = await admin
+  const { data, error } = await reportsDb(context)
     .from('vehicle_reports')
     .insert({
       company_id: context.companyId,
@@ -126,7 +135,7 @@ export async function createVehicleReport(context: RequestContext, request: Requ
 
   if (error || !data) return apiError(500, error?.message ?? 'Report could not be created')
 
-  await admin.from('vehicle_report_status_history').insert({
+  await reportsDb(context).from('vehicle_report_status_history').insert({
     company_id: context.companyId,
     report_id: data.id,
     action: 'reported',
@@ -161,7 +170,7 @@ export async function reviewVehicleReport(
   request: Request,
 ) {
   const input = await readJson<Row>(request)
-  const { data: existing } = await admin
+  const { data: existing } = await reportsDb(context)
     .from('vehicle_reports')
     .select('*')
     .eq('company_id', context.companyId)
@@ -184,7 +193,7 @@ export async function reviewVehicleReport(
     patch.verified_at = new Date().toISOString()
   }
 
-  const { data, error } = await admin
+  const { data, error } = await reportsDb(context)
     .from('vehicle_reports')
     .update(patch)
     .eq('id', reportId)
@@ -193,7 +202,7 @@ export async function reviewVehicleReport(
     .single()
   if (error || !data) return apiError(500, error?.message ?? 'Report could not be updated')
 
-  await admin.from('vehicle_report_status_history').insert({
+  await reportsDb(context).from('vehicle_report_status_history').insert({
     company_id: context.companyId,
     report_id: reportId,
     action: String(input.status ?? input.stage ?? 'reviewed'),
@@ -214,7 +223,7 @@ export async function reviewVehicleReport(
 }
 
 export async function vehicleReportsHub(context: RequestContext) {
-  const { data, error } = await admin
+  const { data, error } = await reportsDb(context)
     .from('vehicle_reports')
     .select('id, status, stage, severity, report_type, vehicle_id, title, reported_at')
     .eq('company_id', context.companyId)
