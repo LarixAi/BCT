@@ -5,7 +5,8 @@
 **Baseline SHA:** `9f5001851214bc009a38d858160ea32c7eb9aefb` (`prod0-phase0-authority-20260817`)  
 **Branch:** `production-stabilisation/2026`  
 **Authority:** [veyvio-production-readiness-blueprint.md](./veyvio-production-readiness-blueprint.md) tracks PR-02 / PROD-1  
-**Static gate (extend, do not rebuild):** `Veyvio admin /scripts/service-role-allowlist.unit.mjs`
+**Static gate (extend, do not rebuild):** `Veyvio admin /scripts/service-role-allowlist.unit.mjs`  
+**CI reliability (separate from wraps):** [prod-1-ci-reliability.md](./prod-1-ci-reliability.md)
 
 This document is the source-confirmed call-path register for the **31** remaining `company_scoped_service_role` modules. It does **not** convert any of them.
 
