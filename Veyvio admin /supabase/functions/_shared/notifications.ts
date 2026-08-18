@@ -1,7 +1,19 @@
-/** Company admin / ops notifications — prefer action-needed events over noisy sends. */
-import { admin } from './supabase.ts'
+/** Company admin / ops notifications — prefer action-needed events over noisy sends.
+ *
+ * PROD-1 Batch 11 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
+ * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
+ * Admin-role fan-out is company_memberships + company-scoped roles only.
+ *
+ * F-29: notifications never create business state. Callers are unchanged.
+ */
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 
 export type NotificationSeverity = 'info' | 'attention' | 'critical'
+
+function notifyDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'notifications')
+}
 
 export const DRIVER_ONBOARDING_NOTIFICATION = {
   requestSent: 'driver.onboarding.request_sent',
@@ -32,7 +44,7 @@ const ADMIN_ROLE_NAMES = new Set([
 ])
 
 export async function resolveCompanyAdminUserIds(companyId: string): Promise<string[]> {
-  const { data: memberships } = await admin
+  const { data: memberships } = await notifyDb(companyId)
     .from('company_memberships')
     .select('user_id, role_ids, status')
     .eq('company_id', companyId)
@@ -46,7 +58,7 @@ export async function resolveCompanyAdminUserIds(companyId: string): Promise<str
     ),
   ]
   const { data: roles } = roleIds.length
-    ? await admin.from('roles').select('id, name').eq('company_id', companyId).in('id', roleIds)
+    ? await notifyDb(companyId).from('roles').select('id, name').eq('company_id', companyId).in('id', roleIds)
     : { data: [] as { id: string; name: string }[] }
 
   const adminRoleIds = new Set(
@@ -117,7 +129,7 @@ export async function notifyCompanyAdmins(input: {
     status: 'unread',
   }))
 
-  const { error } = await admin.from('notifications').insert(rows)
+  const { error } = await notifyDb(input.companyId).from('notifications').insert(rows)
   if (error) {
     console.error('notifyCompanyAdmins failed', error.message)
     return { inserted: 0, error: error.message }
@@ -137,7 +149,7 @@ export async function notifyDriverAppUser(input: {
   sourceEntityType?: string | null
   sourceEntityId?: string | null
 }) {
-  const { data: account } = await admin
+  const { data: account } = await notifyDb(input.companyId)
     .from('driver_app_accounts')
     .select('user_id')
     .eq('company_id', input.companyId)
@@ -147,7 +159,7 @@ export async function notifyDriverAppUser(input: {
   const userId = account?.user_id ? String(account.user_id) : null
   if (!userId) return { inserted: 0 }
 
-  const { error } = await admin.from('notifications').insert({
+  const { error } = await notifyDb(input.companyId).from('notifications').insert({
     company_id: input.companyId,
     recipient_user_id: userId,
     notification_type: input.type,
