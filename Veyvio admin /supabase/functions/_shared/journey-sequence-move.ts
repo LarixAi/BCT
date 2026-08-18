@@ -1,8 +1,16 @@
 /**
  * Durable journey-sequence move for Command (F-03).
  * Moves pickup trips between runs via run_trips (one operational truth).
+ *
+ * PROD-1 Batch 06 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
+ * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
+ * Junction rows (duty_runs / run_trips) are reached only after the parent duty,
+ * trip, or run has been resolved with company_id.
+ *
+ * writeImmutableAudit stays on transitional audit-service — do not wrap that hub here.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import { parseDutyTripSyntheticId } from './journey-sequence-reorder.mapping.ts'
@@ -15,12 +23,16 @@ import {
 
 type Row = Record<string, unknown>
 
+function moveDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'journey_sequence_move')
+}
+
 async function resolvePrimaryRunForDuty(companyId: string, dutyId: string): Promise<{
   dutyId: string
   runId: string
   serviceDate: string
 }> {
-  const { data: duty, error } = await admin
+  const { data: duty, error } = await moveDb(companyId)
     .from('duties')
     .select('id, company_id, service_date')
     .eq('company_id', companyId)
@@ -29,7 +41,7 @@ async function resolvePrimaryRunForDuty(companyId: string, dutyId: string): Prom
   if (error) throw new Error(error.message)
   if (!duty) throw new HttpError(404, 'Duty not found', 'not_found')
 
-  const { data: dutyRuns, error: linkError } = await admin
+  const { data: dutyRuns, error: linkError } = await moveDb(companyId)
     .from('duty_runs')
     .select('run_id, sequence')
     .eq('duty_id', dutyId)
@@ -46,7 +58,7 @@ async function resolveRunForTrip(companyId: string, tripId: string): Promise<{
   serviceDate: string
   status: string
 }> {
-  const { data: trip, error } = await admin
+  const { data: trip, error } = await moveDb(companyId)
     .from('trips')
     .select('id, company_id, service_date, status')
     .eq('company_id', companyId)
@@ -55,7 +67,7 @@ async function resolveRunForTrip(companyId: string, tripId: string): Promise<{
   if (error) throw new Error(error.message)
   if (!trip) throw new HttpError(404, 'Trip not found', 'not_found')
 
-  const { data: link } = await admin
+  const { data: link } = await moveDb(companyId)
     .from('run_trips')
     .select('run_id')
     .eq('trip_id', tripId)
@@ -69,8 +81,8 @@ async function resolveRunForTrip(companyId: string, tripId: string): Promise<{
   }
 }
 
-async function loadRunTripIds(runId: string): Promise<string[]> {
-  const { data, error } = await admin
+async function loadRunTripIds(companyId: string, runId: string): Promise<string[]> {
+  const { data, error } = await moveDb(companyId)
     .from('run_trips')
     .select('trip_id, sequence')
     .eq('run_id', runId)
@@ -79,9 +91,9 @@ async function loadRunTripIds(runId: string): Promise<string[]> {
   return (data ?? []).map((row) => String(row.trip_id))
 }
 
-async function renumberRunTrips(runId: string, orderedTripIds: string[]) {
+async function renumberRunTrips(companyId: string, runId: string, orderedTripIds: string[]) {
   for (let i = 0; i < orderedTripIds.length; i++) {
-    const { error } = await admin
+    const { error } = await moveDb(companyId)
       .from('run_trips')
       .update({ sequence: -(i + 1) })
       .eq('run_id', runId)
@@ -89,7 +101,7 @@ async function renumberRunTrips(runId: string, orderedTripIds: string[]) {
     if (error) throw new Error(error.message)
   }
   for (let i = 0; i < orderedTripIds.length; i++) {
-    const { error } = await admin
+    const { error } = await moveDb(companyId)
       .from('run_trips')
       .update({ sequence: i + 1 })
       .eq('run_id', runId)
@@ -98,15 +110,15 @@ async function renumberRunTrips(runId: string, orderedTripIds: string[]) {
   }
 }
 
-async function detachTripsFromRun(runId: string, tripIds: string[]) {
-  const remaining = (await loadRunTripIds(runId)).filter((id) => !tripIds.includes(id))
-  const { error } = await admin.from('run_trips').delete().eq('run_id', runId).in('trip_id', tripIds)
+async function detachTripsFromRun(companyId: string, runId: string, tripIds: string[]) {
+  const remaining = (await loadRunTripIds(companyId, runId)).filter((id) => !tripIds.includes(id))
+  const { error } = await moveDb(companyId).from('run_trips').delete().eq('run_id', runId).in('trip_id', tripIds)
   if (error) throw new Error(error.message)
-  if (remaining.length) await renumberRunTrips(runId, remaining)
+  if (remaining.length) await renumberRunTrips(companyId, runId, remaining)
 }
 
-async function attachTripsToRun(runId: string, tripIds: string[]) {
-  const existing = await loadRunTripIds(runId)
+async function attachTripsToRun(companyId: string, runId: string, tripIds: string[]) {
+  const existing = await loadRunTripIds(companyId, runId)
   const sequences = nextRunSequences(
     existing.map((_, i) => i + 1),
     tripIds.length,
@@ -114,7 +126,7 @@ async function attachTripsToRun(runId: string, tripIds: string[]) {
   for (let i = 0; i < tripIds.length; i++) {
     const tripId = tripIds[i]!
     if (existing.includes(tripId)) continue
-    const { error } = await admin.from('run_trips').insert({
+    const { error } = await moveDb(companyId).from('run_trips').insert({
       run_id: runId,
       trip_id: tripId,
       sequence: sequences[i]!,
@@ -133,7 +145,7 @@ async function createPlannedRun(input: {
   const runReference = `SPLIT-${suffix}`
   let depotId: string | null = null
   if (input.sourceRunId) {
-    const { data: sourceRun } = await admin
+    const { data: sourceRun } = await moveDb(input.companyId)
       .from('runs')
       .select('depot_id')
       .eq('id', input.sourceRunId)
@@ -141,7 +153,7 @@ async function createPlannedRun(input: {
       .maybeSingle()
     depotId = sourceRun?.depot_id ? String(sourceRun.depot_id) : null
   }
-  const { data, error } = await admin
+  const { data, error } = await moveDb(input.companyId)
     .from('runs')
     .insert({
       company_id: input.companyId,
@@ -190,7 +202,7 @@ async function resolveDestinationRunId(
   const dutyId = parseDutyTripSyntheticId(destinationTripId)
   if (dutyId) {
     const duty = await resolvePrimaryRunForDuty(companyId, dutyId)
-    const { data: run } = await admin
+    const { data: run } = await moveDb(companyId)
       .from('runs')
       .select('status')
       .eq('id', duty.runId)
@@ -209,7 +221,7 @@ async function resolveDestinationRunId(
     // Destination trip exists but is unlinked — create is not automatic here.
     throw new HttpError(409, 'Destination trip is not on a run', 'destination_run_missing')
   }
-  const { data: run } = await admin
+  const { data: run } = await moveDb(companyId)
     .from('runs')
     .select('status')
     .eq('id', trip.runId)
@@ -252,7 +264,7 @@ export async function commitJourneySequenceMove(input: {
     throw new HttpError(409, 'Source journey is not linked to a run', 'source_run_missing')
   }
 
-  const sourceTripIds = await loadRunTripIds(source.runId)
+  const sourceTripIds = await loadRunTripIds(input.companyId, source.runId)
   for (const tripId of movedTripIds) {
     if (!sourceTripIds.includes(tripId)) {
       throw new HttpError(409, `Pickup trip ${tripId} is not on the source run`, 'trip_not_on_source_run')
@@ -292,10 +304,10 @@ export async function commitJourneySequenceMove(input: {
     })
   }
 
-  await detachTripsFromRun(source.runId, movedTripIds)
+  await detachTripsFromRun(input.companyId, source.runId, movedTripIds)
 
   if (destinationRunId && (action === 'move_to_run' || action === 'create_new_run')) {
-    await attachTripsToRun(destinationRunId, movedTripIds)
+    await attachTripsToRun(input.companyId, destinationRunId, movedTripIds)
   }
 
   const reason = String(input.reason ?? '').trim() || 'Operational transfer'
@@ -359,7 +371,7 @@ export async function listJourneySequenceDestinations(input: {
   }>
 > {
   const source = await resolveSourceContext(input.companyId, input.sourceTripId, input.dutyId)
-  const { data: runs, error } = await admin
+  const { data: runs, error } = await moveDb(input.companyId)
     .from('runs')
     .select(
       'id, run_reference, status, service_date, driver_id, vehicle_id, drivers(id, staff_members(first_name, last_name)), vehicles(id, registration)',
@@ -384,7 +396,7 @@ export async function listJourneySequenceDestinations(input: {
   for (const run of runs ?? []) {
     const runId = String(run.id)
     if (source.runId && runId === source.runId) continue
-    const tripIds = await loadRunTripIds(runId)
+    const tripIds = await loadRunTripIds(input.companyId, runId)
     const headTripId = tripIds[0] ?? runId
     const driver = (run.drivers as Row | null) ?? null
     const staff = (driver?.staff_members as Row | null) ?? null
