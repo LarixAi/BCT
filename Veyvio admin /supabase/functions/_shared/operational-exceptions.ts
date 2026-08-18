@@ -1,7 +1,14 @@
 /**
  * Durable operational exception cases — sole Command write path (F-18).
+ *
+ * PROD-1 Batch 10 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
+ * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
+ * users name lookup is display-only after a company-scoped case is loaded.
+ *
+ * writeImmutableAudit stays on transitional audit-service — do not wrap that hub here.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -19,8 +26,12 @@ import {
 
 type Row = Record<string, unknown>
 
+function exceptionDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'operational_exceptions')
+}
+
 async function loadEvents(companyId: string, exceptionId: string): Promise<ExceptionEventRow[]> {
-  const { data, error } = await admin
+  const { data, error } = await exceptionDb(companyId)
     .from('operational_exception_events')
     .select('id, event_type, actor_name, body, created_at, payload')
     .eq('company_id', companyId)
@@ -30,9 +41,9 @@ async function loadEvents(companyId: string, exceptionId: string): Promise<Excep
   return (data ?? []) as ExceptionEventRow[]
 }
 
-async function resolveOwnerName(ownerId: string | null | undefined): Promise<string | null> {
+async function resolveOwnerName(companyId: string, ownerId: string | null | undefined): Promise<string | null> {
   if (!ownerId) return null
-  const { data } = await admin
+  const { data } = await exceptionDb(companyId)
     .from('users')
     .select('first_name, last_name, email')
     .eq('id', ownerId)
@@ -51,7 +62,7 @@ async function appendEvent(input: {
   body?: string | null
   payload?: Record<string, unknown>
 }) {
-  const { error } = await admin.from('operational_exception_events').insert({
+  const { error } = await exceptionDb(input.companyId).from('operational_exception_events').insert({
     company_id: input.companyId,
     exception_id: input.exceptionId,
     event_type: input.eventType,
@@ -64,7 +75,7 @@ async function appendEvent(input: {
 }
 
 async function loadCase(companyId: string, exceptionId: string): Promise<Row | null> {
-  const { data, error } = await admin
+  const { data, error } = await exceptionDb(companyId)
     .from('operational_exceptions')
     .select('*, depots(name)')
     .eq('company_id', companyId)
@@ -80,7 +91,7 @@ export async function getOperationalException(companyId: string, exceptionId: st
   const row = await loadCase(companyId, exceptionId)
   if (!row) return null
   const events = await loadEvents(companyId, exceptionId)
-  const ownerName = await resolveOwnerName(row.owner_id ? String(row.owner_id) : null)
+  const ownerName = await resolveOwnerName(companyId, row.owner_id ? String(row.owner_id) : null)
   return mapExceptionCase(row, events, ownerName)
 }
 
@@ -89,7 +100,7 @@ export async function listOperationalExceptions(input: {
   status?: string | null
   openOnly?: boolean
 }) {
-  let query = admin
+  let query = exceptionDb(input.companyId)
     .from('operational_exceptions')
     .select('*, depots(name)')
     .eq('company_id', input.companyId)
@@ -109,7 +120,7 @@ export async function listOperationalExceptions(input: {
   if (!rows.length) return []
 
   const ids = rows.map((row) => String(row.id))
-  const { data: eventRows, error: eventError } = await admin
+  const { data: eventRows, error: eventError } = await exceptionDb(input.companyId)
     .from('operational_exception_events')
     .select('id, exception_id, event_type, actor_name, body, created_at, payload')
     .eq('company_id', input.companyId)
@@ -128,7 +139,7 @@ export async function listOperationalExceptions(input: {
   const results = []
   for (const row of rows) {
     const depotName = (row.depots as { name?: string } | null)?.name ?? null
-    const ownerName = await resolveOwnerName(row.owner_id ? String(row.owner_id) : null)
+    const ownerName = await resolveOwnerName(input.companyId, row.owner_id ? String(row.owner_id) : null)
     results.push(
       mapExceptionCase(
         { ...row, depot_name: depotName },
@@ -164,7 +175,7 @@ export async function raiseOperationalException(input: {
   const dueAt = new Date(Date.now() + slaMinutes * 60_000).toISOString()
   const typeCode = String(input.typeCode ?? 'manual_exception').trim() || 'manual_exception'
 
-  const { data, error } = await admin
+  const { data, error } = await exceptionDb(input.companyId)
     .from('operational_exceptions')
     .insert({
       company_id: input.companyId,
@@ -253,7 +264,7 @@ async function transitionCase(input: {
     patch.resolution = null
   }
 
-  const { error } = await admin
+  const { error } = await exceptionDb(input.companyId)
     .from('operational_exceptions')
     .update(patch)
     .eq('company_id', input.companyId)
@@ -394,7 +405,7 @@ export async function addOperationalExceptionNote(input: {
     body: text,
   })
 
-  await admin
+  await exceptionDb(input.companyId)
     .from('operational_exceptions')
     .update({
       updated_at: new Date().toISOString(),
