@@ -135,7 +135,8 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pin: required gates must not resolve a floating `latest` tag (CI-CLI-001).
+          version: 2.114.0
 
       - name: Install Admin deps
         run: |
@@ -165,7 +166,8 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pin: required gates must not resolve a floating `latest` tag (CI-CLI-001).
+          version: 2.114.0
 
       - name: Install Admin deps
         run: |
@@ -291,6 +293,11 @@ jobs:
     name: Tenant isolation + dispatch gates
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Hosted Org A/B fixtures are shared. Per-ref workflow concurrency still lets
+    # distinct PRs login the same users in parallel (TI-401). Queue, do not cancel.
+    concurrency:
+      group: tenant-isolation-hosted-smoke
+      cancel-in-progress: false
     # Requires repo secrets against hosted Command API (see docs/plan/veyvio-multi-tenant-saas-roadmap.md).
     # Fork PRs genuinely cannot access repo secrets (GitHub Actions restriction)
     # and skip below. Every other trigger — push to main, same-repo PRs,
