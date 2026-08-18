@@ -34,7 +34,6 @@ export const SERVICE_ROLE_ADMIN_ALLOWLIST = Object.freeze({
   'supabase/functions/_shared/audit-service.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/body-condition.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/domain-events.ts': 'company_scoped_service_role',
-  'supabase/functions/_shared/driver-activation-release.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/driver-devices.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/driver-ops-notifications.ts': 'company_scoped_service_role',
   'supabase/functions/_shared/driver-requirements.ts': 'company_scoped_service_role',
