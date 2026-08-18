@@ -15,7 +15,7 @@ Programme counter stays at the last **merged** wrap. A wrap PR that is open or t
 **Class:** hosted Command API smoke (tenant-isolation job)  
 **Not:** wrap-batch regressions. Do not reopen wrap PRs for these.
 
-Four CI runs that did not modify the failing paths have now received unexpected **401** from hosted Command API. Treat this as **auth/session-state nondeterminism** on the live probe, not a wrap defect. **Hosted-auth investigation is open** (see below).
+Five CI runs that did not modify the failing paths have now received unexpected **401** from hosted Command API. Treat this as **auth/session-state nondeterminism** on the live probe, not a wrap defect. **Hosted-auth investigation is open** (see below).
 
 ### Incident A — yard mutation company-mismatch (`401` vs expected `403`)
 
@@ -67,20 +67,37 @@ Incident B is **not** the same assertion as Incident A. Same class of failure: a
 | Same-run context | Login had succeeded (`accessToken` present); the first authenticated Command API read then returned 401. |
 | Hosted vs PR | Live Command API. PR #11 does not touch auth or vehicle routes. Overlapped Incident C’s first pass and its rerun. |
 
-A, B, C, and D are **four different assertions**. Do not treat this as a single mismatched 403.
+### Incident E — command admin yard hub (`401` vs expected `200`)
+
+| Field | Value |
+|-------|--------|
+| First seen | PR #12 CI run `32103918752`, job `95609562983` |
+| SHA under test | `9eec7e92603c48baa84ce786f351d08cb0602436` (docs-only TI-401 investigation) |
+| Probe | `GET /yard/hub` as Org A (`tenant-isolation-smoke.mjs`: `command admin should reach yard/hub`) |
+| Expected | `200` |
+| Actual | `401` |
+| Hosted vs PR | Live Command API. PR #12 changed only this reliability doc. |
+
+Incident E is a **fifth** distinct assertion. It strengthens hosted 401/auth-state nondeterminism. It does **not** by itself prove the concurrency hypothesis.
+
+A–E are **five different assertions**. Do not treat this as a single mismatched 403.
 
 ### Hosted-auth investigation (open)
 
-`defectsHub` / vehicle profile use `authenticate()` → `auth.getUser(accessToken)` and map failure to `401` `unauthenticated`. The smoke currently asserts status only, so incident bodies were not captured.
+`defectsHub` / vehicle profile / `yardHub` use `authenticate()` → `auth.getUser(accessToken)` and map failure to `401` `unauthenticated`. The smoke currently asserts status only, so incident bodies were not captured.
 
-**Working hypothesis (not proven):** concurrent PR CI jobs share the same hosted Org A/B isolation users. Workflow concurrency is `ci-${{ github.workflow }}-${{ github.ref }}`, so **different PRs run the hosted smoke in parallel**. A second login can rotate/invalidate the first job’s session mid-probe. Incidents C and D overlapped in wall clock.
+**Working hypothesis (not proven):** concurrent PR CI jobs share the same hosted Org A/B isolation users. Workflow concurrency is `ci-${{ github.workflow }}-${{ github.ref }}`, so **different PRs run the hosted smoke in parallel**. A second login can rotate/invalidate the first job’s session mid-probe. Incidents C and D overlapped in wall clock. Incident E is additional nondeterminism evidence, not a concurrency proof.
 
-**Next (separate PRs, do not mix into wrap batches):**
+**Landed:** PR #13 merged `6f79bc8` — job-level `tenant-isolation-hosted-smoke` with `cancel-in-progress: false`. Fresh evidence must come from **new** runs whose merge ref includes that workflow, not reruns of pre-#13 jobs.
 
-1. Serialize the tenant-isolation job across refs (`concurrency.group` for the hosted smoke, `cancel-in-progress: false`).
+**First post-#13 required-gate run:** PR #11 head `7042272` / run `32167704405` — tenant-isolation, fresh-DB, and storage isolation **PASS**. That is consistent with serialization helping; it is not closure of TI-401.
+
+**Next (do not mix into wrap batches):**
+
+1. ~~Serialize the tenant-isolation job across refs~~ — done, PR #13.
 2. Include JSON `code` in unexpected-401 assertion messages (do **not** loosen expected statuses).
 3. Confirm deployed `command-api` revision vs the PR under test.
-4. Third wrap-PR 401 after serialization is in place → inspect GoTrue `getUser` / JWT issuance on the hosted project.
+4. Unexpected 401 on a wrap PR **after** serialization is in the merge ref → inspect GoTrue `getUser` / JWT issuance on the hosted project.
 
 Related (do not conflate): push-workflow tenant-isolation on `phase0/reproducibility` has 401’d on Org A job-execution reads (`c605e33` and later). That is the **push** job, not these PR probes.
 
@@ -102,7 +119,7 @@ Related (do not conflate): push-workflow tenant-isolation on `phase0/reproducibi
 
 Required security gates must not depend on GitHub resolving a floating CLI tag at job start.
 
-**Fix:** pin `supabase/setup-cli` to an explicit CLI version (PR #11, `2.114.0`). Storage isolation on that PR **passed** the JWT matrix with the pin. Until #11 merges, a storage-isolation fail at setup-cli is tooling, not a tenant-storage proof failure. #11 tenant-isolation failure is TI-401 Incident D, not CI-CLI-001.
+**Fix:** pin `supabase/setup-cli` to **2.114.0**. Merged as PR #11 (`f1eb77f`) after a **fresh** required-gate run on the post-#13 merge ref (`7042272` / run `32167704405`): fresh-DB, storage isolation, and tenant-isolation all PASS. The earlier #11 tenant-isolation failure (Incident D) was on the pre-#13 workflow and is TI-401, not CI-CLI-001.
 
 ---
 
