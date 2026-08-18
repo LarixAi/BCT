@@ -6,7 +6,11 @@
 
 These are **security-gate reliability** items. They are not wrap regressions and must not be “fixed” by loosening tenant-isolation assertions.
 
-Programme counter stays at the last **merged** wrap. A wrap PR that is open or that failed required gates does not move the importer count.
+Programme counter stays at the last **merged** wrap. A wrap PR that is open, that failed required gates, or whose tenant-isolation job was **cancelled before the smoke ran** does not move the importer count.
+
+**Do not** add retries inside the tenant-isolation smoke, treat 401 as transient, or weaken expected `200` / `403` responses.
+
+Batch 05 is **closed**. Do not mix these items into Batch 06 or later wrap PRs.
 
 ---
 
@@ -92,6 +96,8 @@ A–E are **five different assertions**. Do not treat this as a single mismatche
 
 **First post-#13 required-gate run:** PR #11 head `7042272` / run `32167704405` — tenant-isolation, fresh-DB, and storage isolation **PASS**. That is consistent with serialization helping; it is not closure of TI-401.
 
+Serialization reduced one credible interference source. Incidents A–E still show a recurring hosted-auth 401 signature across unrelated assertions. **Concurrency is not declared the sole cause. TI-401 stays open.**
+
 **Next (do not mix into wrap batches):**
 
 1. ~~Serialize the tenant-isolation job across refs~~ — done, PR #13.
@@ -101,7 +107,7 @@ A–E are **five different assertions**. Do not treat this as a single mismatche
 
 Related (do not conflate): push-workflow tenant-isolation on `phase0/reproducibility` has 401’d on Org A job-execution reads (`c605e33` and later). That is the **push** job, not these PR probes.
 
-**Do not close TI-401** until either consecutive wrap PRs complete tenant-isolation without unexpected 401s, or the hosted cause is identified and fixed with a regression test. Do not merge wrap PRs on a failed tenant-isolation job.
+**Do not close TI-401** until either consecutive wrap PRs complete tenant-isolation without unexpected 401s, or the hosted cause is identified and fixed with a regression test. Do not merge wrap PRs on a failed tenant-isolation job. A cancelled job is not an unexpected 401 — see CI-CANCEL-001.
 
 ---
 
@@ -123,4 +129,25 @@ Required security gates must not depend on GitHub resolving a floating CLI tag a
 
 ---
 
-Do not mix these items into Batch 05 or later wrap PRs.
+## CI-CANCEL-001 — hosted-smoke job cancelled before execution
+
+**Class:** CI/tooling topology  
+**Not:** TI-401. **Not:** wrap-batch regressions. **Not:** a pass.
+
+| Field | Value |
+|-------|--------|
+| First seen | PR #9 run `32170376936` attempt 1, job `95819831931` |
+| SHA under test | `22d5a44c98ffd531e6d03002db596c9099e1c979` (Batch 05 on post-#13/#11/#12 base) |
+| Failure | Tenant-isolation job **cancelled** in 38s with empty steps; smoke never ran |
+| Contrast | Fresh-DB and storage isolation on the same attempt **passed** |
+| Retry | Attempt 2 on the **same** SHA after the queue cleared: tenant-isolation **PASS** in 8m14s |
+
+Merging to `phase0/reproducibility` still fires **both** a `push` CI run and the phase0→main pull_request CI run. Both jobs use `tenant-isolation-hosted-smoke`. GitHub cancels a **previously pending** job in that group even when `cancel-in-progress: false` (that flag only protects the in-progress job).
+
+**Required outcome:** gate not satisfied; rerun under a clear queue. Do not invent a 401 incident from a cancellation. Do not add smoke-level retries. Do not weaken `200`/`403` assertions.
+
+Batch 05 merged only after attempt 2 produced a real tenant-isolation execution.
+
+---
+
+Do not mix these items into Batch 06 or later wrap PRs.

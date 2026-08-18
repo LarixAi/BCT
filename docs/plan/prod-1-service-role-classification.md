@@ -1,14 +1,24 @@
 # PROD-1 — Service-role call-path classification
 
-**Status:** Classification complete — conversion not started  
-**Date:** 17 August 2026  
-**Baseline SHA:** `9f5001851214bc009a38d858160ea32c7eb9aefb` (`prod0-phase0-authority-20260817`)  
+**Status:** Classification locked; wraps in progress (authority declaration only — **not** RLS cutover)  
+**Date:** 18 August 2026  
+**Programme baseline:** `b4176675608ac095ffa28fd462f06f5c6629ec17` (PR #9 / Batch 05 merge)  
+**Classification SHA:** `9f5001851214bc009a38d858160ea32c7eb9aefb` (`prod0-phase0-authority-20260817`)  
 **Branch:** `production-stabilisation/2026`  
 **Authority:** [veyvio-production-readiness-blueprint.md](./veyvio-production-readiness-blueprint.md) tracks PR-02 / PROD-1  
 **Static gate (extend, do not rebuild):** `Veyvio admin /scripts/service-role-allowlist.unit.mjs`  
 **CI reliability (separate from wraps):** [prod-1-ci-reliability.md](./prod-1-ci-reliability.md)
 
-This document is the source-confirmed call-path register for the **31** remaining `company_scoped_service_role` modules. It does **not** convert any of them.
+| Counter | Value |
+|---------|--------|
+| Transitional importers (`company_scoped_service_role`) | **24** |
+| Ordinary tenant CRUD through UserScopedDb + RLS | **0** (`userScopedDb()` still throws) |
+| Wave 3F | **open** |
+| Batch 05 (`driver-activation-release`) | **accepted** |
+
+Wraps remove a file from the allowlist. They do **not** close Wave 3F. Keep the two counters separate.
+
+The original register below listed **31** remaining modules at classification time. Batches 01–05 have since wrapped seven leaves (see §5a). Next wrap work starts from `b417667…`, one module per PR, with a fresh fully green required-gate run (tenant-isolation and storage-isolation included). A cancelled tenant-isolation job is missing evidence, not a pass.
 
 ---
 
@@ -164,7 +174,21 @@ Batch 16  application-scopes + entitlements split
 Batch 17  command-api/index  (decompose; AuthAdmin + StorageSigner + remaining Type A)
 ```
 
-**Batch 01 is the first conversion PR.** Three small `companyId`-in-signature leaves. No auth-path modules. No hubs. Matches `companyScopedServiceDbForCompany` used by journey-sequence-ack.
+The tree above is the **classification-time** dependency order. Execution refined it to one-module PRs after Batch 01. Do not restart from this tree as if Batches 01–05 had not landed.
+
+## 5a. Executed wraps (authority declaration only)
+
+| Batch | Module(s) | PR | Merge |
+|-------|-----------|----|-------|
+| 01 | `duty-closeout`, `driver-job-execution`, `document-expiry-notifications` | #5 | `d3378a9` |
+| 02 | `compliance-engine` | #6 | `d3e7886` |
+| 03 | `defect-automation` | #7 | `29b92bb` |
+| 04 | `vehicle-reports` | #8 | `d937056` |
+| 05 | `driver-activation-release` | #9 | `b417667` (**closed**) |
+
+Still deferred: `driver-devices` (self-auth), `fcm-send` (unscoped `driver_devices` read — named capability, not Type A), then protected-last (`application-scopes`, `entitlements`, `command-api/index`).
+
+**Batch 06** must start from `b417667…`. One module. Fresh required-gate run on the current CI topology (serialized hosted smoke + pinned CLI). Do not mix TI-401 or CI-topology fixes into the wrap PR.
 
 ---
 
@@ -178,4 +202,6 @@ For each of `duty-closeout`, `driver-job-execution`, `document-expiry-notificati
 4. Run: domain tests, allowlist, fresh-DB, tenant-isolation, storage isolation if relevant, Command API smoke, typecheck, build, full CI.
 5. Own-company read/write and cross-company deny remain mandatory. Live tenant-isolation **push** job currently 401s on job-execution (pre-existing on `c605e33`); treat **PR CI** as the attested gate until that push job is fixed under PR-05/PR-09.
 
-Do not start Batch 01 until this classification is accepted. Do not combine Batch 01 with `command-api/index`, `entitlements`, or `application-scopes`.
+Batch 01 **landed**. Keep this micro-gate for later one-module wraps: own-company read/write and cross-company deny remain mandatory. Live tenant-isolation **push** job has historically 401’d on job-execution (`c605e33`); treat **PR CI** as the attested gate until that push job is fixed under PR-05/PR-09.
+
+Do not combine a wrap PR with `command-api/index`, `entitlements`, or `application-scopes`. Do not mix TI-401 or CI-CANCEL-001 fixes into wrap PRs.
