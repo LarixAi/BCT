@@ -135,7 +135,8 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pin: required gates must not resolve a floating `latest` tag (CI-CLI-001).
+          version: 2.114.0
 
       - name: Install Admin deps
         run: |
@@ -165,7 +166,8 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pin: required gates must not resolve a floating `latest` tag (CI-CLI-001).
+          version: 2.114.0
 
       - name: Install Admin deps
         run: |
