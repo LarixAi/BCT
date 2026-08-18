@@ -1,5 +1,12 @@
-/** Live Command hub projections from shared operational tables. */
-import { admin } from './supabase.ts'
+/** Live Command hub projections from shared operational tables.
+ *
+ * PROD-1 Batch 08 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Reads still use company-scoped service-role
+ * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
+ *
+ * Equipment, stock, tyre, and purchase callees are already wrapped — do not reopen them here.
+ */
+import { companyScopedServiceDbForCompany } from './db-authority.ts'
 import { mapIncidentRegisterRow } from './incident-workflow.ts'
 import { listEquipmentAssets } from './equipment-assets.ts'
 import { listPurchaseRequests } from './purchase-requests.ts'
@@ -7,6 +14,10 @@ import { listDepotStock, listFuelCards, listStockTransfers } from './depot-stock
 import { countTyresNeedingAttention, listTyreAssets } from './tyre-assets.ts'
 
 type Row = Record<string, unknown>
+
+function hubDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'hubs')
+}
 
 function today() {
   return new Date().toISOString().slice(0, 10)
@@ -19,13 +30,13 @@ function ageMinutes(iso: string | null | undefined) {
 
 export async function projectDefectsHub(companyId: string) {
   const [{ data: defects }, { data: depots }, { data: vorCases }] = await Promise.all([
-    admin
+    hubDb(companyId)
       .from('defects')
       .select('*, vehicles(id, registration, fleet_number, make, model, primary_depot_id), depots(id, name)')
       .eq('company_id', companyId)
       .order('reported_at', { ascending: false }),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
-    admin.from('vor_cases').select('id, vehicle_id, status').eq('company_id', companyId).eq('status', 'active'),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId).from('vor_cases').select('id, vehicle_id, status').eq('company_id', companyId).eq('status', 'active'),
   ])
 
   const open = (defects ?? []).filter((d) => !['closed', 'rejected'].includes(String(d.status)))
@@ -165,12 +176,12 @@ export async function projectDefectsHub(companyId: string) {
 
 export async function projectIncidentsHub(companyId: string) {
   const [{ data: incidents }, { data: depots }] = await Promise.all([
-    admin
+    hubDb(companyId)
       .from('incidents')
       .select('*, vehicles(registration), drivers(driver_number)')
       .eq('company_id', companyId)
       .order('occurred_at', { ascending: false }),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
   ])
 
   const monthPrefix = today().slice(0, 7)
@@ -258,10 +269,10 @@ export async function projectIncidentsHub(companyId: string) {
 
 export async function projectMaintenanceHub(companyId: string) {
   const [{ data: vehicles }, { data: workOrders }, { data: defects }, { data: depots }] = await Promise.all([
-    admin.from('vehicles').select('*, depots(name)').eq('company_id', companyId),
-    admin.from('maintenance_work_orders').select('*, vehicles(registration, fleet_number, primary_depot_id)').eq('company_id', companyId).order('created_at', { ascending: false }),
-    admin.from('defects').select('*').eq('company_id', companyId).not('status', 'in', '("closed","rejected")'),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId).from('vehicles').select('*, depots(name)').eq('company_id', companyId),
+    hubDb(companyId).from('maintenance_work_orders').select('*, vehicles(registration, fleet_number, primary_depot_id)').eq('company_id', companyId).order('created_at', { ascending: false }),
+    hubDb(companyId).from('defects').select('*').eq('company_id', companyId).not('status', 'in', '("closed","rejected")'),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
   ])
 
   const total = (vehicles ?? []).length
@@ -428,9 +439,9 @@ export async function projectMaintenanceHub(companyId: string) {
 /** Formal inspections hub — Phase 1 projection until dedicated inspections table lands. */
 export async function projectInspectionsHub(companyId: string) {
   const [{ data: vehicles }, { data: depots }, { data: workOrders }] = await Promise.all([
-    admin.from('vehicles').select('*, depots(name)').eq('company_id', companyId),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
-    admin
+    hubDb(companyId).from('vehicles').select('*, depots(name)').eq('company_id', companyId),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId)
       .from('maintenance_work_orders')
       .select('id, vehicle_id, work_order_reference, status, source_type, scheduled_start')
       .eq('company_id', companyId)
@@ -523,8 +534,8 @@ export async function projectInspectionsHub(companyId: string) {
 /** Fleet Resources hub — Phase 1 live stub until dedicated resource tables land. */
 export async function projectFleetResourcesHub(companyId: string) {
   const [{ data: vehicles }, { data: depots }] = await Promise.all([
-    admin.from('vehicles').select('id, registration, fleet_number, primary_depot_id, operational_status, depots(name)').eq('company_id', companyId),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId).from('vehicles').select('id, registration, fleet_number, primary_depot_id, operational_status, depots(name)').eq('company_id', companyId),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
   ])
 
   const vehicleRows = vehicles ?? []
