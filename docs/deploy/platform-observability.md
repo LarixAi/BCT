@@ -25,6 +25,8 @@ npm run test:backup-pitr-status
 npm run test:tenant-isolation   # use .gate1-secrets.local.env
 ```
 
+CI (trusted triggers): job **Platform health + continuity (PROD-8)** runs health + continuity and uploads evidence artifacts. `PLATFORM_HEALTH_OK_BACKUP_NOT_READY` is an accepted pass while the org remains on Free.
+
 Evidence lands under `docs/plan/evidence/`.
 
 ## Escalation

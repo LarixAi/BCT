@@ -130,12 +130,50 @@ jobs:
           name: veyvio-driver-ios-provenance
           path: ${{ runner.temp }}/driver-ios-release-provenance.json
 
-      # Operator: install cert/profile into keychain, then:
-      #   xcodebuild -workspace ios/App/App.xcworkspace -scheme App \
-      #     -configuration Release -archivePath build/App.xcarchive archive
-      #   xcodebuild -exportArchive -archivePath build/App.xcarchive \
-      #     -exportOptionsPlist ios/ExportOptions.plist -exportPath build/ipa
+      - name: Import Apple signing material into keychain
+        env:
+          VEYVIO_APPLE_TEAM_ID: ${{ secrets.VEYVIO_APPLE_TEAM_ID }}
+          VEYVIO_APPLE_CERTIFICATE_BASE64: ${{ secrets.VEYVIO_APPLE_CERTIFICATE_BASE64 }}
+          VEYVIO_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.VEYVIO_APPLE_CERTIFICATE_PASSWORD }}
+          VEYVIO_APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.VEYVIO_APPLE_PROVISIONING_PROFILE_BASE64 }}
+          VEYVIO_APPLE_PROVISIONING_PROFILE_NAME: ${{ secrets.VEYVIO_APPLE_PROVISIONING_PROFILE_NAME }}
+        run: bash scripts/ios-keychain-import.sh
+
+      - name: Assert ExportOptions rewritten (strict)
+        run: node scripts/assert-ios-release-ready.mjs --strict
+
       - name: Archive and export IPA
         run: |
-          echo "::error::Automated xcodebuild signing install is not yet wired. Secrets check passed — complete archive via docs/plan/gate3-testflight-archive.md or extend this job with keychain import."
-          exit 1
+          set -euo pipefail
+          mkdir -p build/ipa
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/App.xcarchive" \
+            clean archive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="${{ secrets.VEYVIO_APPLE_TEAM_ID }}"
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$PWD/build/App.xcarchive" \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportPath "$PWD/build/ipa"
+          ipa=$(ls build/ipa/*.ipa | head -n 1)
+          echo "ipa_path=$ipa"
+          shasum -a 256 "$ipa"
+          node scripts/record-release-provenance.mjs \
+            --platform ios \
+            --sha "${GITHUB_SHA}" \
+            --version-name "${{ github.event.inputs.version_name || github.ref_name }}" \
+            --artifact "$ipa" \
+            --supabase-host "$EXPECTED_SUPABASE_HOST" \
+            --out "$RUNNER_TEMP/driver-ios-release-provenance.json"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: veyvio-driver-release-ipa
+          path: veyvio-driver-App/build/ipa/*.ipa
+          if-no-files-found: error
