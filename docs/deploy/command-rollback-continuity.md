@@ -16,12 +16,19 @@ Gate A acceptance: production readiness blueprint §19.
 
 | Layer | Control |
 |-------|---------|
-| Postgres | Supabase project `qeckgqjrfbdyxchuncdt` — daily backups; enable/confirm **PITR** in Dashboard → Database → Backups |
+| Postgres | Supabase project `qeckgqjrfbdyxchuncdt` — requires **paid plan + daily backups**; enable **PITR** (Dashboard → Database → Backups, or Management API add-on) |
 | Storage | Tenant buckets + service-only buckets; encrypted at rest |
 | Edge | Immutable deploy by Supabase function version / Deno deployment id (record `deploymentSha` from `/health`) |
 | Frontends | Immutable artifact per git SHA (CI build); never hot-edit production assets |
 
-**Owner residual:** Dashboard confirmation that PITR is ON before Gate A GO.
+**Status probe (non-destructive):**
+
+```bash
+cd "Veyvio admin "
+npm run test:backup-pitr-status
+```
+
+Writes `docs/plan/evidence/gate-a-backup-pitr-status.json`. As of 21 Aug 2026 probe: org plan=`free`, `pitr_enabled=false`, scheduled backups empty — **Gate A backup acceptance blocked until Pro (or higher) + PITR add-on**. Do not purchase add-ons from automation without billing owner approval.
 
 ## Rollback procedure (tested path)
 
@@ -66,7 +73,7 @@ Proves:
 3. Authenticated membership session can read own-tenant vehicles (or honest empty)  
 4. Cross-tenant vehicle id returns empty / denied  
 
-This is the Gate A **continuity drill** that agents can re-run without PITR credentials. Full database PITR remains an owner dashboard action.
+This is the Gate A **continuity drill** that agents can re-run without PITR credentials. Full database PITR requires a paid plan and remains an owner billing + Dashboard action after `test:backup-pitr-status` reports `PITR_ENABLED`.
 
 ## RPO / RTO (platform default until SaaS SLAs)
 
@@ -81,6 +88,8 @@ This is the Gate A **continuity drill** that agents can re-run without PITR cred
 | Artefact | Purpose |
 |----------|---------|
 | `scripts/command-continuity-health.drill.mjs` | Repeatable non-destructive drill |
+| `scripts/command-backup-pitr-status.mjs` | Management API backup/PITR truth |
 | `npm run test:tenant-isolation` | Hosted cross-tenant smoke |
 | `docs/plan/evidence/gate-a-residual-register-2026-08-21.md` | Gate A open/closed register |
-| Supabase Dashboard PITR screenshot | Owner residual before GO |
+| `docs/plan/evidence/gate-a-backup-pitr-status.json` | Latest PITR/backup probe |
+| Supabase Dashboard after Pro+PITR | Human GO after probe shows `PITR_ENABLED` |

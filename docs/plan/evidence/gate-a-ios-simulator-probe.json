@@ -1,0 +1,13 @@
+{
+  "generated_at": "2026-08-21T07:36:34.081Z",
+  "drill": "gate1-ios-simulator-probe",
+  "xcrun_present": true,
+  "available_iphone_count": 5,
+  "selected": "iPhone 17 Pro (A3FB8AB5-41B6-46A7-A66E-AE592701E845) (Shutdown)",
+  "udid": "A3FB8AB5-41B6-46A7-A66E-AE592701E845",
+  "boot_attempted": true,
+  "boot_status": 0,
+  "boot_stderr": "",
+  "verdict": "IOS_SIMULATOR_AVAILABLE_PHYSICAL_STILL_REQUIRED",
+  "note": "Simulator proves tooling only. Airplane mode, Cap install, and native push need a physical iPhone."
+}

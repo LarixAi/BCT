@@ -1,0 +1,56 @@
+{
+  "generated_at": "2026-08-21T07:33:22.117Z",
+  "drill": "command-backup-pitr-status",
+  "project_ref": "qeckgqjrfbdyxchuncdt",
+  "project_status": "ACTIVE_HEALTHY",
+  "project_region": "eu-west-2",
+  "organization_id": "kosgcujegupggddyuvnp",
+  "organization_plan": "free",
+  "backups_http_status": 200,
+  "pitr_enabled": false,
+  "walg_enabled": true,
+  "scheduled_backup_count": 0,
+  "physical_backup_data": {},
+  "selected_addons": [],
+  "pitr_addon_selected": false,
+  "pitr_variants_available": [
+    {
+      "id": "pitr_7",
+      "name": "7 days",
+      "price": {
+        "description": "$100/month",
+        "amount": 100,
+        "interval": "monthly",
+        "type": "fixed"
+      }
+    },
+    {
+      "id": "pitr_14",
+      "name": "14 days",
+      "price": {
+        "description": "$200/month",
+        "amount": 200,
+        "interval": "monthly",
+        "type": "fixed"
+      }
+    },
+    {
+      "id": "pitr_28",
+      "name": "28 days",
+      "price": {
+        "description": "$400/month",
+        "amount": 400,
+        "interval": "monthly",
+        "type": "fixed"
+      }
+    }
+  ],
+  "enablement_notes": [
+    "PITR requires paid org plan (Pro/Team/Enterprise), typically Small+ compute, then PITR add-on.",
+    "This probe never purchases add-ons. To enable later: Dashboard → Database → Backups → PITR, or Management API PATCH /v1/projects/{ref}/billing/addons.",
+    "Do not run restore-pitr against production without a staging restore rehearsal."
+  ],
+  "daily_backups_ok": false,
+  "gate_a_backup_ready": false,
+  "verdict": "FREE_OR_NO_SCHEDULED_BACKUPS_PITR_OFF"
+}
