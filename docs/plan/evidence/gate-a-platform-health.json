@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-08-21T08:19:36.368Z",
+  "drill": "platform-health-probe",
+  "command_api": {
+    "url": "https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api/health",
+    "status": 200,
+    "deploymentSha": "0f988756ad53d9e9bda2caa8d6cbb5ea0284a1a0",
+    "denoDeploymentId": "qeckgqjrfbdyxchuncdt_760fe21a-cd04-4f3e-baee-aae3e899de7e_233",
+    "database": "connected"
+  },
+  "yard_health": {
+    "skipped": true,
+    "reason": "VEYVIO_YARD_HEALTH_URL unset"
+  },
+  "backup_pitr": {
+    "probe_exit": 0,
+    "verdict": "FREE_OR_NO_SCHEDULED_BACKUPS_PITR_OFF",
+    "gate_a_backup_ready": false,
+    "organization_plan": "free"
+  },
+  "verdict": "PLATFORM_HEALTH_OK_BACKUP_NOT_READY"
+}

@@ -22,6 +22,7 @@
     "test:tenant-isolation": "node scripts/tenant-isolation-smoke.mjs",
     "test:command-continuity-drill": "node scripts/command-continuity-health.drill.mjs",
     "test:backup-pitr-status": "node scripts/command-backup-pitr-status.mjs",
+    "test:platform-health": "node scripts/platform-health-probe.mjs",
     "assert:release-config": "node scripts/assert-release-config.mjs",
     "test:rls-postgrest-isolation": "node scripts/rls-postgrest-isolation.unit.mjs",
     "test:wave3f-zero-policy-tables": "node scripts/wave3f-zero-policy-tables.unit.mjs",
