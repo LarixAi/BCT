@@ -6,6 +6,20 @@ Production builds must use live Command API and Supabase — mock flags are bloc
 - **Yard:** `docs/deploy/yard-production.md`
 - **Driver:** section below
 
+## Environment names (PR-06)
+
+Use exactly one of:
+
+| Name | Meaning |
+|------|---------|
+| `local` | Developer machine |
+| `test` | Automated CI / isolation fixtures |
+| `development` | Shared non-prod cloud (optional) |
+| `staging` | Pre-production rehearsal |
+| `production` | Customer-facing pilot / live |
+
+Do **not** use ambiguous values (`prod-ish`, `CI` as a stand-in for production). Admin production validation requires `VALIDATE_PRODUCTION_ENV=true` or `VEYVIO_APP_ENV=production` / `NODE_ENV=production` — GitHub `CI=true` alone is not enough.
+
 ## Required environment variables
 
 ### Veyvio Admin (`Veyvio admin /`)

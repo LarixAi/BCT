@@ -16,6 +16,7 @@
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
     "test": "vitest run && node scripts/job-execution-bridge.unit.mjs && node scripts/assert-release-config.unit.mjs",
+    "security:audit": "node ../scripts/audit-dependencies.mjs --cwd .",
     "test:watch": "vitest",
     "test:e2e": "vitest run e2e.test",
     "test:gate1-exit": "vitest run gate1-pilot-exit.e2e.test",

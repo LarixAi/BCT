@@ -6,15 +6,14 @@ import assert from 'node:assert/strict'
 
 const env = process.env
 const mode = env.NODE_ENV ?? env.MODE ?? ''
+// CI alone is not production (PR-06). Explicit VALIDATE_PRODUCTION_ENV or NODE_ENV=production.
 const isProd =
   mode === 'production' ||
-  env.CI === 'true' ||
-  env.VERCEL === '1' ||
-  env.NETLIFY === 'true' ||
-  env.VALIDATE_PRODUCTION_ENV === 'true'
+  env.VALIDATE_PRODUCTION_ENV === 'true' ||
+  env.VEYVIO_APP_ENV === 'production'
 
 if (!isProd) {
-  console.log('validate-production-env: skip (not production/CI)')
+  console.log('validate-production-env: skip (not production)')
   process.exit(0)
 }
 

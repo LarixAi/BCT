@@ -750,6 +750,8 @@ Introduce:
 
 Final production artefacts contain **zero** development credentials/endpoints.
 
+**Status (21 Aug 2026):** Action SHA pins + default `contents: read`; Dependabot weekly; `security:audit` on Yard/Admin/Driver CI; Admin/Yard/Driver `assert-release-config` on release paths; Admin `VALIDATE_PRODUCTION_ENV` no longer treats `CI=true` as production.
+
 ---
 
 ## 10. TRACK PR-07 — SaaS commercial architecture
