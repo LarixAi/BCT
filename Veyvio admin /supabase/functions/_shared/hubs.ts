@@ -1,12 +1,12 @@
 /** Live Command hub projections from shared operational tables.
  *
- * PROD-1 Batch 08 — authority declaration / bare-admin removal.
- * Not UserScopedDb / RLS cutover. Reads still use company-scoped service-role
- * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
+ * Wave 3F: hub reads use resolveTenantDb (JWT + RLS when ALS/request context is
+ * bound; company-scoped service-role only for JWT-less callers). company_id
+ * filters remain defence-in-depth.
  *
  * Equipment, stock, tyre, and purchase callees are already wrapped — do not reopen them here.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { mapIncidentRegisterRow } from './incident-workflow.ts'
 import { listEquipmentAssets } from './equipment-assets.ts'
 import { listPurchaseRequests } from './purchase-requests.ts'
@@ -16,7 +16,7 @@ import { countTyresNeedingAttention, listTyreAssets } from './tyre-assets.ts'
 type Row = Record<string, unknown>
 
 function hubDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'hubs')
+  return resolveTenantDb(companyId, 'hubs')
 }
 
 function today() {
@@ -280,8 +280,31 @@ export async function projectMaintenanceHub(companyId: string) {
   const inMaintenance = (vehicles ?? []).filter((v) => ['maintenance', 'awaiting_check'].includes(String(v.operational_status))).length
   const vor = (vehicles ?? []).filter((v) => v.operational_status === 'vor').length
 
+  const openWorkOrders = (workOrders ?? []).filter(
+    (w) => w.status !== 'completed' && w.status !== 'cancelled',
+  )
+  const utcDay = (iso: unknown): number | null => {
+    if (!iso) return null
+    const d = new Date(String(iso))
+    if (Number.isNaN(d.getTime())) return null
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  }
+  const todayUtc = utcDay(new Date().toISOString()) ?? 0
+  const dueToday = openWorkOrders.filter((w) => utcDay(w.scheduled_start) === todayUtc).length
+  const overdue = openWorkOrders.filter((w) => {
+    const t = utcDay(w.scheduled_start)
+    return t != null && t < todayUtc
+  }).length
+  const dueWithin14Days = openWorkOrders.filter((w) => {
+    const t = utcDay(w.scheduled_start)
+    if (t == null) return false
+    const diff = (t - todayUtc) / 86_400_000
+    return diff >= 0 && diff <= 14
+  }).length
+
   const workOrderRows = (workOrders ?? []).map((row: Row) => {
     const vehicle = (row.vehicles as Row | null) ?? {}
+    const scheduledDate = row.scheduled_start ? String(row.scheduled_start) : null
     return {
       workOrderId: row.id,
       vehicleId: row.vehicle_id,
@@ -295,9 +318,11 @@ export async function projectMaintenanceHub(companyId: string) {
       provider: null,
       technicianName: null,
       managerName: null,
-      requestedDate: row.scheduled_start ?? null,
-      targetCompletionDate: row.scheduled_end ?? null,
-      expectedCompletion: row.scheduled_end ?? null,
+      scheduledDate,
+      requestedDate: scheduledDate,
+      scheduledStart: scheduledDate,
+      targetCompletionDate: row.scheduled_end ? String(row.scheduled_end) : null,
+      expectedCompletion: row.scheduled_end ? String(row.scheduled_end) : scheduledDate,
       defectId: row.source_id ?? null,
       creationSource: row.source_app ?? 'command',
       diagnosis: null,
@@ -316,9 +341,9 @@ export async function projectMaintenanceHub(companyId: string) {
   return {
     summary: {
       attention: {
-        dueToday: 0,
-        dueWithin14Days: 0,
-        overdue: 0,
+        dueToday,
+        dueWithin14Days,
+        overdue,
         vor,
         safetyCriticalDefects: (defects ?? []).filter((d) =>
           ['critical', 'dangerous', 'major'].includes(String(d.severity)),

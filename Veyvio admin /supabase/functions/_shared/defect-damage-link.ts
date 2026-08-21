@@ -1,12 +1,12 @@
 /**
  * Unifies operational `defects` with long-lived `vehicle_damage_cases` (Blueprint A §8.6).
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 
 type Row = Record<string, unknown>
 
 function damageLinkDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'defect_damage_link')
+  return resolveTenantDb(companyId, 'defect_damage_link')
 }
 
 function buildDamageReference(year: number, caseSeq: number, observationSeq: number): string {

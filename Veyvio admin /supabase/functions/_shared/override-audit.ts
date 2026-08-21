@@ -2,7 +2,7 @@
  * F-07 — Overrides never silent.
  * Every safety/eligibility override must leave an append-only audit row.
  */
-import { admin } from './supabase.ts'
+import { overrideAuditWriterDb } from './db-authority.ts'
 import { emitDomainEvent } from './domain-events.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 
@@ -27,7 +27,7 @@ export async function recordOverride(input: OverrideRecordInput): Promise<{ id: 
   const blockers = input.blockers ?? []
   const warnings = input.warnings ?? []
 
-  const { data, error } = await admin
+  const { data, error } = await overrideAuditWriterDb(input.companyId, ruleCode)
     .from('override_audit_events')
     .insert({
       company_id: input.companyId,

@@ -1,22 +1,35 @@
 /**
  * Ops-approved vehicle swap workflow on Command.
+ *
+ * Wave 3F UserScopedDb/RLS cutover 5: membership JWT writes `vehicle_swap_requests`
+ * through RLS (SELECT/INSERT/UPDATE). Support-grant sessions stay on company-scoped
+ * service-role. Duty vehicle_id mutation on approve stays service-role until duties
+ * are cut over. Audit / events / notifications stay privileged.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { companyScopedServiceDb, userScopedDb } from './db-authority.ts'
 import { emitDomainEvent } from './domain-events.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { notifyCompanyAdmins } from './notifications.ts'
 import { guardDriverScopedWrite } from './driver-write-guards.ts'
 import { recordDutyAssignmentEvent } from './duty-publication.ts'
 import { mapSwapRow } from './vehicle-swap-workflow.mapping.ts'
+import type { RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
-function swapDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'vehicle_swap_workflow')
+function swapDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'vehicle_swap_support_grant')
+  }
+  return userScopedDb(context, 'vehicle_swap_workflow')
+}
+
+function swapDutyDb(context: RequestContext) {
+  return companyScopedServiceDb(context, 'vehicle_swap_duty_update')
 }
 
 export async function createVehicleSwapRequest(input: {
-  companyId: string
+  context: RequestContext
   driverId: string
   dutyId: string
   currentVehicleId: string
@@ -24,12 +37,13 @@ export async function createVehicleSwapRequest(input: {
   reason: string
   clientGeneratedId?: string | null
 }) {
-  const companyId = input.companyId
+  const companyId = input.context.companyId
+  const db = swapDb(input.context)
   const reason = String(input.reason ?? '').trim()
   if (!reason) throw new Error('Explain why you need a different vehicle.')
 
   await guardDriverScopedWrite({
-    companyId: input.companyId,
+    companyId,
     driverId: input.driverId,
     dutyId: input.dutyId,
     vehicleId: input.requestedVehicleId,
@@ -41,28 +55,28 @@ export async function createVehicleSwapRequest(input: {
 
   const clientGeneratedId = input.clientGeneratedId?.trim() || null
   if (clientGeneratedId) {
-    const { data: existing } = await swapDb(companyId)
+    const { data: existing } = await db
       .from('vehicle_swap_requests')
       .select('*')
-      .eq('company_id', input.companyId)
+      .eq('company_id', companyId)
       .eq('client_generated_id', clientGeneratedId)
       .maybeSingle()
     if (existing) return mapSwapRow(existing as Row)
   }
 
-  const { data: pending } = await swapDb(companyId)
+  const { data: pending } = await db
     .from('vehicle_swap_requests')
     .select('id')
-    .eq('company_id', input.companyId)
+    .eq('company_id', companyId)
     .eq('duty_id', input.dutyId)
     .eq('status', 'pending')
     .maybeSingle()
   if (pending?.id) throw new Error('A vehicle swap request is already waiting for dispatch.')
 
-  const { data, error } = await swapDb(companyId)
+  const { data, error } = await db
     .from('vehicle_swap_requests')
     .insert({
-      company_id: input.companyId,
+      company_id: companyId,
       duty_id: input.dutyId,
       driver_id: input.driverId,
       current_vehicle_id: input.currentVehicleId,
@@ -76,7 +90,8 @@ export async function createVehicleSwapRequest(input: {
   if (error || !data) throw new Error(error?.message ?? 'Swap request could not be saved')
 
   await recordDutyAssignmentEvent({
-    companyId: input.companyId,
+    context: input.context,
+    companyId,
     dutyId: input.dutyId,
     eventType: 'vehicle_swap.requested',
     actorDriverId: input.driverId,
@@ -90,7 +105,7 @@ export async function createVehicleSwapRequest(input: {
   })
 
   await emitDomainEvent({
-    companyId: input.companyId,
+    companyId,
     eventType: 'vehicle_swap.requested',
     entityType: 'vehicle_swap_request',
     entityId: String(data.id),
@@ -98,21 +113,23 @@ export async function createVehicleSwapRequest(input: {
   }).catch(() => undefined)
 
   await notifyCompanyAdmins({
-    companyId: input.companyId,
+    companyId,
     type: 'vehicle_swap.requested',
     title: 'Driver requested vehicle swap',
     body: reason.slice(0, 180),
-    severity: 'warning',
+    severity: 'attention',
     actionUrl: `/dispatch?duty=${input.dutyId}`,
     sourceEntityType: 'vehicle_swap_request',
     sourceEntityId: String(data.id),
+    context: input.context,
   })
 
   return mapSwapRow(data as Row)
 }
 
-export async function listVehicleSwapRequests(companyId: string, status?: string) {
-  let query = swapDb(companyId)
+export async function listVehicleSwapRequests(context: RequestContext, status?: string) {
+  const companyId = context.companyId
+  let query = swapDb(context)
     .from('vehicle_swap_requests')
     .select('*')
     .eq('company_id', companyId)
@@ -127,17 +144,18 @@ export async function listVehicleSwapRequests(companyId: string, status?: string
 }
 
 export async function resolveVehicleSwapRequest(input: {
-  companyId: string
+  context: RequestContext
   requestId: string
   actorUserId: string
   approve: boolean
   notes?: string | null
 }) {
-  const companyId = input.companyId
-  const { data: row, error } = await swapDb(companyId)
+  const companyId = input.context.companyId
+  const db = swapDb(input.context)
+  const { data: row, error } = await db
     .from('vehicle_swap_requests')
     .select('*')
-    .eq('company_id', input.companyId)
+    .eq('company_id', companyId)
     .eq('id', input.requestId)
     .maybeSingle()
 
@@ -147,7 +165,7 @@ export async function resolveVehicleSwapRequest(input: {
   const now = new Date().toISOString()
   const nextStatus = input.approve ? 'approved' : 'rejected'
 
-  const { data: updated, error: updateError } = await swapDb(companyId)
+  const { data: updated, error: updateError } = await db
     .from('vehicle_swap_requests')
     .update({
       status: nextStatus,
@@ -157,14 +175,14 @@ export async function resolveVehicleSwapRequest(input: {
       updated_at: now,
     })
     .eq('id', input.requestId)
-    .eq('company_id', input.companyId)
+    .eq('company_id', companyId)
     .select('*')
     .single()
 
   if (updateError || !updated) throw new Error(updateError?.message ?? 'Could not resolve swap request')
 
   if (input.approve) {
-    await swapDb(companyId)
+    await swapDutyDb(input.context)
       .from('duties')
       .update({
         vehicle_id: row.requested_vehicle_id,
@@ -172,10 +190,11 @@ export async function resolveVehicleSwapRequest(input: {
         updated_by: input.actorUserId,
       })
       .eq('id', row.duty_id)
-      .eq('company_id', input.companyId)
+      .eq('company_id', companyId)
 
     await recordDutyAssignmentEvent({
-      companyId: input.companyId,
+      context: input.context,
+      companyId,
       dutyId: String(row.duty_id),
       eventType: 'vehicle_swap.approved',
       actorUserId: input.actorUserId,
@@ -189,7 +208,7 @@ export async function resolveVehicleSwapRequest(input: {
   }
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId,
     actorUserId: input.actorUserId,
     action: input.approve ? 'vehicle_swap.approved' : 'vehicle_swap.rejected',
     entityType: 'vehicle_swap_request',
@@ -198,7 +217,7 @@ export async function resolveVehicleSwapRequest(input: {
   }).catch(() => undefined)
 
   await emitDomainEvent({
-    companyId: input.companyId,
+    companyId,
     eventType: input.approve ? 'vehicle_swap.completed' : 'vehicle_swap.rejected',
     entityType: 'vehicle_swap_request',
     entityId: input.requestId,
@@ -209,8 +228,9 @@ export async function resolveVehicleSwapRequest(input: {
   return mapSwapRow(updated as Row)
 }
 
-export async function listDriverSwapRequests(companyId: string, driverId: string) {
-  const { data, error } = await swapDb(companyId)
+export async function listDriverSwapRequests(context: RequestContext, driverId: string) {
+  const companyId = context.companyId
+  const { data, error } = await swapDb(context)
     .from('vehicle_swap_requests')
     .select('*')
     .eq('company_id', companyId)

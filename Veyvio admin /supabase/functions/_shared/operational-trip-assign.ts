@@ -2,7 +2,8 @@
  * Assign driver/vehicle onto an operational trip (writes trip_assignments + run/duty links).
  * One authoritative path used by Schedule planning and Incoming Interests.
  */
-import { admin, type RequestContext } from './supabase.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
+import { type RequestContext } from './supabase.ts'
 import { apiError, json, readJson, toApiErrorResponse } from './http.ts'
 import {
   evaluateDutyAssignmentEligibility,
@@ -16,13 +17,31 @@ import {
 } from './tenant-guards.ts'
 import { projectOperationalTrips } from './projections.ts'
 
+function opsTableDb(
+  table: string,
+  input: { companyId: string; context?: RequestContext },
+) {
+  if (input.context?.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(input.context, `${table}_support_grant`)
+  }
+  if (input.context) {
+    return userScopedDb(input.context, table)
+  }
+  return resolveTenantDb(input.companyId, `${table}_lookups`)
+}
+
+function opsSideEffectsDb(companyId: string) {
+  return resolveTenantDb(companyId, 'operational_trip_assign_side_effects')
+}
+
+
 type Row = Record<string, unknown>
 
 async function resolveRunIdForTrip(companyId: string, tripId: string): Promise<string | null> {
-  const { data: links } = await admin.from('run_trips').select('run_id').eq('trip_id', tripId).limit(5)
+  const { data: links } = await opsTableDb('run_trips', { companyId: companyId }).from('run_trips').select('run_id').eq('trip_id', tripId).limit(5)
   const runIds = [...new Set((links ?? []).map((row) => String(row.run_id)).filter(Boolean))]
   if (!runIds.length) return null
-  const { data: runs } = await admin
+  const { data: runs } = await opsTableDb('runs', { companyId: companyId })
     .from('runs')
     .select('id')
     .eq('company_id', companyId)
@@ -41,7 +60,7 @@ async function createRunForTrip(input: {
 }): Promise<string> {
   const suffix = crypto.randomUUID().slice(0, 8).toUpperCase()
   const tripRef = String(input.trip.trip_reference ?? input.trip.id).slice(-10)
-  const { data, error } = await admin
+  const { data, error } = await opsTableDb('runs', { companyId: input.companyId })
     .from('runs')
     .insert({
       company_id: input.companyId,
@@ -61,7 +80,7 @@ async function createRunForTrip(input: {
     .single()
   if (error || !data) throw new Error(error?.message ?? 'Could not create run for trip')
 
-  const { error: linkError } = await admin.from('run_trips').insert({
+  const { error: linkError } = await opsTableDb('run_trips', { companyId: input.companyId }).from('run_trips').insert({
     run_id: data.id,
     trip_id: String(input.trip.id),
     sequence: 1,
@@ -81,8 +100,9 @@ async function ensureDutyForRun(input: {
   plannedSignOffAt: string | null
   actorUserId: string
   overrideReason?: string | null
+  context?: RequestContext
 }): Promise<{ dutyId: string; eligibility: Awaited<ReturnType<typeof evaluateDutyAssignmentEligibility>> }> {
-  const { data: existingLink } = await admin
+  const { data: existingLink } = await opsTableDb('duty_runs', { companyId: input.companyId, context: input.context })
     .from('duty_runs')
     .select('duty_id')
     .eq('run_id', input.runId)
@@ -92,7 +112,7 @@ async function ensureDutyForRun(input: {
   let dutyId = existingLink?.duty_id ? String(existingLink.duty_id) : null
 
   if (!dutyId) {
-    const { data: sameDayDuty } = await admin
+    const { data: sameDayDuty } = await opsTableDb('duties', { companyId: input.companyId, context: input.context })
       .from('duties')
       .select('id')
       .eq('company_id', input.companyId)
@@ -143,7 +163,7 @@ async function ensureDutyForRun(input: {
       : 'draft'
 
   if (!dutyId) {
-    const { data: duty, error } = await admin
+    const { data: duty, error } = await opsTableDb('duties', { companyId: input.companyId, context: input.context })
       .from('duties')
       .insert({
         company_id: input.companyId,
@@ -165,6 +185,7 @@ async function ensureDutyForRun(input: {
     if (error || !duty) throw new Error(error?.message ?? 'Could not create duty')
     dutyId = String(duty.id)
     await recordDutyAssignmentEvent({
+      context: input.context,
       companyId: input.companyId,
       dutyId,
       eventType: 'assigned',
@@ -172,7 +193,7 @@ async function ensureDutyForRun(input: {
       payload: { eligibility, publicationStatus, source: 'operational_trip_assign' },
     })
   } else {
-    const { error } = await admin
+    const { error } = await opsTableDb('duties', { companyId: input.companyId, context: input.context })
       .from('duties')
       .update({
         driver_id: input.driverId,
@@ -188,6 +209,7 @@ async function ensureDutyForRun(input: {
       .eq('company_id', input.companyId)
     if (error) throw new Error(error.message)
     await recordDutyAssignmentEvent({
+      context: input.context,
       companyId: input.companyId,
       dutyId,
       eventType: 'reassigned',
@@ -196,18 +218,18 @@ async function ensureDutyForRun(input: {
     })
   }
 
-  const { data: link } = await admin
+  const { data: link } = await opsTableDb('duty_runs', { companyId: input.companyId, context: input.context })
     .from('duty_runs')
     .select('duty_id')
     .eq('duty_id', dutyId)
     .eq('run_id', input.runId)
     .maybeSingle()
   if (!link) {
-    const { count } = await admin
+    const { count } = await opsTableDb('duty_runs', { companyId: input.companyId, context: input.context })
       .from('duty_runs')
       .select('duty_id', { count: 'exact', head: true })
       .eq('duty_id', dutyId)
-    const { error: linkError } = await admin.from('duty_runs').insert({
+    const { error: linkError } = await opsTableDb('duty_runs', { companyId: input.companyId, context: input.context }).from('duty_runs').insert({
       duty_id: dutyId,
       run_id: input.runId,
       sequence: (count ?? 0) + 1,
@@ -233,7 +255,7 @@ export async function assignOperationalTrip(context: RequestContext, tripId: str
   const vehicleId = input.vehicleId ? String(input.vehicleId) : null
   const depotIdInput = input.depotId ? String(input.depotId) : null
 
-  const { data: trip, error: tripError } = await admin
+  const { data: trip, error: tripError } = await opsSideEffectsDb(context.companyId)
     .from('trips')
     .select('*')
     .eq('company_id', context.companyId)
@@ -250,7 +272,7 @@ export async function assignOperationalTrip(context: RequestContext, tripId: str
     return toApiErrorResponse(error, 'Assignment target not found')
   }
 
-  const { data: driver } = await admin
+  const { data: driver } = await opsSideEffectsDb(context.companyId)
     .from('drivers')
     .select('id, primary_depot_id')
     .eq('id', driverId)
@@ -273,7 +295,7 @@ export async function assignOperationalTrip(context: RequestContext, tripId: str
         vehicleId,
       })
     } else {
-      await admin
+      await opsTableDb('runs', { companyId: context.companyId, context })
         .from('runs')
         .update({
           driver_id: driverId,
@@ -298,10 +320,11 @@ export async function assignOperationalTrip(context: RequestContext, tripId: str
       plannedSignOffAt: trip.planned_arrival_at ? String(trip.planned_arrival_at) : null,
       actorUserId: context.user.id,
       overrideReason: input.overrideReason ?? null,
+      context,
     })
 
     const now = new Date().toISOString()
-    await admin
+    await opsTableDb('trip_assignments', { companyId: context.companyId, context })
       .from('trip_assignments')
       .update({
         status: 'superseded',
@@ -313,7 +336,7 @@ export async function assignOperationalTrip(context: RequestContext, tripId: str
       .eq('trip_id', tripId)
       .eq('status', 'active')
 
-    const { error: assignmentError } = await admin.from('trip_assignments').insert({
+    const { error: assignmentError } = await opsTableDb('trip_assignments', { companyId: context.companyId, context }).from('trip_assignments').insert({
       company_id: context.companyId,
       trip_id: tripId,
       run_id: runId,
@@ -329,7 +352,7 @@ export async function assignOperationalTrip(context: RequestContext, tripId: str
     })
     if (assignmentError) throw new Error(assignmentError.message)
 
-    await admin
+    await opsSideEffectsDb(context.companyId)
       .from('trips')
       .update({
         status: 'assigned',
@@ -341,7 +364,7 @@ export async function assignOperationalTrip(context: RequestContext, tripId: str
       .eq('company_id', context.companyId)
 
     if (trip.booking_id) {
-      await admin
+      await opsSideEffectsDb(context.companyId)
         .from('bookings')
         .update({
           status: 'assigned',

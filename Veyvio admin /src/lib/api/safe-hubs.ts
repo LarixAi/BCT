@@ -8,7 +8,7 @@ import type {
 import type { DefectAnalytics, DefectsHubData } from '@/lib/defects/types'
 import type { IncidentAnalytics, IncidentsHubData } from '@/lib/incidents/types'
 import type { MaintenanceIntelligence } from '@/lib/maintenance/intelligence'
-import type { MaintenanceHubData } from '@/lib/maintenance/types'
+import type { FleetWorkOrderRow, MaintenanceHubData } from '@/lib/maintenance/types'
 import type { YardHubData, YardSummary } from '@/lib/yard/types'
 
 /** Coerce API/fixture year values without comparing number | null to ''. */
@@ -208,12 +208,24 @@ export function safeMaintenanceHub(hub: MaintenanceHubData): MaintenanceHubData 
       deadline: item.deadline ?? item.expectedCompletion ?? null,
     })),
     fleetRows: hub.fleetRows ?? [],
-    workOrders: (hub.workOrders ?? []).map((w) => ({
-      ...w,
-      pmiChecklistProgress: w.pmiChecklistProgress ?? null,
-      estimateStatus: w.estimateStatus ?? null,
-      estimateTotal: w.estimateTotal ?? null,
-    })),
+    workOrders: (hub.workOrders ?? []).map((w) => {
+      const raw = w as FleetWorkOrderRow & {
+        requestedDate?: string | null
+        scheduledStart?: string | null
+      }
+      const scheduledDate =
+        raw.scheduledDate ?? raw.requestedDate ?? raw.scheduledStart ?? null
+      return {
+        ...w,
+        scheduledDate,
+        targetCompletionDate: raw.targetCompletionDate ?? null,
+        expectedCompletion: raw.expectedCompletion ?? raw.targetCompletionDate ?? scheduledDate,
+        createdAt: raw.createdAt ?? new Date().toISOString(),
+        pmiChecklistProgress: w.pmiChecklistProgress ?? null,
+        estimateStatus: w.estimateStatus ?? null,
+        estimateTotal: w.estimateTotal ?? null,
+      }
+    }),
     parts: (hub.parts ?? []).map((p) => ({
       ...p,
       stockOnHand: p.stockOnHand ?? 0,

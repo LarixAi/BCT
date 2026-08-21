@@ -1,7 +1,11 @@
 /**
  * P0-07 — incident acknowledgement, escalation, and driver receipt proof on Command.
+ *
+ * Wave 3F UserScopedDb/RLS cutover 8: membership JWT reads/updates `incidents`
+ * through RLS. Depot lookup stays company-scoped service-role. Support-grant
+ * sessions stay on company-scoped service-role. Audit / events / notify stay privileged.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
 import { emitDomainEvent } from './domain-events.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { notifyCompanyAdmins } from './notifications.ts'
@@ -13,11 +17,19 @@ import {
   validateEscalation,
   type IncidentMetadata,
 } from './incident-workflow.mapping.ts'
+import type { RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
-function incidentDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'incident_workflow')
+function incidentLookupDb(companyId: string) {
+  return resolveTenantDb(companyId, 'incident_workflow_lookups')
+}
+
+function incidentTenantDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'incident_workflow_support_grant')
+  }
+  return userScopedDb(context, 'incident_workflow')
 }
 
 export {
@@ -28,8 +40,9 @@ export {
   type IncidentTimelineEntry,
 } from './incident-workflow.mapping.ts'
 
-async function loadIncident(companyId: string, incidentId: string) {
-  const { data, error } = await incidentDb(companyId)
+async function loadIncident(context: RequestContext, incidentId: string) {
+  const companyId = context.companyId
+  const { data, error } = await incidentTenantDb(context)
     .from('incidents')
     .select('*, vehicles(registration, make, model), drivers(driver_number)')
     .eq('company_id', companyId)
@@ -39,33 +52,36 @@ async function loadIncident(companyId: string, incidentId: string) {
   return data as Row | null
 }
 
-export async function getIncidentDetail(companyId: string, incidentId: string) {
-  const row = await loadIncident(companyId, incidentId)
-  if (!row) return null
-  const { data: depot } = await incidentDb(companyId)
+async function loadDepot(companyId: string) {
+  const { data: depot } = await incidentLookupDb(companyId)
     .from('depots')
     .select('id, name')
     .eq('company_id', companyId)
     .limit(1)
     .maybeSingle()
-  return mapIncidentDetail(row, depot)
+  return depot
+}
+
+export async function getIncidentDetail(context: RequestContext, incidentId: string) {
+  const row = await loadIncident(context, incidentId)
+  if (!row) return null
+  return mapIncidentDetail(row, await loadDepot(context.companyId))
 }
 
 export async function acknowledgeIncident(input: {
-  companyId: string
+  context: RequestContext
   incidentId: string
   actorUserId: string
   actorName: string
   notes?: string | null
 }) {
-  const companyId = input.companyId
-  const row = await loadIncident(companyId, input.incidentId)
+  const companyId = input.context.companyId
+  const row = await loadIncident(input.context, input.incidentId)
   if (!row) throw new Error('Incident not found')
 
   const meta = parseMetadata(row.metadata)
   if (meta.acknowledgedAt) {
-    const { data: depot } = await incidentDb(companyId).from('depots').select('id, name').eq('company_id', input.companyId).limit(1).maybeSingle()
-    return mapIncidentDetail(row, depot)
+    return mapIncidentDetail(row, await loadDepot(companyId))
   }
 
   const now = new Date().toISOString()
@@ -84,7 +100,7 @@ export async function acknowledgeIncident(input: {
     acknowledgementNotes: input.notes?.trim() || null,
   }
 
-  const { data: updated, error } = await incidentDb(companyId)
+  const { data: updated, error } = await incidentTenantDb(input.context)
     .from('incidents')
     .update({
       metadata: nextMeta,
@@ -93,14 +109,14 @@ export async function acknowledgeIncident(input: {
       updated_by: input.actorUserId,
     })
     .eq('id', input.incidentId)
-    .eq('company_id', input.companyId)
+    .eq('company_id', companyId)
     .select('*, vehicles(registration, make, model), drivers(driver_number)')
     .single()
 
   if (error || !updated) throw new Error(error?.message ?? 'Acknowledgement failed')
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId,
     actorUserId: input.actorUserId,
     action: 'incident.acknowledged',
     entityType: 'incident',
@@ -109,7 +125,7 @@ export async function acknowledgeIncident(input: {
   }).catch(() => undefined)
 
   await emitDomainEvent({
-    companyId: input.companyId,
+    companyId,
     eventType: 'incident.acknowledged',
     entityType: 'incident',
     entityId: input.incidentId,
@@ -117,20 +133,19 @@ export async function acknowledgeIncident(input: {
     payload: { notes: input.notes ?? null },
   }).catch(() => undefined)
 
-  const { data: depot } = await incidentDb(companyId).from('depots').select('id, name').eq('company_id', input.companyId).limit(1).maybeSingle()
-  return mapIncidentDetail(updated as Row, depot)
+  return mapIncidentDetail(updated as Row, await loadDepot(companyId))
 }
 
 export async function escalateIncident(input: {
-  companyId: string
+  context: RequestContext
   incidentId: string
   actorUserId: string
   actorName: string
   severity: string
   reason: string
 }) {
-  const companyId = input.companyId
-  const row = await loadIncident(companyId, input.incidentId)
+  const companyId = input.context.companyId
+  const row = await loadIncident(input.context, input.incidentId)
   if (!row) throw new Error('Incident not found')
 
   const reason = String(input.reason ?? '').trim()
@@ -160,7 +175,7 @@ export async function escalateIncident(input: {
     escalationReason: reason,
   }
 
-  const { data: updated, error } = await incidentDb(companyId)
+  const { data: updated, error } = await incidentTenantDb(input.context)
     .from('incidents')
     .update({
       metadata: nextMeta,
@@ -170,14 +185,14 @@ export async function escalateIncident(input: {
       updated_by: input.actorUserId,
     })
     .eq('id', input.incidentId)
-    .eq('company_id', input.companyId)
+    .eq('company_id', companyId)
     .select('*, vehicles(registration, make, model), drivers(driver_number)')
     .single()
 
   if (error || !updated) throw new Error(error?.message ?? 'Escalation failed')
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId,
     actorUserId: input.actorUserId,
     action: 'incident.escalated',
     entityType: 'incident',
@@ -186,7 +201,7 @@ export async function escalateIncident(input: {
   }).catch(() => undefined)
 
   await emitDomainEvent({
-    companyId: input.companyId,
+    companyId,
     eventType: 'incident.escalated',
     entityType: 'incident',
     entityId: input.incidentId,
@@ -196,7 +211,7 @@ export async function escalateIncident(input: {
 
   if (nextSeverity === 'critical' || String(row.incident_type) === 'safeguarding') {
     await notifyCompanyAdmins({
-      companyId: input.companyId,
+      companyId,
       type: 'incident.escalated',
       title: 'Incident escalated',
       body: `${String(row.incident_reference)} escalated to ${nextSeverity}. ${reason}`,
@@ -205,9 +220,9 @@ export async function escalateIncident(input: {
       sourceEntityType: 'incident',
       sourceEntityId: input.incidentId,
       excludeUserId: input.actorUserId,
+      context: input.context,
     })
   }
 
-  const { data: depot } = await incidentDb(companyId).from('depots').select('id, name').eq('company_id', input.companyId).limit(1).maybeSingle()
-  return mapIncidentDetail(updated as Row, depot)
+  return mapIncidentDetail(updated as Row, await loadDepot(companyId))
 }

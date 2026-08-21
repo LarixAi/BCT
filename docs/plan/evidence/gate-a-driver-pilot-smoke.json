@@ -1,0 +1,12 @@
+{
+  "generated_at": "2026-08-21T07:09:00Z",
+  "drill": "gate1-pilot-smoke",
+  "status": "PASS",
+  "checks": 13,
+  "notes": [
+    "BCT company reactivated ACTIVE by seed-bct-pilot",
+    "ensureAuthUser prefers auth.users id over public.users email",
+    "bootstrap schema v8; duty ack path exercised"
+  ],
+  "deployment_note": "command-api redeployed with seed fixes before smoke"
+}

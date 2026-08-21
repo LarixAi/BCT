@@ -6,13 +6,13 @@
  *
  * notifyDriverAppUser stays on transitional notifications — do not wrap that hub here.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { DRIVER_ONBOARDING_NOTIFICATION, notifyDriverAppUser } from './notifications.ts'
 
 type Row = Record<string, unknown>
 
 function activationDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'driver_activation_release')
+  return resolveTenantDb(companyId, 'driver_activation_release')
 }
 
 const PENDING_DOC_STATUSES = new Set(['awaiting_review', 'uploaded'])

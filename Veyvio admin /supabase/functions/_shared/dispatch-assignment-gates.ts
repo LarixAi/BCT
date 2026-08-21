@@ -2,13 +2,13 @@
  * Shared driver eligibility + vehicle readiness gates for dispatch assignment and sign-on.
  * Blueprint Part F rule 6 — safety rules are hard gates, not yellow warnings only.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { projectDriverProfile, projectVehicleProfile } from './projections.ts'
 
 type Row = Record<string, unknown>
 
 function dispatchGateDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'dispatch_assignment_gates')
+  return resolveTenantDb(companyId, 'dispatch_assignment_gates')
 }
 
 export type EligibilityResult = {

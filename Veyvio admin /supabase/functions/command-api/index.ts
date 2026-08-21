@@ -11,6 +11,7 @@ import {
   toApiErrorResponse,
   toCamelCase,
 } from '../_shared/http.ts'
+import { deploymentIdentity, logCommandApiFailure } from '../_shared/request-observability.ts'
 import {
   listAdBlueRecordsForVehicle,
   recordAdBlueRefill,
@@ -167,7 +168,162 @@ import {
   platformSupportGrantsAll,
   platformSupportGrantsList,
 } from '../_shared/platform-admin.ts'
-import { admin, authenticate, ensurePlatformUser, publicClient } from '../_shared/supabase.ts'
+import {
+  companyScopedServiceDb,
+  enterActiveRequestContext,
+  getActiveRequestContext,
+  platformAdminDb,
+  privilegedDb,
+  userScopedDb,
+} from '../_shared/db-authority.ts'
+import {
+  authenticate as authenticateBase,
+  ensurePlatformUser,
+  publicClient,
+  type RequestContext,
+} from '../_shared/supabase.ts'
+
+const COMMAND_USER_SCOPED_TABLES = new Set<string>([
+  'adblue_records',
+  'attendance_day_overrides',
+  'attendance_leave_audit',
+  'attendance_leave_requests',
+  'attendance_notes',
+  'attendance_return_to_work',
+  'audit_events',
+  'body_condition_audit_events',
+  'body_inspection_media',
+  'body_inspections',
+  'bookings',
+  'command_page_snapshots',
+  'companies',
+  'company_compliance_settings',
+  'company_holiday_defaults',
+  'company_memberships',
+  'condition_acknowledgements',
+  'customers',
+  'damage_observations',
+  'defects',
+  'depot_access',
+  'depot_stock_items',
+  'depot_stock_movements',
+  'depots',
+  'domain_events',
+  'driver_app_accounts',
+  'driver_app_devices',
+  'driver_documents',
+  'driver_eligibility_results',
+  'driver_holiday_profiles',
+  'driver_job_execution_events',
+  'driver_requirement_requests',
+  'driver_requirements',
+  'driver_restrictions',
+  'driver_training',
+  'drivers',
+  'duties',
+  'duty_acknowledgements',
+  'duty_assignment_events',
+  'duty_closeouts',
+  'duty_live_positions',
+  'duty_runs',
+  'equipment_asset_events',
+  'equipment_assets',
+  'executive_company_records',
+  'executive_policies',
+  'file_objects',
+  'fuel_card_events',
+  'fuel_cards',
+  'fuel_records',
+  'holiday_ledger_entries',
+  'holiday_pay_records',
+  'incidents',
+  'inspection_reviews',
+  'interest_submissions',
+  'invitation_events',
+  'invitations',
+  'journey_sequence_acknowledgements',
+  'journey_stops',
+  'membership_application_access',
+  'messages',
+  'notifications',
+  'operational_exception_events',
+  'operational_exceptions',
+  'override_audit_events',
+  'parking_bays',
+  'places',
+  'purchase_requests',
+  'role_permissions',
+  'roles',
+  'run_trips',
+  'runs',
+  'schools',
+  'staff_members',
+  'stock_transfers',
+  'trip_assignments',
+  'trips',
+  'passengers',
+  'booking_legs',
+  'users',
+  'tyre_asset_events',
+  'tyre_assets',
+  'vehicle_checks',
+  'vehicle_condition_markers',
+  'vehicle_consumable_levels',
+  'vehicle_damage_cases',
+  'vehicle_equipment_checks',
+  'vehicle_report_evidence',
+  'vehicle_report_status_history',
+  'vehicle_reports',
+  'vehicle_swap_requests',
+  'vehicles',
+  'vor_cases',
+  'yard_movements',
+  'yard_tasks'
+])
+
+function commandDbForTable(table: string) {
+  const context = getActiveRequestContext()
+  if (!context?.companyId) {
+    // Pre-auth / bootstrap paths (signup, MFA, health) — privileged named capability.
+    return privilegedDb(`command_api:${table}:preauth`)
+  }
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, `command_api:${table}:support`)
+  }
+  if (COMMAND_USER_SCOPED_TABLES.has(table) && context.accessToken) {
+    return userScopedDb(context, table)
+  }
+  // Remaining catalogue / cross-cutting tables until cut over.
+  return companyScopedServiceDb(context, `command_api:${table}`)
+}
+
+/** Compatibility facade — routes use the same call shape as service-role admin. */
+const admin = {
+  from(table: string) {
+    return commandDbForTable(table).from(table)
+  },
+  rpc(fn: string, args?: Record<string, unknown>) {
+    const context = getActiveRequestContext()
+    const client = context?.companyId
+      ? companyScopedServiceDb(context, `command_api:rpc:${fn}`)
+      : privilegedDb(`command_api:rpc:${fn}`)
+    return client.rpc(fn, args as never)
+  },
+  get auth() {
+    return privilegedDb('command_api:auth_admin').auth
+  },
+  get storage() {
+    return privilegedDb('command_api:storage').storage
+  },
+}
+
+async function authenticate(request: Request, requireCompany = true): Promise<RequestContext> {
+  const context = await authenticateBase(request, requireCompany)
+  // Bind JWT context for subsequent admin.from / projection calls in this request.
+  enterActiveRequestContext(context)
+  return context
+}
+
 import {
   ensureOpenSupportSession,
   resolveActiveSupportGrant,
@@ -320,6 +476,10 @@ import {
   escalateIncident,
   getIncidentDetail,
 } from '../_shared/incident-workflow.ts'
+import {
+  recordVehicleEquipmentCheck,
+  listVehicleEquipmentChecks,
+} from '../_shared/vehicle-equipment-checks.ts'
 import {
   createVehicleSwapRequest,
   listDriverSwapRequests,
@@ -2240,7 +2400,7 @@ async function driverListAdBlueRecords(request: Request) {
   }
 
   try {
-    const records = await listAdBlueRecordsForVehicle(context.companyId, vehicleId, 15)
+    const records = await listAdBlueRecordsForVehicle(context, vehicleId, 15)
     return json({ vehicleId, records })
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'AdBlue history failed')
@@ -2299,7 +2459,7 @@ async function driverRecordAdBlueRefill(request: Request) {
       'Driver'
 
     const record = await recordAdBlueRefill({
-      companyId: context.companyId,
+      context,
       depotId: depotId ?? (vehicle.primary_depot_id ? String(vehicle.primary_depot_id) : null),
       vehicleId,
       registration: String(vehicle.registration ?? ''),
@@ -2353,20 +2513,17 @@ async function driverVehicleEquipment(request: Request) {
 
   const items = Array.isArray(input.items) ? input.items : []
   const missingItems = Array.isArray(input.missingItems) ? input.missingItems : []
-  const { data, error } = await admin
-    .from('vehicle_equipment_checks')
-    .insert({
-      company_id: context.companyId,
-      vehicle_id: vehicleId,
-      driver_id: appAccount.driver_id,
+  try {
+    const data = await recordVehicleEquipmentCheck(context, {
+      vehicleId,
+      driverId: String(appAccount.driver_id),
       items,
-      missing_items: missingItems,
-      created_by: context.user.id,
+      missingItems,
     })
-    .select('*')
-    .single()
-  if (error || !data) return apiError(500, error?.message ?? 'Equipment check could not be saved')
-  return json(expandRow(data), 201)
+    return json(expandRow(data), 201)
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Equipment check could not be saved')
+  }
 }
 
 async function driverListVehicleEquipment(request: Request) {
@@ -2374,15 +2531,12 @@ async function driverListVehicleEquipment(request: Request) {
   const url = new URL(request.url)
   const vehicleId = url.searchParams.get('vehicleId')
   if (!vehicleId) return apiError(400, 'vehicleId is required', 'invalid_input')
-  const { data, error } = await admin
-    .from('vehicle_equipment_checks')
-    .select('*')
-    .eq('company_id', context.companyId)
-    .eq('vehicle_id', vehicleId)
-    .order('checked_at', { ascending: false })
-    .limit(20)
-  if (error) return apiError(500, error.message)
-  return json({ items: expandRow(data ?? []) })
+  try {
+    const data = await listVehicleEquipmentChecks(context, vehicleId)
+    return json({ items: expandRow(data) })
+  } catch (error) {
+    return apiError(500, error instanceof Error ? error.message : 'Equipment checks failed')
+  }
 }
 
 async function driverAcknowledgeDuty(request: Request, dutyId: string) {
@@ -4548,7 +4702,7 @@ async function driverCreateVehicleSwapRequest(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const created = await createVehicleSwapRequest({
-      companyId: context.companyId,
+      context,
       driverId: String(resolved.appAccount!.driver_id),
       dutyId: String(input.dutyId ?? ''),
       currentVehicleId: String(input.currentVehicleId ?? ''),
@@ -4567,7 +4721,7 @@ async function driverListVehicleSwapRequests(request: Request) {
   const resolved = await resolveDriverAppAccount(context)
   if ('error' in resolved && resolved.error) return resolved.error
   try {
-    return json(await listDriverSwapRequests(context.companyId, String(resolved.appAccount!.driver_id)))
+    return json(await listDriverSwapRequests(context, String(resolved.appAccount!.driver_id)))
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'Swap requests failed')
   }
@@ -4580,7 +4734,7 @@ async function driverSubmitDutyCloseout(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const result = await submitDutyCloseout({
-      companyId: context.companyId,
+      context,
       driverId: String(resolved.appAccount!.driver_id),
       dutyId: input.dutyId ? String(input.dutyId) : null,
       jobReference: input.jobId ? String(input.jobId) : input.jobReference ? String(input.jobReference) : null,
@@ -4608,7 +4762,7 @@ async function driverGetDutyCloseout(request: Request) {
       driverId: String(resolved.appAccount!.driver_id),
       dutyId: guardDutyId,
     })
-    const row = await getDutyCloseout(context.companyId, {
+    const row = await getDutyCloseout(context, {
       dutyId: dutyId ?? undefined,
       jobReference: jobReference ?? undefined,
     })
@@ -4628,7 +4782,7 @@ async function driverRecordJobExecution(request: Request) {
   if (!eventType) return apiError(400, 'eventType is required')
   try {
     const row = await recordDriverJobExecutionEvent({
-      companyId: context.companyId,
+      context,
       driverId: String(resolved.appAccount!.driver_id),
       jobId: String(input.jobId ?? ''),
       eventType,
@@ -4659,7 +4813,7 @@ async function driverGetJobExecution(request: Request, jobId: string) {
       driverId: String(resolved.appAccount!.driver_id),
       dutyId: jobId,
     })
-    return json(await getJobExecutionSnapshot(context.companyId, jobId))
+    return json(await getJobExecutionSnapshot(context, jobId))
   } catch (error) {
     return toApiErrorResponse(error, 'Job execution lookup failed')
   }
@@ -4668,7 +4822,7 @@ async function driverGetJobExecution(request: Request, jobId: string) {
 async function adminGetJobExecution(request: Request, jobId: string) {
   const context = await authenticate(request)
   try {
-    return json(await getJobExecutionSnapshot(context.companyId, jobId))
+    return json(await getJobExecutionSnapshot(context, jobId))
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'Job execution lookup failed')
   }
@@ -4677,7 +4831,7 @@ async function adminGetJobExecution(request: Request, jobId: string) {
 async function listPendingVehicleSwapRequests(request: Request) {
   const context = await authenticate(request)
   try {
-    return json(await listVehicleSwapRequests(context.companyId, 'pending'))
+    return json(await listVehicleSwapRequests(context, 'pending'))
   } catch (error) {
     return apiError(500, error instanceof Error ? error.message : 'Swap requests failed')
   }
@@ -4688,7 +4842,7 @@ async function resolveVehicleSwapRequestRoute(request: Request, requestId: strin
   const input = await readJson<Row>(request)
   try {
     const row = await resolveVehicleSwapRequest({
-      companyId: context.companyId,
+      context,
       requestId,
       actorUserId: context.user.id,
       approve,
@@ -6113,9 +6267,9 @@ async function yardHubData(context: Awaited<ReturnType<typeof authenticate>>, re
     activeDepot.id
       ? loadRecentVehicleReturnedEvents(admin, context.companyId, activeDepot.id)
       : Promise.resolve([]),
-    listEquipmentRowsForCompany(context.companyId),
+    listEquipmentRowsForCompany(context.companyId, context),
     listVehicleConsumablesByCompany(context.companyId),
-    listYardDepotStockLines(context.companyId, activeDepot.id || null),
+    listYardDepotStockLines(context.companyId, activeDepot.id || null, context),
   ])
 
   const filtered = (vehicles ?? []).filter((v: Row) => {
@@ -7893,7 +8047,17 @@ async function profile(request: Request) {
 
 async function health() {
   const { error } = await admin.from('companies').select('id').limit(1)
-  return json({ status: error ? 'degraded' : 'ok', database: error ? error.message : 'connected', surface: 'command-api' }, error ? 503 : 200)
+  const identity = deploymentIdentity()
+  return json(
+    {
+      status: error ? 'degraded' : 'ok',
+      database: error ? error.message : 'connected',
+      surface: 'command-api',
+      deploymentSha: identity.deploymentSha,
+      denoDeploymentId: identity.denoDeploymentId,
+    },
+    error ? 503 : 200,
+  )
 }
 
 async function driverProfiles(request: Request, driverId?: string) {
@@ -8090,7 +8254,7 @@ async function reorderJourneySequence(request: Request, tripId: string) {
     const ackRequired =
       Boolean(input.sendNotifications) && journeyAckRequiredForTripStatus(tripStatus)
     const acknowledgement = await ensureJourneySequenceAcknowledgement({
-      companyId: context.companyId,
+      context,
       actorUserId: context.user.id,
       tripKey: tripId,
       summary: result.changed
@@ -8163,7 +8327,7 @@ async function moveJourneySequence(request: Request, tripId: string) {
 
     const needsAck = action === 'move_to_run' || action === 'create_new_run'
     const acknowledgement = await ensureJourneySequenceAcknowledgement({
-      companyId: context.companyId,
+      context,
       actorUserId: context.user.id,
       tripKey: tripId,
       summary: result.message,
@@ -8186,7 +8350,7 @@ async function getJourneySequenceAckRoute(request: Request, tripId: string) {
   const context = await authenticate(request)
   try {
     const ack = await getJourneySequenceAcknowledgement({
-      companyId: context.companyId,
+      context,
       tripKey: tripId,
     })
     return json({ acknowledgement: ack })
@@ -8207,7 +8371,7 @@ async function advanceJourneySequenceAckRoute(request: Request, tripId: string) 
       return apiError(400, 'status must be viewed, acknowledged, declined, or delivered', 'invalid_status')
     }
     const acknowledgement = await advanceJourneySequenceAcknowledgement({
-      companyId: context.companyId,
+      context,
       actorUserId: context.user.id,
       tripKey: tripId,
       nextStatus: status as 'viewed' | 'acknowledged' | 'declined' | 'delivered',
@@ -8234,6 +8398,7 @@ async function listOperationalExceptionsRoute(request: Request) {
     const status = url.searchParams.get('status')
     const openOnly = url.searchParams.get('openOnly')
     const exceptions = await listOperationalExceptions({
+      context,
       companyId: context.companyId,
       status,
       openOnly: openOnly === 'false' ? false : true,
@@ -8247,7 +8412,10 @@ async function listOperationalExceptionsRoute(request: Request) {
 async function getOperationalExceptionRoute(request: Request, exceptionId: string) {
   const context = await authenticate(request)
   try {
-    const exception = await getOperationalException(context.companyId, exceptionId)
+    const exception = await getOperationalException(
+      { context, companyId: context.companyId },
+      exceptionId,
+    )
     if (!exception) return apiError(404, 'Exception not found', 'not_found')
     return json(exception)
   } catch (error) {
@@ -8260,6 +8428,7 @@ async function raiseOperationalExceptionRoute(request: Request) {
   try {
     const input = await readJson<Row>(request)
     const exception = await raiseOperationalException({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
@@ -8286,6 +8455,7 @@ async function acknowledgeOperationalExceptionRoute(request: Request, exceptionI
   try {
     const input = await readJson<Row>(request).catch(() => ({} as Row))
     const exception = await acknowledgeOperationalException({
+      context,
       companyId: context.companyId,
       exceptionId,
       actorUserId: context.user.id,
@@ -8303,6 +8473,7 @@ async function assignOperationalExceptionRoute(request: Request, exceptionId: st
   try {
     const input = await readJson<Row>(request).catch(() => ({} as Row))
     const exception = await assignOperationalException({
+      context,
       companyId: context.companyId,
       exceptionId,
       actorUserId: context.user.id,
@@ -8321,6 +8492,7 @@ async function investigateOperationalExceptionRoute(request: Request, exceptionI
   try {
     const input = await readJson<Row>(request).catch(() => ({} as Row))
     const exception = await investigateOperationalException({
+      context,
       companyId: context.companyId,
       exceptionId,
       actorUserId: context.user.id,
@@ -8337,6 +8509,7 @@ async function escalateOperationalExceptionRoute(request: Request, exceptionId: 
   try {
     const input = await readJson<Row>(request).catch(() => ({} as Row))
     const exception = await escalateOperationalException({
+      context,
       companyId: context.companyId,
       exceptionId,
       actorUserId: context.user.id,
@@ -8354,6 +8527,7 @@ async function closeOperationalExceptionRoute(request: Request, exceptionId: str
   try {
     const input = await readJson<Row>(request).catch(() => ({} as Row))
     const exception = await closeOperationalException({
+      context,
       companyId: context.companyId,
       exceptionId,
       actorUserId: context.user.id,
@@ -8372,6 +8546,7 @@ async function noteOperationalExceptionRoute(request: Request, exceptionId: stri
   try {
     const input = await readJson<Row>(request)
     const exception = await addOperationalExceptionNote({
+      context,
       companyId: context.companyId,
       exceptionId,
       actorUserId: context.user.id,
@@ -8390,7 +8565,7 @@ async function driverListJourneySequenceAcks(request: Request) {
   if ('error' in resolved && resolved.error) return resolved.error
   try {
     const acknowledgements = await listPendingJourneySequenceAcksForDriver({
-      companyId: context.companyId,
+      context,
       driverId: String(resolved.appAccount!.driver_id),
     })
     return json({ acknowledgements })
@@ -8413,7 +8588,7 @@ async function driverAdvanceJourneySequenceAckRoute(request: Request, tripKey: s
       return apiError(400, 'status must be viewed, acknowledged, declined, or delivered', 'invalid_status')
     }
     const acknowledgement = await driverAdvanceJourneySequenceAcknowledgement({
-      companyId: context.companyId,
+      context,
       actorUserId: context.user.id,
       driverId: String(resolved.appAccount!.driver_id),
       tripKey,
@@ -10353,7 +10528,7 @@ async function incidentsHub(request: Request) {
 async function incidentDetail(request: Request, incidentId: string) {
   const context = await authenticate(request)
   try {
-    const detail = await getIncidentDetail(context.companyId, incidentId)
+    const detail = await getIncidentDetail(context, incidentId)
     if (!detail) return apiError(404, 'Incident not found')
     return json(detail)
   } catch (error) {
@@ -10369,7 +10544,7 @@ async function incidentAcknowledge(request: Request) {
 
   try {
     const detail = await acknowledgeIncident({
-      companyId: context.companyId,
+      context,
       incidentId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
@@ -10391,7 +10566,7 @@ async function incidentEscalate(request: Request) {
 
   try {
     const detail = await escalateIncident({
-      companyId: context.companyId,
+      context,
       incidentId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Operations'),
@@ -10436,6 +10611,7 @@ async function fleetResourcesEquipmentCreate(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const asset = await createEquipmentAsset({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10472,6 +10648,7 @@ async function fleetResourcesEquipmentAssign(request: Request) {
         ? null
         : String(input.vehicleId)
     const asset = await assignEquipmentAsset({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10495,6 +10672,7 @@ async function patchVehicleEquipment(request: Request, vehicleId: string) {
     const equipmentId = String(input.equipmentId ?? '')
     if (!equipmentId) return apiError(400, 'equipmentId is required')
     await updateVehicleEquipmentItem({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10521,6 +10699,7 @@ async function fleetResourcesStockUpsert(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const row = await upsertDepotStock({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10547,6 +10726,7 @@ async function fleetResourcesStockTransfer(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const row = await createStockTransfer({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10571,6 +10751,7 @@ async function fleetResourcesFuelCardCreate(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const card = await createFuelCard({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10599,6 +10780,7 @@ async function fleetResourcesFuelCardAssign(request: Request) {
     const fuelCardId = String(input.fuelCardId ?? input.cardId ?? '')
     if (!fuelCardId) return apiError(400, 'fuelCardId is required')
     const card = await assignFuelCard({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10631,6 +10813,7 @@ async function fleetResourcesTyreCreate(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const tyre = await createTyreAsset({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10658,6 +10841,7 @@ async function fleetResourcesTyreFit(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const tyre = await fitTyreAsset({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10681,6 +10865,7 @@ async function fleetResourcesTyreRemove(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const tyre = await removeTyreAsset({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10701,6 +10886,7 @@ async function fleetResourcesTyreRotate(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const tyres = await rotateTyreAssets({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10722,6 +10908,7 @@ async function fleetResourcesPurchaseCreate(request: Request) {
   const input = await readJson<Row>(request)
   try {
     const row = await createPurchaseRequest({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -10749,6 +10936,7 @@ async function fleetResourcesPurchaseApprove(request: Request, purchaseId: strin
   const input = await readJson<Row>(request)
   try {
     const row = await approvePurchaseRequest({
+      context,
       companyId: context.companyId,
       actorUserId: context.user.id,
       actorName: String(input.actorName ?? context.user.email ?? 'Command'),
@@ -11210,7 +11398,7 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'compliance/expiring' && request.method === 'GET') return complianceExpiries(request)
   if (path === 'compliance/automation-settings' && request.method === 'GET') {
     const context = await authenticate(request)
-    const settings = await getComplianceSettings(context.companyId)
+    const settings = await getComplianceSettings(context.companyId, context)
     return json({
       ...settings,
       defectAutomationRules: DEFAULT_DEFECT_AUTOMATION_RULES,
@@ -11219,7 +11407,7 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
   if (path === 'compliance/automation-settings' && request.method === 'PATCH') {
     const context = await authenticate(request)
     const input = await readJson<Partial<typeof DEFAULT_COMPLIANCE_SETTINGS>>(request)
-    const settings = await upsertComplianceSettings(context.companyId, input, context.user.id)
+    const settings = await upsertComplianceSettings(context.companyId, input, context.user.id, context)
     return json({
       ...settings,
       defectAutomationRules: DEFAULT_DEFECT_AUTOMATION_RULES,
@@ -12037,7 +12225,7 @@ Deno.serve(async (request) => {
     // Must await: bare `return handler()` skips try/catch and Safari shows "Load failed" (no CORS).
     return await dispatchCommandApi(request)
   } catch (error) {
-    console.error(error)
+    logCommandApiFailure(error, { route: new URL(request.url).pathname })
     return toApiErrorResponse(error)
   }
 })

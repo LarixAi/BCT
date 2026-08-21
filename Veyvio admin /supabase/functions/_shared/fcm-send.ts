@@ -2,7 +2,7 @@
  * FCM HTTP v1 delivery for Driver devices.
  * F-29: notifications never create business state — call only after in-app insert.
  */
-import { admin } from './supabase.ts'
+import { pushSenderDb } from './db-authority.ts'
 import {
   buildFcmMessage,
   isSendCapablePushToken,
@@ -139,7 +139,7 @@ export async function sendFcmToDriver(input: {
     return { attempted: 0, sent: 0, skipped: true }
   }
 
-  const { data: devices, error } = await admin
+  const { data: devices, error } = await pushSenderDb(input.companyId, 'driver_devices_lookup')
     .from('driver_devices')
     .select('push_token,platform,is_active')
     .eq('organisation_id', input.companyId)

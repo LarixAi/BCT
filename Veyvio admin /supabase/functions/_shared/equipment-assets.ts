@@ -1,7 +1,14 @@
 /**
  * Durable equipment inventory — sole Command write path for kit assets (F-18 / TD-027).
+ *
+ * Wave 3F UserScopedDb/RLS cutover 12: membership JWT reads/writes
+ * `equipment_assets` through RLS (SELECT/INSERT/UPDATE). Support-grant
+ * sessions, hub/projection lists, and Yard mutations without a membership JWT
+ * stay on company-scoped service-role. Membership JWT also appends
+ * `equipment_asset_events` (SELECT/INSERT). Vehicle/depot lookups stay
+ * service-role. writeImmutableAudit stays privileged.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -16,15 +23,39 @@ import {
   type EquipmentAssetCategory,
   type EquipmentAssetStatus,
 } from './equipment-assets.mapping.ts'
+import type { RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
-function equipmentDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'equipment_assets')
+type EquipmentScope = {
+  companyId: string
+  context?: RequestContext
+}
+
+function equipmentTenantDb(scope: EquipmentScope) {
+  const companyId = scope.context?.companyId ?? scope.companyId
+  if (scope.context?.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(scope.context, 'equipment_assets_support_grant')
+  }
+  if (scope.context) {
+    return userScopedDb(scope.context, 'equipment_assets')
+  }
+  return resolveTenantDb(companyId, 'equipment_assets')
+}
+
+function equipmentSideEffectsDb(scope: EquipmentScope) {
+  if (scope.context) {
+    return companyScopedServiceDb(scope.context, 'equipment_assets_side_effects')
+  }
+  return resolveTenantDb(scope.companyId, 'equipment_assets_side_effects')
+}
+
+function scopeFrom(input: { context?: RequestContext; companyId: string }): EquipmentScope {
+  return { companyId: input.context?.companyId ?? input.companyId, context: input.context }
 }
 
 async function appendEvent(input: {
-  companyId: string
+  scope: EquipmentScope
   equipmentId: string
   eventType: string
   actorUserId?: string | null
@@ -32,8 +63,8 @@ async function appendEvent(input: {
   body?: string | null
   payload?: Record<string, unknown>
 }) {
-  const { error } = await equipmentDb(input.companyId).from('equipment_asset_events').insert({
-    company_id: input.companyId,
+  const { error } = await equipmentTenantDb(input.scope).from('equipment_asset_events').insert({
+    company_id: input.scope.companyId,
     equipment_id: input.equipmentId,
     event_type: input.eventType,
     actor_user_id: input.actorUserId ?? null,
@@ -44,15 +75,41 @@ async function appendEvent(input: {
   if (error) throw new Error(error.message)
 }
 
-async function loadAsset(companyId: string, equipmentId: string): Promise<Row | null> {
-  const { data, error } = await equipmentDb(companyId)
+async function loadAsset(scope: EquipmentScope, equipmentId: string): Promise<Row | null> {
+  const companyId = scope.companyId
+  const { data, error } = await equipmentTenantDb(scope)
     .from('equipment_assets')
-    .select('*, vehicles(registration), depots(name)')
+    .select('*')
     .eq('company_id', companyId)
     .eq('id', equipmentId)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  return data as Row | null
+  if (!data) return null
+  return enrichAsset(scope, data as Row)
+}
+
+async function enrichAsset(scope: EquipmentScope, row: Row): Promise<Row> {
+  const companyId = scope.companyId
+  const lookups = equipmentSideEffectsDb(scope)
+  const [{ data: vehicle }, { data: depot }] = await Promise.all([
+    row.vehicle_id
+      ? lookups
+          .from('vehicles')
+          .select('registration')
+          .eq('company_id', companyId)
+          .eq('id', String(row.vehicle_id))
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    row.depot_id
+      ? lookups
+          .from('depots')
+          .select('name')
+          .eq('company_id', companyId)
+          .eq('id', String(row.depot_id))
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  return { ...row, vehicles: vehicle, depots: depot }
 }
 
 function mapLoaded(row: Row) {
@@ -64,34 +121,38 @@ function mapLoaded(row: Row) {
   })
 }
 
-export async function listEquipmentAssets(companyId: string) {
-  const { data, error } = await equipmentDb(companyId)
+export async function listEquipmentAssets(companyId: string, context?: RequestContext) {
+  const scope = scopeFrom({ companyId, context })
+  const { data, error } = await equipmentTenantDb(scope)
     .from('equipment_assets')
-    .select('*, vehicles(registration), depots(name)')
-    .eq('company_id', companyId)
+    .select('*')
+    .eq('company_id', scope.companyId)
     .order('name', { ascending: true })
     .limit(500)
   if (error) throw new Error(error.message)
-  return (data ?? []).map((row) => mapLoaded(row as Row))
+  const rows = await Promise.all((data ?? []).map((row) => enrichAsset(scope, row as Row)))
+  return rows.map((row) => mapLoaded(row))
 }
 
-export async function listEquipmentRowsForCompany(companyId: string): Promise<Row[]> {
-  const { data, error } = await equipmentDb(companyId)
+export async function listEquipmentRowsForCompany(companyId: string, context?: RequestContext): Promise<Row[]> {
+  const scope = scopeFrom({ companyId, context })
+  const { data, error } = await equipmentTenantDb(scope)
     .from('equipment_assets')
     .select('*')
-    .eq('company_id', companyId)
+    .eq('company_id', scope.companyId)
     .limit(1000)
   if (error) throw new Error(error.message)
   return (data ?? []) as Row[]
 }
 
-export async function getEquipmentAsset(companyId: string, equipmentId: string) {
-  const row = await loadAsset(companyId, equipmentId)
+export async function getEquipmentAsset(companyId: string, equipmentId: string, context?: RequestContext) {
+  const row = await loadAsset(scopeFrom({ companyId, context }), equipmentId)
   if (!row) return null
   return mapLoaded(row)
 }
 
 export async function createEquipmentAsset(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -108,7 +169,7 @@ export async function createEquipmentAsset(input: {
   serviceable?: boolean
   inDate?: boolean
 }) {
-  const companyId = input.companyId
+  const scope = scopeFrom(input)
   const name = String(input.name ?? '').trim()
   if (!name) throw new HttpError(400, 'name is required')
 
@@ -120,7 +181,7 @@ export async function createEquipmentAsset(input: {
   const category: EquipmentAssetCategory = normalizeEquipmentCategory(input.category)
 
   const insert: Row = {
-    company_id: input.companyId,
+    company_id: scope.companyId,
     name,
     category,
     status,
@@ -140,12 +201,12 @@ export async function createEquipmentAsset(input: {
     updated_at: now,
   }
 
-  const { data, error } = await equipmentDb(companyId).from('equipment_assets').insert(insert).select('id').single()
+  const { data, error } = await equipmentTenantDb(scope).from('equipment_assets').insert(insert).select('id').single()
   if (error) throw new Error(error.message)
   const id = String(data.id)
 
   await appendEvent({
-    companyId: input.companyId,
+    scope,
     equipmentId: id,
     eventType: 'created',
     actorUserId: input.actorUserId,
@@ -155,7 +216,7 @@ export async function createEquipmentAsset(input: {
   })
   if (vehicleId) {
     await appendEvent({
-      companyId: input.companyId,
+      scope,
       equipmentId: id,
       eventType: 'assigned',
       actorUserId: input.actorUserId,
@@ -166,7 +227,7 @@ export async function createEquipmentAsset(input: {
   }
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: 'equipment.created',
     entityType: 'equipment_asset',
@@ -175,10 +236,11 @@ export async function createEquipmentAsset(input: {
     afterSnapshot: insert,
   })
 
-  return getEquipmentAsset(input.companyId, id)
+  return getEquipmentAsset(scope.companyId, id, input.context)
 }
 
 export async function assignEquipmentAsset(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -186,11 +248,11 @@ export async function assignEquipmentAsset(input: {
   vehicleId: string | null
   depotId?: string | null
 }) {
-  const companyId = input.companyId
+  const scope = scopeFrom(input)
   const equipmentId = String(input.equipmentId)
   if (!equipmentId) throw new HttpError(400, 'equipmentId is required')
 
-  const existing = await loadAsset(companyId, equipmentId)
+  const existing = await loadAsset(scope, equipmentId)
   if (!existing) throw new HttpError(404, 'Equipment asset not found')
 
   const previousVehicleId = existing.vehicle_id ? String(existing.vehicle_id) : null
@@ -200,10 +262,10 @@ export async function assignEquipmentAsset(input: {
   }
 
   if (nextVehicleId) {
-    const { data: vehicle, error } = await equipmentDb(companyId)
+    const { data: vehicle, error } = await equipmentSideEffectsDb(scope)
       .from('vehicles')
       .select('id, primary_depot_id')
-      .eq('company_id', input.companyId)
+      .eq('company_id', scope.companyId)
       .eq('id', nextVehicleId)
       .maybeSingle()
     if (error) throw new Error(error.message)
@@ -224,10 +286,10 @@ export async function assignEquipmentAsset(input: {
     updated_at: now,
   }
 
-  const { error: updateError } = await equipmentDb(companyId)
+  const { error: updateError } = await equipmentTenantDb(scope)
     .from('equipment_assets')
     .update(patch)
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', equipmentId)
   if (updateError) throw new Error(updateError.message)
 
@@ -238,7 +300,7 @@ export async function assignEquipmentAsset(input: {
       : 'transferred'
 
   await appendEvent({
-    companyId: input.companyId,
+    scope,
     equipmentId,
     eventType,
     actorUserId: input.actorUserId,
@@ -250,7 +312,7 @@ export async function assignEquipmentAsset(input: {
   })
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: `equipment.${eventType}`,
     entityType: 'equipment_asset',
@@ -260,10 +322,11 @@ export async function assignEquipmentAsset(input: {
     afterSnapshot: patch,
   })
 
-  return getEquipmentAsset(input.companyId, equipmentId)
+  return getEquipmentAsset(scope.companyId, equipmentId, input.context)
 }
 
 export async function updateVehicleEquipmentItem(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -274,13 +337,14 @@ export async function updateVehicleEquipmentItem(input: {
   inDate?: boolean
   status?: string
 }) {
-  const companyId = input.companyId
-  const existing = await loadAsset(companyId, input.equipmentId)
+  const scope = scopeFrom(input)
+  const existing = await loadAsset(scope, input.equipmentId)
   if (!existing) throw new HttpError(404, 'Equipment asset not found')
 
   const currentVehicle = existing.vehicle_id ? String(existing.vehicle_id) : null
   if (input.assigned === true && currentVehicle !== input.vehicleId) {
     await assignEquipmentAsset({
+      context: input.context,
       companyId: input.companyId,
       actorUserId: input.actorUserId,
       actorName: input.actorName,
@@ -289,6 +353,7 @@ export async function updateVehicleEquipmentItem(input: {
     })
   } else if (input.assigned === false && currentVehicle === input.vehicleId) {
     await assignEquipmentAsset({
+      context: input.context,
       companyId: input.companyId,
       actorUserId: input.actorUserId,
       actorName: input.actorName,
@@ -306,15 +371,15 @@ export async function updateVehicleEquipmentItem(input: {
   else if (input.inDate === false) patch.status = 'expired'
 
   if (Object.keys(patch).length > 1) {
-    const { error } = await equipmentDb(companyId)
+    const { error } = await equipmentTenantDb(scope)
       .from('equipment_assets')
       .update(patch)
-      .eq('company_id', input.companyId)
+      .eq('company_id', scope.companyId)
       .eq('id', input.equipmentId)
     if (error) throw new Error(error.message)
 
     await appendEvent({
-      companyId: input.companyId,
+      scope,
       equipmentId: input.equipmentId,
       eventType: 'updated',
       actorUserId: input.actorUserId,
@@ -324,26 +389,29 @@ export async function updateVehicleEquipmentItem(input: {
     })
   }
 
-  return getEquipmentAsset(input.companyId, input.equipmentId)
+  return getEquipmentAsset(scope.companyId, input.equipmentId, input.context)
 }
 
 /** Resolve Yard client itemId (uuid or qr/local code) within company. */
 export async function findEquipmentByClientId(
   companyId: string,
   itemId: string,
+  context?: RequestContext,
 ): Promise<Row | null> {
   if (!itemId) return null
+  const scope = scopeFrom({ companyId, context })
   if (isUuid(itemId)) {
-    return loadAsset(companyId, itemId)
+    return loadAsset(scope, itemId)
   }
-  const { data, error } = await equipmentDb(companyId)
+  const { data, error } = await equipmentTenantDb(scope)
     .from('equipment_assets')
-    .select('*, vehicles(registration), depots(name)')
-    .eq('company_id', companyId)
+    .select('*')
+    .eq('company_id', scope.companyId)
     .eq('qr_code', itemId)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  return data as Row | null
+  if (!data) return null
+  return enrichAsset(scope, data as Row)
 }
 
 /**
@@ -352,6 +420,7 @@ export async function findEquipmentByClientId(
  */
 export async function applyYardEquipmentMutation(input: {
   type: string
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -367,9 +436,10 @@ export async function applyYardEquipmentMutation(input: {
 
   if (input.type === 'equipment.assign') {
     if (!vehicleId) throw new HttpError(400, 'vehicleId is required')
-    const existing = itemId ? await findEquipmentByClientId(input.companyId, itemId) : null
+    const existing = itemId ? await findEquipmentByClientId(input.companyId, itemId, input.context) : null
     if (existing) {
       const asset = await assignEquipmentAsset({
+        context: input.context,
         companyId: input.companyId,
         actorUserId: input.actorUserId,
         actorName: input.actorName,
@@ -379,6 +449,7 @@ export async function applyYardEquipmentMutation(input: {
       return { equipmentId: String(asset?.id ?? existing.id) }
     }
     const created = await createEquipmentAsset({
+      context: input.context,
       companyId: input.companyId,
       actorUserId: input.actorUserId,
       actorName: input.actorName,
@@ -391,12 +462,12 @@ export async function applyYardEquipmentMutation(input: {
   }
 
   if (input.type === 'equipment.transfer') {
-    // Unassign to store: { vehicleId, itemId, reason, destination }
     if (reason || destination) {
       if (!itemId) throw new HttpError(400, 'itemId is required')
-      const existing = await findEquipmentByClientId(input.companyId, itemId)
+      const existing = await findEquipmentByClientId(input.companyId, itemId, input.context)
       if (!existing) throw new HttpError(404, 'Equipment asset not found')
       await assignEquipmentAsset({
+        context: input.context,
         companyId: input.companyId,
         actorUserId: input.actorUserId,
         actorName: input.actorName,
@@ -404,7 +475,7 @@ export async function applyYardEquipmentMutation(input: {
         vehicleId: null,
       })
       await appendEvent({
-        companyId: input.companyId,
+        scope: scopeFrom(input),
         equipmentId: String(existing.id),
         eventType: 'unassigned',
         actorUserId: input.actorUserId,
@@ -415,13 +486,13 @@ export async function applyYardEquipmentMutation(input: {
       return { equipmentId: String(existing.id) }
     }
 
-    // Vehicle-to-vehicle: { fromVehicleId, toVehicleId, itemId }
     if (!toVehicleId || !itemId) {
       throw new HttpError(400, 'toVehicleId and itemId are required for transfer')
     }
-    const existing = await findEquipmentByClientId(input.companyId, itemId)
+    const existing = await findEquipmentByClientId(input.companyId, itemId, input.context)
     if (!existing) throw new HttpError(404, 'Equipment asset not found')
     await assignEquipmentAsset({
+      context: input.context,
       companyId: input.companyId,
       actorUserId: input.actorUserId,
       actorName: input.actorName,
@@ -432,7 +503,6 @@ export async function applyYardEquipmentMutation(input: {
   }
 
   if (input.type === 'equipment.restock') {
-    // Handled by applyYardConsumableRestock in yard-mutation-handlers.
     throw new HttpError(400, 'Use applyYardConsumableRestock for equipment.restock')
   }
 

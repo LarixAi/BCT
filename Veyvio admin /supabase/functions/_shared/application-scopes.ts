@@ -1,9 +1,12 @@
 /**
  * Blueprint Part F — application access scopes (deny-by-default).
  * Wave 3B: explicit membership_application_access (+ support grant path) only.
+ *
+ * Wave 3F cutover 56: membership JWT reads/writes via UserScopedDb + RLS.
  */
+import { companyScopedServiceDb, userScopedDb } from './db-authority.ts'
 import { HttpError } from './http.ts'
-import { admin, type RequestContext } from './supabase.ts'
+import { type RequestContext } from './supabase.ts'
 import { recordSecurityEvent } from './tenant-auth.ts'
 import { normalizeAppType, type VeyvioAppType } from './account-authority.ts'
 import { decideExplicitApplicationScopes } from './explicit-application-scopes.ts'
@@ -32,6 +35,13 @@ export {
 }
 export { decideExplicitApplicationScopes } from './explicit-application-scopes.ts'
 
+function applicationAccessDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'membership_application_access_support_grant')
+  }
+  return userScopedDb(context, 'membership_application_access')
+}
+
 export async function resolveApplicationScopes(
   context: RequestContext,
   options: { clientClaimedApps?: readonly string[] | null } = {},
@@ -39,7 +49,7 @@ export async function resolveApplicationScopes(
   let explicitAppTypes: string[] = []
 
   if (context.companyId && context.membershipId && context.workspaceAuthority === 'membership') {
-    const { data: accessRows, error: accessError } = await admin
+    const { data: accessRows, error: accessError } = await applicationAccessDb(context)
       .from('membership_application_access')
       .select('app_type')
       .eq('company_id', context.companyId)
@@ -84,7 +94,7 @@ export async function assertExplicitApplicationAccess(
     )
   }
 
-  const { data, error } = await admin
+  const { data, error } = await applicationAccessDb(context)
     .from('membership_application_access')
     .select('id')
     .eq('company_id', context.companyId)

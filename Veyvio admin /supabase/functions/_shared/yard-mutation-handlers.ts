@@ -2,13 +2,12 @@
  * Command handlers for yard outbox mutations (Blueprint TD-009 / P0-02).
  * Persists to shared tables or append-only audit_events — idempotent by client correlation id.
  *
- * PROD-1 Batch 09 — authority declaration / bare-admin removal.
- * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
- * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
- *
- * maybeCreateExceptionForDefect, equipment, stock, and AdBlue callees stay as previously
- * wrapped. Direct audit_events writes stay in this module — do not wrap audit-service here.
- * company_mismatch remains the command-api yard mutation gate; do not change it in this PR.
+ * Wave 3F UserScopedDb/RLS cutovers 29–31: membership JWT reads/writes `defects`
+ * (SELECT/INSERT/UPDATE), inserts `yard_movements` (SELECT/INSERT), and updates
+ * `vor_cases` (SELECT/UPDATE) through RLS. Support-grant sessions stay on
+ * company-scoped service-role. Vehicles and audit_events stay service-role.
+ * maybeCreateExceptionForDefect / equipment / stock / AdBlue callees stay as
+ * previously wrapped. company_mismatch remains the command-api yard mutation gate.
  */
 import { recordAdBlueRefill } from './adblue-records.ts'
 import { maybeCreateExceptionForDefect } from './defect-automation.ts'
@@ -16,12 +15,24 @@ import { applyYardEquipmentMutation } from './equipment-assets.ts'
 import { applyYardConsumableRestock } from './depot-stock.ts'
 import { apiError, json } from './http.ts'
 import { type RequestContext } from './supabase.ts'
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
 
 type Row = Record<string, unknown>
+type YardTenantTable = 'defects' | 'yard_movements' | 'vor_cases'
 
-function yardDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'yard_mutation_handlers')
+function yardTenantDb(context: RequestContext, table: YardTenantTable) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'yard_mutation_handlers_support_grant')
+  }
+  return userScopedDb(context, table)
+}
+
+function yardSideEffectsDb(context: RequestContext) {
+  return companyScopedServiceDb(context, 'yard_mutation_handlers_side_effects')
+}
+
+function yardSideEffectsDbForCompany(companyId: string) {
+  return resolveTenantDb(companyId, 'yard_mutation_handlers_side_effects')
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -42,7 +53,7 @@ async function findAuditServerId(
   action: string,
   correlationId: string,
 ): Promise<string | null> {
-  const { data } = await yardDb(companyId)
+  const { data } = await yardSideEffectsDbForCompany(companyId)
     .from('audit_events')
     .select('id')
     .eq('company_id', companyId)
@@ -66,7 +77,7 @@ async function writeYardAuditEvent(input: {
   const existing = await findAuditServerId(input.context.companyId, input.action, input.correlationId)
   if (existing) return existing
 
-  const { data, error } = await yardDb(context.companyId)
+  const { data, error } = await yardSideEffectsDb(input.context)
     .from('audit_events')
     .insert({
       company_id: input.context.companyId,
@@ -123,7 +134,7 @@ async function yardDefectCreateMutation(
   if (!vehicleId || !clientId) return apiError(400, 'vehicleId and defectId are required')
   if (!isUuid(vehicleId)) return apiError(400, 'vehicleId must be a server vehicle id')
 
-  const { data: existing } = await yardDb(context.companyId)
+  const { data: existing } = await yardTenantDb(context, 'defects')
     .from('defects')
     .select('id')
     .eq('company_id', context.companyId)
@@ -135,7 +146,7 @@ async function yardDefectCreateMutation(
   const now = new Date().toISOString()
   const defectReference = `DEF-YRD-${Date.now().toString(36).toUpperCase()}`
 
-  const { data, error } = await yardDb(context.companyId)
+  const { data, error } = await yardTenantDb(context, 'defects')
     .from('defects')
     .insert({
       company_id: context.companyId,
@@ -159,7 +170,7 @@ async function yardDefectCreateMutation(
 
   if (error) {
     if (String(error.code) === '23505') {
-      const { data: dup } = await yardDb(context.companyId)
+      const { data: dup } = await yardTenantDb(context, 'defects')
         .from('defects')
         .select('id')
         .eq('company_id', context.companyId)
@@ -197,7 +208,7 @@ async function yardDefectResolveMutation(
   const clientId = String(payload.defectId ?? '')
   if (!clientId) return apiError(400, 'defectId is required')
 
-  const { data: defect } = await yardDb(context.companyId)
+  const { data: defect } = await yardTenantDb(context, 'defects')
     .from('defects')
     .select('id, status')
     .eq('company_id', context.companyId)
@@ -205,7 +216,7 @@ async function yardDefectResolveMutation(
     .maybeSingle()
 
   if (!defect?.id && isUuid(clientId)) {
-    const { data: byId } = await yardDb(context.companyId)
+    const { data: byId } = await yardTenantDb(context, 'defects')
       .from('defects')
       .select('id, status')
       .eq('company_id', context.companyId)
@@ -233,7 +244,7 @@ async function resolveDefectRow(
   }
 
   const now = new Date().toISOString()
-  const { error } = await yardDb(context.companyId)
+  const { error } = await yardTenantDb(context, 'defects')
     .from('defects')
     .update({
       status: 'closed',
@@ -385,7 +396,7 @@ async function yardDepartureCompleteMutation(
 
   if (isUuid(vehicleId)) {
     const now = new Date().toISOString()
-    const { data: vehicle } = await yardDb(context.companyId)
+    const { data: vehicle } = await yardSideEffectsDb(context)
       .from('vehicles')
       .select('id, registration, primary_depot_id')
       .eq('company_id', context.companyId)
@@ -393,7 +404,7 @@ async function yardDepartureCompleteMutation(
       .maybeSingle()
 
     if (vehicle) {
-      await yardDb(context.companyId).from('yard_movements').insert({
+      await yardTenantDb(context, 'yard_movements').from('yard_movements').insert({
         company_id: context.companyId,
         depot_id: vehicle.primary_depot_id ?? null,
         vehicle_id: vehicleId,
@@ -411,7 +422,7 @@ async function yardDepartureCompleteMutation(
         created_at: now,
       }).catch(() => undefined)
 
-      await yardDb(context.companyId)
+      await yardSideEffectsDb(context)
         .from('vehicles')
         .update({ operational_status: 'in_service', updated_at: now })
         .eq('company_id', context.companyId)
@@ -446,7 +457,7 @@ async function yardReleaseVorMutation(
   const now = new Date().toISOString()
   const note = payload.note ? String(payload.note) : null
 
-  await yardDb(context.companyId)
+  await yardSideEffectsDb(context)
     .from('vehicles')
     .update({ operational_status: 'available', updated_at: now })
     .eq('company_id', context.companyId)
@@ -454,7 +465,7 @@ async function yardReleaseVorMutation(
 
   const caseId = payload.caseId ? String(payload.caseId) : ''
   if (caseId && isUuid(caseId)) {
-    await yardDb(context.companyId)
+    await yardTenantDb(context, 'vor_cases')
       .from('vor_cases')
       .update({
         status: 'released',
@@ -464,7 +475,7 @@ async function yardReleaseVorMutation(
       .eq('company_id', context.companyId)
       .eq('id', caseId)
   } else {
-    await yardDb(context.companyId)
+    await yardTenantDb(context, 'vor_cases')
       .from('vor_cases')
       .update({
         status: 'released',
@@ -506,7 +517,7 @@ async function yardAdBlueRefillMutation(
     if (existingAudit) return json({ ok: true, serverId: existingAudit })
   }
 
-  const { data: vehicle } = await yardDb(context.companyId)
+  const { data: vehicle } = await yardSideEffectsDb(context)
     .from('vehicles')
     .select('id, registration, primary_depot_id, fuel_type')
     .eq('company_id', context.companyId)
@@ -515,7 +526,7 @@ async function yardAdBlueRefillMutation(
   if (!vehicle) return apiError(404, 'Vehicle not found')
 
   const record = await recordAdBlueRefill({
-    companyId: context.companyId,
+    context,
     depotId: vehicle.primary_depot_id ? String(vehicle.primary_depot_id) : null,
     vehicleId,
     registration: String(vehicle.registration ?? ''),

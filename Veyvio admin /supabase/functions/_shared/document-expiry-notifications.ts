@@ -6,12 +6,12 @@
  * Not UserScopedDb / RLS cutover. Reads still use company-scoped service-role
  * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { notifyDriverAppUser } from './notifications.ts'
 import { resolveNotificationTemplate } from './notification-rules.ts'
 
 function documentExpiryDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'document_expiry_notifications')
+  return resolveTenantDb(companyId, 'document_expiry_notifications')
 }
 
 const EXPIRY_WINDOW_DAYS = 30

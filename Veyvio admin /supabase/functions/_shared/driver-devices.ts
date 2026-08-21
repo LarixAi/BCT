@@ -1,8 +1,14 @@
 /**
  * Driver trusted-device helpers — security metadata only (no biometric templates).
+ *
+ * Wave 3F UserScopedDb/RLS cutover 32: membership JWT reads/writes `driver_app_devices`
+ * through RLS (SELECT/INSERT/UPDATE). Support-grant sessions stay on company-scoped
+ * service-role. `driver_app_accounts` count sync and `audit_events` stay service-role.
+ * Distinct from FCM `driver_devices` (Type B / pushSender).
  */
+import { companyScopedServiceDb, userScopedDb } from './db-authority.ts'
 import { apiError, json, readJson } from './http.ts'
-import { admin, authenticate } from './supabase.ts'
+import { authenticate, type RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
@@ -16,6 +22,17 @@ const ALLOWED_SECURITY_EVENTS = new Set([
   'driver.device_revoked',
   'driver.password_reauthentication_required',
 ])
+
+function devicesDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'driver_devices_support_grant')
+  }
+  return userScopedDb(context, 'driver_app_devices')
+}
+
+function devicesSideEffectsDb(context: RequestContext) {
+  return companyScopedServiceDb(context, 'driver_devices_side_effects')
+}
 
 export function mapDriverDeviceRow(row: Row) {
   return {
@@ -42,8 +59,8 @@ export function mapDriverDeviceRow(row: Row) {
   }
 }
 
-async function resolveDriverApp(context: { companyId: string; user: { id: string } }) {
-  const { data: appAccount, error } = await admin
+async function resolveDriverApp(context: RequestContext) {
+  const { data: appAccount, error } = await devicesSideEffectsDb(context)
     .from('driver_app_accounts')
     .select('id, driver_id, company_id, account_status')
     .eq('company_id', context.companyId)
@@ -57,8 +74,7 @@ async function resolveDriverApp(context: { companyId: string; user: { id: string
 }
 
 async function auditDriverDevice(
-  companyId: string,
-  actorId: string,
+  context: RequestContext,
   action: string,
   driverId: string,
   before: Row | null,
@@ -66,10 +82,10 @@ async function auditDriverDevice(
   reason?: string | null,
   opts?: { sourceApp?: string; deviceId?: string | null },
 ) {
-  await admin.from('audit_events').insert({
-    company_id: companyId,
+  await devicesSideEffectsDb(context).from('audit_events').insert({
+    company_id: context.companyId,
     actor_type: 'user',
-    actor_id: actorId,
+    actor_id: context.user.id,
     action,
     entity_type: 'driver',
     entity_id: driverId,
@@ -96,8 +112,9 @@ export async function upsertDriverDevice(request: Request) {
   const now = new Date().toISOString()
   const driverId = String(appAccount.driver_id)
   const companyId = String(appAccount.company_id)
+  const db = devicesDb(context)
 
-  const { data: existing } = await admin
+  const { data: existing } = await db
     .from('driver_app_devices')
     .select('*')
     .eq('company_id', companyId)
@@ -149,16 +166,17 @@ export async function upsertDriverDevice(request: Request) {
 
   let row: Row | null = existing
   if (existing) {
-    const { data, error } = await admin
+    const { data, error } = await db
       .from('driver_app_devices')
       .update(patch)
+      .eq('company_id', companyId)
       .eq('id', existing.id)
       .select('*')
       .single()
     if (error) return apiError(500, error.message)
     row = data
   } else {
-    const { data, error } = await admin
+    const { data, error } = await db
       .from('driver_app_devices')
       .insert({
         company_id: companyId,
@@ -174,14 +192,15 @@ export async function upsertDriverDevice(request: Request) {
     row = data
   }
 
-  const { count } = await admin
+  const sideEffects = devicesSideEffectsDb(context)
+  const { count } = await sideEffects
     .from('driver_app_devices')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
     .eq('driver_id', driverId)
     .neq('security_status', 'revoked')
 
-  await admin
+  await sideEffects
     .from('driver_app_accounts')
     .update({
       registered_device_count: count ?? 0,
@@ -205,7 +224,7 @@ export async function getDriverDeviceStatus(request: Request) {
   const deviceKey = String(url.searchParams.get('deviceKey') ?? '').trim()
   if (!deviceKey) return apiError(400, 'deviceKey is required')
 
-  const { data, error } = await admin
+  const { data, error } = await devicesDb(context)
     .from('driver_app_devices')
     .select('*')
     .eq('company_id', context.companyId)
@@ -260,8 +279,9 @@ export async function postDriverSecurityEvent(request: Request) {
 
   const deviceKey = input.deviceKey ? String(input.deviceKey).trim() : null
   let deviceRow: Row | null = null
+  const db = devicesDb(context)
   if (deviceKey) {
-    const { data } = await admin
+    const { data } = await db
       .from('driver_app_devices')
       .select('id, security_status, biometric_unlock, last_biometric_unlock_at')
       .eq('company_id', context.companyId)
@@ -272,16 +292,16 @@ export async function postDriverSecurityEvent(request: Request) {
 
     if (action === 'driver.biometric_unlock_succeeded' && data && String(data.security_status) !== 'revoked') {
       const now = new Date().toISOString()
-      await admin
+      await db
         .from('driver_app_devices')
         .update({ last_biometric_unlock_at: now, last_seen_at: now, updated_at: now })
+        .eq('company_id', context.companyId)
         .eq('id', data.id)
     }
   }
 
   await auditDriverDevice(
-    context.companyId,
-    context.user.id,
+    context,
     action,
     String(appAccount.driver_id),
     null,
@@ -308,7 +328,8 @@ export async function revokeDriverDevice(
   const reason = String(input.reason ?? '').trim()
   if (!reason) return apiError(400, 'A reason is required to revoke a device.')
 
-  const { data: device, error } = await admin
+  const db = devicesDb(context)
+  const { data: device, error } = await db
     .from('driver_app_devices')
     .select('*')
     .eq('company_id', context.companyId)
@@ -319,7 +340,7 @@ export async function revokeDriverDevice(
   if (!device) return apiError(404, 'Device not found')
 
   const now = new Date().toISOString()
-  const { error: updateError } = await admin
+  const { error: updateError } = await db
     .from('driver_app_devices')
     .update({
       security_status: 'revoked',
@@ -330,17 +351,19 @@ export async function revokeDriverDevice(
       revoke_reason: reason,
       updated_at: now,
     })
+    .eq('company_id', context.companyId)
     .eq('id', deviceId)
   if (updateError) return apiError(500, updateError.message)
 
-  const { count } = await admin
+  const sideEffects = devicesSideEffectsDb(context)
+  const { count } = await sideEffects
     .from('driver_app_devices')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', context.companyId)
     .eq('driver_id', driverId)
     .neq('security_status', 'revoked')
 
-  await admin
+  await sideEffects
     .from('driver_app_accounts')
     .update({
       registered_device_count: count ?? 0,
@@ -352,8 +375,7 @@ export async function revokeDriverDevice(
     .eq('driver_id', driverId)
 
   await auditDriverDevice(
-    context.companyId,
-    context.user.id,
+    context,
     'driver.device_revoked',
     driverId,
     {
@@ -372,8 +394,7 @@ export async function revokeDriverDevice(
   )
 
   await auditDriverDevice(
-    context.companyId,
-    context.user.id,
+    context,
     'driver.password_reauthentication_required',
     driverId,
     null,

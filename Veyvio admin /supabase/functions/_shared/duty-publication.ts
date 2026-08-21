@@ -1,10 +1,15 @@
 /**
  * Duty publication first slice — draft/assign/publish/acknowledge.
  * Publication status is separate from execution duty_status.
+ *
+ * Wave 3F UserScopedDb/RLS: membership JWT writes duties / duty_runs / run_trips /
+ * duty_acknowledgements / duty_assignment_events through RLS. Support-grant and
+ * companyId-only lookups use company-scoped service-role. Driver/vehicle/passenger
+ * lookups stay side effects. duty_runs DELETE (republish replace) stays service-role.
  */
-import { admin } from './supabase.ts'
-import { apiError, json, readJson, toApiErrorResponse } from './http.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import type { RequestContext } from './supabase.ts'
+import { apiError, json, readJson, toApiErrorResponse } from './http.ts'
 import {
   appendVehicleReadinessGates,
   finalizeEligibilityResult,
@@ -25,9 +30,29 @@ import {
 import { assertRunIdsInCompany } from './tenant-db.ts'
 import { notifyDriverDutyPublished } from './driver-ops-notifications.ts'
 
+function opsTableDb(
+  table: string,
+  input: { companyId: string; context?: RequestContext },
+) {
+  return resolveTenantDb(input.companyId, table, input.context)
+}
+
+function opsSideEffectsDb(companyId: string) {
+  return resolveTenantDb(companyId, 'duty_publication_side_effects')
+}
+
+
 type Row = Record<string, unknown>
 
 export type { EligibilityResult }
+
+function dutyAckDb(context: RequestContext) {
+  return resolveTenantDb(context.companyId, 'duty_acknowledgements', context)
+}
+
+function dutyAssignmentEventsDb(input: { companyId: string; context?: RequestContext }) {
+  return resolveTenantDb(input.companyId, 'duty_assignment_events', input.context)
+}
 
 function endOfServiceDayUtc(serviceDate: string): string {
   // Acknowledgement deadline: end of calendar day (UTC) before service date starts locally —
@@ -43,8 +68,9 @@ export async function recordDutyAssignmentEvent(input: {
   actorDriverId?: string | null
   payload?: Row
   sourceApp?: string
+  context?: RequestContext
 }) {
-  await admin.from('duty_assignment_events').insert({
+  await dutyAssignmentEventsDb(input).from('duty_assignment_events').insert({
     company_id: input.companyId,
     duty_id: input.dutyId,
     event_type: input.eventType,
@@ -67,7 +93,7 @@ export async function evaluateDutyAssignmentEligibility(input: {
   const blockers: string[] = []
   const warnings: string[] = []
 
-  const { data: driver } = await admin
+  const { data: driver } = await opsSideEffectsDb(input.companyId)
     .from('drivers')
     .select('id, status, company_id')
     .eq('id', input.driverId)
@@ -80,7 +106,7 @@ export async function evaluateDutyAssignmentEligibility(input: {
     blockers.push('Driver is not available for duty assignment.')
   }
 
-  const { data: appAccount } = await admin
+  const { data: appAccount } = await opsSideEffectsDb(input.companyId)
     .from('driver_app_accounts')
     .select('account_status')
     .eq('company_id', input.companyId)
@@ -98,7 +124,7 @@ export async function evaluateDutyAssignmentEligibility(input: {
     blockers.push('Driver app access is suspended or removed.')
   }
 
-  let conflictQuery = admin
+  let conflictQuery = opsTableDb('duties', { companyId: input.companyId })
     .from('duties')
     .select('id, planned_sign_on_at, planned_sign_off_at, publication_status, status')
     .eq('company_id', input.companyId)
@@ -115,7 +141,7 @@ export async function evaluateDutyAssignmentEligibility(input: {
   }
 
   if (input.vehicleId) {
-    const { data: vehicle } = await admin
+    const { data: vehicle } = await opsSideEffectsDb(input.companyId)
       .from('vehicles')
       .select('id, operational_status, registration')
       .eq('id', input.vehicleId)
@@ -233,7 +259,7 @@ export async function createDraftDuty(context: RequestContext, request: Request)
       ? 'ready_to_publish'
       : 'draft'
 
-  const { data: duty, error } = await admin
+  const { data: duty, error } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .insert({
       company_id: context.companyId,
@@ -265,7 +291,7 @@ export async function createDraftDuty(context: RequestContext, request: Request)
     } catch {
       return apiError(404, 'One or more runs were not found in this company', 'not_found')
     }
-    await admin.from('duty_runs').insert(
+    await opsTableDb('duty_runs', { companyId: context.companyId, context }).from('duty_runs').insert(
       runIds.map((runId, index) => ({
         duty_id: duty.id,
         run_id: runId,
@@ -275,6 +301,7 @@ export async function createDraftDuty(context: RequestContext, request: Request)
   }
 
   await recordDutyAssignmentEvent({
+    context,
     companyId: context.companyId,
     dutyId: String(duty.id),
     eventType: 'assigned',
@@ -309,7 +336,7 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
     overrideReason?: string | null
   }>(request)
 
-  const { data: existing, error: loadError } = await admin
+  const { data: existing, error: loadError } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .select('*')
     .eq('id', dutyId)
@@ -332,7 +359,7 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
   }
 
   if (onlyStatusUpdate) {
-    const { data: updated, error } = await admin
+    const { data: updated, error } = await opsTableDb('duties', { companyId: context.companyId, context })
       .from('duties')
       .update({
         status: mapExecutionStatus(input.status, String(existing.status)),
@@ -404,7 +431,7 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
   const publicationStatus =
     driverId && vehicleId && plannedSignOn && plannedSignOff ? 'ready_to_publish' : 'draft'
 
-  const { data: updated, error } = await admin
+  const { data: updated, error } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .update({
       driver_id: driverId,
@@ -427,14 +454,14 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
   if (error || !updated) return apiError(500, error?.message ?? 'Duty could not be assigned')
 
   if (Array.isArray(input.runIds)) {
-    await admin.from('duty_runs').delete().eq('duty_id', dutyId)
+    await opsSideEffectsDb(context.companyId).from('duty_runs').delete().eq('duty_id', dutyId)
     if (input.runIds.length) {
       try {
         await assertRunIdsInCompany(context, input.runIds.filter(Boolean))
       } catch {
         return apiError(404, 'One or more runs were not found in this company', 'not_found')
       }
-      await admin.from('duty_runs').insert(
+      await opsTableDb('duty_runs', { companyId: context.companyId, context }).from('duty_runs').insert(
         input.runIds.map((runId, index) => ({
           duty_id: dutyId,
           run_id: runId,
@@ -445,6 +472,7 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
   }
 
   await recordDutyAssignmentEvent({
+    context,
     companyId: context.companyId,
     dutyId,
     eventType: 'assigned',
@@ -465,7 +493,7 @@ export async function assignDuty(context: RequestContext, dutyId: string, reques
 }
 
 export async function publishDuty(context: RequestContext, dutyId: string) {
-  const { data: existing, error: loadError } = await admin
+  const { data: existing, error: loadError } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .select('*')
     .eq('id', dutyId)
@@ -502,7 +530,7 @@ export async function publishDuty(context: RequestContext, dutyId: string) {
   const deadline =
     existing.acknowledgement_deadline ?? endOfServiceDayUtc(String(existing.service_date))
 
-  const { data: updated, error } = await admin
+  const { data: updated, error } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .update({
       publication_status: 'published',
@@ -522,6 +550,7 @@ export async function publishDuty(context: RequestContext, dutyId: string) {
   if (error || !updated) return apiError(500, error?.message ?? 'Duty could not be published')
 
   await recordDutyAssignmentEvent({
+    context,
     companyId: context.companyId,
     dutyId,
     eventType: 'published',
@@ -534,6 +563,7 @@ export async function publishDuty(context: RequestContext, dutyId: string) {
   })
 
   await recordDutyAssignmentEvent({
+    context,
     companyId: context.companyId,
     dutyId,
     eventType: 'notification_pending',
@@ -543,7 +573,7 @@ export async function publishDuty(context: RequestContext, dutyId: string) {
 
   let vehicleRegistration: string | null = null
   if (existing.vehicle_id) {
-    const { data: vehicle } = await admin
+    const { data: vehicle } = await opsSideEffectsDb(context.companyId)
       .from('vehicles')
       .select('registration')
       .eq('company_id', context.companyId)
@@ -575,7 +605,7 @@ export async function acknowledgePublishedDuty(
   driverId: string,
   deviceId?: string | null,
 ) {
-  const { data: existing, error: loadError } = await admin
+  const { data: existing, error: loadError } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .select('*')
     .eq('id', dutyId)
@@ -605,7 +635,7 @@ export async function acknowledgePublishedDuty(
   // Update lifecycle first. `duties.version` auto-increments on UPDATE, so the
   // acknowledgement revision must be written against the post-update version
   // or sign-on will look for revision N+1 and miss the row stored at N.
-  const { data: updated, error } = await admin
+  const { data: updated, error } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .update({
       driver_lifecycle_status: 'acknowledged',
@@ -620,7 +650,7 @@ export async function acknowledgePublishedDuty(
 
   const revision = Number(updated.version ?? existing.version ?? 1)
 
-  const { error: ackError } = await admin.from('duty_acknowledgements').upsert(
+  const { error: ackError } = await dutyAckDb(context).from('duty_acknowledgements').upsert(
     {
       company_id: context.companyId,
       duty_id: dutyId,
@@ -636,6 +666,7 @@ export async function acknowledgePublishedDuty(
   if (ackError) return apiError(500, ackError.message)
 
   await recordDutyAssignmentEvent({
+    context,
     companyId: context.companyId,
     dutyId,
     eventType: 'acknowledged',
@@ -661,7 +692,7 @@ export async function signOnPublishedDuty(
   driverId: string,
   deviceId?: string | null,
 ) {
-  const { data: existing, error: loadError } = await admin
+  const { data: existing, error: loadError } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .select('*')
     .eq('id', dutyId)
@@ -690,7 +721,7 @@ export async function signOnPublishedDuty(
   const revision = Number(existing.version ?? 1)
   let acknowledged = false
   if (existing.acknowledgement_required !== false) {
-    const { data: ackRow } = await admin
+    const { data: ackRow } = await dutyAckDb(context)
       .from('duty_acknowledgements')
       .select('id')
       .eq('company_id', context.companyId)
@@ -726,7 +757,7 @@ export async function signOnPublishedDuty(
   }
 
   const signedOnAt = new Date().toISOString()
-  const { data: updated, error } = await admin
+  const { data: updated, error } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .update({
       actual_sign_on_at: signedOnAt,
@@ -743,6 +774,7 @@ export async function signOnPublishedDuty(
   if (error || !updated) return apiError(500, error?.message ?? 'Sign-on could not be saved')
 
   await recordDutyAssignmentEvent({
+    context,
     companyId: context.companyId,
     dutyId,
     eventType: 'signed_on',
@@ -767,7 +799,7 @@ export async function signOffPublishedDuty(
   driverId: string,
   deviceId?: string | null,
 ) {
-  const { data: existing, error: loadError } = await admin
+  const { data: existing, error: loadError } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .select('*')
     .eq('id', dutyId)
@@ -800,7 +832,7 @@ export async function signOffPublishedDuty(
   }
 
   const signedOffAt = new Date().toISOString()
-  const { data: updated, error } = await admin
+  const { data: updated, error } = await opsTableDb('duties', { companyId: context.companyId, context })
     .from('duties')
     .update({
       actual_sign_off_at: signedOffAt,
@@ -817,6 +849,7 @@ export async function signOffPublishedDuty(
   if (error || !updated) return apiError(500, error?.message ?? 'Sign-off could not be saved')
 
   await recordDutyAssignmentEvent({
+    context,
     companyId: context.companyId,
     dutyId,
     eventType: 'signed_off',
@@ -959,7 +992,7 @@ export async function projectPublishedDutiesForDriver(input: {
   depotId: string
 }): Promise<Row[]> {
   const today = new Date().toISOString().slice(0, 10)
-  const { data: duties, error } = await admin
+  const { data: duties, error } = await opsTableDb('duties', { companyId: input.companyId })
     .from('duties')
     .select(
       '*, depots(id, name, code), vehicles(id, registration, fleet_number, make, model, seat_capacity, wheelchair_capacity, fuel_type, operational_status)',
@@ -974,7 +1007,7 @@ export async function projectPublishedDutiesForDriver(input: {
   if (!duties?.length) return []
 
   const dutyIds = duties.map((d) => String(d.id))
-  const { data: dutyRuns } = await admin
+  const { data: dutyRuns } = await opsTableDb('duty_runs', { companyId: input.companyId })
     .from('duty_runs')
     .select(
       'duty_id, sequence, runs(id, run_reference, planned_start_at, planned_end_at, status, vehicle_id)',
@@ -996,7 +1029,7 @@ export async function projectPublishedDutiesForDriver(input: {
   const tripsByRun = new Map<string, Row[]>()
   const passengerIds = new Set<string>()
   if (runIds.length) {
-    const { data: runTrips } = await admin
+    const { data: runTrips } = await opsTableDb('run_trips', { companyId: input.companyId })
       .from('run_trips')
       .select(
         'run_id, sequence, trips(id, trip_reference, planned_pickup_at, planned_arrival_at, pickup_location, destination_location, passenger_ids, status)',
@@ -1019,7 +1052,7 @@ export async function projectPublishedDutiesForDriver(input: {
 
   const passengerNames = new Map<string, string>()
   if (passengerIds.size) {
-    const { data: passengers } = await admin
+    const { data: passengers } = await opsSideEffectsDb(input.companyId)
       .from('passengers')
       .select('id, first_name, last_name, preferred_name')
       .eq('company_id', input.companyId)
