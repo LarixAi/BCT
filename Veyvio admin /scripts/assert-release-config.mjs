@@ -3,6 +3,8 @@
  * Admin (Command) fail-closed production artifact check (PR-06).
  *
  *   node scripts/assert-release-config.mjs --dist dist --expected-supabase-host proj.supabase.co
+ *   node scripts/assert-release-config.mjs --dist dist --forbid-only
+ *     # BFF-relative Admin builds: reject demo/local patterns without requiring host embedding
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -14,6 +16,7 @@ function argValue(flag) {
   return process.argv[idx + 1]
 }
 
+const forbidOnly = process.argv.includes('--forbid-only')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const distDir = argValue('--dist') || join(root, 'dist')
 const expectedHost = (argValue('--expected-supabase-host') || process.env.EXPECTED_SUPABASE_HOST || '')
@@ -21,8 +24,10 @@ const expectedHost = (argValue('--expected-supabase-host') || process.env.EXPECT
   .replace(/\/.*$/, '')
   .trim()
 
-if (!expectedHost) {
-  console.error('assert-release-config: --expected-supabase-host or EXPECTED_SUPABASE_HOST is required')
+if (!forbidOnly && !expectedHost) {
+  console.error(
+    'assert-release-config: --expected-supabase-host, EXPECTED_SUPABASE_HOST, or --forbid-only is required',
+  )
   process.exit(1)
 }
 
@@ -61,12 +66,16 @@ for (const file of files) {
       process.exit(1)
     }
   }
-  if (source.includes(expectedHost)) foundExpected = true
+  if (expectedHost && source.includes(expectedHost)) foundExpected = true
 }
 
-if (!foundExpected) {
+if (!forbidOnly && !foundExpected) {
   console.error(`assert-release-config: expected Supabase host "${expectedHost}" was not found in ${distDir}`)
   process.exit(1)
 }
 
-console.log(`assert-release-config: ok (host=${expectedHost}, files=${files.length})`)
+console.log(
+  forbidOnly
+    ? `assert-release-config: ok (forbid-only, files=${files.length})`
+    : `assert-release-config: ok (host=${expectedHost}, files=${files.length})`,
+)

@@ -291,7 +291,7 @@ v2.0 expands the rule set from 17 to **35**. F-01–F-17 retain v1.0 implementat
 | TD-020 | Admin mock-client static import in live entry | F-03 | Bundle / misconfig blast radius | 🟠 | Exec Gate 0–3 | Partial — dynamic import when `VITE_MOCK_API=true` |
 | TD-021 | Cost Control bank implicit `demo_live` | F-03 | Finance demo mistaken for live | 🟠 | Exec Gate 4 | Done (code) — prod requires explicit mode |
 | TD-022 | Stale Driver “transport mock-only” docs | F-03 | Gate review false signal | 🟡 | Exec Gate 4 | Done (docs) |
-| TD-023 | Scanner / absence-test blind spots | F-03, F-17 | False PASS on F-03 | 🔴 | Exec Gate 3 | Partial — scanners + CI inventory; bootstrap types live under `platform/yard/bootstrap-payload`; eslint bans `@/data/mocks/bootstrap` in prod; tenancy mock route imports still open |
+| TD-023 | Scanner / absence-test blind spots | F-03, F-17 | False PASS on F-03 | 🔴 | Exec Gate 3 | Closed for Yard API entry — `getYardApi` dynamic-imports mock only when `VITE_USE_MOCK_API=true`; server bootstrap stub dynamic-imports; f03-gate0 + eslint lock static mock imports |
 | TD-024 | Implicit Yard mock-auth when Command env missing | F-03 | Accidental mock login | 🔴 | Exec Gate 0 | Done (code) — prod never silent mock |
 | TD-025 | Website CRM/email stub returns success | F-03 (sales) | Lost waiting-list evidence | 🟠 | Exec Gate 4 | Done (code) — persist-first (KV/notify); production fails closed without persist; crmSynced/emailDelivered honest |
 | TD-026 | Shared BCT layout auto-substitution | F-03 | Fake depot geometry | 🟠 | Exec Gate 4 | Done (code) — map/hub no BCT fallback |

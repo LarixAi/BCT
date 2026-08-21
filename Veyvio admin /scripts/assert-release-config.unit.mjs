@@ -3,7 +3,7 @@
  * Unit checks for Admin assert-release-config.mjs
  * Run: node scripts/assert-release-config.unit.mjs
  */
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -33,6 +33,20 @@ if (fail.status === 0) {
   process.exit(1)
 }
 
+const forbidOnly = mkdtempSync(join(tmpdir(), 'veyvio-admin-assert-forbid-'))
+writeFileSync(join(forbidOnly, 'app.js'), 'const api = "/api/command";')
+const fo = spawnSync(
+  process.execPath,
+  [script, '--dist', forbidOnly, '--forbid-only'],
+  { encoding: 'utf8' },
+)
+if (fo.status !== 0) {
+  console.error('forbid-only clean build should pass', fo.stdout, fo.stderr)
+  process.exit(1)
+}
+
 rmSync(good, { recursive: true, force: true })
 rmSync(bad, { recursive: true, force: true })
+rmSync(forbidOnly, { recursive: true, force: true })
 console.log('assert-release-config.unit.mjs: ok')
+

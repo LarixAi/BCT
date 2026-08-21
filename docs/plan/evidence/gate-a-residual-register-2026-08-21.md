@@ -21,7 +21,10 @@
 | iOS release chain scaffolding | keychain import + xcodebuild archive path in IPA workflow |
 | Platform health CI | `Platform health + continuity (PROD-8)` job |
 | Backup/PITR **status probe** | `test:backup-pitr-status` |
-| **One release SHA on `main`** | **`b71c9f6`** (PR #2); tip includes PR #23–#57 |
+| F-03 Yard mock graph quarantine | dynamic `mock-yard-api` + bootstrap stub; f03-gate0 + eslint |
+| Admin CI release assert | `--forbid-only` on CI build artifact |
+| CI-CANCEL-001 mitigation | TI skipped on non-main branch push (PR covers it) |
+| **One release SHA on `main`** | **`b71c9f6`** (PR #2); tip includes PR #23–#58 |
 
 ## Open (true non-code / secrets)
 

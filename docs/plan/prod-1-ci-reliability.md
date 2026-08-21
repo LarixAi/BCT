@@ -144,9 +144,9 @@ Required security gates must not depend on GitHub resolving a floating CLI tag a
 | Contrast | Fresh-DB and storage isolation on the same attempt **passed** |
 | Retry | Attempt 2 on the **same** SHA after the queue cleared: tenant-isolation **PASS** in 8m14s |
 
-Merging to `phase0/reproducibility` still fires **both** a `push` CI run and the phase0→main pull_request CI run. Both jobs use `tenant-isolation-hosted-smoke`. GitHub cancels a **previously pending** job in that group even when `cancel-in-progress: false` (that flag only protects the in-progress job).
+Merging to `phase0/reproducibility` historically fired **both** a `push` CI run and the phase0→main pull_request CI run. Both jobs used `tenant-isolation-hosted-smoke`. GitHub cancels a **previously pending** job in that group even when `cancel-in-progress: false` (that flag only protects the in-progress job).
 
-**Mitigation (current):** keep `cancel-in-progress: false` on the global TI group; treat cancelled jobs as “gate not satisfied — requeue”, never as TI-401. Top-level workflow concurrency (`ci-${{ github.workflow }}-${{ github.ref }}`, `cancel-in-progress: true`) may still cancel a *superseded* run on the same ref (new push to the same PR) — intentional.
+**Mitigation (current):** `tenant-isolation` runs only on `pull_request`, `workflow_dispatch`, and `push` to `main` — not on push to `phase0`/`wave3f` feature branches (PR already covers those). Keep `cancel-in-progress: false` on the global TI group; treat cancelled jobs as “gate not satisfied — requeue”, never as TI-401. Top-level workflow concurrency may still cancel a *superseded* run on the same ref (new push to the same PR) — intentional.
 
 **Required outcome:** gate not satisfied; rerun under a clear queue. Do not invent a 401 incident from a cancellation. Do not add smoke-level retries. Do not weaken `200`/`403` assertions.
 
