@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-08-21T07:28:00Z",
+  "gate": "Gate A",
+  "release_sha_main": "b71c9f6b269293fb1c4a21a049a70948bbbf2d23",
+  "gate_a_tip": "a755b5dc19c1ad071b591dd64a35fbea6a56d182",
+  "prs": {
+    "gate_a_engineering": 21,
+    "phase0_to_main": 2
+  },
+  "status": "RELEASE_SHA_ON_MAIN"
+}

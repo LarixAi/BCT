@@ -13,13 +13,14 @@
 | Driver production build | verify:production-build PASS |
 | Driver pilot API smoke | gate1:pilot-smoke 13/13 |
 | Driver device-exit API | gate1-device-exit-api **10/10** |
-| Driver release AAB fail-closed | assert-release-config + AAB workflow production env |
+| Driver release AAB fail-closed | assert-release-config + AAB workflow |
+| **One release SHA on `main`** | **`b71c9f6`** (merge of PR #2); includes Gate A tip `a755b5d` (PR #21) |
 
 ## Open (true non-code)
 
 | Item | Owner | Notes |
 |------|-------|-------|
-| Release SHA on production authority branch | Release | PR from `prod1/gate-a-engineering-close` → `phase0/reproducibility` then promote to `main` |
-| PITR dashboard confirmation | Ops | Screenshot residual |
-| Physical handset (airplane / native push) | Mobile | No adb device in this environment; API path closed |
+| PITR dashboard confirmation | Ops | Screenshot residual — see `docs/deploy/command-rollback-continuity.md` |
+| Physical handset (airplane / native push) | Mobile | No adb device; API path closed — `docs/plan/gate1-pilot-exit-test.md` |
 
+**Verdict:** Gate A engineering + release SHA on `main` are closed. Remaining are owner dashboard + physical device only.
