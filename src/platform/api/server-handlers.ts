@@ -1,4 +1,3 @@
-import { buildBootstrapPayload } from "@/data/mocks/bootstrap";
 import type { YardRole } from "@/types/permissions";
 import type { OutboxMutation } from "@/types/sync";
 
@@ -27,7 +26,7 @@ export function handleHealthRequest(): Response {
   );
 }
 
-export function handleBootstrapRequest(request: Request): Response {
+export async function handleBootstrapRequest(request: Request): Promise<Response> {
   if (import.meta.env.PROD) {
     return Response.json(
       {
@@ -39,6 +38,7 @@ export function handleBootstrapRequest(request: Request): Response {
     );
   }
 
+  const { buildBootstrapPayload } = await import("@/data/mocks/bootstrap");
   const url = new URL(request.url);
   const companyId = url.searchParams.get("companyId") ?? "co_demo";
   const depotId = url.searchParams.get("depotId") ?? "depot_b3";

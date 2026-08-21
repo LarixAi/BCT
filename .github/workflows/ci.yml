@@ -128,6 +128,11 @@ jobs:
           cd "Veyvio admin "
           npm run build
 
+      - name: Assert release config (forbid-only)
+        run: |
+          cd "Veyvio admin "
+          node scripts/assert-release-config.mjs --dist dist --forbid-only
+
   admin-fresh-db:
     name: Admin fresh-DB gate (FIX-P1-048)
     runs-on: ubuntu-latest
@@ -307,6 +312,12 @@ jobs:
     name: Tenant isolation + dispatch gates
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # CI-CANCEL-001: skip push on feature branches (phase0/wave3f) — PR workflow already runs TI.
+    # Keep push on main, all pull_request, and workflow_dispatch.
+    if: >
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     # Hosted Org A/B fixtures are shared across PRs (TI-401). One global queue —
     # never cancel-in-progress (CI-CANCEL-001). Top-level workflow concurrency may
     # still cancel superseded runs on the *same* ref; that is intentional.
@@ -361,6 +372,10 @@ jobs:
     name: Platform health + continuity (PROD-8)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: >
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     concurrency:
       group: platform-health-hosted-probe
       cancel-in-progress: false

@@ -53,6 +53,16 @@ export default tseslint.config(
               message:
                 "F-03: mock tenancy is for mock-auth / DEV bypass only. Live routes must use Command depot lists or dynamic import under isMockAuth.",
             },
+            {
+              name: "@/platform/api/mock-yard-api",
+              message:
+                "F-03: do not statically import mock-yard-api. Use getYardApi() (loads mock only when VITE_USE_MOCK_API=true).",
+            },
+            {
+              name: "./mock-yard-api",
+              message:
+                "F-03: do not statically import ./mock-yard-api. Use await import() under VITE_USE_MOCK_API.",
+            },
           ],
         },
       ],
@@ -72,8 +82,8 @@ export default tseslint.config(
     files: [
       "src/data/mocks/**/*.{ts,tsx}",
       "src/platform/api/mock-*.ts",
+      "src/platform/api/index.ts",
       "src/platform/auth/auth-api.mock.ts",
-      "src/platform/api/server-handlers.ts",
       "src/platform/yard/dev-bypass-bootstrap.ts",
       "src/**/*.{test,spec}.{ts,tsx}",
     ],

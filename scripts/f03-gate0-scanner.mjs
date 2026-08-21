@@ -109,6 +109,16 @@ const checks = [
     must: [/Purchasing is not filled with demo spend/],
   },
   {
+    file: 'src/platform/api/index.ts',
+    mustNot: [/from\s*['"]\.\/mock-yard-api['"]/, /import\s*\{[^}]*mockYardApi/],
+    must: [/await import\(['"]\.\/mock-yard-api['"]\)/, /VITE_USE_MOCK_API/],
+  },
+  {
+    file: 'src/platform/api/server-handlers.ts',
+    mustNot: [/from\s*['"]@\/data\/mocks\/bootstrap['"]/],
+    must: [/await import\(['"]@\/data\/mocks\/bootstrap['"]\)/],
+  },
+  {
     file: 'src/platform/yard/hydrate-yard-store.ts',
     mustNot: [/@\/data\/mocks\/bootstrap/],
     must: [/normalizeLiveBootstrapPayload/, /@\/platform\/yard\/bootstrap-payload/],
