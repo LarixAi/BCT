@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-21T08:19:36.368Z",
+  "generated_at": "2026-08-21T10:04:53.268Z",
   "drill": "platform-health-probe",
   "command_api": {
     "url": "https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api/health",

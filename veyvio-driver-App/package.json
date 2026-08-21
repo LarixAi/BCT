@@ -15,7 +15,7 @@
     "android:run": "npm run build:android && npm run android:apk && npm run android:install && npm run android:launch",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
-    "test": "vitest run && node scripts/job-execution-bridge.unit.mjs && node scripts/assert-release-config.unit.mjs && node scripts/assert-ios-release-ready.mjs",
+    "test": "vitest run && node scripts/job-execution-bridge.unit.mjs && node scripts/assert-release-config.unit.mjs && node scripts/assert-ios-release-ready.mjs && node scripts/assert-ios-release-ready.unit.mjs && node scripts/record-release-provenance.unit.mjs",
     "security:audit": "node ../scripts/audit-dependencies.mjs --cwd .",
     "test:watch": "vitest",
     "test:e2e": "vitest run e2e.test",

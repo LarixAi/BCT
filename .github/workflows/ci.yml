@@ -307,8 +307,9 @@ jobs:
     name: Tenant isolation + dispatch gates
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Hosted Org A/B fixtures are shared. Per-ref workflow concurrency still lets
-    # distinct PRs login the same users in parallel (TI-401). Queue, do not cancel.
+    # Hosted Org A/B fixtures are shared across PRs (TI-401). One global queue —
+    # never cancel-in-progress (CI-CANCEL-001). Top-level workflow concurrency may
+    # still cancel superseded runs on the *same* ref; that is intentional.
     concurrency:
       group: tenant-isolation-hosted-smoke
       cancel-in-progress: false
@@ -355,6 +356,63 @@ jobs:
           fi
           npm run test:tenant-isolation
           npm run test:dispatch-gates-live
+
+  platform-health:
+    name: Platform health + continuity (PROD-8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: platform-health-hosted-probe
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ format('{0} /package-lock.json', 'Veyvio admin') }}
+
+      - name: Install Admin deps
+        run: |
+          cd "Veyvio admin "
+          npm ci
+
+      - name: Platform health + continuity drills
+        env:
+          CI: "true"
+          VEYVIO_ANON_KEY: ${{ secrets.VEYVIO_ANON_KEY }}
+          VEYVIO_API_URL: ${{ secrets.VEYVIO_API_URL }}
+          VEYVIO_SUPABASE_URL: ${{ secrets.VEYVIO_SUPABASE_URL }}
+          VEYVIO_PLATFORM_EMAIL: ${{ secrets.VEYVIO_PLATFORM_EMAIL }}
+          VEYVIO_PLATFORM_PASSWORD: ${{ secrets.VEYVIO_PLATFORM_PASSWORD }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          cd "Veyvio admin "
+          if [ -z "${VEYVIO_ANON_KEY}" ]; then
+            if [ "${IS_FORK_PR}" = "true" ]; then
+              echo "::warning::Skipping platform-health on fork PR (no secrets)."
+              exit 0
+            fi
+            echo "::error::VEYVIO_ANON_KEY required for platform-health on trusted triggers."
+            exit 1
+          fi
+          npm run test:platform-health
+          npm run test:command-continuity-drill
+
+      - name: Upload platform health evidence
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: gate-a-platform-health
+          path: |
+            docs/plan/evidence/gate-a-platform-health.json
+            docs/plan/evidence/gate-a-command-continuity-drill.json
+            docs/plan/evidence/gate-a-backup-pitr-status.json
+          if-no-files-found: warn
 
   website:
     name: Website
