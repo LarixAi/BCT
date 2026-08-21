@@ -8,7 +8,7 @@
  * Exception creation stays on raiseOperationalException (operational-exceptions
  * remains a transitional importer until its own batch).
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { raiseOperationalException } from './operational-exceptions.ts'
 import {
   defectCreatesOperationalException,
@@ -22,7 +22,7 @@ export {
 } from './defect-automation.mapping.ts'
 
 function defectAutomationDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'defect_automation')
+  return resolveTenantDb(companyId, 'defect_automation')
 }
 
 /** F-18: critical defects create one durable Command exception case (idempotent). */

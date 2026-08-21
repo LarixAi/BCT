@@ -1,5 +1,11 @@
-/** Driver activation requirements — request, resend, assign, waive, history. */
-import { admin, authenticate } from './supabase.ts'
+/** Driver activation requirements — request, resend, assign, waive, history.
+ *
+ * Wave 3F UserScopedDb/RLS cutovers 46–47: membership JWT writes
+ * `driver_requirements` and `driver_requirement_requests` through RLS.
+ * Drivers / documents stay service-role side effects.
+ */
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
+import { authenticate, type RequestContext } from './supabase.ts'
 import { apiError, json, readJson } from './http.ts'
 import {
   DRIVER_ONBOARDING_NOTIFICATION,
@@ -11,6 +17,23 @@ import {
   notifyDriverTrainingAssigned,
   TRAINING_COURSE_META,
 } from './driver-training-centre.ts'
+
+function reqTableDb(
+  table: string,
+  input: { companyId: string; context?: RequestContext },
+) {
+  if (input.context?.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(input.context, `${table}_support_grant`)
+  }
+  if (input.context) {
+    return userScopedDb(input.context, table)
+  }
+  return resolveTenantDb(input.companyId, `${table}_lookups`)
+}
+
+function reqSideEffectsDb(companyId: string) {
+  return resolveTenantDb(companyId, 'driver_requirements_side_effects')
+}
 
 type Row = Record<string, unknown>
 
@@ -115,10 +138,10 @@ async function applyRequirementRequest(input: {
     patch.status_override = 'training_assigned'
     patch.assigned_to_name = input.actorName
 
-    const { error: updateError } = await admin.from('driver_requirements').update(patch).eq('id', req.id)
+    const { error: updateError } = await reqTableDb('driver_requirements', { companyId: input.companyId }).from('driver_requirements').update(patch).eq('id', req.id)
     if (updateError) throw new Error(updateError.message)
 
-    const { error: historyError } = await admin.from('driver_requirement_requests').insert({
+    const { error: historyError } = await reqTableDb('driver_requirement_requests', { companyId: input.companyId }).from('driver_requirement_requests').insert({
       company_id: input.companyId,
       driver_id: input.driverId,
       requirement_id: req.id,
@@ -159,10 +182,10 @@ async function applyRequirementRequest(input: {
 
   patch.status_override = 'request_sent'
 
-  const { error: updateError } = await admin.from('driver_requirements').update(patch).eq('id', req.id)
+  const { error: updateError } = await reqTableDb('driver_requirements', { companyId: input.companyId }).from('driver_requirements').update(patch).eq('id', req.id)
   if (updateError) throw new Error(updateError.message)
 
-  const { error: historyError } = await admin.from('driver_requirement_requests').insert({
+  const { error: historyError } = await reqTableDb('driver_requirement_requests', { companyId: input.companyId }).from('driver_requirement_requests').insert({
     company_id: input.companyId,
     driver_id: input.driverId,
     requirement_id: req.id,
@@ -217,7 +240,7 @@ export async function syncDriverRequirementAfterDocumentVerified(input: {
   const definitionKey = definitionKeyForDocumentRequirementType(input.requirementType)
   const req = await ensureRequirement(input.companyId, input.driverId, definitionKey, input.userId)
   const now = new Date().toISOString()
-  await admin
+  await reqTableDb('driver_requirements', { companyId: input.companyId })
     .from('driver_requirements')
     .update({
       status_override: 'approved',
@@ -241,7 +264,7 @@ export async function syncDriverRequirementAfterDocumentRejected(input: {
   const definitionKey = definitionKeyForDocumentRequirementType(input.requirementType)
   const req = await ensureRequirement(input.companyId, input.driverId, definitionKey, input.userId)
   const now = new Date().toISOString()
-  await admin
+  await reqTableDb('driver_requirements', { companyId: input.companyId })
     .from('driver_requirements')
     .update({
       status_override: 'rejected',
@@ -303,7 +326,7 @@ async function ensureRequirement(
   definitionKey: string,
   userId: string | null,
 ) {
-  const { data: existing } = await admin
+  const { data: existing } = await reqTableDb('driver_requirements', { companyId: companyId })
     .from('driver_requirements')
     .select('*')
     .eq('company_id', companyId)
@@ -312,7 +335,7 @@ async function ensureRequirement(
     .maybeSingle()
   if (existing) return existing as Row
 
-  const { data, error } = await admin
+  const { data, error } = await reqTableDb('driver_requirements', { companyId: companyId })
     .from('driver_requirements')
     .insert({
       company_id: companyId,
@@ -329,7 +352,7 @@ async function ensureRequirement(
 }
 
 async function assertDriver(companyId: string, driverId: string) {
-  const { data, error } = await admin
+  const { data, error } = await reqSideEffectsDb(companyId)
     .from('drivers')
     .select('id, staff_members(first_name, last_name)')
     .eq('company_id', companyId)
@@ -351,7 +374,7 @@ export async function listDriverRequirements(request: Request, driverId: string)
   const driver = await assertDriver(context.companyId, driverId)
   if (!driver) return apiError(404, 'Driver not found', 'not_found')
 
-  const { data, error } = await admin
+  const { data, error } = await reqTableDb('driver_requirements', { companyId: context.companyId, context })
     .from('driver_requirements')
     .select('*')
     .eq('company_id', context.companyId)
@@ -432,7 +455,7 @@ export async function requestDriverRequirements(request: Request, driverId: stri
     }
   }
 
-  const { data: states } = await admin
+  const { data: states } = await reqTableDb('driver_requirements', { companyId: context.companyId, context })
     .from('driver_requirements')
     .select('*')
     .eq('company_id', context.companyId)
@@ -498,12 +521,12 @@ export async function patchDriverRequirement(
     return apiError(400, 'Unknown action')
   }
 
-  const { error } = await admin.from('driver_requirements').update(patch).eq('id', req.id)
+  const { error } = await reqTableDb('driver_requirements', { companyId: context.companyId, context }).from('driver_requirements').update(patch).eq('id', req.id)
   if (error) return apiError(400, error.message)
 
   // Reject linked document evidence when a document requirement is rejected
   if (action === 'reject' && requirementTypeFor(definitionKey) === 'document') {
-    await admin
+    await reqSideEffectsDb(context.companyId)
       .from('driver_documents')
       .update({
         verification_status: 'rejected',
@@ -516,7 +539,7 @@ export async function patchDriverRequirement(
       .eq('requirement_type', definitionKey)
   }
 
-  await admin.from('driver_requirement_requests').insert({
+  await reqTableDb('driver_requirement_requests', { companyId: context.companyId, context }).from('driver_requirement_requests').insert({
     company_id: context.companyId,
     driver_id: driverId,
     requirement_id: req.id,
@@ -585,7 +608,7 @@ export async function patchDriverRequirement(
       console.error('assign_training materialise failed', err)
     }
   } else if (action === 'approve' || action === 'waive' || action === 'mark_not_applicable') {
-    const { data: open } = await admin
+    const { data: open } = await reqTableDb('driver_requirements', { companyId: context.companyId, context })
       .from('driver_requirements')
       .select('definition_key, status_override')
       .eq('company_id', context.companyId)
@@ -621,7 +644,7 @@ export async function patchDriverRequirement(
     }
   }
 
-  const { data: refreshed } = await admin
+  const { data: refreshed } = await reqTableDb('driver_requirements', { companyId: context.companyId, context })
     .from('driver_requirements')
     .select('*')
     .eq('id', req.id)
@@ -639,7 +662,7 @@ export async function driverRequirementHistory(
   const driver = await assertDriver(context.companyId, driverId)
   if (!driver) return apiError(404, 'Driver not found', 'not_found')
 
-  const { data, error } = await admin
+  const { data, error } = await reqTableDb('driver_requirement_requests', { companyId: context.companyId, context })
     .from('driver_requirement_requests')
     .select('*')
     .eq('company_id', context.companyId)

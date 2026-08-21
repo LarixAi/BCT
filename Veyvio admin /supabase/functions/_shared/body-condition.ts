@@ -1,8 +1,12 @@
 /**
  * Body Condition Inspection — persistence, hub projections, and yard mutation handlers.
+ *
+ * Wave 3F cutovers 57–64: membership JWT writes body-condition tables through RLS.
+ * Vehicle lookups stay company-scoped service-role until vehicles cutover is wired.
  */
-import { admin } from './supabase.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
 import { apiError, json } from './http.ts'
+import type { RequestContext } from './supabase.ts'
 
 function buildDamageReference(year: number, caseSeq: number, observationSeq: number): string {
   return `BD-${year}-${String(caseSeq).padStart(5, '0')}-${String(observationSeq).padStart(2, '0')}`
@@ -13,6 +17,26 @@ type Row = Record<string, unknown>
 type AuthContext = {
   companyId: string
   user: { id: string; email?: string | null }
+  accessToken?: string
+  workspaceAuthority?: 'membership' | 'support' | 'none'
+}
+
+function bodyTableDb(
+  table: string,
+  input: { companyId: string; context?: AuthContext | RequestContext },
+) {
+  const ctx = input.context
+  if (ctx && 'workspaceAuthority' in ctx && ctx.workspaceAuthority === 'support' && 'accessToken' in ctx && ctx.accessToken) {
+    return companyScopedServiceDb(ctx as RequestContext, `${table}_support_grant`)
+  }
+  if (ctx && 'accessToken' in ctx && ctx.accessToken && ctx.workspaceAuthority !== 'support') {
+    return userScopedDb(ctx as RequestContext, table)
+  }
+  return resolveTenantDb(input.companyId, `${table}_lookups`)
+}
+
+function bodySideEffectsDb(companyId: string) {
+  return resolveTenantDb(companyId, 'body_condition_side_effects')
 }
 
 async function writeAuditEvent(
@@ -27,7 +51,7 @@ async function writeAuditEvent(
   reason?: string,
 ) {
   try {
-    await admin.from('body_condition_audit_events').insert({
+    await bodyTableDb('body_condition_audit_events', { companyId: companyId }).from('body_condition_audit_events').insert({
       company_id: companyId,
       entity_type: entityType,
       entity_id: entityId,
@@ -46,7 +70,7 @@ async function writeAuditEvent(
 async function nextInspectionReference(companyId: string): Promise<string> {
   const year = new Date().getFullYear()
   const prefix = `BI-${year}-`
-  const { count } = await admin
+  const { count } = await bodyTableDb('body_inspections', { companyId: companyId })
     .from('body_inspections')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
@@ -57,7 +81,7 @@ async function nextInspectionReference(companyId: string): Promise<string> {
 
 async function nextDamageCaseReference(companyId: string): Promise<{ ref: string; seq: number }> {
   const year = new Date().getFullYear()
-  const { count } = await admin
+  const { count } = await bodyTableDb('vehicle_damage_cases', { companyId: companyId })
     .from('vehicle_damage_cases')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
@@ -66,7 +90,7 @@ async function nextDamageCaseReference(companyId: string): Promise<{ ref: string
 }
 
 async function assertVehicleInCompany(companyId: string, vehicleId: string) {
-  const { data, error } = await admin
+  const { data, error } = await bodySideEffectsDb(companyId)
     .from('vehicles')
     .select('id, registration, primary_depot_id, operational_status')
     .eq('company_id', companyId)
@@ -82,7 +106,7 @@ async function resolveBodyInspection(
   inspectionId: string,
   select = 'id, vehicle_id, company_id',
 ) {
-  const { data: byId, error: byIdError } = await admin
+  const { data: byId, error: byIdError } = await bodyTableDb('body_inspections', { companyId: companyId })
     .from('body_inspections')
     .select(select)
     .eq('company_id', companyId)
@@ -90,7 +114,7 @@ async function resolveBodyInspection(
     .maybeSingle()
   if (!byIdError && byId) return byId as Row
 
-  const { data: byClient, error: byClientError } = await admin
+  const { data: byClient, error: byClientError } = await bodyTableDb('body_inspections', { companyId: companyId })
     .from('body_inspections')
     .select(select)
     .eq('company_id', companyId)
@@ -126,7 +150,7 @@ export async function startBodyInspectionMutation(
   if (!vehicle) return apiError(404, 'Vehicle not found')
 
   if (clientInspectionId) {
-    const { data: existing } = await admin
+    const { data: existing } = await bodyTableDb('body_inspections', { companyId: context.companyId, context: context })
       .from('body_inspections')
       .select('id')
       .eq('company_id', context.companyId)
@@ -138,7 +162,7 @@ export async function startBodyInspectionMutation(
   const referenceNumber = await nextInspectionReference(context.companyId)
   const now = new Date().toISOString()
 
-  const { data, error } = await admin
+  const { data, error } = await bodyTableDb('body_inspections', { companyId: context.companyId, context: context })
     .from('body_inspections')
     .insert({
       company_id: context.companyId,
@@ -162,7 +186,7 @@ export async function startBodyInspectionMutation(
 
   if (error) {
     if (String(error.code) === '23505' && clientInspectionId) {
-      const { data: dup } = await admin
+      const { data: dup } = await bodyTableDb('body_inspections', { companyId: context.companyId, context: context })
         .from('body_inspections')
         .select('id')
         .eq('company_id', context.companyId)
@@ -199,7 +223,7 @@ export async function addBodyInspectionMediaMutation(
   const checksum = typeof media.checksum === 'string' ? media.checksum : null
   const now = new Date().toISOString()
 
-  const { data, error } = await admin
+  const { data, error } = await bodyTableDb('body_inspection_media', { companyId: context.companyId, context: context })
     .from('body_inspection_media')
     .insert({
       id: mediaId && /^[0-9a-f-]{36}$/i.test(mediaId) ? mediaId : undefined,
@@ -252,7 +276,7 @@ export async function completeBodyInspectionMutation(
   const nextStatus = awaitingApproval ? 'awaiting_review' : 'submitted'
   const recommendedStatus = String(payload.recommendedVehicleStatus ?? 'good')
 
-  const { error } = await admin
+  const { error } = await bodyTableDb('body_inspections', { companyId: context.companyId, context: context })
     .from('body_inspections')
     .update({
       status: nextStatus,
@@ -302,7 +326,7 @@ export async function approveBodyInspectionMutation(
   const now = new Date().toISOString()
   const approvedStatus = String(payload.approvedVehicleStatus ?? inspection.recommended_vehicle_status ?? 'good')
 
-  await admin
+  await bodyTableDb('body_inspections', { companyId: context.companyId, context: context })
     .from('body_inspections')
     .update({
       status: 'approved',
@@ -315,7 +339,7 @@ export async function approveBodyInspectionMutation(
     .eq('id', serverInspectionId)
     .eq('company_id', context.companyId)
 
-  await admin.from('inspection_reviews').insert({
+  await bodyTableDb('inspection_reviews', { companyId: context.companyId, context: context }).from('inspection_reviews').insert({
     company_id: context.companyId,
     inspection_id: serverInspectionId,
     reviewer_id: context.user.id,
@@ -327,7 +351,7 @@ export async function approveBodyInspectionMutation(
   })
 
   if (approvedStatus === 'vor') {
-    await admin
+    await bodySideEffectsDb(context.companyId)
       .from('vehicles')
       .update({ operational_status: 'vor', updated_at: now })
       .eq('company_id', context.companyId)
@@ -363,7 +387,7 @@ export async function reportDamageMutation(context: AuthContext, payload: Row, a
   if (!damageCaseId) {
     const { ref, seq } = await nextDamageCaseReference(context.companyId)
     referenceNumber = ref
-    const { data: caseRow, error: caseError } = await admin
+    const { data: caseRow, error: caseError } = await bodyTableDb('vehicle_damage_cases', { companyId: context.companyId, context: context })
       .from('vehicle_damage_cases')
       .insert({
         company_id: context.companyId,
@@ -389,7 +413,7 @@ export async function reportDamageMutation(context: AuthContext, payload: Row, a
     damageCaseId = String((caseRow as Row).id)
 
     if (payload.diagramView && payload.xCoordinate != null && payload.yCoordinate != null) {
-      await admin.from('vehicle_condition_markers').insert({
+      await bodyTableDb('vehicle_condition_markers', { companyId: context.companyId, context: context }).from('vehicle_condition_markers').insert({
         company_id: context.companyId,
         damage_case_id: damageCaseId,
         diagram_view: String(payload.diagramView),
@@ -402,7 +426,7 @@ export async function reportDamageMutation(context: AuthContext, payload: Row, a
     }
   }
 
-  const { data: obs, error: obsError } = await admin
+  const { data: obs, error: obsError } = await bodyTableDb('damage_observations', { companyId: context.companyId, context: context })
     .from('damage_observations')
     .insert({
       company_id: context.companyId,
@@ -423,12 +447,12 @@ export async function reportDamageMutation(context: AuthContext, payload: Row, a
   if (obsError) return apiError(500, obsError.message, 'database_error')
 
   if (severity === 'critical') {
-    await admin
+    await bodySideEffectsDb(context.companyId)
       .from('vehicles')
       .update({ operational_status: 'vor', updated_at: now })
       .eq('company_id', context.companyId)
       .eq('id', vehicleId)
-    await admin
+    await bodyTableDb('vehicle_damage_cases', { companyId: context.companyId, context: context })
       .from('vehicle_damage_cases')
       .update({ vor_triggered: true, status: 'under_review', updated_at: now })
       .eq('id', damageCaseId)
@@ -443,7 +467,7 @@ export async function reviewDamageMutation(context: AuthContext, payload: Row, a
   const decision = String(payload.decision ?? payload.classification ?? '')
   if (!observationId) return apiError(400, 'observationId is required')
 
-  const { data: observation, error: loadError } = await admin
+  const { data: observation, error: loadError } = await bodyTableDb('damage_observations', { companyId: context.companyId, context: context })
     .from('damage_observations')
     .select('id, damage_case_id, inspection_id, classification')
     .eq('company_id', context.companyId)
@@ -455,7 +479,7 @@ export async function reviewDamageMutation(context: AuthContext, payload: Row, a
   const caseStatus =
     decision.includes('existing') ? 'confirmed_existing' : decision.includes('new') ? 'confirmed_new' : 'under_review'
 
-  await admin
+  await bodyTableDb('damage_observations', { companyId: context.companyId, context: context })
     .from('damage_observations')
     .update({
       classification: decision,
@@ -463,7 +487,7 @@ export async function reviewDamageMutation(context: AuthContext, payload: Row, a
     })
     .eq('id', observationId)
 
-  await admin
+  await bodyTableDb('vehicle_damage_cases', { companyId: context.companyId, context: context })
     .from('vehicle_damage_cases')
     .update({
       status: caseStatus,
@@ -494,7 +518,7 @@ export async function requestRepairMutation(context: AuthContext, payload: Row, 
   const workOrderRef = `WO-BC-${Date.now()}`
   const now = new Date().toISOString()
 
-  const { error } = await admin
+  const { error } = await bodyTableDb('vehicle_damage_cases', { companyId: context.companyId, context: context })
     .from('vehicle_damage_cases')
     .update({
       status: 'approved_for_repair',
@@ -520,13 +544,13 @@ export async function markVorFromDamageMutation(context: AuthContext, payload: R
   if (!vehicle) return apiError(404, 'Vehicle not found')
 
   const now = new Date().toISOString()
-  await admin
+  await bodySideEffectsDb(context.companyId)
     .from('vehicles')
     .update({ operational_status: 'vor', updated_at: now })
     .eq('company_id', context.companyId)
     .eq('id', vehicleId)
 
-  const { data: vorCase } = await admin
+  const { data: vorCase } = await bodyTableDb('vor_cases', { companyId: context.companyId, context: context })
     .from('vor_cases')
     .insert({
       company_id: context.companyId,
@@ -568,7 +592,7 @@ export async function submitConditionAcknowledgement(
   const now = new Date().toISOString()
   const differs = ['condition_differs', 'new_damage_found'].includes(acknowledgementType)
 
-  const { data, error } = await admin
+  const { data, error } = await bodyTableDb('condition_acknowledgements', { companyId: context.companyId, context: context })
     .from('condition_acknowledgements')
     .insert({
       company_id: context.companyId,
@@ -592,7 +616,7 @@ export async function submitConditionAcknowledgement(
   if (differs && payload.createProvisionalReport !== false) {
     const inspectionType = 'reported_damage'
     const referenceNumber = await nextInspectionReference(context.companyId)
-    const { data: insp } = await admin
+    const { data: insp } = await bodyTableDb('body_inspections', { companyId: context.companyId, context: context })
       .from('body_inspections')
       .insert({
         company_id: context.companyId,
@@ -615,7 +639,7 @@ export async function submitConditionAcknowledgement(
       .single()
 
     if (insp?.id) {
-      await admin
+      await bodyTableDb('condition_acknowledgements', { companyId: context.companyId, context: context })
         .from('condition_acknowledgements')
         .update({ inspection_id: String(insp.id) })
         .eq('id', String((data as Row).id))
@@ -740,7 +764,7 @@ function projectMedia(row: Row) {
 
 export async function loadBodyConditionForYardHub(companyId: string, depotId?: string | null) {
   try {
-    let inspectionQuery = admin
+    let inspectionQuery = bodyTableDb('body_inspections', { companyId: companyId })
       .from('body_inspections')
       .select('*')
       .eq('company_id', companyId)
@@ -751,27 +775,27 @@ export async function loadBodyConditionForYardHub(companyId: string, depotId?: s
 
     const [inspectionsRes, casesRes, observationsRes, mediaRes, ackRes] = await Promise.all([
       inspectionQuery,
-      admin
+      bodyTableDb('vehicle_damage_cases', { companyId: companyId })
         .from('vehicle_damage_cases')
         .select('*')
         .eq('company_id', companyId)
         .not('status', 'in', '("closed")')
         .order('first_detected_at', { ascending: false })
         .limit(80),
-      admin
+      bodyTableDb('damage_observations', { companyId: companyId })
         .from('damage_observations')
         .select('*, vehicle_damage_cases!inner(vehicle_id, vehicle_zone)')
         .eq('company_id', companyId)
         .order('observed_at', { ascending: false })
         .limit(120),
-      admin
+      bodyTableDb('body_inspection_media', { companyId: companyId })
         .from('body_inspection_media')
         .select('*')
         .eq('company_id', companyId)
         .is('withdrawn_at', null)
         .order('captured_at', { ascending: false })
         .limit(200),
-      admin
+      bodyTableDb('condition_acknowledgements', { companyId: companyId })
         .from('condition_acknowledgements')
         .select('*')
         .eq('company_id', companyId)

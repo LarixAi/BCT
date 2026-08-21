@@ -2,6 +2,8 @@
 /**
  * Production build guard (P0-10).
  * Fails if release-profile env enables demo/mock/PHV/Base44 paths or if dist bundles Base44.
+ * Placeholder example.supabase.co defaults are for this script's own CI build only —
+ * they are not a production artifact proof. Release AAB uses assert-release-config.mjs.
  */
 import { execSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";

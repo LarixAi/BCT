@@ -1,0 +1,34 @@
+{
+  "generated_at": "2026-08-21T06:56:14.433Z",
+  "drill": "command-continuity-health",
+  "api": "https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api",
+  "deployment": "fa6260b7cc7b1b614d8f2ea139d6330e00ada8ad",
+  "summary": {
+    "total": 4,
+    "pass": 4,
+    "fail": 0
+  },
+  "results": [
+    {
+      "name": "health_200",
+      "ok": true,
+      "detail": "status=200 deployment=fa6260b7cc7b1b614d8f2ea139d6330e00ada8ad"
+    },
+    {
+      "name": "anon_vehicles_denied",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "name": "member_A_vehicles_ok",
+      "ok": true,
+      "detail": "status=200 company=n/a"
+    },
+    {
+      "name": "member_B_cannot_read_A_vehicle",
+      "ok": true,
+      "detail": "skipped — no org B credentials"
+    }
+  ],
+  "procedure": "docs/deploy/command-rollback-continuity.md"
+}

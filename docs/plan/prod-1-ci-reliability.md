@@ -10,7 +10,7 @@ Programme counter stays at the last **merged** wrap. A wrap PR that is open, tha
 
 **Do not** add retries inside the tenant-isolation smoke, treat 401 as transient, or weaken expected `200` / `403` responses.
 
-Batch 05 is **closed**. Do not mix these items into Batch 06 or later wrap PRs.
+Batch 11 is **closed** at `aa02c19`. TI-401 stays open. CI-CANCEL-001 stays separate. Do not mix TI-401 into wrap PRs. **Wave 3F is LOCKED** (Gate A engineering on `prod1/gate-a-engineering-close` / `be78bd9+`); next programme merge is Gate A release SHA onto the production authority branch — not Batch 12 wrap.
 
 ---
 
@@ -88,7 +88,7 @@ A–E are **five different assertions**. Do not treat this as a single mismatche
 
 ### Hosted-auth investigation (open)
 
-`defectsHub` / vehicle profile / `yardHub` use `authenticate()` → `auth.getUser(accessToken)` and map failure to `401` `unauthenticated`. The smoke currently asserts status only, so incident bodies were not captured.
+`defectsHub` / vehicle profile / `yardHub` use `authenticate()` → `auth.getUser(accessToken)` and map failure to `401` `unauthenticated`. Unexpected-401 assertion messages now include JSON `code`, `authStage`, correlation id, deployment SHA, and body shape (`command-api` vs non-command/gateway). Expected statuses are unchanged (`200` / `403`).
 
 **Working hypothesis (not proven):** concurrent PR CI jobs share the same hosted Org A/B isolation users. Workflow concurrency is `ci-${{ github.workflow }}-${{ github.ref }}`, so **different PRs run the hosted smoke in parallel**. A second login can rotate/invalidate the first job’s session mid-probe. Incidents C and D overlapped in wall clock. Incident E is additional nondeterminism evidence, not a concurrency proof.
 
@@ -96,14 +96,16 @@ A–E are **five different assertions**. Do not treat this as a single mismatche
 
 **First post-#13 required-gate run:** PR #11 head `7042272` / run `32167704405` — tenant-isolation, fresh-DB, and storage isolation **PASS**. That is consistent with serialization helping; it is not closure of TI-401.
 
+**Instrumentation (this package):** `authStage` (`missing_bearer` / `getUser` / `membership` / `support` / `company`); `correlationId` on 401/403 JSON and `x-veyvio-request-id`; `/health` reports `deploymentSha` / `denoDeploymentId`; smoke logs hosted revision vs `GITHUB_SHA` (mismatch is a note, not a pass).
+
 Serialization reduced one credible interference source. Incidents A–E still show a recurring hosted-auth 401 signature across unrelated assertions. **Concurrency is not declared the sole cause. TI-401 stays open.**
 
 **Next (do not mix into wrap batches):**
 
 1. ~~Serialize the tenant-isolation job across refs~~ — done, PR #13.
-2. Include JSON `code` in unexpected-401 assertion messages (do **not** loosen expected statuses).
-3. Confirm deployed `command-api` revision vs the PR under test.
-4. Unexpected 401 on a wrap PR **after** serialization is in the merge ref → inspect GoTrue `getUser` / JWT issuance on the hosted project.
+2. ~~Include JSON `code` in unexpected-401 assertion messages~~ — done (do **not** loosen expected statuses).
+3. ~~Confirm deployed `command-api` revision vs the PR under test~~ — health/smoke compare SHA; hosted proof still requires deploy.
+4. Unexpected 401 **after** serialization is in the merge ref → inspect GoTrue `getUser` / JWT issuance on the hosted project.
 
 Related (do not conflate): push-workflow tenant-isolation on `phase0/reproducibility` has 401’d on Org A job-execution reads (`c605e33` and later). That is the **push** job, not these PR probes.
 
@@ -150,4 +152,4 @@ Batch 05 merged only after attempt 2 produced a real tenant-isolation execution.
 
 ---
 
-Do not mix these items into Batch 06 or later wrap PRs.
+Do not mix these items into wrap PRs. Wave 3F is LOCKED — do not reopen Batch 12 wraps for TI-401.

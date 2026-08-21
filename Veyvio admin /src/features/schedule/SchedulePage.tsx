@@ -30,7 +30,6 @@ import { api } from '@/lib/api/client'
 import type { DutyRecord } from '@/lib/api/types'
 import { useAuth } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
-import { isOperationsDemoLayerActive, OPERATIONS_DEMO_BANNER } from '@/lib/operations/operations-data-source'
 import {
   detectScheduleConflicts,
   normalizeDutyDate,
@@ -312,13 +311,6 @@ export function SchedulePage() {
       {coverMessage && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-950">
           {coverMessage}
-        </div>
-      )}
-
-      {isOperationsDemoLayerActive() && OPERATIONS_DEMO_BANNER && (
-        <div className="rounded-xl border border-command-200 bg-command-50 px-4 py-3 text-sm text-command-950">
-          <p className="font-semibold">{OPERATIONS_DEMO_BANNER.title}</p>
-          <p className="mt-1 text-command-900">{OPERATIONS_DEMO_BANNER.body}</p>
         </div>
       )}
 

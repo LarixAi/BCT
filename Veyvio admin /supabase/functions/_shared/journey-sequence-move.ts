@@ -10,7 +10,7 @@
  *
  * writeImmutableAudit stays on transitional audit-service — do not wrap that hub here.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import { parseDutyTripSyntheticId } from './journey-sequence-reorder.mapping.ts'
@@ -24,7 +24,7 @@ import {
 type Row = Record<string, unknown>
 
 function moveDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'journey_sequence_move')
+  return resolveTenantDb(companyId, 'journey_sequence_move')
 }
 
 async function resolvePrimaryRunForDuty(companyId: string, dutyId: string): Promise<{

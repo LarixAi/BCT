@@ -107,11 +107,13 @@ function requireAccessToken(body, email, stage) {
 }
 
 async function api(method, path, token, body) {
+  const requestId = crypto.randomUUID()
   const res = await fetch(`${API}/api${path}`, {
     method,
     headers: {
       apikey: ANON,
       Authorization: `Bearer ${token}`,
+      'x-veyvio-request-id': requestId,
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -123,7 +125,7 @@ async function api(method, path, token, body) {
   } catch {
     json = text
   }
-  return { status: res.status, json }
+  return { status: res.status, json, requestId, headerRequestId: res.headers.get('x-veyvio-request-id') }
 }
 
 async function driverLogin(email, password) {
@@ -141,11 +143,13 @@ async function driverLogin(email, password) {
 }
 
 async function driverApi(method, path, token, body) {
+  const requestId = crypto.randomUUID()
   const res = await fetch(`${API}/${path}`, {
     method,
     headers: {
       apikey: ANON,
       Authorization: `Bearer ${token}`,
+      'x-veyvio-request-id': requestId,
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -157,7 +161,34 @@ async function driverApi(method, path, token, body) {
   } catch {
     json = text
   }
-  return { status: res.status, json }
+  return { status: res.status, json, requestId, headerRequestId: res.headers.get('x-veyvio-request-id') }
+}
+
+function isolationBodyShape(json) {
+  if (json == null) return 'empty'
+  if (typeof json !== 'object') return typeof json
+  const keys = Object.keys(json).sort().join(',')
+  const commandLike =
+    typeof json === 'object' &&
+    json !== null &&
+    'statusCode' in json &&
+    'code' in json &&
+    'message' in json
+  return `${commandLike ? 'command-api' : 'non-command'}{${keys}}`
+}
+
+function formatIsolationFailure(res, extra = '') {
+  const json = res?.json && typeof res.json === 'object' ? res.json : null
+  const parts = [
+    `status=${res?.status}`,
+    `code=${json?.code ?? 'n/a'}`,
+    `auth_stage=${json?.authStage ?? json?.auth_stage ?? 'n/a'}`,
+    `correlation=${json?.correlationId ?? res?.headerRequestId ?? res?.requestId ?? 'n/a'}`,
+    `deployment=${json?.deploymentSha ?? 'n/a'}`,
+    `body_shape=${isolationBodyShape(res?.json)}`,
+  ]
+  if (extra) parts.push(extra)
+  return parts.join(' ')
 }
 
 function assertDenied(status, label) {
@@ -191,6 +222,20 @@ async function main() {
     return
   }
 
+  const shaUnderTest = process.env.GITHUB_SHA ?? null
+  const healthRes = await fetch(`${API}/health`, {
+    headers: { apikey: ANON, Authorization: `Bearer ${ANON}` },
+  })
+  const healthJson = await healthRes.json().catch(() => ({}))
+  console.log(
+    `hosted command-api health status=${healthRes.status} deploymentSha=${healthJson?.deploymentSha ?? 'n/a'} denoDeploymentId=${healthJson?.denoDeploymentId ?? 'n/a'} githubSha=${shaUnderTest ?? 'n/a'}`,
+  )
+  if (shaUnderTest && healthJson?.deploymentSha && healthJson.deploymentSha !== shaUnderTest) {
+    console.log(
+      `TI-401 note: deployed function SHA (${healthJson.deploymentSha}) differs from GITHUB_SHA (${shaUnderTest}) — hosted API is not this PR until command-api is deployed`,
+    )
+  }
+
   const platform = await login(PLATFORM_EMAIL, PLATFORM_PASSWORD, { skipTenantSelection: true })
   assert.ok(platform.accessToken, 'platform token missing')
 
@@ -213,9 +258,9 @@ async function main() {
 
   // Positive: each org can read its own vehicle
   const ownA = await api('GET', `/vehicles/${orgA.vehicleId}/profile`, sessionA.accessToken)
-  assert.equal(ownA.status, 200, `Org A should read own vehicle, got ${ownA.status}`)
+  assert.equal(ownA.status, 200, `Org A should read own vehicle, got ${formatIsolationFailure(ownA)}`)
   const ownB = await api('GET', `/vehicles/${orgB.vehicleId}/profile`, sessionB.accessToken)
-  assert.equal(ownB.status, 200, `Org B should read own vehicle, got ${ownB.status}`)
+  assert.equal(ownB.status, 200, `Org B should read own vehicle, got ${formatIsolationFailure(ownB)}`)
 
   // Cross-tenant reads
   const crossVehicle = await api('GET', `/vehicles/${orgA.vehicleId}/profile`, sessionB.accessToken)
@@ -233,7 +278,7 @@ async function main() {
 
   // List must not include foreign registration
   const listB = await api('GET', '/vehicles/profiles', sessionB.accessToken)
-  assert.equal(listB.status, 200, `Org B vehicle list failed: ${listB.status}`)
+  assert.equal(listB.status, 200, `Org B vehicle list failed: ${formatIsolationFailure(listB)}`)
   const listPayload = JSON.stringify(listB.json ?? {})
   assert.ok(!listPayload.includes(orgA.vehicleRegistration), 'Org B list must not include Org A registration')
   assert.ok(!listPayload.includes(orgA.vehicleId), 'Org B list must not include Org A vehicle id')
@@ -259,7 +304,7 @@ async function main() {
   // Defects / reports hubs — foreign ids must not appear
   if (orgA.defectId) {
     const hubB = await api('GET', '/defects/hub', sessionB.accessToken)
-    assert.equal(hubB.status, 200, `defects hub failed: ${hubB.status}`)
+    assert.equal(hubB.status, 200, `defects hub failed: ${formatIsolationFailure(hubB)}`)
     const hubText = JSON.stringify(hubB.json ?? {})
     assert.ok(!hubText.includes(orgA.defectId), 'Org B defects hub must not include Org A defect')
   }
@@ -311,7 +356,7 @@ async function main() {
 
   // Command staff may still reach yard/hub (COMMAND or YARD scope)
   const yardHub = await api('GET', '/yard/hub', sessionA.accessToken)
-  assert.equal(yardHub.status, 200, `command admin should reach yard/hub, got ${yardHub.status}`)
+  assert.equal(yardHub.status, 200, `command admin should reach yard/hub, got ${formatIsolationFailure(yardHub)}`)
 
   const yardHubB = await api('GET', '/yard/hub', sessionB.accessToken)
   assert.equal(yardHubB.status, 200, `Org B yard hub failed: ${yardHubB.status}`)
@@ -331,7 +376,11 @@ async function main() {
       reason: 'isolation probe',
     },
   })
-  assert.equal(yardCompanyMismatch.status, 403, 'yard mutation company mismatch')
+  assert.equal(
+    yardCompanyMismatch.status,
+    403,
+    `yard mutation company mismatch ${formatIsolationFailure(yardCompanyMismatch)}`,
+  )
   assert.equal(yardCompanyMismatch.json?.code, 'company_mismatch', 'expected company_mismatch code')
 
   const foreignTaskCreate = await api('POST', '/yard/mutations', sessionB.accessToken, {

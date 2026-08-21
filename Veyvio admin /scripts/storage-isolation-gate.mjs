@@ -14,7 +14,19 @@ const EVIDENCE_DIR = path.resolve(ADMIN_ROOT, '../docs/plan/evidence')
 
 function run(cmd, opts = {}) {
   console.log(`\n> ${cmd}`)
-  execSync(cmd, { stdio: 'inherit', cwd: ADMIN_ROOT, ...opts })
+  execSync(cmd, { stdio: 'inherit', cwd: ADMIN_ROOT, shell: true, ...opts })
+}
+
+function supabaseBin() {
+  try {
+    execSync('command -v supabase', { stdio: 'ignore', shell: true })
+    return 'supabase'
+  } catch {
+    // fall through
+  }
+  const local = path.join(ADMIN_ROOT, 'node_modules', '.bin', 'supabase')
+  if (fs.existsSync(local)) return `"${local}"`
+  return 'npx supabase'
 }
 
 function patchConfigRemoveCostControl() {
@@ -34,16 +46,17 @@ function patchConfigRemoveCostControl() {
 
 async function main() {
   const env = { ...process.env, VYVIO_3FE_OUT: EVIDENCE_DIR }
+  const sb = supabaseBin()
   let restoredConfig = null
   try {
     restoredConfig = patchConfigRemoveCostControl()
-    run('supabase start')
-    run('supabase db reset')
+    run(`${sb} start`)
+    run(`${sb} db reset`)
   } finally {
     if (restoredConfig) fs.writeFileSync(CONFIG_PATH, restoredConfig)
   }
-  run('supabase stop')
-  run('supabase start')
+  run(`${sb} stop`)
+  run(`${sb} start`)
   run('node scripts/wave3f-storage-isolation.unit.mjs', { env })
   console.log('\nWave 3F-E storage isolation gate: PASS')
 }

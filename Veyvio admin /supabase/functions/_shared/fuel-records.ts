@@ -1,11 +1,27 @@
 /**
  * Gate 2 — fuel refill / purchase records.
+ *
+ * Wave 3F UserScopedDb/RLS cutover 3: membership JWT writes `fuel_records`
+ * through RLS (INSERT + SELECT). Support-grant sessions stay on company-scoped
+ * service-role. Vehicle lookup and vehicle_reports timeline mirror stay
+ * service-role until those tables are cut over. Audit / domain events stay privileged.
  */
 import { type RequestContext } from './supabase.ts'
-import { companyScopedServiceDb } from './db-authority.ts'
+import { companyScopedServiceDb, userScopedDb } from './db-authority.ts'
 import { apiError, json, readJson, toCamelCase } from './http.ts'
 import { emitDomainEvent } from './domain-events.ts'
 import { writeImmutableAudit } from './audit-service.ts'
+
+function fuelRecordsDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'fuel_records_support_grant')
+  }
+  return userScopedDb(context, 'fuel_records')
+}
+
+function fuelRecordsSideEffectsDb(context: RequestContext) {
+  return companyScopedServiceDb(context, 'fuel_records_vehicle_reports_mirror')
+}
 
 export async function recordFuelRefill(context: RequestContext, request: Request) {
   const input = await readJson<{
@@ -18,12 +34,13 @@ export async function recordFuelRefill(context: RequestContext, request: Request
     driverId?: string
   }>(request)
 
-  const db = companyScopedServiceDb(context, 'fuel_records')
+  const db = fuelRecordsDb(context)
+  const sideEffects = fuelRecordsSideEffectsDb(context)
 
   const vehicleId = String(input.vehicleId ?? '')
   if (!vehicleId) return apiError(400, 'vehicleId is required', 'invalid_input')
 
-  const { data: vehicle } = await db
+  const { data: vehicle } = await sideEffects
     .from('vehicles')
     .select('id, depot_id')
     .eq('company_id', context.companyId)
@@ -61,7 +78,7 @@ export async function recordFuelRefill(context: RequestContext, request: Request
   if (error || !data) return apiError(500, error?.message ?? 'Fuel refill could not be recorded')
 
   // Also mirror into vehicle_reports timeline spine as fuel_purchase.
-  await db.from('vehicle_reports').insert({
+  await sideEffects.from('vehicle_reports').insert({
     company_id: context.companyId,
     depot_id: vehicle.depot_id ?? null,
     vehicle_id: vehicleId,
@@ -103,7 +120,7 @@ export async function recordFuelRefill(context: RequestContext, request: Request
 }
 
 export async function listFuelRecords(context: RequestContext, request: Request) {
-  const db = companyScopedServiceDb(context, 'fuel_records')
+  const db = fuelRecordsDb(context)
   const url = new URL(request.url)
   const vehicleId = url.searchParams.get('vehicleId')
   let query = db

@@ -18,7 +18,20 @@ const EVIDENCE_DIR = path.resolve(ADMIN_ROOT, '../docs/plan/evidence')
 
 function run(cmd, opts = {}) {
   console.log(`\n> ${cmd}`)
-  execSync(cmd, { stdio: 'inherit', cwd: ADMIN_ROOT, ...opts })
+  execSync(cmd, { stdio: 'inherit', cwd: ADMIN_ROOT, shell: true, ...opts })
+}
+
+function supabaseBin() {
+  // Prefer PATH (CI setup-cli), then local package binary, then npx.
+  try {
+    execSync('command -v supabase', { stdio: 'ignore', shell: true })
+    return 'supabase'
+  } catch {
+    // fall through
+  }
+  const local = path.join(ADMIN_ROOT, 'node_modules', '.bin', 'supabase')
+  if (fs.existsSync(local)) return `"${local}"`
+  return 'npx supabase'
 }
 
 function patchConfigRemoveCostControl() {
@@ -101,18 +114,19 @@ async function main() {
   }
 
   let restoredConfig = null
+  const sb = supabaseBin()
   try {
     restoredConfig = patchConfigRemoveCostControl()
-    run('supabase start')
-    run('supabase db reset')
+    run(`${sb} start`)
+    run(`${sb} db reset`)
   } finally {
     if (restoredConfig) {
       fs.writeFileSync(CONFIG_PATH, restoredConfig)
     }
   }
 
-  run('supabase stop')
-  run('supabase start')
+  run(`${sb} stop`)
+  run(`${sb} start`)
 
   exportTenantAuditCsv()
   assertInventory()
@@ -124,16 +138,17 @@ async function main() {
   const summary = {
     generated_at: new Date().toISOString(),
     fix: 'FIX-P1-048',
+    status: 'PASS',
     steps: [
       'supabase start (cost_control schema excluded until reset)',
       'supabase db reset',
       'supabase restart with cost_control exposed',
       'tenant-table-audit.sql',
-      'wave3f-same-company-triggers',
+      'wave3f-same-company-triggers (static + forge including PR-03 P0 wave 2)',
       'rls-postgrest-isolation JWT matrix',
     ],
     storage: 'explicit separate slice — not in this gate',
-    hosted_migrations: '202608170001–004 local only until gate green',
+    hosted_migrations: 'through 202608210001 (PR-03 P0 wave 2)',
   }
   fs.writeFileSync(path.join(EVIDENCE_DIR, 'wave-3f-fresh-db-gate.json'), JSON.stringify(summary, null, 2))
   console.log('\nFIX-P1-048 fresh-DB gate: PASS')

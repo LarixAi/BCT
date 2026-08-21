@@ -1,7 +1,27 @@
 /** Holiday entitlement — minutes ledger + fixed_days balance (Phase 1). */
-import { admin, authenticate } from './supabase.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
+import { authenticate, type RequestContext } from './supabase.ts'
 import { apiError, json, readJson } from './http.ts'
 import { notifyCompanyAdmins, notifyDriverAppUser } from './notifications.ts'
+
+
+function holidayTableDb(
+  table: string,
+  input: { companyId: string; context?: RequestContext },
+) {
+  if (input.context?.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(input.context, `${table}_support_grant`)
+  }
+  if (input.context) {
+    return userScopedDb(input.context, table)
+  }
+  return resolveTenantDb(input.companyId, `${table}_lookups`)
+}
+
+function holidaySideEffectsDb(companyId: string) {
+  return resolveTenantDb(companyId, 'holiday_balance_side_effects')
+}
+
 
 type Row = Record<string, unknown>
 
@@ -167,7 +187,7 @@ export function formatLeaveYearLabel(start: string, end: string) {
 }
 
 async function ensureCompanyDefaults(companyId: string, userId?: string | null) {
-  const { data: existing } = await admin
+  const { data: existing } = await holidayTableDb('company_holiday_defaults', { companyId })
     .from('company_holiday_defaults')
     .select('*')
     .eq('company_id', companyId)
@@ -191,7 +211,7 @@ async function ensureCompanyDefaults(companyId: string, userId?: string | null) 
     updated_at: new Date().toISOString(),
     updated_by: userId ?? null,
   }
-  const { data, error } = await admin
+  const { data, error } = await holidayTableDb('company_holiday_defaults', { companyId })
     .from('company_holiday_defaults')
     .upsert(row)
     .select('*')
@@ -207,7 +227,7 @@ export async function ensureDriverHolidayProfile(input: {
   patch?: Row
 }) {
   const defaults = await ensureCompanyDefaults(input.companyId, input.userId)
-  const { data: existing } = await admin
+  const { data: existing } = await holidayTableDb('driver_holiday_profiles', { companyId: input.companyId })
     .from('driver_holiday_profiles')
     .select('*')
     .eq('company_id', input.companyId)
@@ -340,8 +360,8 @@ export async function ensureDriverHolidayProfile(input: {
   }
 
   if (existing?.id) {
-    const { data, error } = await admin
-      .from('driver_holiday_profiles')
+    const { data, error } = await holidayTableDb('driver_holiday_profiles', { companyId: input.companyId })
+    .from('driver_holiday_profiles')
       .update(payload)
       .eq('id', existing.id)
       .select('*')
@@ -350,7 +370,7 @@ export async function ensureDriverHolidayProfile(input: {
     return data as Row
   }
 
-  const { data, error } = await admin
+  const { data, error } = await holidayTableDb('driver_holiday_profiles', { companyId: input.companyId })
     .from('driver_holiday_profiles')
     .insert({ ...payload, created_at: new Date().toISOString() })
     .select('*')
@@ -368,7 +388,7 @@ async function ensureOpeningLedgerEntries(input: {
 }) {
   const yearStart = String(input.profile.leave_year_start)
   const yearEnd = String(input.profile.leave_year_end)
-  const { data: existing } = await admin
+  const { data: existing } = await holidayTableDb('holiday_ledger_entries', { companyId: input.companyId })
     .from('holiday_ledger_entries')
     .select('id, entry_type')
     .eq('company_id', input.companyId)
@@ -411,7 +431,7 @@ async function ensureOpeningLedgerEntries(input: {
   }
 
   if (rows.length) {
-    const { error } = await admin.from('holiday_ledger_entries').insert(rows)
+    const { error } = await holidayTableDb('holiday_ledger_entries', { companyId: input.companyId }).from('holiday_ledger_entries').insert(rows)
     if (error) throw new Error(error.message)
   }
 }
@@ -439,14 +459,14 @@ export async function computeHolidayBalance(input: {
   const today = isoDate(new Date())
 
   const [{ data: ledger }, { data: leaveRows }] = await Promise.all([
-    admin
-      .from('holiday_ledger_entries')
+    holidayTableDb('holiday_ledger_entries', { companyId: input.companyId })
+    .from('holiday_ledger_entries')
       .select('*')
       .eq('company_id', input.companyId)
       .eq('driver_id', input.driverId)
       .eq('leave_year_start', yearStart)
       .order('effective_at', { ascending: true }),
-    admin
+    holidayTableDb('attendance_leave_requests', { companyId: input.companyId })
       .from('attendance_leave_requests')
       .select('*')
       .eq('company_id', input.companyId)
@@ -654,7 +674,7 @@ export async function postApprovedLeaveLedger(input: {
   })
 
   // Idempotent: skip if already posted for this leave request
-  const { data: existing } = await admin
+  const { data: existing } = await holidayTableDb('holiday_ledger_entries', { companyId: input.companyId })
     .from('holiday_ledger_entries')
     .select('id')
     .eq('company_id', input.companyId)
@@ -677,7 +697,7 @@ export async function postApprovedLeaveLedger(input: {
   })
   if (minutes <= 0) return null
 
-  const { data, error } = await admin
+  const { data, error } = await holidayTableDb('holiday_ledger_entries', { companyId: input.companyId })
     .from('holiday_ledger_entries')
     .insert({
       company_id: input.companyId,
@@ -707,7 +727,7 @@ export async function postApprovedLeaveLedger(input: {
     const weekMinutes = 5 * 480
     const calculatedPayPence =
       weekly != null && weekly > 0 ? Math.round((minutes / weekMinutes) * Number(weekly)) : null
-    await admin.from('holiday_pay_records').insert({
+    await holidayTableDb('holiday_pay_records', { companyId: input.companyId }).from('holiday_pay_records').insert({
       company_id: input.companyId,
       driver_id: input.driverId,
       leave_request_id: input.leaveRequestId,
@@ -735,7 +755,7 @@ export async function reverseApprovedLeaveLedger(input: {
   actorName: string
   reason: string
 }) {
-  const { data: original } = await admin
+  const { data: original } = await holidayTableDb('holiday_ledger_entries', { companyId: input.companyId })
     .from('holiday_ledger_entries')
     .select('*')
     .eq('company_id', input.companyId)
@@ -749,7 +769,7 @@ export async function reverseApprovedLeaveLedger(input: {
   const minutes = Math.abs(Number(original.minutes ?? 0))
   if (minutes <= 0) return null
 
-  const { data: already } = await admin
+  const { data: already } = await holidayTableDb('holiday_ledger_entries', { companyId: input.companyId })
     .from('holiday_ledger_entries')
     .select('id')
     .eq('reference_type', 'leave_request')
@@ -758,7 +778,7 @@ export async function reverseApprovedLeaveLedger(input: {
     .maybeSingle()
   if (already) return already
 
-  const { data, error } = await admin
+  const { data, error } = await holidayTableDb('holiday_ledger_entries', { companyId: input.companyId })
     .from('holiday_ledger_entries')
     .insert({
       company_id: input.companyId,
@@ -803,7 +823,7 @@ export async function postManualHolidayAdjustment(input: {
     actorName: input.actorName,
   })
 
-  const { data, error } = await admin
+  const { data, error } = await holidayTableDb('holiday_ledger_entries', { companyId: input.companyId })
     .from('holiday_ledger_entries')
     .insert({
       company_id: input.companyId,
@@ -866,7 +886,7 @@ export async function postIrregularHoursAccrual(input: {
     actorName: input.actorName,
   })
   const minutes = Math.round(hours * 0.1207 * 60)
-  const { data, error } = await admin
+  const { data, error } = await holidayTableDb('holiday_ledger_entries', { companyId: input.companyId })
     .from('holiday_ledger_entries')
     .insert({
       company_id: input.companyId,
@@ -890,7 +910,7 @@ async function resolveDriverFromAuth(context: {
   companyId: string
   user: { id: string }
 }) {
-  const { data: appAccount, error } = await admin
+  const { data: appAccount, error } = await holidaySideEffectsDb(context.companyId)
     .from('driver_app_accounts')
     .select('driver_id')
     .eq('company_id', context.companyId)
@@ -902,7 +922,7 @@ async function resolveDriverFromAuth(context: {
 }
 
 async function loadDriverPerson(companyId: string, driverId: string) {
-  const { data, error } = await admin
+  const { data, error } = await holidaySideEffectsDb(companyId)
     .from('drivers')
     .select('id, driver_number, staff_members(first_name, last_name), primary_depot_id')
     .eq('company_id', companyId)
@@ -914,7 +934,7 @@ async function loadDriverPerson(companyId: string, driverId: string) {
   const staffRow = Array.isArray(staff) ? staff[0] ?? null : staff
   let depotName: string | null = null
   if (data.primary_depot_id) {
-    const { data: depot } = await admin
+    const { data: depot } = await holidaySideEffectsDb(companyId)
       .from('depots')
       .select('name')
       .eq('id', data.primary_depot_id)
@@ -1000,7 +1020,7 @@ export async function driverHolidayListRequests(request: Request) {
   const driverId = await resolveDriverFromAuth(context)
   if (!driverId) return apiError(403, 'No Driver account is linked to this login', 'driver_account_missing')
 
-  const { data, error } = await admin
+  const { data, error } = await holidayTableDb('attendance_leave_requests', { companyId: context.companyId, context })
     .from('attendance_leave_requests')
     .select('*')
     .eq('company_id', context.companyId)
@@ -1095,14 +1115,14 @@ export async function driverHolidaySubmitRequest(request: Request) {
     updated_at: new Date().toISOString(),
   }
 
-  const { data, error } = await admin
+  const { data, error } = await holidayTableDb('attendance_leave_requests', { companyId: context.companyId, context })
     .from('attendance_leave_requests')
     .insert(payload)
     .select('*')
     .single()
   if (error) return apiError(500, error.message)
 
-  await admin.from('attendance_leave_audit').insert({
+  await holidayTableDb('attendance_leave_audit', { companyId: context.companyId, context }).from('attendance_leave_audit').insert({
     company_id: context.companyId,
     leave_request_id: id,
     actor_name: person.personName,
@@ -1156,7 +1176,7 @@ export async function adminDriverHolidayGet(request: Request, driverId: string) 
       driverId,
       userId: context.user.id,
     })
-    const { data: leave } = await admin
+    const { data: leave } = await holidayTableDb('attendance_leave_requests', { companyId: context.companyId, context })
       .from('attendance_leave_requests')
       .select('*')
       .eq('company_id', context.companyId)
@@ -1235,8 +1255,8 @@ export async function adminDriverHolidayPatchProfile(request: Request, driverId:
 
     // Refresh opening entitlement if leave year / entitlement changed
     const yearStart = String(profile.leave_year_start)
-    const { data: opening } = await admin
-      .from('holiday_ledger_entries')
+    const { data: opening } = await holidayTableDb('holiday_ledger_entries', { companyId: context.companyId, context })
+    .from('holiday_ledger_entries')
       .select('id, minutes')
       .eq('company_id', context.companyId)
       .eq('driver_id', driverId)
@@ -1245,7 +1265,7 @@ export async function adminDriverHolidayPatchProfile(request: Request, driverId:
       .maybeSingle()
 
     if (opening && Number(opening.minutes) !== Number(profile.annual_entitlement_minutes)) {
-      await admin
+      await holidayTableDb('holiday_ledger_entries', { companyId: context.companyId, context })
         .from('holiday_ledger_entries')
         .update({
           minutes: Number(profile.annual_entitlement_minutes),

@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
 import { api } from '@/lib/api/client'
-import { isOperationsDemoLayerActive, OPERATIONS_DEMO_BANNER } from '@/lib/operations/operations-data-source'
 import {
   flattenTripsToJobs,
   jobRegisterSummary,
@@ -110,13 +109,6 @@ export function JobsPage() {
           Create urgent booking
         </Link>
       </div>
-
-      {isOperationsDemoLayerActive() && OPERATIONS_DEMO_BANNER && (
-        <div className="rounded-xl border border-command-200 bg-command-50 px-4 py-3 text-sm text-command-950">
-          <p className="font-semibold">{OPERATIONS_DEMO_BANNER.title}</p>
-          <p className="mt-1 text-command-900">{OPERATIONS_DEMO_BANNER.body}</p>
-        </div>
-      )}
 
       <div className="grid gap-3 sm:grid-cols-4">
         <StatCard label="Unscheduled" value={summary.unscheduled} />

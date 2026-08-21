@@ -25,26 +25,36 @@ async function withAuthAdminRetry<T>(label: string, fn: () => Promise<T>): Promi
 async function ensureAuthUser(email: string, firstName: string, lastName: string, password: string) {
   const normalised = email.toLowerCase()
 
+  // Prefer Auth user id as source of truth — public.users can lag or diverge.
+  for (let page = 1; page <= 10; page += 1) {
+    const { data: listed } = await admin.auth.admin.listUsers({ page, perPage: 200 })
+    const existing = listed?.users?.find((u) => u.email?.toLowerCase() === normalised)
+    if (existing) {
+      await withAuthAdminRetry('pilot password sync', () =>
+        admin.auth.admin.updateUserById(existing.id, {
+          password,
+          email_confirm: true,
+          user_metadata: { first_name: firstName, last_name: lastName },
+        }).then(({ error }) => {
+          if (error) throw new Error(error.message)
+        }),
+      )
+      return existing.id
+    }
+    if (!listed?.users?.length || listed.users.length < 200) break
+  }
+
   const { data: profile } = await admin.from('users').select('id').ilike('email', normalised).maybeSingle()
   if (profile?.id) {
-    await withAuthAdminRetry('pilot password sync', () =>
+    await withAuthAdminRetry('pilot password sync (profile)', () =>
       admin.auth.admin.updateUserById(String(profile.id), {
         password,
         email_confirm: true,
       }).then(({ error }) => {
         if (error) throw new Error(error.message)
-      }))
+      }),
+    )
     return String(profile.id)
-  }
-
-  for (let page = 1; page <= 10; page += 1) {
-    const { data: listed } = await admin.auth.admin.listUsers({ page, perPage: 200 })
-    const existing = listed?.users?.find((u) => u.email?.toLowerCase() === normalised)
-    if (existing) {
-      await admin.auth.admin.updateUserById(existing.id, { password, email_confirm: true })
-      return existing.id
-    }
-    if (!listed?.users?.length || listed.users.length < 200) break
   }
 
   const { data: created, error } = await admin.auth.admin.createUser({
@@ -56,10 +66,14 @@ async function ensureAuthUser(email: string, firstName: string, lastName: string
   if (!error && created.user) return created.user.id
 
   if (error?.message?.toLowerCase().includes('already been registered')) {
-    const { data: retryProfile } = await admin.from('users').select('id').ilike('email', normalised).maybeSingle()
-    if (retryProfile?.id) {
-      await admin.auth.admin.updateUserById(String(retryProfile.id), { password, email_confirm: true })
-      return String(retryProfile.id)
+    for (let page = 1; page <= 10; page += 1) {
+      const { data: listed } = await admin.auth.admin.listUsers({ page, perPage: 200 })
+      const existing = listed?.users?.find((u) => u.email?.toLowerCase() === normalised)
+      if (existing) {
+        await admin.auth.admin.updateUserById(existing.id, { password, email_confirm: true })
+        return existing.id
+      }
+      if (!listed?.users?.length || listed.users.length < 200) break
     }
   }
 
@@ -93,6 +107,17 @@ export async function seedBctPilotDriver() {
   if (!company?.id) throw new Error('BCT company not found — run BCT yard seed migrations first')
 
   const companyId = String(company.id)
+
+  // Gate A pilot requires an operable tenant — CLOSED/archived BCT blocks Driver bootstrap.
+  await admin
+    .from('companies')
+    .update({
+      tenant_status: 'ACTIVE',
+      trading_name: 'Brent Community Transport',
+      activated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', companyId)
 
   const { data: depot } = await admin
     .from('depots')
@@ -166,6 +191,17 @@ export async function seedBctPilotDriver() {
       .single()
     if (error || !createdMembership) throw new Error(error?.message ?? 'BCT pilot membership failed')
     membership = createdMembership
+  } else {
+    await admin
+      .from('company_memberships')
+      .update({
+        status: 'active',
+        role_ids: driverRole?.id ? [driverRole.id] : [],
+        accepted_at: new Date().toISOString(),
+        updated_by: userId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', membership.id)
   }
 
   const membershipId = String(membership.id)

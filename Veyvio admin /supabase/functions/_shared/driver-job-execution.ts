@@ -1,24 +1,28 @@
 /**
  * Server-enforced driver job execution events (Command source of truth when configured).
  *
- * PROD-1 Batch 01 — authority declaration / bare-admin removal.
- * Not UserScopedDb / RLS cutover. Writes still use company-scoped service-role
- * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
+ * Wave 3F UserScopedDb/RLS cutover 2: membership JWT writes `driver_job_execution_events`
+ * through RLS (INSERT + SELECT). Support-grant sessions stay on company-scoped
+ * service-role — membership RLS cannot see non-member JWTs.
+ * company_id filters remain defence-in-depth.
+ * Domain events stay privileged until named capabilities exist.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { companyScopedServiceDb, userScopedDb } from './db-authority.ts'
 import { guardDriverScopedWrite } from './driver-write-guards.ts'
 import { emitDomainEvent } from './domain-events.ts'
+import type { RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
-function jobExecutionDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'driver_job_execution')
+function jobExecutionDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'driver_job_execution_support_grant')
+  }
+  return userScopedDb(context, 'driver_job_execution')
 }
 
-const STOP_EVENT_TYPES = new Set(['arrived_stop', 'completed_stop'])
-
 export type JobExecutionEventInput = {
-  companyId: string
+  context: RequestContext
   driverId: string
   jobId: string
   eventType: string
@@ -37,12 +41,14 @@ function mapStopStatus(eventType: string): string | null {
 }
 
 export async function recordDriverJobExecutionEvent(input: JobExecutionEventInput) {
+  const companyId = input.context.companyId
+  const db = jobExecutionDb(input.context)
   const clientGeneratedId = input.clientGeneratedId?.trim() || null
   if (clientGeneratedId) {
-    const { data: existing } = await jobExecutionDb(input.companyId)
+    const { data: existing } = await db
       .from('driver_job_execution_events')
       .select('id, event_type, occurred_at, payload')
-      .eq('company_id', input.companyId)
+      .eq('company_id', companyId)
       .eq('client_generated_id', clientGeneratedId)
       .maybeSingle()
     if (existing) return existing as Row
@@ -53,16 +59,16 @@ export async function recordDriverJobExecutionEvent(input: JobExecutionEventInpu
   // when dutyId is absent so this write can never skip the assignment
   // check just because the client omitted dutyId.
   await guardDriverScopedWrite({
-    companyId: input.companyId,
+    companyId,
     driverId: input.driverId,
     dutyId: input.dutyId ? String(input.dutyId) : String(input.jobId),
   })
 
   const now = new Date().toISOString()
-  const { data, error } = await jobExecutionDb(input.companyId)
+  const { data, error } = await db
     .from('driver_job_execution_events')
     .insert({
-      company_id: input.companyId,
+      company_id: companyId,
       driver_id: input.driverId,
       job_id: String(input.jobId),
       duty_id: input.dutyId ?? null,
@@ -80,7 +86,7 @@ export async function recordDriverJobExecutionEvent(input: JobExecutionEventInpu
   if (error || !data) throw new Error(error?.message ?? 'Job execution event could not be recorded')
 
   await emitDomainEvent({
-    companyId: input.companyId,
+    companyId,
     eventType: `job.${input.eventType}`,
     entityType: 'job',
     entityId: String(input.jobId),
@@ -93,8 +99,9 @@ export async function recordDriverJobExecutionEvent(input: JobExecutionEventInpu
   return data as Row
 }
 
-export async function getJobExecutionSnapshot(companyId: string, jobId: string) {
-  const { data, error } = await jobExecutionDb(companyId)
+export async function getJobExecutionSnapshot(context: RequestContext, jobId: string) {
+  const companyId = context.companyId
+  const { data, error } = await jobExecutionDb(context)
     .from('driver_job_execution_events')
     .select('*')
     .eq('company_id', companyId)

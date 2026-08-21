@@ -1,9 +1,9 @@
 # Wave 3F — Service-role usage + full RLS tenant-isolation proof
 
-**Status:** LOCKED / IN PROGRESS — FIX-P0-011 **LOCKED** 17 Aug 2026; FIX-P1-012 importer batches remain frozen until hosted verification  
+**Status:** **LOCKED** 21 Aug 2026 — ordinary authenticated CRUD on UserScopedDb + RLS (`resolveTenantDb` / ALS); FIX-P0-011 remains LOCKED; residual Type B + JWT-less fallback inventoried in [prod-1-service-role-classification.md](./prod-1-service-role-classification.md)  
 **Programme track:** Production Readiness **PR-02** ([veyvio-production-readiness-blueprint.md](./veyvio-production-readiness-blueprint.md))  
 **Depends on:** Wave 3E CLOSED / LOCKED  
-**Does not touch:** 3E-1 BFF cookies, 3E-2 native Driver custody, organisation_id (3G — deferred until 3F LOCKED)
+**Does not touch:** 3E-1 BFF cookies, 3E-2 native Driver custody, organisation_id (3G — deferred until 3F LOCKED; now unblocked for sequencing only after Gate A)
 
 **Anchors (remediation plan):**
 
@@ -96,7 +96,8 @@ Browser / Driver / Yard / Command SPA
 
 - [x] Inventory dual-FK relationships missing `assert_same_company_pair` — see `docs/plan/evidence/wave-3fd-same-company-inventory.json`
 - [x] First-wave triggers + service_role forge tests (`202608170004`) — duties, defects, drivers, runs, trip_assignments, duty_live_positions, vehicle_swap_requests, fuel_records
-- [ ] Later-wave dual-FK tables (40+ inventoried residual)
+- [x] Later-wave dual-FK tables — **PR-03 P0 wave 2 closed** (`202608210001`, forge 23/23); residual dual-FK classified P1 with register in `docs/plan/evidence/pr03-p0-same-company-wave2.json`
+
 
 ### 3F-F — Storage tenant isolation (explicit slice)
 

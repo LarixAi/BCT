@@ -1,15 +1,14 @@
 /**
  * Driver journey start/complete handlers (runs as journeys).
  *
- * PROD-1 Batch 07 — authority declaration / bare-admin removal.
- * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
- * via companyScopedServiceDb; company_id filters remain defence-in-depth.
- * duty_runs is reached only after the parent run is resolved with company_id.
- *
- * emitDomainEvent and writeImmutableAudit stay on transitional hubs — do not wrap them here.
+ * Wave 3F UserScopedDb/RLS cutover 26+28: membership JWT reads/writes
+ * `journey_stops` (SELECT/INSERT/UPDATE) and reads/updates `runs`
+ * (SELECT/UPDATE). Support-grant sessions stay on company-scoped service-role.
+ * Duties, drivers, duty_runs, and driver_app_accounts stay service-role.
+ * emitDomainEvent and writeImmutableAudit stay privileged.
  */
 import { type RequestContext } from './supabase.ts'
-import { companyScopedServiceDb } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { apiError, json, readJson } from './http.ts'
 import {
   evaluateJourneyTransition,
@@ -22,12 +21,20 @@ import { writeImmutableAudit } from './audit-service.ts'
 
 type Row = Record<string, unknown>
 
-function journeyDb(context: RequestContext) {
-  return companyScopedServiceDb(context, 'journey_handlers')
+function journeyTenantDb(context: RequestContext) {
+  return resolveTenantDb(context.companyId, 'journey_stops', context)
+}
+
+function journeyRunsDb(context: RequestContext) {
+  return resolveTenantDb(context.companyId, 'runs', context)
+}
+
+function journeyLookupsDb(context: RequestContext) {
+  return resolveTenantDb(context.companyId, 'journey_handlers_lookups', context)
 }
 
 async function loadDriverForUser(context: RequestContext): Promise<Row | null> {
-  const { data } = await journeyDb(context)
+  const { data } = await journeyLookupsDb(context)
     .from('drivers')
     .select('id, company_id')
     .eq('company_id', context.companyId)
@@ -35,14 +42,14 @@ async function loadDriverForUser(context: RequestContext): Promise<Row | null> {
     .maybeSingle()
   if (data) return data
   // Fallback: driver_app_accounts linkage
-  const { data: app } = await journeyDb(context)
+  const { data: app } = await journeyLookupsDb(context)
     .from('driver_app_accounts')
     .select('driver_id')
     .eq('company_id', context.companyId)
     .eq('user_id', context.user.id)
     .maybeSingle()
   if (!app?.driver_id) return null
-  const { data: driver } = await journeyDb(context)
+  const { data: driver } = await journeyLookupsDb(context)
     .from('drivers')
     .select('id, company_id')
     .eq('id', app.driver_id)
@@ -52,7 +59,7 @@ async function loadDriverForUser(context: RequestContext): Promise<Row | null> {
 }
 
 async function loadJourneyForDriver(context: RequestContext, journeyId: string, driverId: string) {
-  const { data: run, error } = await journeyDb(context)
+  const { data: run, error } = await journeyRunsDb(context)
     .from('runs')
     .select('*')
     .eq('company_id', context.companyId)
@@ -61,7 +68,7 @@ async function loadJourneyForDriver(context: RequestContext, journeyId: string, 
   if (error) throw new Error(error.message)
   if (!run) return { run: null, duty: null, forbidden: false as const }
 
-  const { data: link } = await journeyDb(context)
+  const { data: link } = await journeyLookupsDb(context)
     .from('duty_runs')
     .select('duty_id')
     .eq('run_id', journeyId)
@@ -70,7 +77,7 @@ async function loadJourneyForDriver(context: RequestContext, journeyId: string, 
 
   let duty: Row | null = null
   if (link?.duty_id) {
-    const { data: dutyRow } = await journeyDb(context)
+    const { data: dutyRow } = await journeyLookupsDb(context)
       .from('duties')
       .select('id, driver_id, company_id, actual_sign_on_at, actual_sign_off_at, active_journey_id, publication_status, status')
       .eq('id', link.duty_id)
@@ -120,7 +127,7 @@ export async function startDriverJourney(
   }
 
   const now = new Date().toISOString()
-  const { data: updated, error } = await journeyDb(context)
+  const { data: updated, error } = await journeyRunsDb(context)
     .from('runs')
     .update({
       lifecycle_status: gate.to,
@@ -136,7 +143,7 @@ export async function startDriverJourney(
   if (error || !updated) return apiError(500, error?.message ?? 'Journey could not be started')
 
   if (loaded.duty?.id) {
-    await journeyDb(context)
+    await journeyLookupsDb(context)
       .from('duties')
       .update({
         active_journey_id: journeyId,
@@ -202,7 +209,7 @@ export async function completeDriverJourney(
   }
 
   const now = new Date().toISOString()
-  const { data: updated, error } = await journeyDb(context)
+  const { data: updated, error } = await journeyRunsDb(context)
     .from('runs')
     .update({
       lifecycle_status: gate.to,
@@ -218,7 +225,7 @@ export async function completeDriverJourney(
   if (error || !updated) return apiError(500, error?.message ?? 'Journey could not be completed')
 
   if (loaded.duty?.id && String(loaded.duty.active_journey_id) === journeyId) {
-    await journeyDb(context)
+    await journeyLookupsDb(context)
       .from('duties')
       .update({
         active_journey_id: null,
@@ -272,7 +279,7 @@ async function resolveJourneyStop(
 ) {
   const stopId = input.stopId ? String(input.stopId).trim() : ''
   if (stopId) {
-    const { data, error } = await journeyDb(context)
+    const { data, error } = await journeyTenantDb(context)
       .from('journey_stops')
       .select('*')
       .eq('company_id', context.companyId)
@@ -288,7 +295,7 @@ async function resolveJourneyStop(
     throw new Error('sequence must be a positive integer when stopId is omitted')
   }
 
-  const { data: existing } = await journeyDb(context)
+  const { data: existing } = await journeyTenantDb(context)
     .from('journey_stops')
     .select('*')
     .eq('company_id', context.companyId)
@@ -297,7 +304,7 @@ async function resolveJourneyStop(
     .maybeSingle()
   if (existing) return existing
 
-  const { data: created, error: createError } = await journeyDb(context)
+  const { data: created, error: createError } = await journeyTenantDb(context)
     .from('journey_stops')
     .insert({
       company_id: context.companyId,
@@ -350,7 +357,7 @@ export async function arriveDriverJourneyStop(
   }
 
   const now = new Date().toISOString()
-  const { data: updated, error } = await journeyDb(context)
+  const { data: updated, error } = await journeyTenantDb(context)
     .from('journey_stops')
     .update({
       status: 'arrived',
@@ -444,7 +451,7 @@ export async function completeDriverJourneyStop(
   }
 
   const now = new Date().toISOString()
-  const { data: updated, error } = await journeyDb(context)
+  const { data: updated, error } = await journeyTenantDb(context)
     .from('journey_stops')
     .update({
       status: 'completed',

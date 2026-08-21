@@ -60,6 +60,8 @@ export type RequestContext = {
   supportGrantId: string | null
   supportSessionId: string | null
   supportGrant: ActiveSupportGrant | null
+  /** User JWT for UserScopedDb / RLS. Never log this value. */
+  accessToken: string
   db: SupabaseClient
 }
 
@@ -96,6 +98,7 @@ export async function ensurePlatformUser(user: User) {
 function emptyContext(
   user: User,
   platformRole: string | null,
+  accessToken: string,
 ): RequestContext {
   return {
     user,
@@ -113,33 +116,44 @@ function emptyContext(
     supportGrantId: null,
     supportSessionId: null,
     supportGrant: null,
+    accessToken,
     db: admin,
   }
 }
 
 export async function authenticate(request: Request, requireCompany = true): Promise<RequestContext> {
+  const correlationId = request.headers.get('x-veyvio-request-id')?.trim() || crypto.randomUUID()
   const header = request.headers.get('Authorization')
   if (!header?.startsWith('Bearer ')) {
-    throw new HttpError(401, 'Authentication required', 'unauthenticated')
+    throw new HttpError(401, 'Authentication required', 'unauthenticated', {
+      authStage: 'missing_bearer',
+      correlationId,
+    })
   }
 
   const accessToken = header.slice(7)
   const { data, error } = await publicClient(accessToken).auth.getUser(accessToken)
   if (error || !data.user) {
-    throw new HttpError(401, 'Session is invalid or expired', 'unauthenticated')
+    throw new HttpError(401, 'Session is invalid or expired', 'unauthenticated', {
+      authStage: 'getUser',
+      correlationId,
+    })
   }
 
   const companyId = String(
     data.user.app_metadata.active_company_id ?? data.user.app_metadata.active_tenant_id ?? '',
   )
   if (requireCompany && !companyId) {
-    throw new HttpError(409, 'Select a company before continuing', 'company_required')
+    throw new HttpError(409, 'Select a company before continuing', 'company_required', {
+      authStage: 'company',
+      correlationId,
+    })
   }
 
   const platformRole = await resolvePlatformRole(data.user.id)
 
   if (!companyId) {
-    return emptyContext(data.user, platformRole)
+    return emptyContext(data.user, platformRole, accessToken)
   }
 
   // Client-supplied membership claims (if any header/query) must never authorize.
@@ -173,7 +187,10 @@ export async function authenticate(request: Request, requireCompany = true): Pro
       severity: 'attention',
       metadata: { reason: access.reason },
     }).catch(() => undefined)
-    throw new HttpError(403, 'Company access is unavailable', 'forbidden')
+    throw new HttpError(403, 'Company access is unavailable', 'forbidden', {
+      authStage: 'membership',
+      correlationId,
+    })
   }
 
   if (access.via === 'support') {
@@ -192,7 +209,10 @@ export async function authenticate(request: Request, requireCompany = true): Pro
         severity: 'attention',
         metadata: { code: decision.code, clientMembershipId: clientMembershipId || null },
       }).catch(() => undefined)
-      throw new HttpError(403, decision.message, decision.code)
+      throw new HttpError(403, decision.message, decision.code, {
+        authStage: 'support',
+        correlationId,
+      })
     }
 
     assertSupportGrantWrite(supportGrant, request.method)
@@ -236,6 +256,7 @@ export async function authenticate(request: Request, requireCompany = true): Pro
       supportGrantId: decision.supportGrantId,
       supportSessionId,
       supportGrant,
+      accessToken,
       db: admin,
     }
   }
@@ -243,7 +264,10 @@ export async function authenticate(request: Request, requireCompany = true): Pro
   // Ordinary membership path — never mix support grant roles/grants.
   const membershipId = String(membership?.id ?? '')
   if (!membershipId) {
-    throw new HttpError(403, 'Company access is unavailable', 'forbidden')
+    throw new HttpError(403, 'Company access is unavailable', 'forbidden', {
+      authStage: 'membership',
+      correlationId,
+    })
   }
 
   const roleIds = (membership?.role_ids as string[] | null) ?? []
@@ -284,6 +308,7 @@ export async function authenticate(request: Request, requireCompany = true): Pro
     supportGrantId: null,
     supportSessionId: null,
     supportGrant: null,
+    accessToken,
     db: admin,
   }
 }

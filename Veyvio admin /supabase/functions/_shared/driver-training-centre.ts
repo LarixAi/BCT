@@ -1,5 +1,13 @@
-/** Driver Training Centre — list assignments and save progress/completion. */
-import { admin, authenticate } from './supabase.ts'
+/** Driver Training Centre — list assignments and save progress/completion.
+ *
+ * Wave 3F UserScopedDb/RLS cutover 36: membership JWT reads/writes
+ * `driver_training` through RLS (SELECT/INSERT/UPDATE). Support-grant / no-JWT
+ * callers (driver-requirements ensure) stay on company-scoped service-role.
+ * `driver_app_accounts`, `driver_requirements`, and driver profile lookups stay
+ * service-role. Notifications stay as previously wrapped.
+ */
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
+import { authenticate, type RequestContext } from './supabase.ts'
 import { apiError, json, readJson } from './http.ts'
 import {
   DRIVER_ONBOARDING_NOTIFICATION,
@@ -8,6 +16,23 @@ import {
 } from './notifications.ts'
 
 type Row = Record<string, unknown>
+
+function trainingDb(input: { companyId: string; context?: RequestContext }) {
+  if (input.context?.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(input.context, 'driver_training_support_grant')
+  }
+  if (input.context) {
+    return userScopedDb(input.context, 'driver_training')
+  }
+  return resolveTenantDb(input.companyId, 'driver_training')
+}
+
+function trainingSideEffectsDb(input: { companyId: string; context?: RequestContext }) {
+  if (input.context) {
+    return companyScopedServiceDb(input.context, 'driver_training_side_effects')
+  }
+  return resolveTenantDb(input.companyId, 'driver_training_side_effects')
+}
 
 export const TRAINING_COURSE_META: Record<
   string,
@@ -392,13 +417,15 @@ export async function ensureTrainingAssignmentRow(input: {
   userId: string
   assignedByName?: string | null
   dueAt?: string | null
+  context?: RequestContext
 }) {
   const meta = TRAINING_COURSE_META[input.trainingKey]
   if (!meta) return null
   const now = new Date().toISOString()
+  const db = trainingDb(input)
   let existing: Row | null = null
   {
-    const withProgress = await admin
+    const withProgress = await db
       .from('driver_training')
       .select('id, status, progress_percentage')
       .eq('company_id', input.companyId)
@@ -406,7 +433,7 @@ export async function ensureTrainingAssignmentRow(input: {
       .eq('training_key', input.trainingKey)
       .maybeSingle()
     if (withProgress.error && /progress_percentage/i.test(withProgress.error.message)) {
-      const basic = await admin
+      const basic = await db
         .from('driver_training')
         .select('id, status')
         .eq('company_id', input.companyId)
@@ -444,7 +471,7 @@ export async function ensureTrainingAssignmentRow(input: {
     source_app: 'COMMAND',
   }
 
-  let { data, error } = await admin
+  let { data, error } = await db
     .from('driver_training')
     .upsert(row, { onConflict: 'driver_id,training_key' })
     .select('*')
@@ -465,7 +492,7 @@ export async function ensureTrainingAssignmentRow(input: {
       created_by: input.userId,
       source_app: 'COMMAND',
     }
-    const retry = await admin
+    const retry = await db
       .from('driver_training')
       .upsert(basic, { onConflict: 'driver_id,training_key' })
       .select('*')
@@ -546,7 +573,9 @@ function toAssignment(row: Row, req: Row | null): Row {
 
 export async function listDriverTrainingCentre(request: Request) {
   const context = await authenticate(request)
-  const { data: appAccount, error: accountError } = await admin
+  const sideEffects = trainingSideEffectsDb({ companyId: context.companyId, context })
+  const db = trainingDb({ companyId: context.companyId, context })
+  const { data: appAccount, error: accountError } = await sideEffects
     .from('driver_app_accounts')
     .select('driver_id')
     .eq('company_id', context.companyId)
@@ -560,12 +589,12 @@ export async function listDriverTrainingCentre(request: Request) {
   const driverId = String(appAccount.driver_id)
 
   const [{ data: requirements }, { data: trainingRows }] = await Promise.all([
-    admin
+    sideEffects
       .from('driver_requirements')
       .select('*')
       .eq('company_id', context.companyId)
       .eq('driver_id', driverId),
-    admin
+    db
       .from('driver_training')
       .select('*')
       .eq('company_id', context.companyId)
@@ -590,7 +619,7 @@ export async function listDriverTrainingCentre(request: Request) {
 
     if (status === 'request_sent') {
       try {
-        await admin
+        await sideEffects
           .from('driver_requirements')
           .update({
             status_override: 'training_assigned',
@@ -619,6 +648,7 @@ export async function listDriverTrainingCentre(request: Request) {
         userId: context.user.id,
         assignedByName: req.assigned_to_name ? String(req.assigned_to_name) : 'Training lead',
         dueAt: req.due_at ? String(req.due_at) : null,
+        context,
       })
       if (created) trainByKey.set(key, created as Row)
     } catch (err) {
@@ -683,7 +713,9 @@ export async function listDriverTrainingCentre(request: Request) {
 
 export async function updateDriverTrainingProgress(request: Request) {
   const context = await authenticate(request)
-  const { data: appAccount, error: accountError } = await admin
+  const sideEffects = trainingSideEffectsDb({ companyId: context.companyId, context })
+  const db = trainingDb({ companyId: context.companyId, context })
+  const { data: appAccount, error: accountError } = await sideEffects
     .from('driver_app_accounts')
     .select('driver_id')
     .eq('company_id', context.companyId)
@@ -701,7 +733,7 @@ export async function updateDriverTrainingProgress(request: Request) {
   const action = String(input.action ?? 'save_progress')
   const now = new Date().toISOString()
 
-  let query = admin
+  let query = db
     .from('driver_training')
     .select('*')
     .eq('company_id', context.companyId)
@@ -761,7 +793,7 @@ export async function updateDriverTrainingProgress(request: Request) {
     patch.status = progressPercentage >= 100 ? 'assessment_required' : 'in_progress'
     if (!existing.started_at) patch.started_at = now
 
-    await admin
+    await sideEffects
       .from('driver_requirements')
       .update({
         status_override: 'in_progress',
@@ -782,7 +814,7 @@ export async function updateDriverTrainingProgress(request: Request) {
     if (input.assessmentScore != null) patch.assessment_score = Number(input.assessmentScore)
     if (!existing.started_at) patch.started_at = now
 
-    await admin
+    await sideEffects
       .from('driver_requirements')
       .update({
         status_override: 'approved',
@@ -793,7 +825,7 @@ export async function updateDriverTrainingProgress(request: Request) {
       .eq('driver_id', driverId)
       .eq('definition_key', trainingKey)
 
-    const { data: driver } = await admin
+    const { data: driver } = await sideEffects
       .from('drivers')
       .select('staff_members(first_name, last_name)')
       .eq('id', driverId)
@@ -814,7 +846,7 @@ export async function updateDriverTrainingProgress(request: Request) {
   } else if (action === 'start') {
     patch.status = 'in_progress'
     if (!existing.started_at) patch.started_at = now
-    await admin
+    await sideEffects
       .from('driver_requirements')
       .update({
         status_override: 'in_progress',
@@ -829,9 +861,10 @@ export async function updateDriverTrainingProgress(request: Request) {
     return apiError(400, 'Unknown action')
   }
 
-  const { data: updated, error: updateError } = await admin
+  const { data: updated, error: updateError } = await db
     .from('driver_training')
     .update(patch)
+    .eq('company_id', context.companyId)
     .eq('id', existing.id)
     .select('*')
     .maybeSingle()
@@ -850,9 +883,10 @@ export async function updateDriverTrainingProgress(request: Request) {
       updated_at: now,
       updated_by: context.user.id,
     }
-    const retry = await admin
+    const retry = await db
       .from('driver_training')
       .update(basicPatch)
+      .eq('company_id', context.companyId)
       .eq('id', existing.id)
       .select('*')
       .maybeSingle()
@@ -862,7 +896,7 @@ export async function updateDriverTrainingProgress(request: Request) {
     return apiError(400, updateError.message)
   }
 
-  const { data: req } = await admin
+  const { data: req } = await sideEffects
     .from('driver_requirements')
     .select('*')
     .eq('company_id', context.companyId)

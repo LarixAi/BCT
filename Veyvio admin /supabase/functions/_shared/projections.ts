@@ -1,5 +1,10 @@
 /** Command read-model projections over shared platform tables. */
-import { admin } from './supabase.ts'
+import { resolveProjectionDb } from './db-authority.ts'
+
+function projDb(companyId: string) {
+  return resolveProjectionDb(companyId, 'projections_read')
+}
+
 import {
   groupVehicleEquipmentItems,
   listEquipmentRowsForCompany,
@@ -515,7 +520,7 @@ function approvedOnboarding() {
 }
 
 async function loadDriverRows(companyId: string, driverId?: string) {
-  let embedded = admin
+  let embedded = projDb(companyId)
     .from('drivers')
     .select('*, staff_members(*), depots(id, name)')
     .eq('company_id', companyId)
@@ -526,7 +531,7 @@ async function loadDriverRows(companyId: string, driverId?: string) {
   if (!embeddedResult.error) return (embeddedResult.data ?? []) as Row[]
 
   // Fallback when PostgREST cannot resolve embeds (schema cache / missing FK).
-  let plain = admin.from('drivers').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
+  let plain = projDb(companyId).from('drivers').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
   if (driverId) plain = plain.eq('id', driverId)
   const { data, error } = await plain
   if (error) throw new Error(error.message || embeddedResult.error.message)
@@ -537,10 +542,10 @@ async function loadDriverRows(companyId: string, driverId?: string) {
 
   const [staffRes, depotRes] = await Promise.all([
     staffIds.length
-      ? admin.from('staff_members').select('*').in('id', staffIds)
+      ? projDb(companyId).from('staff_members').select('*').in('id', staffIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     depotIds.length
-      ? admin.from('depots').select('id, name').in('id', depotIds)
+      ? projDb(companyId).from('depots').select('id, name').in('id', depotIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
   ])
 
@@ -561,7 +566,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
   const today = new Date().toISOString().slice(0, 10)
 
   const [dutiesRes, docsRes, restrictionsRes, accountsRes, trainingRes, auditRes, devicesRes] = await Promise.all([
-    admin
+    projDb(companyId)
       .from('duties')
       .select('id, driver_id, service_date, planned_sign_on_at, status')
       .eq('company_id', companyId)
@@ -569,20 +574,20 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
       .order('service_date', { ascending: true })
       .limit(200),
     driverIds.length
-      ? admin.from('driver_documents').select('*').eq('company_id', companyId).in('driver_id', driverIds)
+      ? projDb(companyId).from('driver_documents').select('*').eq('company_id', companyId).in('driver_id', driverIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     driverIds.length
-      ? admin.from('driver_restrictions').select('*').eq('company_id', companyId).in('driver_id', driverIds)
+      ? projDb(companyId).from('driver_restrictions').select('*').eq('company_id', companyId).in('driver_id', driverIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     driverIds.length
-      ? admin.from('driver_app_accounts').select('*').eq('company_id', companyId).in('driver_id', driverIds)
+      ? projDb(companyId).from('driver_app_accounts').select('*').eq('company_id', companyId).in('driver_id', driverIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     driverIds.length
-      ? admin.from('driver_training').select('*').eq('company_id', companyId).in('driver_id', driverIds)
+      ? projDb(companyId).from('driver_training').select('*').eq('company_id', companyId).in('driver_id', driverIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     // Detail only — keep directory list light
     driverId
-      ? admin
+      ? projDb(companyId)
           .from('audit_events')
           .select('id, action, actor_id, occurred_at, created_at, before_snapshot, after_snapshot, reason')
           .eq('company_id', companyId)
@@ -592,7 +597,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
           .limit(100)
       : Promise.resolve({ data: [] as Row[], error: null }),
     driverIds.length
-      ? admin
+      ? projDb(companyId)
           .from('driver_app_devices')
           .select('*')
           .eq('company_id', companyId)
@@ -611,7 +616,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
 
   const actorIds = [...new Set(auditRows.map((a) => a.actor_id).filter(Boolean).map(String))]
   const { data: actorUsers } = actorIds.length
-    ? await admin.from('users').select('id, first_name, last_name, email').in('id', actorIds)
+    ? await projDb(companyId).from('users').select('id, first_name, last_name, email').in('id', actorIds)
     : { data: [] as Row[] }
   const actorNameById = new Map(
     (actorUsers ?? []).map((u: Row) => [
@@ -741,7 +746,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
     ) {
       accountStatus = 'active'
       if (app?.id && String(app.account_status) !== 'active') {
-        void admin
+        void projDb(companyId)
           .from('driver_app_accounts')
           .update({
             account_status: 'active',
@@ -1014,7 +1019,7 @@ function mapVehicleCheckEntry(row: Row) {
 }
 
 async function loadVehicleCheckEntries(companyId: string, vehicleId?: string) {
-  let query = admin
+  let query = projDb(companyId)
     .from('vehicle_checks')
     .select(
       'id, vehicle_id, check_type, result, ops_outcome, odometer, fuel_level, submitted_at, created_at, source_app, drivers(staff_members(first_name, last_name))',
@@ -1117,7 +1122,7 @@ async function loadVehicleOperationalContexts(
 
   const [{ data: runs }, { data: duties }, { data: assignments }, { data: fuelRows }, { data: adblueRows }] =
     await Promise.all([
-      admin
+      projDb(companyId)
         .from('runs')
         .select(
           'id, run_reference, service_date, planned_start_at, status, vehicle_id, driver_id, drivers(id, driver_number, staff_members(first_name, last_name))',
@@ -1127,7 +1132,7 @@ async function loadVehicleOperationalContexts(
         .gte('service_date', today)
         .order('planned_start_at', { ascending: true })
         .limit(400),
-      admin
+      projDb(companyId)
         .from('duties')
         .select(
           'id, service_date, planned_sign_on_at, status, vehicle_id, driver_id, drivers(id, driver_number, staff_members(first_name, last_name))',
@@ -1137,7 +1142,7 @@ async function loadVehicleOperationalContexts(
         .gte('service_date', today)
         .order('planned_sign_on_at', { ascending: true })
         .limit(400),
-      admin
+      projDb(companyId)
         .from('trip_assignments')
         .select(
           'id, status, vehicle_id, driver_id, run_id, assigned_at, effective_from, drivers(id, driver_number, staff_members(first_name, last_name)), runs(id, run_reference, service_date, planned_start_at, status), trips(id, trip_reference, planned_pickup_at, status)',
@@ -1147,7 +1152,7 @@ async function loadVehicleOperationalContexts(
         .eq('status', 'active')
         .order('assigned_at', { ascending: false })
         .limit(400),
-      admin
+      projDb(companyId)
         .from('fuel_records')
         .select('vehicle_id, odometer, recorded_at')
         .eq('company_id', companyId)
@@ -1155,7 +1160,7 @@ async function loadVehicleOperationalContexts(
         .not('odometer', 'is', null)
         .order('recorded_at', { ascending: false })
         .limit(200),
-      admin
+      projDb(companyId)
         .from('adblue_records')
         .select('vehicle_id, mileage, top_up_at')
         .eq('company_id', companyId)
@@ -1210,13 +1215,13 @@ async function loadVehicleOperationalContexts(
   // Duties that only link the vehicle via duty_runs → runs.vehicle_id
   const runIds = [...new Set((runs ?? []).map((row: Row) => String(row.id)).filter(Boolean))]
   if (runIds.length) {
-    const { data: dutyLinks } = await admin
+    const { data: dutyLinks } = await projDb(companyId)
       .from('duty_runs')
       .select('duty_id, run_id, sequence, runs(id, vehicle_id, run_reference)')
       .in('run_id', runIds)
     const dutyIds = [...new Set((dutyLinks ?? []).map((link: Row) => String(link.duty_id)).filter(Boolean))]
     if (dutyIds.length) {
-      const { data: linkedDuties } = await admin
+      const { data: linkedDuties } = await projDb(companyId)
         .from('duties')
         .select(
           'id, service_date, planned_sign_on_at, status, vehicle_id, driver_id, drivers(id, driver_number, staff_members(first_name, last_name))',
@@ -1355,7 +1360,7 @@ async function loadVehicleOperationalContexts(
 }
 
 export async function projectVehicleProfile(companyId: string, vehicleId?: string) {
-  let query = admin
+  let query = projDb(companyId)
     .from('vehicles')
     .select('*, depots(id, name)')
     .eq('company_id', companyId)
@@ -1366,7 +1371,7 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
   if (error) throw new Error(error.message)
 
   const [{ data: defectCounts }, checkEntries, equipmentRows] = await Promise.all([
-    admin
+    projDb(companyId)
       .from('defects')
       .select('vehicle_id, severity, status')
       .eq('company_id', companyId)
@@ -1757,7 +1762,7 @@ function pushDriverTimelineEvent(events: DriverVehicleTimelineEvent[], event: Dr
 }
 
 export async function nextVehicleReportReference(companyId: string): Promise<string> {
-  const { count } = await admin
+  const { count } = await projDb(companyId)
     .from('vehicle_reports')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
@@ -1797,7 +1802,7 @@ export async function recordDriverVehicleHandbackReport(input: {
   ].filter(Boolean)
 
   const reference = await nextVehicleReportReference(input.companyId)
-  const { data, error } = await admin
+  const { data, error } = await projDb(companyId)
     .from('vehicle_reports')
     .insert({
       company_id: input.companyId,
@@ -1826,7 +1831,7 @@ export async function recordDriverVehicleHandbackReport(input: {
 
   if (error) throw new Error(error.message)
 
-  await admin.from('vehicle_report_status_history').insert({
+  await projDb(companyId).from('vehicle_report_status_history').insert({
     company_id: input.companyId,
     report_id: data.id,
     action: 'recorded',
@@ -1838,7 +1843,7 @@ export async function recordDriverVehicleHandbackReport(input: {
   let fuelReportReference: string | null = null
   if (input.fuelLevel) {
     fuelReportReference = await nextVehicleReportReference(input.companyId)
-    await admin.from('vehicle_reports').insert({
+    await projDb(companyId).from('vehicle_reports').insert({
       company_id: input.companyId,
       depot_id: input.depotId,
       vehicle_id: input.vehicleId,
@@ -1880,28 +1885,28 @@ export async function projectDriverVehicleTimeline(
     { data: fuelRows },
   ] =
     await Promise.all([
-    admin
+    projDb(companyId)
       .from('vehicle_checks')
       .select('id, check_type, result, fuel_level, odometer, submitted_at, drivers(staff_members(first_name, last_name))')
       .eq('company_id', companyId)
       .eq('vehicle_id', vehicleId)
       .order('submitted_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('defects')
       .select('id, category, component, description, severity, status, reported_at')
       .eq('company_id', companyId)
       .eq('vehicle_id', vehicleId)
       .order('reported_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('yard_movements')
       .select('id, to_location, reason, completed_at, completed_by, note')
       .eq('company_id', companyId)
       .eq('vehicle_id', vehicleId)
       .order('completed_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('vehicle_reports')
       .select(
         'id, reference, report_type, report_category, title, description, reported_at, reported_by, mileage, linked_work_order_id, status, stage',
@@ -1910,14 +1915,14 @@ export async function projectDriverVehicleTimeline(
       .eq('vehicle_id', vehicleId)
       .order('reported_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('adblue_records')
       .select('id, amount_litres, mileage, top_up_at, recorded_by_name, warning_before, warning_cleared')
       .eq('company_id', companyId)
       .eq('vehicle_id', vehicleId)
       .order('top_up_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('fuel_records')
       .select('id, litres, odometer, fuel_type, recorded_at, notes')
       .eq('company_id', companyId)
@@ -2038,14 +2043,14 @@ export async function projectDriverVehicleTimeline(
 }
 
 export async function projectBookingList(companyId: string) {
-  const { data: bookings, error } = await admin
+  const { data: bookings, error } = await projDb(companyId)
     .from('bookings')
     .select('*, customers(trading_name, legal_name), depots(name)')
     .eq('company_id', companyId)
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
 
-  const { data: trips } = await admin.from('trips').select('id, booking_id').eq('company_id', companyId)
+  const { data: trips } = await projDb(companyId).from('trips').select('id, booking_id').eq('company_id', companyId)
   const tripCount = new Map<string, number>()
   for (const trip of trips ?? []) {
     const id = String(trip.booking_id ?? '')
@@ -2080,7 +2085,7 @@ export async function projectBookingList(companyId: string) {
 
 export async function projectSchoolRouteList(companyId: string) {
   const today = new Date().toISOString().slice(0, 10)
-  const { data: bookings, error } = await admin
+  const { data: bookings, error } = await projDb(companyId)
     .from('bookings')
     .select('id, booking_reference, status, requested_date, passenger_ids, notes, customers(trading_name, legal_name)')
     .eq('company_id', companyId)
@@ -2091,7 +2096,7 @@ export async function projectSchoolRouteList(companyId: string) {
   const bookingIds = (bookings ?? []).map((row: Row) => String(row.id))
   const tripDatesByBooking = new Map<string, string[]>()
   if (bookingIds.length) {
-    const { data: trips } = await admin
+    const { data: trips } = await projDb(companyId)
       .from('trips')
       .select('booking_id, service_date')
       .eq('company_id', companyId)
@@ -2148,7 +2153,7 @@ export async function projectSchoolRouteSummary(companyId: string) {
   const routeBookingIds = routes.map((route) => String(route.id))
   let unscheduledJobs = 0
   if (routeBookingIds.length) {
-    const { data: trips } = await admin
+    const { data: trips } = await projDb(companyId)
       .from('trips')
       .select('id, booking_id')
       .eq('company_id', companyId)
@@ -2156,7 +2161,7 @@ export async function projectSchoolRouteSummary(companyId: string) {
       .in('booking_id', routeBookingIds)
     const tripIds = (trips ?? []).map((trip: Row) => String(trip.id))
     if (tripIds.length) {
-      const { data: linked } = await admin.from('run_trips').select('trip_id').in('trip_id', tripIds)
+      const { data: linked } = await projDb(companyId).from('run_trips').select('trip_id').in('trip_id', tripIds)
       const linkedTripIds = new Set((linked ?? []).map((row: Row) => String(row.trip_id)))
       unscheduledJobs = tripIds.filter((tripId) => !linkedTripIds.has(tripId)).length
     }
@@ -2312,7 +2317,7 @@ function dbTripToBookingTrip(trip: Row, index: number): Row {
 }
 
 export async function projectBookingDetail(companyId: string, bookingId: string) {
-  const { data: booking, error } = await admin
+  const { data: booking, error } = await projDb(companyId)
     .from('bookings')
     .select('*, customers(trading_name, legal_name), depots(name), contracts(contract_number, name)')
     .eq('company_id', companyId)
@@ -2326,13 +2331,13 @@ export async function projectBookingDetail(companyId: string, bookingId: string)
     : iso(booking.created_at).slice(0, 10)
 
   const [{ data: legs }, { data: trips }] = await Promise.all([
-    admin
+    projDb(companyId)
       .from('booking_legs')
       .select('*')
       .eq('company_id', companyId)
       .eq('booking_id', bookingId)
       .order('sequence', { ascending: true }),
-    admin
+    projDb(companyId)
       .from('trips')
       .select('*')
       .eq('company_id', companyId)
@@ -2343,7 +2348,7 @@ export async function projectBookingDetail(companyId: string, bookingId: string)
   const passengerIds = (booking.passenger_ids as string[] | null) ?? []
   let passengerRows: Row[] = []
   if (passengerIds.length) {
-    const { data } = await admin
+    const { data } = await projDb(companyId)
       .from('passengers')
       .select('id, first_name, last_name, safeguarding_flag, mobility_requirements')
       .eq('company_id', companyId)
@@ -2552,7 +2557,7 @@ function passengerDisplayName(passengerId: string, pickup: Row, names: Map<strin
 }
 
 export async function projectDuties(companyId: string, date?: string | null, dutyId?: string) {
-  let query = admin
+  let query = projDb(companyId)
     .from('duties')
     .select(
       '*, drivers(id, driver_number, staff_members(first_name, last_name), status), depots(id, name), vehicles(id, registration, operational_status)',
@@ -2567,7 +2572,7 @@ export async function projectDuties(companyId: string, date?: string | null, dut
 
   const dutyIds = (data ?? []).map((d: Row) => d.id as string)
   const { data: dutyRuns } = dutyIds.length
-    ? await admin.from('duty_runs').select('duty_id, run_id, sequence, runs(id, run_reference, vehicle_id, vehicles(id, registration, operational_status))').in('duty_id', dutyIds)
+    ? await projDb(companyId).from('duty_runs').select('duty_id, run_id, sequence, runs(id, run_reference, vehicle_id, vehicles(id, registration, operational_status))').in('duty_id', dutyIds)
     : { data: [] as Row[] }
 
   const runsByDuty = new Map<string, Row>()
@@ -2580,7 +2585,7 @@ export async function projectDuties(companyId: string, date?: string | null, dut
 
   const tripsByRun = new Map<string, Row[]>()
   if (runIds.length) {
-    const { data: runTrips } = await admin
+    const { data: runTrips } = await projDb(companyId)
       .from('run_trips')
       .select(
         'run_id, sequence, trips(id, trip_reference, planned_pickup_at, planned_arrival_at, pickup_location, destination_location, passenger_ids, status)',
@@ -2598,7 +2603,7 @@ export async function projectDuties(companyId: string, date?: string | null, dut
   }
 
   const { data: livePositions } = dutyIds.length
-    ? await admin
+    ? await projDb(companyId)
         .from('duty_live_positions')
         .select('duty_id, latitude, longitude, recorded_at, updated_at')
         .in('duty_id', dutyIds)
@@ -2672,7 +2677,7 @@ export async function projectDutyTrack(companyId: string, dutyId: string) {
   const duty = await projectDuties(companyId, null, dutyId)
   if (!duty) return null
 
-  const { data: live } = await admin
+  const { data: live } = await projDb(companyId)
     .from('duty_live_positions')
     .select('duty_id, latitude, longitude, recorded_at, updated_at, speed_mps, accuracy_meters')
     .eq('company_id', companyId)
@@ -2772,7 +2777,7 @@ export async function projectOperationalTrips(
   tripId?: string,
   options?: { serviceDate?: string | null; bookingId?: string | null },
 ) {
-  let query = admin
+  let query = projDb(companyId)
     .from('trips')
     .select('*')
     .eq('company_id', companyId)
@@ -2796,7 +2801,7 @@ export async function projectOperationalTrips(
   const bookingIds = [...new Set(rows.map((row: Row) => String(row.booking_id ?? '')).filter(Boolean))]
   const bookingMeta = new Map<string, { type: string; reference: string; depotId: string | null }>()
   if (bookingIds.length) {
-    const { data: bookings } = await admin
+    const { data: bookings } = await projDb(companyId)
       .from('bookings')
       .select('id, booking_type, booking_reference, depot_id')
       .eq('company_id', companyId)
@@ -2812,7 +2817,7 @@ export async function projectOperationalTrips(
 
   const [{ data: assignments }, { data: runLinks }] = await Promise.all([
     tripIds.length
-      ? admin
+      ? projDb(companyId)
           .from('trip_assignments')
           .select(
             'trip_id, run_id, driver_id, vehicle_id, status, assigned_at, assigned_by, drivers(id, primary_depot_id, staff_members(first_name, last_name)), vehicles(id, registration, primary_depot_id)',
@@ -2822,7 +2827,7 @@ export async function projectOperationalTrips(
           .in('trip_id', tripIds)
       : Promise.resolve({ data: [] as Row[] }),
     tripIds.length
-      ? admin
+      ? projDb(companyId)
           .from('run_trips')
           .select('trip_id, run_id, runs(id, run_reference, depot_id)')
           .in('trip_id', tripIds)
@@ -2863,10 +2868,10 @@ export async function projectOperationalTrips(
 
   const [{ data: depotRows }, { data: userRows }] = await Promise.all([
     depotIds.size
-      ? admin.from('depots').select('id, name').eq('company_id', companyId).in('id', [...depotIds])
+      ? projDb(companyId).from('depots').select('id, name').eq('company_id', companyId).in('id', [...depotIds])
       : Promise.resolve({ data: [] as Row[] }),
     dispatcherIds.size
-      ? admin.from('users').select('id, first_name, last_name, email').in('id', [...dispatcherIds])
+      ? projDb(companyId).from('users').select('id, first_name, last_name, email').in('id', [...dispatcherIds])
       : Promise.resolve({ data: [] as Row[] }),
   ])
   const depotNameById = new Map<string, string>()
@@ -2881,7 +2886,7 @@ export async function projectOperationalTrips(
 
   const runIds = [...new Set((runLinks ?? []).map((row: Row) => String(row.run_id)).filter(Boolean))]
   const { data: dutyLinks } = runIds.length
-    ? await admin.from('duty_runs').select('duty_id, run_id').in('run_id', runIds)
+    ? await projDb(companyId).from('duty_runs').select('duty_id, run_id').in('run_id', runIds)
     : { data: [] as Row[] }
   const dutyByRun = new Map<string, string>()
   for (const row of dutyLinks ?? []) {
@@ -2894,7 +2899,7 @@ export async function projectOperationalTrips(
   }
   const passengerNames = new Map<string, string>()
   if (allPassengerIds.size) {
-    const { data: passengers } = await admin
+    const { data: passengers } = await projDb(companyId)
       .from('passengers')
       .select('id, first_name, last_name, preferred_name')
       .eq('company_id', companyId)
@@ -2908,7 +2913,7 @@ export async function projectOperationalTrips(
 
   const dutyIdsForGps = [...new Set([...dutyByRun.values()])]
   const { data: liveRows } = dutyIdsForGps.length
-    ? await admin
+    ? await projDb(companyId)
         .from('duty_live_positions')
         .select('duty_id, latitude, longitude, recorded_at')
         .in('duty_id', dutyIdsForGps)
@@ -2918,14 +2923,14 @@ export async function projectOperationalTrips(
 
   const [{ data: dutyLifecycleRows }, { data: dutyAckRows }] = await Promise.all([
     dutyIdsForGps.length
-      ? admin
+      ? projDb(companyId)
           .from('duties')
           .select('id, driver_lifecycle_status, updated_at')
           .eq('company_id', companyId)
           .in('id', dutyIdsForGps)
       : Promise.resolve({ data: [] as Row[] }),
     dutyIdsForGps.length
-      ? admin
+      ? projDb(companyId)
           .from('duty_acknowledgements')
           .select('duty_id, acknowledged_at')
           .eq('company_id', companyId)
@@ -3054,14 +3059,14 @@ export async function projectOperationalTripsByBooking(companyId: string, bookin
 }
 
 export async function projectOperationalTripByDuty(companyId: string, dutyId: string) {
-  const { data: dutyRuns } = await admin
+  const { data: dutyRuns } = await projDb(companyId)
     .from('duty_runs')
     .select('run_id, sequence')
     .eq('duty_id', dutyId)
     .order('sequence', { ascending: true })
   const runIds = (dutyRuns ?? []).map((row: Row) => String(row.run_id))
   if (runIds.length) {
-    const { data: runTrips } = await admin
+    const { data: runTrips } = await projDb(companyId)
       .from('run_trips')
       .select('trip_id, sequence')
       .in('run_id', runIds)
@@ -3121,7 +3126,7 @@ function assignmentChangeType(previous: Row | null, current: Row): string {
 
 /** Immutable assignment change list for Trip Assignments / Change history. */
 export async function projectAssignmentHistory(companyId: string, tripId: string) {
-  const { data: trip, error: tripError } = await admin
+  const { data: trip, error: tripError } = await projDb(companyId)
     .from('trips')
     .select('id')
     .eq('company_id', companyId)
@@ -3130,7 +3135,7 @@ export async function projectAssignmentHistory(companyId: string, tripId: string
   if (tripError) throw new Error(tripError.message)
   if (!trip) return null
 
-  const { data: rows, error } = await admin
+  const { data: rows, error } = await projDb(companyId)
     .from('trip_assignments')
     .select(
       'id, trip_id, run_id, driver_id, vehicle_id, status, assigned_at, assigned_by, created_at, drivers(id, staff_members(first_name, last_name)), vehicles(id, registration)',
@@ -3144,7 +3149,7 @@ export async function projectAssignmentHistory(companyId: string, tripId: string
   const assignments = rows ?? []
   const runIds = [...new Set(assignments.map((row: Row) => (row.run_id ? String(row.run_id) : '')).filter(Boolean))]
   const { data: dutyLinks } = runIds.length
-    ? await admin.from('duty_runs').select('duty_id, run_id').in('run_id', runIds)
+    ? await projDb(companyId).from('duty_runs').select('duty_id, run_id').in('run_id', runIds)
     : { data: [] as Row[] }
   const dutyByRun = new Map<string, string>()
   for (const row of dutyLinks ?? []) {
@@ -3159,7 +3164,7 @@ export async function projectAssignmentHistory(companyId: string, tripId: string
     ),
   ]
   const { data: userRows } = adminIds.length
-    ? await admin.from('users').select('id, first_name, last_name, email').in('id', adminIds)
+    ? await projDb(companyId).from('users').select('id, first_name, last_name, email').in('id', adminIds)
     : { data: [] as Row[] }
   const adminNameById = new Map<string, string>()
   for (const user of userRows ?? []) {

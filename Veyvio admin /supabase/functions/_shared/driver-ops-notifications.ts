@@ -1,8 +1,12 @@
 /**
  * Driver operational notifications — duty publish, compliance warnings, vehicle status.
  * In-app + best-effort FCM push (Gate 3). Push never creates business state (F-29).
+ *
+ * Wave 3F: notifications already UserScopedDb (cutover 27). This helper uses
+ * company-scoped service-role for dedupe reads + driver_app_accounts lookup
+ * (no bare admin import).
  */
-import { admin } from './supabase.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { notifyDriverAppUser, type NotificationSeverity } from './notifications.ts'
 import { sendFcmToDriver } from './fcm-send.ts'
 
@@ -34,7 +38,7 @@ async function hasRecentNotification(input: {
   withinHours: number
 }): Promise<boolean> {
   const since = new Date(Date.now() - input.withinHours * 3_600_000).toISOString()
-  const { data } = await admin
+  const { data } = await resolveTenantDb(input.companyId, 'driver_ops_notification_dedupe')
     .from('notifications')
     .select('id')
     .eq('company_id', input.companyId)
@@ -47,7 +51,7 @@ async function hasRecentNotification(input: {
 }
 
 async function resolveDriverAppUserId(companyId: string, driverId: string): Promise<string | null> {
-  const { data: account } = await admin
+  const { data: account } = await resolveTenantDb(companyId, 'driver_ops_app_account_lookup')
     .from('driver_app_accounts')
     .select('user_id')
     .eq('company_id', companyId)

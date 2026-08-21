@@ -1,42 +1,15 @@
 {
-  "generated_at": "2026-08-17T06:29:42.777Z",
+  "generated_at": "2026-08-21T06:43:15.028Z",
   "fix": "FIX-P1-048",
   "status": "PASS",
-  "environment": "GitHub Actions + local",
-  "ci_run": {
-    "workflow": "32002475034",
-    "job": "Admin fresh-DB gate (FIX-P1-048)",
-    "base_branch": "phase0/reproducibility",
-    "pr": 3,
-    "duration_seconds": 194
-  },
   "steps": [
     "supabase start (cost_control schema excluded until reset)",
     "supabase db reset",
     "supabase restart with cost_control exposed",
     "tenant-table-audit.sql",
-    "wave3f-same-company-triggers-static",
-    "wave3f-same-company-triggers (13/13 forge)",
-    "rls-postgrest-isolation JWT matrix (72/72)"
+    "wave3f-same-company-triggers (static + forge including PR-03 P0 wave 2)",
+    "rls-postgrest-isolation JWT matrix"
   ],
-  "results": {
-    "inventory": {
-      "tenant_rows": 178,
-      "zero_policy": 0,
-      "public_force_rls": "171/171",
-      "cost_control_force_rls": "34/34"
-    },
-    "same_company_triggers": {
-      "total": 13,
-      "pass": 13,
-      "fail": 0
-    },
-    "jwt_matrix": {
-      "total": 72,
-      "pass": 72,
-      "fail": 0
-    }
-  },
-  "storage": "explicit separate slice — wave-3fe-storage-isolation.json (not in this gate)",
-  "hosted_migrations": "202608170001–004 held until FIX-P0-011 lock reassessment"
+  "storage": "explicit separate slice — not in this gate",
+  "hosted_migrations": "through 202608210001 (PR-03 P0 wave 2)"
 }

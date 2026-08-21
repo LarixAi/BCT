@@ -1,35 +1,43 @@
 /**
  * Duty closeout records on Command (replaces Supabase-only job_stop_events for BCT path).
  *
- * PROD-1 Batch 01 — authority declaration / bare-admin removal.
- * Not UserScopedDb / RLS cutover. Writes still use company-scoped service-role
- * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
+ * Wave 3F first UserScopedDb/RLS cutover: membership JWT writes `duty_closeouts`
+ * through RLS (INSERT + SELECT). Support-grant sessions stay on company-scoped
+ * service-role — membership RLS cannot see non-member JWTs.
+ * company_id filters remain defence-in-depth.
+ * Audit / domain events stay privileged until named capabilities exist.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { companyScopedServiceDb, userScopedDb } from './db-authority.ts'
 import { emitDomainEvent } from './domain-events.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { guardDriverScopedWrite } from './driver-write-guards.ts'
+import type { RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
-function closeoutDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'duty_closeout')
+function closeoutDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'duty_closeout_support_grant')
+  }
+  return userScopedDb(context, 'duty_closeout')
 }
 
 export async function submitDutyCloseout(input: {
-  companyId: string
+  context: RequestContext
   driverId: string
   dutyId?: string | null
   jobReference?: string | null
   payload: Row
   clientGeneratedId?: string | null
 }) {
+  const companyId = input.context.companyId
+  const db = closeoutDb(input.context)
   const clientGeneratedId = input.clientGeneratedId?.trim() || null
   if (clientGeneratedId) {
-    const { data: existing } = await closeoutDb(input.companyId)
+    const { data: existing } = await db
       .from('duty_closeouts')
       .select('id, submitted_at, payload')
-      .eq('company_id', input.companyId)
+      .eq('company_id', companyId)
       .eq('client_generated_id', clientGeneratedId)
       .maybeSingle()
     if (existing) {
@@ -50,15 +58,15 @@ export async function submitDutyCloseout(input: {
   // duty-closeout.service.js resolveDutyIdForJob) — fall back to it when
   // dutyId is absent so this write can never skip the assignment check.
   await guardDriverScopedWrite({
-    companyId: input.companyId,
+    companyId,
     driverId: input.driverId,
     dutyId: guardDutyId,
   })
 
-  const { data, error } = await closeoutDb(input.companyId)
+  const { data, error } = await db
     .from('duty_closeouts')
     .insert({
-      company_id: input.companyId,
+      company_id: companyId,
       duty_id: input.dutyId ?? null,
       driver_id: input.driverId,
       job_reference: input.jobReference ?? null,
@@ -71,8 +79,8 @@ export async function submitDutyCloseout(input: {
   if (error || !data) throw new Error(error?.message ?? 'Closeout could not be saved')
 
   await writeImmutableAudit({
-    companyId: input.companyId,
-    actorUserId: null,
+    companyId,
+    actorUserId: input.context.user?.id ?? null,
     action: 'duty.closeout_submitted',
     entityType: 'duty_closeout',
     entityId: String(data.id),
@@ -80,7 +88,7 @@ export async function submitDutyCloseout(input: {
   }).catch(() => undefined)
 
   await emitDomainEvent({
-    companyId: input.companyId,
+    companyId,
     eventType: 'duty.closeout_submitted',
     entityType: 'duty_closeout',
     entityId: String(data.id),
@@ -95,8 +103,12 @@ export async function submitDutyCloseout(input: {
   }
 }
 
-export async function getDutyCloseout(companyId: string, input: { dutyId?: string; jobReference?: string }) {
-  let query = closeoutDb(companyId)
+export async function getDutyCloseout(
+  context: RequestContext,
+  input: { dutyId?: string; jobReference?: string },
+) {
+  const companyId = context.companyId
+  let query = closeoutDb(context)
     .from('duty_closeouts')
     .select('id, submitted_at, payload, duty_id, job_reference')
     .eq('company_id', companyId)

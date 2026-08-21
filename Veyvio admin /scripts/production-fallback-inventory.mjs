@@ -84,9 +84,9 @@ const TRACKED_DEBT = new Map([
   ['src/lib/api/real-client.ts', 'fail-closed empty hubs — no mock fallbacks'],
   ['src/features/journey-sequence/JourneySequencePanel.tsx', 'journey sequence reorder/move/ack live via Command API; mock upsert only when VITE_MOCK_API=true'],
   ['src/features/journey-sequence/MoveJourneyPanel.tsx', 'journey move live via Command API'],
-  ['src/features/jobs/JobsPage.tsx', 'operations demo layer banner only'],
-  ['src/features/schedule/SchedulePage.tsx', 'operations demo layer banner only'],
-  ['src/lib/operations/operations-data-source.ts', 'demo layer toggle — fail-closed in production builds'],
+  ['src/features/jobs/JobsPage.tsx', 'demo banner removed — live jobs register only'],
+  ['src/features/schedule/SchedulePage.tsx', 'demo banner removed — live schedule only'],
+  ['src/lib/operations/operations-data-source.ts', 'demo layer permanently false / null — fail-closed'],
 ])
 
 console.log('F-03 production fallback inventory')

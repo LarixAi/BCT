@@ -102,14 +102,35 @@ async function ensureUser(email, label) {
     }),
   })
   const created = await create.json()
-  if (create.ok && created.id) return created.id
-  const listed = await fetch(`${API}/auth/v1/admin/users?page=1&per_page=200`, {
-    headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
+  let userId = create.ok && created.id ? created.id : null
+  if (!userId) {
+    const listed = await fetch(`${API}/auth/v1/admin/users?page=1&per_page=200`, {
+      headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
+    })
+    const users = (await listed.json()).users || []
+    const hit = users.find((u) => (u.email || '').toLowerCase() === email.toLowerCase())
+    if (!hit) throw new Error(`Could not create/find ${email}`)
+    userId = hit.id
+  }
+  // Always re-assert password so forge/storage suites share durable credentials.
+  const reset = await fetch(`${API}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: {
+      apikey: SERVICE,
+      Authorization: `Bearer ${SERVICE}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      password: PASSWORD,
+      email_confirm: true,
+      user_metadata: { first_name: 'Isolation', last_name: label },
+    }),
   })
-  const users = (await listed.json()).users || []
-  const hit = users.find((u) => (u.email || '').toLowerCase() === email.toLowerCase())
-  if (!hit) throw new Error(`Could not create/find ${email}`)
-  return hit.id
+  if (!reset.ok) {
+    const text = await reset.text()
+    throw new Error(`password reset failed for ${email}: ${text.slice(0, 200)}`)
+  }
+  return userId
 }
 
 async function seedOrg(label, email, tradingName) {

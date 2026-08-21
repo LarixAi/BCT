@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-08-17T06:24:11.669Z",
+  "generated_at": "2026-08-21T06:43:11.846Z",
   "fix": "FIX-P1-013",
   "api": "http://127.0.0.1:54321",
   "summary": {
-    "total": 13,
-    "pass": 13,
+    "total": 23,
+    "pass": 23,
     "fail": 0
   },
   "results": [
@@ -18,7 +18,7 @@
       "phase": "setup",
       "name": "seed_orgs",
       "ok": true,
-      "detail": "A=b7d9fd0d-a3c3-4152-a878-43c4f276a20f B=f8415408-474b-4ab1-806c-b688e1f01bbd"
+      "detail": "A=d812741e-e93e-47c1-9f73-77cf94147957 B=6b0e0057-3988-4427-96b7-1c9384624442"
     },
     {
       "phase": "forge",
@@ -67,6 +67,66 @@
       "name": "forge_fuel_records_cross_company_vehicle",
       "ok": true,
       "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"fuel_records.vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_adblue_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"adblue_records.vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_vehicle_reports_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"vehicle_reports.vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_vehicle_checks_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"vehicle_checks.vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_duty_ack_cross_company_driver",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"duty_acknowledgements.driver_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_driver_documents_cross_company_driver",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"driver_documents.driver_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_incidents_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"incidents.vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_vor_cases_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"vor_cases.vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_yard_movements_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"yard_movements.vehicle_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_journey_stops_cross_company_run",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"journey_stops.run_id: cross-tenant link refused\"}"
+    },
+    {
+      "phase": "forge",
+      "name": "forge_equipment_assets_cross_company_vehicle",
+      "ok": true,
+      "detail": "status=400 body={\"code\":\"23514\",\"details\":null,\"hint\":null,\"message\":\"equipment_assets.vehicle_id: cross-tenant link refused\"}"
     },
     {
       "phase": "forge",

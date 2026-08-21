@@ -1,7 +1,15 @@
 /**
  * Register Interest intake + Command Incoming Interests staff routes.
+ *
+ * Wave 3F UserScopedDb/RLS cutover 37: membership JWT reads/writes
+ * `interest_submissions` through RLS (SELECT/INSERT/UPDATE). Website intake
+ * (integration API key, no membership JWT) and support-grant stay on
+ * company-scoped service-role. Conversion side effects (customers, passengers,
+ * bookings, trips, users, memberships, audit, integration keys, reference RPC)
+ * stay service-role.
  */
-import { admin, type RequestContext } from './supabase.ts'
+import { companyScopedServiceDb, companyScopedServiceDbForCompany, resolveTenantDb, userScopedDb } from './db-authority.ts'
+import { type RequestContext } from './supabase.ts'
 import { apiError, HttpError, json, readJson, toCamelCase } from './http.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { recordSecurityEvent } from './tenant-auth.ts'
@@ -32,6 +40,25 @@ const COLOOP_WEBSITE_SOURCE = 'coloop-website'
 const DEFAULT_COLOOP_NOTIFY_EMAIL = 'hello@coloop.org.uk'
 const DEFAULT_COMMAND_APP_URL = 'https://veyvio-admin.pages.dev'
 
+function interestsDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'interest_submissions_support_grant')
+  }
+  return userScopedDb(context, 'interest_submissions')
+}
+
+function interestsIntakeDb(companyId: string) {
+  return companyScopedServiceDbForCompany(companyId, 'interest_submissions_intake')
+}
+
+function interestsSideEffectsDb(context: RequestContext) {
+  return companyScopedServiceDb(context, 'interest_submissions_side_effects')
+}
+
+function interestsSideEffectsForCompany(companyId: string) {
+  return resolveTenantDb(companyId, 'interest_submissions_side_effects')
+}
+
 type StaffNote = {
   id: string
   body: string
@@ -57,7 +84,7 @@ function displayName(user: { first_name?: string | null; last_name?: string | nu
 
 async function assertIntakeRateLimit(key: IntegrationKeyContext, request: Request) {
   const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
-  const { count, error } = await admin
+  const { count, error } = await interestsIntakeDb(key.companyId)
     .from('interest_submissions')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', key.companyId)
@@ -84,7 +111,7 @@ async function assertIntakeRateLimit(key: IntegrationKeyContext, request: Reques
 async function findRecentDuplicate(companyId: string, email: string | null, source: string) {
   if (!email) return null
   const since = new Date(Date.now() - DUPLICATE_WINDOW_MS).toISOString()
-  const { data } = await admin
+  const { data } = await interestsIntakeDb(companyId)
     .from('interest_submissions')
     .select('id, reference, status, created_at')
     .eq('company_id', companyId)
@@ -204,7 +231,7 @@ export async function createInterestSubmission(request: Request): Promise<Respon
     null
 
   if (idempotencyKey) {
-    const { data: existing } = await admin
+    const { data: existing } = await interestsIntakeDb(key.companyId)
       .from('interest_submissions')
       .select('id, reference, status, request_id')
       .eq('company_id', key.companyId)
@@ -214,7 +241,7 @@ export async function createInterestSubmission(request: Request): Promise<Respon
   }
 
   if (validated.value.externalSubmissionId) {
-    const { data: existingExt } = await admin
+    const { data: existingExt } = await interestsIntakeDb(key.companyId)
       .from('interest_submissions')
       .select('id, reference, status, request_id')
       .eq('company_id', key.companyId)
@@ -230,7 +257,7 @@ export async function createInterestSubmission(request: Request): Promise<Respon
     validated.value.source,
   )
 
-  const { data: reference, error: refError } = await admin.rpc('next_interest_reference', {
+  const { data: reference, error: refError } = await interestsSideEffectsForCompany(key.companyId).rpc('next_interest_reference', {
     p_company_id: key.companyId,
   })
   if (refError || !reference) {
@@ -272,7 +299,7 @@ export async function createInterestSubmission(request: Request): Promise<Respon
     last_activity_at: now,
   }
 
-  const { data: row, error } = await admin
+  const { data: row, error } = await interestsIntakeDb(key.companyId)
     .from('interest_submissions')
     .insert(insertRow)
     .select('id, reference, status, request_id, source, source_label, contact_name')
@@ -281,7 +308,7 @@ export async function createInterestSubmission(request: Request): Promise<Respon
   if (error || !row) {
     // Race on unique idempotency / external id — return the winner.
     if (idempotencyKey && String(error?.code) === '23505') {
-      const { data: raced } = await admin
+      const { data: raced } = await interestsIntakeDb(key.companyId)
         .from('interest_submissions')
         .select('id, reference, status, request_id')
         .eq('company_id', key.companyId)
@@ -355,7 +382,7 @@ export async function listInterestSubmissions(context: RequestContext, request: 
   const url = new URL(request.url)
   const filters = listFilters(url)
 
-  let query = admin
+  let query = interestsDb(context)
     .from('interest_submissions')
     .select(
       'id, reference, status, source, source_label, contact_name, contact_email, contact_phone, postcode, borough, service, journey_types, wheelchair_accessible_vehicle_required, passenger_count, marketing_accepted, assigned_to_user_id, assigned_to_name, possible_duplicate, last_activity_at, created_at, updated_at',
@@ -398,7 +425,7 @@ export async function listInterestSubmissions(context: RequestContext, request: 
 }
 
 export async function getInterestSubmission(context: RequestContext, interestId: string) {
-  const { data, error } = await admin
+  const { data, error } = await interestsDb(context)
     .from('interest_submissions')
     .select('*')
     .eq('company_id', context.companyId)
@@ -408,7 +435,7 @@ export async function getInterestSubmission(context: RequestContext, interestId:
   if (error) return apiError(500, error.message)
   if (!data) return apiError(404, 'Interest submission not found', 'not_found')
 
-  const { data: audit } = await admin
+  const { data: audit } = await interestsSideEffectsDb(context)
     .from('audit_events')
     .select('id, action, actor_type, actor_id, occurred_at, reason, after_snapshot, before_snapshot, correlation_id')
     .eq('company_id', context.companyId)
@@ -429,7 +456,7 @@ export async function getInterestSubmission(context: RequestContext, interestId:
 
   let integrationName: string | null = null
   if (data.integration_api_key_id) {
-    const { data: key } = await admin
+    const { data: key } = await interestsSideEffectsDb(context)
       .from('integration_api_keys')
       .select('name, key_prefix')
       .eq('company_id', context.companyId)
@@ -457,7 +484,7 @@ export async function patchInterestSubmission(
     closedReason?: string
   }>(request)
 
-  const { data: existing, error: loadError } = await admin
+  const { data: existing, error: loadError } = await interestsDb(context)
     .from('interest_submissions')
     .select('*')
     .eq('company_id', context.companyId)
@@ -467,7 +494,7 @@ export async function patchInterestSubmission(
   if (loadError) return apiError(500, loadError.message)
   if (!existing) return apiError(404, 'Interest submission not found', 'not_found')
 
-  const { data: actor } = await admin
+  const { data: actor } = await interestsSideEffectsDb(context)
     .from('users')
     .select('id, first_name, last_name, email')
     .eq('id', context.user.id)
@@ -523,14 +550,14 @@ export async function patchInterestSubmission(
         after: { assignedToUserId: null },
       })
     } else {
-      const { data: assignee } = await admin
+      const { data: assignee } = await interestsSideEffectsDb(context)
         .from('users')
         .select('id, first_name, last_name, email')
         .eq('id', input.assignedToUserId)
         .maybeSingle()
       if (!assignee) return apiError(400, 'Assigned user not found', 'invalid_assignee')
 
-      const { data: membership } = await admin
+      const { data: membership } = await interestsSideEffectsDb(context)
         .from('company_memberships')
         .select('user_id')
         .eq('company_id', context.companyId)
@@ -578,7 +605,7 @@ export async function patchInterestSubmission(
     return apiError(400, 'No changes provided', 'invalid_input')
   }
 
-  const { data: updated, error } = await admin
+  const { data: updated, error } = await interestsDb(context)
     .from('interest_submissions')
     .update(patch)
     .eq('company_id', context.companyId)
@@ -610,11 +637,11 @@ function nextOperationalReference(prefix: 'BK' | 'TR', interestReference: string
   return `${prefix}-${tail}-${stamp}`
 }
 
-async function loadInterestOr404(companyId: string, interestId: string) {
-  const { data, error } = await admin
+async function loadInterestOr404(context: RequestContext, interestId: string) {
+  const { data, error } = await interestsDb(context)
     .from('interest_submissions')
     .select('*')
-    .eq('company_id', companyId)
+    .eq('company_id', context.companyId)
     .eq('id', interestId)
     .maybeSingle()
   if (error) throw new HttpError(500, error.message)
@@ -631,7 +658,7 @@ export async function acceptInterestSubmission(
 ): Promise<Response> {
   let existing
   try {
-    existing = await loadInterestOr404(context.companyId, interestId)
+    existing = await loadInterestOr404(context, interestId)
   } catch (error) {
     if (error instanceof HttpError) return apiError(error.status, error.message, error.code)
     throw error
@@ -666,7 +693,7 @@ export async function acceptInterestSubmission(
   const now = new Date().toISOString()
   const actorId = context.user.id
 
-  const { data: customer, error: customerError } = await admin
+  const { data: customer, error: customerError } = await interestsSideEffectsDb(context)
     .from('customers')
     .insert({
       company_id: context.companyId,
@@ -692,7 +719,7 @@ export async function acceptInterestSubmission(
     return apiError(500, customerError?.message ?? 'Could not create customer for this journey')
   }
 
-  const { data: passenger, error: passengerError } = await admin
+  const { data: passenger, error: passengerError } = await interestsSideEffectsDb(context)
     .from('passengers')
     .insert({
       company_id: context.companyId,
@@ -714,7 +741,7 @@ export async function acceptInterestSubmission(
 
   const bookingReference = nextOperationalReference('BK', String(existing.reference))
   const bookingType = /return/i.test(plan.journeyType ?? '') ? 'return' : 'single'
-  const { data: booking, error: bookingError } = await admin
+  const { data: booking, error: bookingError } = await interestsSideEffectsDb(context)
     .from('bookings')
     .insert({
       company_id: context.companyId,
@@ -751,7 +778,7 @@ export async function acceptInterestSubmission(
     ? plannedPickupIso(plan.travelDate, plan.returnTime)
     : null
 
-  const { data: trip, error: tripError } = await admin
+  const { data: trip, error: tripError } = await interestsSideEffectsDb(context)
     .from('trips')
     .insert({
       company_id: context.companyId,
@@ -782,7 +809,7 @@ export async function acceptInterestSubmission(
     return apiError(500, tripError?.message ?? 'Could not create trip/job for this journey')
   }
 
-  const { data: updated, error: updateError } = await admin
+  const { data: updated, error: updateError } = await interestsDb(context)
     .from('interest_submissions')
     .update({
       status: 'converted',
@@ -845,7 +872,7 @@ export async function rejectInterestSubmission(
 ): Promise<Response> {
   let existing
   try {
-    existing = await loadInterestOr404(context.companyId, interestId)
+    existing = await loadInterestOr404(context, interestId)
   } catch (error) {
     if (error instanceof HttpError) return apiError(error.status, error.message, error.code)
     throw error
@@ -895,7 +922,7 @@ export async function rejectInterestSubmission(
     notifyError = 'No customer email on this submission'
   }
 
-  const { data: updated, error: updateError } = await admin
+  const { data: updated, error: updateError } = await interestsDb(context)
     .from('interest_submissions')
     .update({
       status: 'closed',

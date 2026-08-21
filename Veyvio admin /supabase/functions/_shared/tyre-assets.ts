@@ -1,7 +1,13 @@
 /**
  * Durable tyre inventory — Command write path for fit / remove / rotate (F-18 / TD-027).
+ *
+ * Wave 3F UserScopedDb/RLS cutover 13: membership JWT reads/writes
+ * `tyre_assets` through RLS (SELECT/INSERT/UPDATE). Support-grant sessions
+ * and hub lists without a membership JWT stay on company-scoped service-role.
+ * Membership JWT also appends `tyre_asset_events` (SELECT/INSERT). Vehicle/depot
+ * lookups stay service-role. writeImmutableAudit stays privileged.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -11,15 +17,39 @@ import {
   tyreNeedsAttentionMapped,
   type TyreAssetStatus,
 } from './tyre-assets.mapping.ts'
+import type { RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
-function tyreDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'tyre_assets')
+type TyreScope = {
+  companyId: string
+  context?: RequestContext
+}
+
+function tyreTenantDb(scope: TyreScope) {
+  const companyId = scope.context?.companyId ?? scope.companyId
+  if (scope.context?.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(scope.context, 'tyre_assets_support_grant')
+  }
+  if (scope.context) {
+    return userScopedDb(scope.context, 'tyre_assets')
+  }
+  return resolveTenantDb(companyId, 'tyre_assets')
+}
+
+function tyreSideEffectsDb(scope: TyreScope) {
+  if (scope.context) {
+    return companyScopedServiceDb(scope.context, 'tyre_assets_side_effects')
+  }
+  return resolveTenantDb(scope.companyId, 'tyre_assets_side_effects')
+}
+
+function scopeFrom(input: { context?: RequestContext; companyId: string }): TyreScope {
+  return { companyId: input.context?.companyId ?? input.companyId, context: input.context }
 }
 
 async function appendEvent(input: {
-  companyId: string
+  scope: TyreScope
   tyreId: string
   eventType: string
   actorUserId?: string | null
@@ -27,8 +57,8 @@ async function appendEvent(input: {
   body?: string | null
   payload?: Record<string, unknown>
 }) {
-  const { error } = await tyreDb(input.companyId).from('tyre_asset_events').insert({
-    company_id: input.companyId,
+  const { error } = await tyreTenantDb(input.scope).from('tyre_asset_events').insert({
+    company_id: input.scope.companyId,
     tyre_id: input.tyreId,
     event_type: input.eventType,
     actor_user_id: input.actorUserId ?? null,
@@ -39,16 +69,42 @@ async function appendEvent(input: {
   if (error) throw new Error(error.message)
 }
 
-async function loadTyre(companyId: string, tyreId: string): Promise<Row | null> {
+async function loadTyre(scope: TyreScope, tyreId: string): Promise<Row | null> {
   if (!isUuid(tyreId)) return null
-  const { data, error } = await tyreDb(companyId)
+  const companyId = scope.companyId
+  const { data, error } = await tyreTenantDb(scope)
     .from('tyre_assets')
-    .select('*, vehicles(registration), depots(name)')
+    .select('*')
     .eq('company_id', companyId)
     .eq('id', tyreId)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  return data as Row | null
+  if (!data) return null
+  return enrichTyre(scope, data as Row)
+}
+
+async function enrichTyre(scope: TyreScope, row: Row): Promise<Row> {
+  const companyId = scope.companyId
+  const lookups = tyreSideEffectsDb(scope)
+  const [{ data: vehicle }, { data: depot }] = await Promise.all([
+    row.vehicle_id
+      ? lookups
+          .from('vehicles')
+          .select('registration')
+          .eq('company_id', companyId)
+          .eq('id', String(row.vehicle_id))
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    row.depot_id
+      ? lookups
+          .from('depots')
+          .select('name')
+          .eq('company_id', companyId)
+          .eq('id', String(row.depot_id))
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  return { ...row, vehicles: vehicle, depots: depot }
 }
 
 function mapLoaded(row: Row) {
@@ -60,24 +116,27 @@ function mapLoaded(row: Row) {
   })
 }
 
-export async function listTyreAssets(companyId: string) {
-  const { data, error } = await tyreDb(companyId)
+export async function listTyreAssets(companyId: string, context?: RequestContext) {
+  const scope = scopeFrom({ companyId, context })
+  const { data, error } = await tyreTenantDb(scope)
     .from('tyre_assets')
-    .select('*, vehicles(registration), depots(name)')
-    .eq('company_id', companyId)
+    .select('*')
+    .eq('company_id', scope.companyId)
     .order('updated_at', { ascending: false })
     .limit(500)
   if (error) throw new Error(error.message)
-  return (data ?? []).map((row) => mapLoaded(row as Row))
+  const rows = await Promise.all((data ?? []).map((row) => enrichTyre(scope, row as Row)))
+  return rows.map((row) => mapLoaded(row))
 }
 
-export async function getTyreAsset(companyId: string, tyreId: string) {
-  const row = await loadTyre(companyId, tyreId)
+export async function getTyreAsset(companyId: string, tyreId: string, context?: RequestContext) {
+  const row = await loadTyre(scopeFrom({ companyId, context }), tyreId)
   if (!row) return null
   return mapLoaded(row)
 }
 
 export async function createTyreAsset(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -91,7 +150,7 @@ export async function createTyreAsset(input: {
   pressurePsi?: number | null
   unitCost?: number | null
 }) {
-  const companyId = input.companyId
+  const scope = scopeFrom(input)
   const internalId = String(input.internalId ?? '').trim()
   const brand = String(input.brand ?? '').trim()
   const size = String(input.size ?? '').trim()
@@ -102,7 +161,7 @@ export async function createTyreAsset(input: {
   const now = new Date().toISOString()
   const status: TyreAssetStatus = normalizeTyreStatus(input.status ?? 'in_stock')
   const insert: Row = {
-    company_id: input.companyId,
+    company_id: scope.companyId,
     internal_id: internalId,
     brand,
     size,
@@ -117,12 +176,12 @@ export async function createTyreAsset(input: {
     updated_at: now,
   }
 
-  const { data, error } = await tyreDb(companyId).from('tyre_assets').insert(insert).select('id').single()
+  const { data, error } = await tyreTenantDb(scope).from('tyre_assets').insert(insert).select('id').single()
   if (error) throw new Error(error.message)
   const id = String(data.id)
 
   await appendEvent({
-    companyId: input.companyId,
+    scope,
     tyreId: id,
     eventType: 'created',
     actorUserId: input.actorUserId,
@@ -131,7 +190,7 @@ export async function createTyreAsset(input: {
   })
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: 'tyre.created',
     entityType: 'tyre_asset',
@@ -139,10 +198,11 @@ export async function createTyreAsset(input: {
     afterSnapshot: insert,
   })
 
-  return getTyreAsset(input.companyId, id)
+  return getTyreAsset(scope.companyId, id, input.context)
 }
 
 export async function fitTyreAsset(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -152,8 +212,8 @@ export async function fitTyreAsset(input: {
   positionLabel: string
   retorqueDueAt?: string | null
 }) {
-  const companyId = input.companyId
-  const existing = await loadTyre(companyId, input.tyreId)
+  const scope = scopeFrom(input)
+  const existing = await loadTyre(scope, input.tyreId)
   if (!existing) throw new HttpError(404, 'Tyre asset not found')
 
   const vehicleId = String(input.vehicleId ?? '').trim()
@@ -162,20 +222,19 @@ export async function fitTyreAsset(input: {
   const positionLabel = String(input.positionLabel ?? position).trim()
   if (!position) throw new HttpError(400, 'position is required')
 
-  const { data: vehicle, error: vehicleError } = await tyreDb(companyId)
+  const { data: vehicle, error: vehicleError } = await tyreSideEffectsDb(scope)
     .from('vehicles')
     .select('id, primary_depot_id')
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', vehicleId)
     .maybeSingle()
   if (vehicleError) throw new Error(vehicleError.message)
   if (!vehicle) throw new HttpError(404, 'Vehicle not found')
 
-  // One tyre per vehicle position.
-  const { data: occupant } = await tyreDb(companyId)
+  const { data: occupant } = await tyreTenantDb(scope)
     .from('tyre_assets')
     .select('id')
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('vehicle_id', vehicleId)
     .eq('position', position)
     .eq('status', 'fitted')
@@ -198,15 +257,15 @@ export async function fitTyreAsset(input: {
     updated_at: now,
   }
 
-  const { error } = await tyreDb(companyId)
+  const { error } = await tyreTenantDb(scope)
     .from('tyre_assets')
     .update(patch)
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', input.tyreId)
   if (error) throw new Error(error.message)
 
   await appendEvent({
-    companyId: input.companyId,
+    scope,
     tyreId: input.tyreId,
     eventType: 'fitted',
     actorUserId: input.actorUserId,
@@ -216,7 +275,7 @@ export async function fitTyreAsset(input: {
   })
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: 'tyre.fitted',
     entityType: 'tyre_asset',
@@ -225,18 +284,19 @@ export async function fitTyreAsset(input: {
     afterSnapshot: patch,
   })
 
-  return getTyreAsset(input.companyId, input.tyreId)
+  return getTyreAsset(scope.companyId, input.tyreId, input.context)
 }
 
 export async function removeTyreAsset(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
   tyreId: string
   quarantine?: boolean
 }) {
-  const companyId = input.companyId
-  const existing = await loadTyre(companyId, input.tyreId)
+  const scope = scopeFrom(input)
+  const existing = await loadTyre(scope, input.tyreId)
   if (!existing) throw new HttpError(404, 'Tyre asset not found')
 
   const now = new Date().toISOString()
@@ -251,15 +311,15 @@ export async function removeTyreAsset(input: {
     updated_at: now,
   }
 
-  const { error } = await tyreDb(companyId)
+  const { error } = await tyreTenantDb(scope)
     .from('tyre_assets')
     .update(patch)
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', input.tyreId)
   if (error) throw new Error(error.message)
 
   await appendEvent({
-    companyId: input.companyId,
+    scope,
     tyreId: input.tyreId,
     eventType: 'removed',
     actorUserId: input.actorUserId,
@@ -269,7 +329,7 @@ export async function removeTyreAsset(input: {
   })
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: input.quarantine ? 'tyre.quarantined' : 'tyre.removed',
     entityType: 'tyre_asset',
@@ -278,10 +338,11 @@ export async function removeTyreAsset(input: {
     afterSnapshot: patch,
   })
 
-  return getTyreAsset(input.companyId, input.tyreId)
+  return getTyreAsset(scope.companyId, input.tyreId, input.context)
 }
 
 export async function rotateTyreAssets(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -289,9 +350,9 @@ export async function rotateTyreAssets(input: {
   aTyreId: string
   bTyreId: string
 }) {
-  const companyId = input.companyId
-  const a = await loadTyre(companyId, input.aTyreId)
-  const b = await loadTyre(companyId, input.bTyreId)
+  const scope = scopeFrom(input)
+  const a = await loadTyre(scope, input.aTyreId)
+  const b = await loadTyre(scope, input.bTyreId)
   if (!a || !b) throw new HttpError(404, 'Tyre asset not found')
 
   const vehicleId = String(input.vehicleId)
@@ -309,31 +370,31 @@ export async function rotateTyreAssets(input: {
   if (!aPos || !bPos) throw new HttpError(400, 'Both tyres need positions to rotate')
 
   const now = new Date().toISOString()
-  const { error: errA } = await tyreDb(companyId)
+  const { error: errA } = await tyreTenantDb(scope)
     .from('tyre_assets')
     .update({
       position: bPos,
       position_label: bLabel,
       updated_at: now,
     })
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', input.aTyreId)
   if (errA) throw new Error(errA.message)
 
-  const { error: errB } = await tyreDb(companyId)
+  const { error: errB } = await tyreTenantDb(scope)
     .from('tyre_assets')
     .update({
       position: aPos,
       position_label: aLabel,
       updated_at: now,
     })
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', input.bTyreId)
   if (errB) throw new Error(errB.message)
 
   for (const tyreId of [input.aTyreId, input.bTyreId]) {
     await appendEvent({
-      companyId: input.companyId,
+      scope,
       tyreId,
       eventType: 'rotated',
       actorUserId: input.actorUserId,
@@ -344,7 +405,7 @@ export async function rotateTyreAssets(input: {
   }
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: 'tyre.rotated',
     entityType: 'tyre_asset',
@@ -353,8 +414,8 @@ export async function rotateTyreAssets(input: {
   })
 
   const [nextA, nextB] = await Promise.all([
-    getTyreAsset(input.companyId, input.aTyreId),
-    getTyreAsset(input.companyId, input.bTyreId),
+    getTyreAsset(scope.companyId, input.aTyreId, input.context),
+    getTyreAsset(scope.companyId, input.bTyreId, input.context),
   ])
   return [nextA, nextB].filter(Boolean)
 }

@@ -463,6 +463,126 @@ async function main() {
     }),
   )
 
+  // PR-03 P0 wave 2
+  await expectForgeRejected('forge_adblue_cross_company_vehicle', () =>
+    service('POST', '/rest/v1/adblue_records', {
+      body: {
+        company_id: orgA.companyId,
+        vehicle_id: orgB.vehicleId,
+        recorded_by_name: 'forge',
+        mileage: 1,
+        amount_litres: 1,
+      },
+    }),
+  )
+
+  await expectForgeRejected('forge_vehicle_reports_cross_company_vehicle', () =>
+    service('POST', '/rest/v1/vehicle_reports', {
+      body: {
+        company_id: orgA.companyId,
+        vehicle_id: orgB.vehicleId,
+        reference: `FORGE-VR-${Date.now()}`,
+        report_type: 'defect',
+        title: 'forge',
+        description: 'forge',
+        reported_by: 'forge',
+      },
+    }),
+  )
+
+  await expectForgeRejected('forge_vehicle_checks_cross_company_vehicle', () =>
+    service('POST', '/rest/v1/vehicle_checks', {
+      body: {
+        company_id: orgA.companyId,
+        vehicle_id: orgB.vehicleId,
+        result: 'pass',
+        source_app: 'DRIVER',
+      },
+    }),
+  )
+
+  await expectForgeRejected('forge_duty_ack_cross_company_driver', () =>
+    service('POST', '/rest/v1/duty_acknowledgements', {
+      body: {
+        company_id: orgA.companyId,
+        duty_id: orgA.dutyId,
+        driver_id: orgB.driverId,
+        revision: 99,
+        source_app: 'DRIVER',
+      },
+    }),
+  )
+
+  await expectForgeRejected('forge_driver_documents_cross_company_driver', () =>
+    service('POST', '/rest/v1/driver_documents', {
+      body: {
+        company_id: orgA.companyId,
+        driver_id: orgB.driverId,
+        requirement_type: 'licence',
+        label: 'forge',
+        source_app: 'COMMAND',
+      },
+    }),
+  )
+
+  await expectForgeRejected('forge_incidents_cross_company_vehicle', () =>
+    service('POST', '/rest/v1/incidents', {
+      body: {
+        company_id: orgA.companyId,
+        vehicle_id: orgB.vehicleId,
+        incident_reference: `FORGE-INC-${Date.now()}`,
+        incident_type: 'other',
+        occurred_at: new Date().toISOString(),
+        description: 'forge',
+        source_app: 'COMMAND',
+      },
+    }),
+  )
+
+  await expectForgeRejected('forge_vor_cases_cross_company_vehicle', () =>
+    service('POST', '/rest/v1/vor_cases', {
+      body: {
+        company_id: orgA.companyId,
+        vehicle_id: orgB.vehicleId,
+        reason_code: 'forge',
+        source_app: 'COMMAND',
+      },
+    }),
+  )
+
+  await expectForgeRejected('forge_yard_movements_cross_company_vehicle', () =>
+    service('POST', '/rest/v1/yard_movements', {
+      body: {
+        company_id: orgA.companyId,
+        vehicle_id: orgB.vehicleId,
+        from_location: 'A',
+        to_location: 'B',
+        reason: 'forge',
+        requested_by: 'forge',
+      },
+    }),
+  )
+
+  await expectForgeRejected('forge_journey_stops_cross_company_run', () =>
+    service('POST', '/rest/v1/journey_stops', {
+      body: {
+        company_id: orgA.companyId,
+        run_id: orgB.runId,
+        sequence: 99,
+      },
+    }),
+  )
+
+  await expectForgeRejected('forge_equipment_assets_cross_company_vehicle', () =>
+    service('POST', '/rest/v1/equipment_assets', {
+      body: {
+        company_id: orgA.companyId,
+        vehicle_id: orgB.vehicleId,
+        name: 'forge kit',
+      },
+    }),
+  )
+
   await expectForgeRejected('forge_duty_runs_cross_company', () =>
     service('POST', '/rest/v1/duty_runs', {
       body: {

@@ -1,20 +1,32 @@
 /**
  * F-05 — company-configurable compliance rules (Gate 2 §4.3).
  *
- * PROD-1 Batch 02 — authority declaration / bare-admin removal.
- * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
- * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
+ * Wave 3F UserScopedDb/RLS cutover 22: membership JWT reads/writes
+ * `company_compliance_settings` through RLS (SELECT/INSERT/UPDATE). Support-grant
+ * sessions stay on company-scoped service-role. evaluateComplianceRules and other
+ * callers without a membership JWT stay on companyScopedServiceDbForCompany.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import {
   appendDriverProfileGates,
   appendVehicleReadinessGates,
   finalizeEligibilityResult,
   type EligibilityResult,
 } from './dispatch-assignment-gates.ts'
+import type { RequestContext } from './supabase.ts'
 
-function complianceDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'compliance_engine')
+type ComplianceScope = {
+  companyId: string
+  context?: RequestContext
+}
+
+function complianceTenantDb(scope: ComplianceScope) {
+  const companyId = scope.context?.companyId ?? scope.companyId
+  return resolveTenantDb(companyId, 'compliance_engine', scope.context)
+}
+
+function scopeFrom(input: { context?: RequestContext; companyId: string }): ComplianceScope {
+  return { companyId: input.context?.companyId ?? input.companyId, context: input.context }
 }
 
 export type ComplianceAutomationSettings = {
@@ -51,11 +63,15 @@ export const DEFAULT_COMPLIANCE_SETTINGS: ComplianceAutomationSettings = {
   defectAutomationEnabled: true,
 }
 
-export async function getComplianceSettings(companyId: string): Promise<ComplianceAutomationSettings> {
-  const { data } = await complianceDb(companyId)
+export async function getComplianceSettings(
+  companyId: string,
+  context?: RequestContext,
+): Promise<ComplianceAutomationSettings> {
+  const scope = scopeFrom({ companyId, context })
+  const { data } = await complianceTenantDb(scope)
     .from('company_compliance_settings')
     .select('settings')
-    .eq('company_id', companyId)
+    .eq('company_id', scope.companyId)
     .maybeSingle()
 
   const raw = (data?.settings ?? {}) as Partial<ComplianceAutomationSettings>
@@ -66,11 +82,13 @@ export async function upsertComplianceSettings(
   companyId: string,
   patch: Partial<ComplianceAutomationSettings>,
   actorUserId: string | null,
+  context?: RequestContext,
 ): Promise<ComplianceAutomationSettings> {
-  const current = await getComplianceSettings(companyId)
+  const scope = scopeFrom({ companyId, context })
+  const current = await getComplianceSettings(scope.companyId, context)
   const next = { ...current, ...patch }
-  const { error } = await complianceDb(companyId).from('company_compliance_settings').upsert({
-    company_id: companyId,
+  const { error } = await complianceTenantDb(scope).from('company_compliance_settings').upsert({
+    company_id: scope.companyId,
     settings: next,
     updated_at: new Date().toISOString(),
     updated_by: actorUserId,

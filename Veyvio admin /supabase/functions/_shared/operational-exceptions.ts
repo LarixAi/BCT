@@ -1,14 +1,14 @@
 /**
  * Durable operational exception cases — sole Command write path (F-18).
  *
- * PROD-1 Batch 10 — authority declaration / bare-admin removal.
- * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
- * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
- * users name lookup is display-only after a company-scoped case is loaded.
- *
- * writeImmutableAudit stays on transitional audit-service — do not wrap that hub here.
+ * Wave 3F UserScopedDb/RLS cutover 10+23: membership JWT reads/writes
+ * `operational_exceptions` (SELECT/INSERT/UPDATE) and appends
+ * `operational_exception_events` (SELECT/INSERT). Support-grant sessions stay on
+ * company-scoped service-role. User display-name and depot lookups stay
+ * service-role. Defect automation raises without a membership JWT and uses
+ * company-scoped service-role. writeImmutableAudit stays privileged.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -23,15 +23,40 @@ import {
   type ExceptionCaseStatus,
   type ExceptionEventRow,
 } from './operational-exceptions.mapping.ts'
+import type { RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
-function exceptionDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'operational_exceptions')
+type ExceptionScope = {
+  companyId: string
+  context?: RequestContext
 }
 
-async function loadEvents(companyId: string, exceptionId: string): Promise<ExceptionEventRow[]> {
-  const { data, error } = await exceptionDb(companyId)
+function exceptionTenantDb(scope: ExceptionScope) {
+  const companyId = scope.context?.companyId ?? scope.companyId
+  if (scope.context?.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(scope.context, 'operational_exceptions_support_grant')
+  }
+  if (scope.context) {
+    return userScopedDb(scope.context, 'operational_exceptions')
+  }
+  return resolveTenantDb(companyId, 'operational_exceptions')
+}
+
+function exceptionSideEffectsDb(scope: ExceptionScope) {
+  if (scope.context) {
+    return companyScopedServiceDb(scope.context, 'operational_exception_side_effects')
+  }
+  return resolveTenantDb(scope.companyId, 'operational_exception_side_effects')
+}
+
+function scopeFrom(input: { context?: RequestContext; companyId: string }): ExceptionScope {
+  return { companyId: input.context?.companyId ?? input.companyId, context: input.context }
+}
+
+async function loadEvents(scope: ExceptionScope, exceptionId: string): Promise<ExceptionEventRow[]> {
+  const companyId = scope.companyId
+  const { data, error } = await exceptionTenantDb(scope)
     .from('operational_exception_events')
     .select('id, event_type, actor_name, body, created_at, payload')
     .eq('company_id', companyId)
@@ -41,9 +66,9 @@ async function loadEvents(companyId: string, exceptionId: string): Promise<Excep
   return (data ?? []) as ExceptionEventRow[]
 }
 
-async function resolveOwnerName(companyId: string, ownerId: string | null | undefined): Promise<string | null> {
+async function resolveOwnerName(scope: ExceptionScope, ownerId: string | null | undefined): Promise<string | null> {
   if (!ownerId) return null
-  const { data } = await exceptionDb(companyId)
+  const { data } = await exceptionSideEffectsDb(scope)
     .from('users')
     .select('first_name, last_name, email')
     .eq('id', ownerId)
@@ -54,7 +79,7 @@ async function resolveOwnerName(companyId: string, ownerId: string | null | unde
 }
 
 async function appendEvent(input: {
-  companyId: string
+  scope: ExceptionScope
   exceptionId: string
   eventType: string
   actorUserId: string
@@ -62,8 +87,8 @@ async function appendEvent(input: {
   body?: string | null
   payload?: Record<string, unknown>
 }) {
-  const { error } = await exceptionDb(input.companyId).from('operational_exception_events').insert({
-    company_id: input.companyId,
+  const { error } = await exceptionTenantDb(input.scope).from('operational_exception_events').insert({
+    company_id: input.scope.companyId,
     exception_id: input.exceptionId,
     event_type: input.eventType,
     actor_user_id: input.actorUserId,
@@ -74,36 +99,50 @@ async function appendEvent(input: {
   if (error) throw new Error(error.message)
 }
 
-async function loadCase(companyId: string, exceptionId: string): Promise<Row | null> {
-  const { data, error } = await exceptionDb(companyId)
+async function loadCase(scope: ExceptionScope, exceptionId: string): Promise<Row | null> {
+  const companyId = scope.companyId
+  const { data, error } = await exceptionTenantDb(scope)
     .from('operational_exceptions')
-    .select('*, depots(name)')
+    .select('*')
     .eq('company_id', companyId)
     .eq('id', exceptionId)
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
-  const depotName = (data.depots as { name?: string } | null)?.name ?? null
-  return { ...data, depot_name: depotName }
+  const { data: depot } = data.depot_id
+    ? await exceptionSideEffectsDb(scope)
+        .from('depots')
+        .select('name')
+        .eq('company_id', companyId)
+        .eq('id', String(data.depot_id))
+        .maybeSingle()
+    : { data: null }
+  return { ...data, depot_name: depot?.name ?? null }
 }
 
-export async function getOperationalException(companyId: string, exceptionId: string) {
-  const row = await loadCase(companyId, exceptionId)
+export async function getOperationalException(
+  input: { context?: RequestContext; companyId: string },
+  exceptionId: string,
+) {
+  const scope = scopeFrom(input)
+  const row = await loadCase(scope, exceptionId)
   if (!row) return null
-  const events = await loadEvents(companyId, exceptionId)
-  const ownerName = await resolveOwnerName(companyId, row.owner_id ? String(row.owner_id) : null)
+  const events = await loadEvents(scope, exceptionId)
+  const ownerName = await resolveOwnerName(scope, row.owner_id ? String(row.owner_id) : null)
   return mapExceptionCase(row, events, ownerName)
 }
 
 export async function listOperationalExceptions(input: {
+  context?: RequestContext
   companyId: string
   status?: string | null
   openOnly?: boolean
 }) {
-  let query = exceptionDb(input.companyId)
+  const scope = scopeFrom(input)
+  let query = exceptionTenantDb(scope)
     .from('operational_exceptions')
-    .select('*, depots(name)')
-    .eq('company_id', input.companyId)
+    .select('*')
+    .eq('company_id', scope.companyId)
     .order('detected_at', { ascending: false })
     .limit(200)
 
@@ -120,10 +159,10 @@ export async function listOperationalExceptions(input: {
   if (!rows.length) return []
 
   const ids = rows.map((row) => String(row.id))
-  const { data: eventRows, error: eventError } = await exceptionDb(input.companyId)
+  const { data: eventRows, error: eventError } = await exceptionTenantDb(scope)
     .from('operational_exception_events')
     .select('id, exception_id, event_type, actor_name, body, created_at, payload')
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .in('exception_id', ids)
     .order('created_at', { ascending: true })
   if (eventError) throw new Error(eventError.message)
@@ -136,13 +175,18 @@ export async function listOperationalExceptions(input: {
     eventsByCase.set(key, list)
   }
 
+  const depotIds = [...new Set(rows.map((row) => row.depot_id).filter(Boolean).map(String))]
+  const { data: depots } = depotIds.length
+    ? await exceptionSideEffectsDb(scope).from('depots').select('id, name').eq('company_id', scope.companyId).in('id', depotIds)
+    : { data: [] as Row[] }
+  const depotById = new Map((depots ?? []).map((depot) => [String(depot.id), depot.name]))
+
   const results = []
   for (const row of rows) {
-    const depotName = (row.depots as { name?: string } | null)?.name ?? null
-    const ownerName = await resolveOwnerName(input.companyId, row.owner_id ? String(row.owner_id) : null)
+    const ownerName = await resolveOwnerName(scope, row.owner_id ? String(row.owner_id) : null)
     results.push(
       mapExceptionCase(
-        { ...row, depot_name: depotName },
+        { ...row, depot_name: depotById.get(String(row.depot_id ?? '')) ?? null },
         eventsByCase.get(String(row.id)) ?? [],
         ownerName,
       ),
@@ -152,6 +196,7 @@ export async function listOperationalExceptions(input: {
 }
 
 export async function raiseOperationalException(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -167,6 +212,7 @@ export async function raiseOperationalException(input: {
   relatedHref?: string | null
   slaMinutes?: number | null
 }) {
+  const scope = scopeFrom(input)
   const title = String(input.title ?? '').trim()
   if (!title) throw new HttpError(400, 'Exception title is required', 'title_required')
 
@@ -175,10 +221,10 @@ export async function raiseOperationalException(input: {
   const dueAt = new Date(Date.now() + slaMinutes * 60_000).toISOString()
   const typeCode = String(input.typeCode ?? 'manual_exception').trim() || 'manual_exception'
 
-  const { data, error } = await exceptionDb(input.companyId)
+  const { data, error } = await exceptionTenantDb(scope)
     .from('operational_exceptions')
     .insert({
-      company_id: input.companyId,
+      company_id: scope.companyId,
       type: typeCode,
       type_code: typeCode,
       category: normalizeExceptionCategory(input.category),
@@ -204,7 +250,7 @@ export async function raiseOperationalException(input: {
   if (error || !data) throw new Error(error?.message ?? 'Exception could not be raised')
 
   await appendEvent({
-    companyId: input.companyId,
+    scope,
     exceptionId: String(data.id),
     eventType: 'raised',
     actorUserId: input.actorUserId,
@@ -213,7 +259,7 @@ export async function raiseOperationalException(input: {
   })
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: 'exception.raised',
     entityType: 'operational_exception',
@@ -222,10 +268,11 @@ export async function raiseOperationalException(input: {
     afterSnapshot: { status: 'new', title },
   })
 
-  return getOperationalException(input.companyId, String(data.id))
+  return getOperationalException(input, String(data.id))
 }
 
 async function transitionCase(input: {
+  context?: RequestContext
   companyId: string
   exceptionId: string
   actorUserId: string
@@ -235,7 +282,8 @@ async function transitionCase(input: {
   body?: string | null
   patch?: Record<string, unknown>
 }) {
-  const row = await loadCase(input.companyId, input.exceptionId)
+  const scope = scopeFrom(input)
+  const row = await loadCase(scope, input.exceptionId)
   if (!row) throw new HttpError(404, 'Exception not found', 'not_found')
 
   const current = normalizeExceptionStatus(String(row.status))
@@ -264,15 +312,15 @@ async function transitionCase(input: {
     patch.resolution = null
   }
 
-  const { error } = await exceptionDb(input.companyId)
+  const { error } = await exceptionTenantDb(scope)
     .from('operational_exceptions')
     .update(patch)
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', input.exceptionId)
   if (error) throw new Error(error.message)
 
   await appendEvent({
-    companyId: input.companyId,
+    scope,
     exceptionId: input.exceptionId,
     eventType: input.eventType,
     actorUserId: input.actorUserId,
@@ -282,7 +330,7 @@ async function transitionCase(input: {
   })
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: `exception.${input.eventType}`,
     entityType: 'operational_exception',
@@ -292,10 +340,11 @@ async function transitionCase(input: {
     afterSnapshot: { status: input.nextStatus },
   })
 
-  return getOperationalException(input.companyId, input.exceptionId)
+  return getOperationalException(input, input.exceptionId)
 }
 
 export async function acknowledgeOperationalException(input: {
+  context?: RequestContext
   companyId: string
   exceptionId: string
   actorUserId: string
@@ -311,6 +360,7 @@ export async function acknowledgeOperationalException(input: {
 }
 
 export async function assignOperationalException(input: {
+  context?: RequestContext
   companyId: string
   exceptionId: string
   actorUserId: string
@@ -320,6 +370,7 @@ export async function assignOperationalException(input: {
 }) {
   const assignee = input.assigneeUserId?.trim() || input.actorUserId
   return transitionCase({
+    context: input.context,
     companyId: input.companyId,
     exceptionId: input.exceptionId,
     actorUserId: input.actorUserId,
@@ -332,6 +383,7 @@ export async function assignOperationalException(input: {
 }
 
 export async function investigateOperationalException(input: {
+  context?: RequestContext
   companyId: string
   exceptionId: string
   actorUserId: string
@@ -346,6 +398,7 @@ export async function investigateOperationalException(input: {
 }
 
 export async function escalateOperationalException(input: {
+  context?: RequestContext
   companyId: string
   exceptionId: string
   actorUserId: string
@@ -353,6 +406,7 @@ export async function escalateOperationalException(input: {
   reason?: string | null
 }) {
   return transitionCase({
+    context: input.context,
     companyId: input.companyId,
     exceptionId: input.exceptionId,
     actorUserId: input.actorUserId,
@@ -365,6 +419,7 @@ export async function escalateOperationalException(input: {
 }
 
 export async function closeOperationalException(input: {
+  context?: RequestContext
   companyId: string
   exceptionId: string
   actorUserId: string
@@ -373,6 +428,7 @@ export async function closeOperationalException(input: {
   dismiss?: boolean
 }) {
   return transitionCase({
+    context: input.context,
     companyId: input.companyId,
     exceptionId: input.exceptionId,
     actorUserId: input.actorUserId,
@@ -385,6 +441,7 @@ export async function closeOperationalException(input: {
 }
 
 export async function addOperationalExceptionNote(input: {
+  context?: RequestContext
   companyId: string
   exceptionId: string
   actorUserId: string
@@ -393,11 +450,12 @@ export async function addOperationalExceptionNote(input: {
 }) {
   const text = String(input.body ?? '').trim()
   if (!text) throw new HttpError(400, 'Note body is required', 'note_required')
-  const row = await loadCase(input.companyId, input.exceptionId)
+  const scope = scopeFrom(input)
+  const row = await loadCase(scope, input.exceptionId)
   if (!row) throw new HttpError(404, 'Exception not found', 'not_found')
 
   await appendEvent({
-    companyId: input.companyId,
+    scope,
     exceptionId: input.exceptionId,
     eventType: 'note',
     actorUserId: input.actorUserId,
@@ -405,14 +463,14 @@ export async function addOperationalExceptionNote(input: {
     body: text,
   })
 
-  await exceptionDb(input.companyId)
+  await exceptionTenantDb(scope)
     .from('operational_exceptions')
     .update({
       updated_at: new Date().toISOString(),
       updated_by: input.actorUserId,
     })
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', input.exceptionId)
 
-  return getOperationalException(input.companyId, input.exceptionId)
+  return getOperationalException(input, input.exceptionId)
 }

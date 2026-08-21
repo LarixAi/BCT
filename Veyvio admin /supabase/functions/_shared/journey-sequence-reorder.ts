@@ -2,7 +2,7 @@
  * Durable journey-sequence reorder for Command (F-03).
  * Updates run_trips.sequence or trips.passenger_ids, bumps versions, audits.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -15,7 +15,7 @@ import {
 type Row = Record<string, unknown>
 
 function reorderDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'journey_sequence_reorder')
+  return resolveTenantDb(companyId, 'journey_sequence_reorder')
 }
 
 const REASONS = new Set([

@@ -3,7 +3,7 @@
  */
 import { projectPublishedDutiesForDriver } from './duty-publication.ts'
 import { HttpError } from './http.ts'
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { assertRequestCompanyId } from './request-company-guard.ts'
 
 export { assertRequestCompanyId }
@@ -11,7 +11,7 @@ export { assertRequestCompanyId }
 type Row = Record<string, unknown>
 
 function driverGuardDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'driver_write_guards')
+  return resolveTenantDb(companyId, 'driver_write_guards')
 }
 
 export async function resolveDriverAssignedVehicleIds(input: {

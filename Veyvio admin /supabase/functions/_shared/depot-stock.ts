@@ -1,7 +1,14 @@
 /**
  * Durable depot stock + fuel cards — F-18 / TD-027 write path.
+ *
+ * Wave 3F UserScopedDb/RLS cutover 14+17–21: membership JWT reads/writes
+ * `depot_stock_items`, `depot_stock_movements`, `fuel_cards`, `fuel_card_events`,
+ * `stock_transfers`, and `vehicle_consumable_levels` through RLS. Support-grant,
+ * hub lists, and Yard restock without a membership JWT stay on company-scoped
+ * service-role. Vehicles/depots lookups stay service-role. writeImmutableAudit
+ * stays privileged.
  */
-import { companyScopedServiceDbForCompany } from './db-authority.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
 import { writeImmutableAudit } from './audit-service.ts'
 import { HttpError } from './http.ts'
 import {
@@ -12,60 +19,112 @@ import {
   normalizeFuelCardStatus,
   normalizeStockCategory,
 } from './depot-stock.mapping.ts'
+import type { RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
-function stockDb(companyId: string) {
-  return companyScopedServiceDbForCompany(companyId, 'depot_stock')
+type StockScope = {
+  companyId: string
+  context?: RequestContext
 }
 
-async function depotNameMap(companyId: string): Promise<Map<string, string>> {
-  const { data, error } = await stockDb(companyId).from('depots').select('id, name').eq('company_id', companyId)
+function stockTenantDb(scope: StockScope) {
+  const companyId = scope.context?.companyId ?? scope.companyId
+  if (scope.context?.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(scope.context, 'depot_stock_support_grant')
+  }
+  if (scope.context) {
+    return userScopedDb(scope.context, 'depot_stock_items')
+  }
+  return resolveTenantDb(companyId, 'depot_stock')
+}
+
+function stockSideEffectsDb(scope: StockScope) {
+  if (scope.context) {
+    return companyScopedServiceDb(scope.context, 'depot_stock_side_effects')
+  }
+  return resolveTenantDb(scope.companyId, 'depot_stock_side_effects')
+}
+
+function scopeFrom(input: { context?: RequestContext; companyId: string }): StockScope {
+  return { companyId: input.context?.companyId ?? input.companyId, context: input.context }
+}
+
+async function depotNameMap(scope: StockScope): Promise<Map<string, string>> {
+  const { data, error } = await stockSideEffectsDb(scope)
+    .from('depots')
+    .select('id, name')
+    .eq('company_id', scope.companyId)
   if (error) throw new Error(error.message)
   return new Map((data ?? []).map((d) => [String(d.id), String(d.name ?? 'Depot')]))
 }
 
-export async function listDepotStock(companyId: string, depotId?: string | null) {
-  let query = stockDb(companyId)
+export async function listDepotStock(companyId: string, depotId?: string | null, context?: RequestContext) {
+  const scope = scopeFrom({ companyId, context })
+  let query = stockTenantDb(scope)
     .from('depot_stock_items')
     .select('*')
-    .eq('company_id', companyId)
+    .eq('company_id', scope.companyId)
     .order('resource_name', { ascending: true })
     .limit(500)
   if (depotId) query = query.eq('depot_id', depotId)
   const { data, error } = await query
   if (error) throw new Error(error.message)
-  const names = await depotNameMap(companyId)
+  const names = await depotNameMap(scope)
   return (data ?? []).map((row) =>
     mapDepotStockRow(row as Row, names.get(String((row as Row).depot_id)) ?? null),
   )
 }
 
-export async function listFuelCards(companyId: string) {
-  const { data, error } = await stockDb(companyId)
+export async function listFuelCards(companyId: string, context?: RequestContext) {
+  const scope = scopeFrom({ companyId, context })
+  const { data, error } = await stockTenantDb(scope)
     .from('fuel_cards')
-    .select('*, vehicles(registration)')
-    .eq('company_id', companyId)
+    .select('*')
+    .eq('company_id', scope.companyId)
     .order('created_at', { ascending: false })
     .limit(200)
   if (error) throw new Error(error.message)
+  const vehicleIds = [
+    ...new Set(
+      (data ?? [])
+        .map((row) => (row as Row).assigned_vehicle_id)
+        .filter((id): id is string => Boolean(id))
+        .map((id) => String(id)),
+    ),
+  ]
+  const registrationByVehicleId = new Map<string, string>()
+  if (vehicleIds.length > 0) {
+    const { data: vehicles, error: vehicleError } = await stockSideEffectsDb(scope)
+      .from('vehicles')
+      .select('id, registration')
+      .eq('company_id', scope.companyId)
+      .in('id', vehicleIds)
+    if (vehicleError) throw new Error(vehicleError.message)
+    for (const vehicle of vehicles ?? []) {
+      registrationByVehicleId.set(String(vehicle.id), String(vehicle.registration ?? ''))
+    }
+  }
   return (data ?? []).map((row) => {
-    const vehicle = ((row as Row).vehicles as Row | null) ?? null
+    const vehicleId = (row as Row).assigned_vehicle_id
+      ? String((row as Row).assigned_vehicle_id)
+      : null
     return mapFuelCardRow(row as Row, {
-      registrationNumber: vehicle?.registration ? String(vehicle.registration) : null,
+      registrationNumber: vehicleId ? registrationByVehicleId.get(vehicleId) ?? null : null,
     })
   })
 }
 
-export async function listStockTransfers(companyId: string) {
-  const { data, error } = await stockDb(companyId)
+export async function listStockTransfers(companyId: string, context?: RequestContext) {
+  const scope = scopeFrom({ companyId, context })
+  const { data, error } = await stockTenantDb(scope)
     .from('stock_transfers')
     .select('*')
-    .eq('company_id', companyId)
+    .eq('company_id', scope.companyId)
     .order('created_at', { ascending: false })
     .limit(100)
   if (error) throw new Error(error.message)
-  const names = await depotNameMap(companyId)
+  const names = await depotNameMap(scope)
   return (data ?? []).map((row) =>
     mapStockTransferRow(row as Row, {
       fromDepotName: names.get(String((row as Row).from_depot_id)) ?? '',
@@ -75,7 +134,7 @@ export async function listStockTransfers(companyId: string) {
 }
 
 async function getOrCreateStockItem(input: {
-  companyId: string
+  scope: StockScope
   depotId: string
   resourceItemId: string
   resourceName: string
@@ -84,11 +143,11 @@ async function getOrCreateStockItem(input: {
   minimum?: number
   actorUserId?: string | null
 }): Promise<Row> {
-  const companyId = input.companyId
-  const { data: existing, error } = await stockDb(companyId)
+  const companyId = input.scope.companyId
+  const { data: existing, error } = await stockTenantDb(input.scope)
     .from('depot_stock_items')
     .select('*')
-    .eq('company_id', input.companyId)
+    .eq('company_id', companyId)
     .eq('depot_id', input.depotId)
     .eq('resource_item_id', input.resourceItemId)
     .maybeSingle()
@@ -96,7 +155,7 @@ async function getOrCreateStockItem(input: {
   if (existing) return existing as Row
 
   const insert = {
-    company_id: input.companyId,
+    company_id: companyId,
     depot_id: input.depotId,
     resource_item_id: input.resourceItemId,
     resource_name: input.resourceName,
@@ -107,7 +166,7 @@ async function getOrCreateStockItem(input: {
     unit: input.unit ?? 'units',
     created_by: input.actorUserId ?? null,
   }
-  const { data, error: insertError } = await stockDb(companyId)
+  const { data, error: insertError } = await stockTenantDb(input.scope)
     .from('depot_stock_items')
     .insert(insert)
     .select('*')
@@ -117,7 +176,7 @@ async function getOrCreateStockItem(input: {
 }
 
 async function recordMovement(input: {
-  companyId: string
+  scope: StockScope
   stockItemId: string
   movementType: string
   quantity: number
@@ -127,9 +186,8 @@ async function recordMovement(input: {
   body?: string
   payload?: Record<string, unknown>
 }) {
-  const companyId = input.companyId
-  const { error } = await stockDb(companyId).from('depot_stock_movements').insert({
-    company_id: input.companyId,
+  const { error } = await stockTenantDb(input.scope).from('depot_stock_movements').insert({
+    company_id: input.scope.companyId,
     stock_item_id: input.stockItemId,
     movement_type: input.movementType,
     quantity: input.quantity,
@@ -143,6 +201,7 @@ async function recordMovement(input: {
 }
 
 export async function upsertDepotStock(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -155,6 +214,7 @@ export async function upsertDepotStock(input: {
   minimum?: number
   adjustBy?: number
 }) {
+  const scope = scopeFrom(input)
   const depotId = String(input.depotId)
   const resourceItemId = String(input.resourceItemId).trim()
   const resourceName = String(input.resourceName).trim()
@@ -162,17 +222,16 @@ export async function upsertDepotStock(input: {
     throw new HttpError(400, 'depotId, resourceItemId and resourceName are required')
   }
 
-  const companyId = input.companyId
-  const { data: depot } = await stockDb(companyId)
+  const { data: depot } = await stockSideEffectsDb(scope)
     .from('depots')
     .select('id')
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', depotId)
     .maybeSingle()
   if (!depot) throw new HttpError(404, 'Depot not found')
 
   const item = await getOrCreateStockItem({
-    companyId: input.companyId,
+    scope,
     depotId,
     resourceItemId,
     resourceName,
@@ -206,16 +265,16 @@ export async function upsertDepotStock(input: {
   if (typeof input.minimum === 'number') patch.minimum = Math.max(0, input.minimum)
   if (quantityDelta !== 0 || typeof input.available === 'number') patch.available = next
 
-  const { error } = await stockDb(companyId)
+  const { error } = await stockTenantDb(scope)
     .from('depot_stock_items')
     .update(patch)
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', item.id)
   if (error) throw new Error(error.message)
 
   if (quantityDelta !== 0) {
     await recordMovement({
-      companyId: input.companyId,
+      scope,
       stockItemId: String(item.id),
       movementType,
       quantity: quantityDelta,
@@ -227,7 +286,7 @@ export async function upsertDepotStock(input: {
   }
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: 'depot_stock.upsert',
     entityType: 'depot_stock_item',
@@ -237,11 +296,12 @@ export async function upsertDepotStock(input: {
     afterSnapshot: { available: next, ...patch },
   })
 
-  const names = await depotNameMap(input.companyId)
+  const names = await depotNameMap(scope)
   return mapDepotStockRow({ ...item, ...patch, available: next }, names.get(depotId) ?? null)
 }
 
 export async function createStockTransfer(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -252,14 +312,14 @@ export async function createStockTransfer(input: {
   fromDepotId: string
   toDepotId: string
 }) {
+  const scope = scopeFrom(input)
   const qty = Number(input.quantity)
   if (!Number.isFinite(qty) || qty <= 0) throw new HttpError(400, 'quantity must be positive')
   if (!input.fromDepotId || !input.toDepotId) throw new HttpError(400, 'fromDepotId and toDepotId are required')
   if (input.fromDepotId === input.toDepotId) throw new HttpError(400, 'Depots must differ')
 
-  const companyId = input.companyId
   const fromItem = await getOrCreateStockItem({
-    companyId: input.companyId,
+    scope,
     depotId: input.fromDepotId,
     resourceItemId: input.resourceItemId,
     resourceName: input.resourceName,
@@ -270,7 +330,7 @@ export async function createStockTransfer(input: {
   if (available < qty) throw new HttpError(409, 'Insufficient stock at source depot')
 
   const toItem = await getOrCreateStockItem({
-    companyId: input.companyId,
+    scope,
     depotId: input.toDepotId,
     resourceItemId: input.resourceItemId,
     resourceName: input.resourceName,
@@ -282,22 +342,22 @@ export async function createStockTransfer(input: {
   const fromNext = available - qty
   const toNext = Number(toItem.available ?? 0) + qty
 
-  const { error: fromErr } = await stockDb(companyId)
+  const { error: fromErr } = await stockTenantDb(scope)
     .from('depot_stock_items')
     .update({ available: fromNext, updated_at: now })
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', fromItem.id)
   if (fromErr) throw new Error(fromErr.message)
 
-  const { error: toErr } = await stockDb(companyId)
+  const { error: toErr } = await stockTenantDb(scope)
     .from('depot_stock_items')
     .update({ available: toNext, updated_at: now })
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', toItem.id)
   if (toErr) throw new Error(toErr.message)
 
   await recordMovement({
-    companyId: input.companyId,
+    scope,
     stockItemId: String(fromItem.id),
     movementType: 'transfer_out',
     quantity: -qty,
@@ -306,7 +366,7 @@ export async function createStockTransfer(input: {
     body: `Transfer out to depot ${input.toDepotId}`,
   })
   await recordMovement({
-    companyId: input.companyId,
+    scope,
     stockItemId: String(toItem.id),
     movementType: 'transfer_in',
     quantity: qty,
@@ -315,10 +375,10 @@ export async function createStockTransfer(input: {
     body: `Transfer in from depot ${input.fromDepotId}`,
   })
 
-  const { data: transfer, error: transferError } = await stockDb(companyId)
+  const { data: transfer, error: transferError } = await stockTenantDb(scope)
     .from('stock_transfers')
     .insert({
-      company_id: input.companyId,
+      company_id: scope.companyId,
       resource_item_id: input.resourceItemId,
       resource_name: input.resourceName,
       quantity: qty,
@@ -335,7 +395,7 @@ export async function createStockTransfer(input: {
   if (transferError) throw new Error(transferError.message)
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: 'depot_stock.transfer',
     entityType: 'stock_transfer',
@@ -344,7 +404,7 @@ export async function createStockTransfer(input: {
     afterSnapshot: { quantity: qty, from: input.fromDepotId, to: input.toDepotId },
   })
 
-  const names = await depotNameMap(input.companyId)
+  const names = await depotNameMap(scope)
   return mapStockTransferRow(transfer as Row, {
     fromDepotName: names.get(input.fromDepotId) ?? '',
     toDepotName: names.get(input.toDepotId) ?? '',
@@ -352,6 +412,7 @@ export async function createStockTransfer(input: {
 }
 
 export async function createFuelCard(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -364,18 +425,18 @@ export async function createFuelCard(input: {
   depotId?: string | null
   dailyLimit?: number | null
 }) {
+  const scope = scopeFrom(input)
   const provider = String(input.provider ?? '').trim()
   const maskedNumber = String(input.maskedNumber ?? '').trim()
   if (!provider || !maskedNumber) throw new HttpError(400, 'provider and maskedNumber are required')
 
-  const companyId = input.companyId
   const vehicleId = input.assignedVehicleId ? String(input.assignedVehicleId) : null
   const status = vehicleId
     ? 'active'
     : normalizeFuelCardStatus(input.status ?? 'unassigned')
 
   const insert = {
-    company_id: input.companyId,
+    company_id: scope.companyId,
     provider,
     masked_number: maskedNumber,
     status,
@@ -389,12 +450,12 @@ export async function createFuelCard(input: {
     created_by: input.actorUserId,
   }
 
-  const { data, error } = await stockDb(companyId).from('fuel_cards').insert(insert).select('id').single()
+  const { data, error } = await stockTenantDb(scope).from('fuel_cards').insert(insert).select('id').single()
   if (error) throw new Error(error.message)
   const id = String(data.id)
 
-  await stockDb(companyId).from('fuel_card_events').insert({
-    company_id: input.companyId,
+  await stockTenantDb(scope).from('fuel_card_events').insert({
+    company_id: scope.companyId,
     fuel_card_id: id,
     event_type: 'created',
     actor_user_id: input.actorUserId,
@@ -404,7 +465,7 @@ export async function createFuelCard(input: {
   })
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: 'fuel_card.created',
     entityType: 'fuel_card',
@@ -413,11 +474,12 @@ export async function createFuelCard(input: {
     afterSnapshot: insert,
   })
 
-  const cards = await listFuelCards(input.companyId)
+  const cards = await listFuelCards(scope.companyId, input.context)
   return cards.find((c) => c.id === id) ?? null
 }
 
 export async function assignFuelCard(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -426,11 +488,11 @@ export async function assignFuelCard(input: {
   assignedDriverName?: string | null
   status?: string
 }) {
-  const companyId = input.companyId
-  const { data: existing, error } = await stockDb(companyId)
+  const scope = scopeFrom(input)
+  const { data: existing, error } = await stockTenantDb(scope)
     .from('fuel_cards')
     .select('*')
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', input.fuelCardId)
     .maybeSingle()
   if (error) throw new Error(error.message)
@@ -459,15 +521,15 @@ export async function assignFuelCard(input: {
     updated_at: new Date().toISOString(),
   }
 
-  const { error: updateError } = await stockDb(companyId)
+  const { error: updateError } = await stockTenantDb(scope)
     .from('fuel_cards')
     .update(patch)
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', input.fuelCardId)
   if (updateError) throw new Error(updateError.message)
 
-  await stockDb(companyId).from('fuel_card_events').insert({
-    company_id: input.companyId,
+  await stockTenantDb(scope).from('fuel_card_events').insert({
+    company_id: scope.companyId,
     fuel_card_id: input.fuelCardId,
     event_type: vehicleId ? 'assigned' : 'unassigned',
     actor_user_id: input.actorUserId,
@@ -477,7 +539,7 @@ export async function assignFuelCard(input: {
   })
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: vehicleId ? 'fuel_card.assigned' : 'fuel_card.unassigned',
     entityType: 'fuel_card',
@@ -485,7 +547,7 @@ export async function assignFuelCard(input: {
     afterSnapshot: patch,
   })
 
-  const cards = await listFuelCards(input.companyId)
+  const cards = await listFuelCards(scope.companyId, input.context)
   return cards.find((c) => c.id === input.fuelCardId) ?? null
 }
 
@@ -493,6 +555,7 @@ export async function assignFuelCard(input: {
  * Yard restock: decrement depot stock and raise vehicle consumable level.
  */
 export async function applyYardConsumableRestock(input: {
+  context?: RequestContext
   companyId: string
   actorUserId: string
   actorName: string
@@ -503,16 +566,16 @@ export async function applyYardConsumableRestock(input: {
   unit?: string
   depotId?: string | null
 }) {
+  const scope = scopeFrom(input)
   const addQty = Number(input.addQty)
   if (!input.vehicleId) throw new HttpError(400, 'vehicleId is required')
   if (!input.defId) throw new HttpError(400, 'defId is required')
   if (!Number.isFinite(addQty) || addQty <= 0) throw new HttpError(400, 'addQty must be positive')
 
-  const companyId = input.companyId
-  const { data: vehicle, error: vehicleError } = await stockDb(companyId)
+  const { data: vehicle, error: vehicleError } = await stockSideEffectsDb(scope)
     .from('vehicles')
     .select('id, primary_depot_id')
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', input.vehicleId)
     .maybeSingle()
   if (vehicleError) throw new Error(vehicleError.message)
@@ -529,7 +592,7 @@ export async function applyYardConsumableRestock(input: {
   const unit = String(input.unit ?? 'units')
 
   const stockItem = await getOrCreateStockItem({
-    companyId: input.companyId,
+    scope,
     depotId,
     resourceItemId: input.defId,
     resourceName: label,
@@ -545,15 +608,15 @@ export async function applyYardConsumableRestock(input: {
 
   const nextAvailable = available - addQty
   const now = new Date().toISOString()
-  const { error: stockError } = await stockDb(companyId)
+  const { error: stockError } = await stockTenantDb(scope)
     .from('depot_stock_items')
     .update({ available: nextAvailable, updated_at: now })
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('id', stockItem.id)
   if (stockError) throw new Error(stockError.message)
 
   await recordMovement({
-    companyId: input.companyId,
+    scope,
     stockItemId: String(stockItem.id),
     movementType: 'restock',
     quantity: -addQty,
@@ -564,10 +627,10 @@ export async function applyYardConsumableRestock(input: {
     payload: { defId: input.defId, addQty },
   })
 
-  const { data: level } = await stockDb(companyId)
+  const { data: level } = await stockTenantDb(scope)
     .from('vehicle_consumable_levels')
     .select('*')
-    .eq('company_id', input.companyId)
+    .eq('company_id', scope.companyId)
     .eq('vehicle_id', input.vehicleId)
     .eq('def_id', input.defId)
     .maybeSingle()
@@ -575,7 +638,7 @@ export async function applyYardConsumableRestock(input: {
   const current = Number(level?.current_qty ?? 0)
   const target = Number(level?.target_qty ?? Math.max(current + addQty, addQty))
   const levelUpsert = {
-    company_id: input.companyId,
+    company_id: scope.companyId,
     vehicle_id: input.vehicleId,
     def_id: input.defId,
     label,
@@ -585,13 +648,13 @@ export async function applyYardConsumableRestock(input: {
     updated_at: now,
   }
 
-  const { error: levelError } = await stockDb(companyId)
+  const { error: levelError } = await stockTenantDb(scope)
     .from('vehicle_consumable_levels')
     .upsert(levelUpsert, { onConflict: 'company_id,vehicle_id,def_id' })
   if (levelError) throw new Error(levelError.message)
 
   await writeImmutableAudit({
-    companyId: input.companyId,
+    companyId: scope.companyId,
     actorUserId: input.actorUserId,
     action: 'equipment.restock',
     entityType: 'vehicle_consumable',
@@ -607,23 +670,25 @@ export async function applyYardConsumableRestock(input: {
   }
 }
 
-export async function listYardDepotStockLines(companyId: string, depotId: string | null) {
+export async function listYardDepotStockLines(companyId: string, depotId: string | null, context?: RequestContext) {
   if (!depotId) return []
-  const { data, error } = await stockDb(companyId)
+  const scope = scopeFrom({ companyId, context })
+  const { data, error } = await stockTenantDb(scope)
     .from('depot_stock_items')
     .select('*')
-    .eq('company_id', companyId)
+    .eq('company_id', scope.companyId)
     .eq('depot_id', depotId)
     .order('resource_name')
   if (error) throw new Error(error.message)
   return (data ?? []).map((row) => mapDepotStockToYardLine(row as Row))
 }
 
-export async function listVehicleConsumablesByCompany(companyId: string) {
-  const { data, error } = await stockDb(companyId)
+export async function listVehicleConsumablesByCompany(companyId: string, context?: RequestContext) {
+  const scope = scopeFrom({ companyId, context })
+  const { data, error } = await stockTenantDb(scope)
     .from('vehicle_consumable_levels')
     .select('*')
-    .eq('company_id', companyId)
+    .eq('company_id', scope.companyId)
     .limit(2000)
   if (error) throw new Error(error.message)
   return (data ?? []) as Row[]
