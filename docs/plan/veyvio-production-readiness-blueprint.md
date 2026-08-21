@@ -1188,6 +1188,8 @@ These decisions stop the platform drifting back into the same problems later.
 
 Numbered `ADR-PR-*` so they do not collide with existing `docs/adr/001-web-first-phase-1.md`.
 
+**Filed (Accepted, 21 Aug 2026):** `docs/adr/ADR-PR-001-tenant-authority.md` … `docs/adr/ADR-PR-008-wave-3g-sequencing.md`.
+
 ---
 
 ## 25. Immediate starting point
