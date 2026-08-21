@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { OperationalPlan } from "@/types/yard";
 import type { Trip, Vehicle } from "@/types/yard";
 import { ThickProgressBar } from "./HomeDashboardPrimitives";
@@ -13,8 +14,8 @@ type TimelineItem = {
 };
 
 type Props = {
-  nextTrip?: Trip;
-  nextTripVehicle?: Vehicle;
+  trips: Trip[];
+  vehicles: Vehicle[];
   departureProgress: number;
   operationalPlan?: OperationalPlan | null;
   timeline: TimelineItem[];
@@ -22,17 +23,28 @@ type Props = {
 };
 
 export function ShiftOverviewPanel({
-  nextTrip,
-  nextTripVehicle,
+  trips,
+  vehicles,
   departureProgress,
   operationalPlan,
   timeline,
   openTaskCount,
 }: Props) {
+  const [tripIndex, setTripIndex] = useState(0);
+  const safeIndex = trips.length === 0 ? 0 : ((tripIndex % trips.length) + trips.length) % trips.length;
+  const nextTrip = trips[safeIndex];
+  const nextTripVehicle = nextTrip ? vehicles.find(v => v.id === nextTrip.vehicleId) : undefined;
+
   const title = nextTrip ? `${nextTrip.code} · ${nextTrip.service}` : "No active run";
   const subtitle = nextTrip
     ? `${nextTrip.departAt} departure${nextTripVehicle ? ` · ${nextTripVehicle.reg}` : ""}`
     : "Waiting for published duties";
+
+  const canCycle = trips.length > 1;
+  const positionLabel = useMemo(() => {
+    if (trips.length === 0) return null;
+    return `${safeIndex + 1} of ${trips.length}`;
+  }, [safeIndex, trips.length]);
 
   return (
     <section className="flex h-full flex-col rounded-2xl border border-[#e4e7ec] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
@@ -44,23 +56,42 @@ export function ShiftOverviewPanel({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <button type="button" className="grid size-8 place-items-center rounded-lg border border-[#e4e7ec] text-[#98a2b3]">
+          <button
+            type="button"
+            disabled={!canCycle}
+            aria-label="Previous departure"
+            onClick={() => setTripIndex(i => i - 1)}
+            className="grid size-8 place-items-center rounded-lg border border-[#e4e7ec] text-[#667085] disabled:opacity-40"
+          >
             <ChevronLeft className="size-4" />
           </button>
-          <button type="button" className="grid size-8 place-items-center rounded-lg border border-[#e4e7ec] text-[#98a2b3]">
+          <button
+            type="button"
+            disabled={!canCycle}
+            aria-label="Next departure"
+            onClick={() => setTripIndex(i => i + 1)}
+            className="grid size-8 place-items-center rounded-lg border border-[#e4e7ec] text-[#667085] disabled:opacity-40"
+          >
             <ChevronRight className="size-4" />
           </button>
-          <Link to="/departure-line" className="grid size-8 place-items-center rounded-lg border border-[#e4e7ec] text-[#667085]">
+          <Link
+            to="/departure-line"
+            className="grid size-8 place-items-center rounded-lg border border-[#e4e7ec] text-[#667085]"
+            aria-label="Open departure line"
+          >
             <ExternalLink className="size-4" />
           </Link>
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-2 text-xs text-[#667085]">
-        <span className="grid size-6 place-items-center rounded-md bg-command-50 text-[10px] font-bold text-command-700">
-          VY
+      <div className="mt-4 flex items-center justify-between gap-2 text-xs text-[#667085]">
+        <span className="inline-flex items-center gap-2">
+          <span className="grid size-6 place-items-center rounded-md bg-command-50 text-[10px] font-bold text-command-700">
+            VY
+          </span>
+          Veyvio Yard · {operationalPlan?.operationalDate ?? "Today"}
         </span>
-        Veyvio Yard · {operationalPlan?.operationalDate ?? "Today"}
+        {positionLabel ? <span className="tabular-nums">{positionLabel}</span> : null}
       </div>
 
       <h3 className="mt-2 text-xl font-semibold text-ink">{title}</h3>

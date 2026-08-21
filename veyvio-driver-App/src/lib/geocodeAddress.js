@@ -2,7 +2,7 @@
  * UK address search via OpenStreetMap Nominatim (driver app).
  */
 
-const USER_AGENT = "RidovaDriverApp/1.0";
+const USER_AGENT = "VeyvioDriverApp/1.0";
 
 function shortLabel(hit) {
   const addr = hit.address;

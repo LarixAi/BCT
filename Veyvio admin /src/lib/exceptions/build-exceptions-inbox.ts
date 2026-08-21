@@ -16,7 +16,7 @@ export type ExceptionsInboxInput = {
   driverExceptions?: OperationalException[] | null
   vehicleExceptions?: OperationalException[] | null
   yardExceptions?: YardException[] | null
-  /** Include seeded multi-module catalog (default true for control-room demo density). */
+  /** Opt-in seeded catalog for mock/demo only — default off (F-03). */
   includeCatalog?: boolean
   apiExceptions?: OperationalException[] | null
 }
@@ -104,7 +104,7 @@ export function buildExceptionsInbox(input: ExceptionsInboxInput): OperationalEx
   const fromVehicles = (input.vehicleExceptions ?? []).map(normalizeException)
   const fromYard = (input.yardExceptions ?? []).map(mapYardExceptionToOperational)
   const fromApi = (input.apiExceptions ?? []).map(normalizeException)
-  const fromCatalog = input.includeCatalog === false ? [] : EXCEPTION_CATALOG.map(normalizeException)
+  const fromCatalog = input.includeCatalog === true ? EXCEPTION_CATALOG.map(normalizeException) : []
 
   const byId = new Map<string, OperationalException>()
   for (const row of [

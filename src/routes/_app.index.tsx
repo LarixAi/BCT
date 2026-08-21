@@ -14,13 +14,14 @@ import {
   buildDepotReadinessSeries,
   departureReadinessSnapshot,
 } from "@/features/home/depot-readiness-series";
-import { HomeDashboardHeader } from "@/features/home/HomeDashboardHeader";
+import { HomeDashboardHeader, type HomeRange } from "@/features/home/HomeDashboardHeader";
 import { KpiMetricCard } from "@/features/home/HomeDashboardPrimitives";
 import { buildHomeKpis } from "@/features/home/home-kpi";
 import { RecentTasksTable } from "@/features/home/RecentTasksTable";
 import { ShiftOverviewPanel } from "@/features/home/ShiftOverviewPanel";
 import { DashboardSurface } from "@/features/home/HomeDashboardPrimitives";
 import { taskStats } from "@/domain/tasks/task-stats";
+import type { YardTask } from "@/types/tasks";
 
 export const Route = createFileRoute("/_app/")({
   head: () => ({
@@ -32,10 +33,36 @@ export const Route = createFileRoute("/_app/")({
   component: Home,
 });
 
-type Range = "daily" | "weekly" | "monthly" | "yearly";
+function startOfLocalDay(d = new Date()): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function taskInRange(task: YardTask, range: HomeRange, now = new Date()): boolean {
+  const due = task.dueAt ? new Date(task.dueAt) : null;
+  const created = task.createdAt ? new Date(task.createdAt) : null;
+  const anchor = due && !Number.isNaN(due.getTime()) ? due : created;
+  if (!anchor || Number.isNaN(anchor.getTime())) {
+    return range === "yearly" || range === "monthly";
+  }
+
+  const today = startOfLocalDay(now);
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  if (range === "daily") {
+    return startOfLocalDay(anchor).getTime() === today.getTime();
+  }
+  if (range === "weekly") {
+    const weekAgo = today.getTime() - 6 * dayMs;
+    return anchor.getTime() >= weekAgo;
+  }
+  if (range === "monthly") {
+    return anchor.getMonth() === now.getMonth() && anchor.getFullYear() === now.getFullYear();
+  }
+  return anchor.getFullYear() === now.getFullYear();
+}
 
 function Home() {
-  const [range, setRange] = useState<Range>("monthly");
+  const [range, setRange] = useState<HomeRange>("daily");
   const vehicles = useYard(s => s.vehicles);
   const trips = useYard(s => s.trips);
   const tasks = useYard(s => s.tasks) ?? [];
@@ -46,8 +73,6 @@ function Home() {
   const userId = useSessionStore(s => s.user?.id);
 
   const upcomingTrips = trips.slice(0, 6);
-  const nextTrip = upcomingTrips[0];
-  const nextTripVehicle = nextTrip ? vehicles.find(v => v.id === nextTrip.vehicleId) : undefined;
 
   const damageReviewCount = useMemo(
     () => pendingDamageReviews(damageObservations, damageReviews).length,
@@ -61,14 +86,18 @@ function Home() {
     () => getAttentionItems(vehicles, trips, tasks, damageReviewCount, repairVerifyCount),
     [vehicles, trips, tasks, damageReviewCount, repairVerifyCount],
   );
-  const recentTasks = useMemo(
-    () => tasks.filter(t => t.status !== "cancelled").slice(0, 8),
-    [tasks],
+  const rangedTasks = useMemo(
+    () => tasks.filter(t => t.status !== "cancelled" && taskInRange(t, range)),
+    [tasks, range],
   );
+  const recentTasks = useMemo(() => rangedTasks.slice(0, 8), [rangedTasks]);
   const readinessSeries = useMemo(() => buildDepotReadinessSeries(vehicles), [vehicles]);
   const departureReady = useMemo(() => departureReadinessSnapshot(trips), [trips]);
   const stats = useMemo(() => taskStats(tasks, userId), [tasks, userId]);
-  const kpis = useMemo(() => buildHomeKpis({ vehicles, trips, tasks }), [vehicles, trips, tasks]);
+  const kpis = useMemo(
+    () => buildHomeKpis({ vehicles, trips, tasks: rangedTasks.length ? rangedTasks : tasks }),
+    [vehicles, trips, rangedTasks, tasks],
+  );
 
   const departureProgress = trips.length
     ? Math.round((departureReady.ready / trips.length) * 100)
@@ -85,7 +114,7 @@ function Home() {
         to: "/plan" as const,
       }));
     }
-    return upcomingTrips.slice(0, 2).map((trip, index) => ({
+    return upcomingTrips.slice(0, 2).map(trip => ({
       id: trip.id,
       date: trip.departAt,
       title: `${trip.code} · ${trip.service}`,
@@ -143,8 +172,8 @@ function Home() {
         </DashboardSurface>
 
         <ShiftOverviewPanel
-          nextTrip={nextTrip}
-          nextTripVehicle={nextTripVehicle}
+          trips={upcomingTrips}
+          vehicles={vehicles}
           departureProgress={departureProgress}
           operationalPlan={operationalPlan}
           timeline={timeline}

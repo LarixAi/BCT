@@ -40,6 +40,7 @@ export const COMMAND_NAV: NavEntry[] = [
       { label: 'Staff', href: '/staff' },
       { label: 'Vehicles', href: '/vehicles' },
       { label: 'Depots', href: '/depots' },
+      { label: 'Places', href: '/places' },
       { label: 'Yard Operations', href: '/yard' },
       { label: 'Maintenance', href: '/maintenance' },
       { label: 'Fleet Resources', href: '/fleet-resources' },

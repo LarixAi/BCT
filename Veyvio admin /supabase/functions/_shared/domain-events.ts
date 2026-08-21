@@ -1,7 +1,9 @@
 /**
  * F-09 — material writes produce domain events.
+ *
+ * Wave 3F cutover 49 + named capability `domainEventWriterDb` (no bare admin import).
  */
-import { admin } from './supabase.ts'
+import { domainEventWriterDb } from './db-authority.ts'
 
 export type DomainEventInput = {
   companyId: string
@@ -13,7 +15,7 @@ export type DomainEventInput = {
 }
 
 export async function emitDomainEvent(input: DomainEventInput): Promise<{ id: string }> {
-  const { data, error } = await admin
+  const { data, error } = await domainEventWriterDb(input.companyId, input.eventType)
     .from('domain_events')
     .insert({
       company_id: input.companyId,

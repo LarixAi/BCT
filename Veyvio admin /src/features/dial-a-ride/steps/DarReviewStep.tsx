@@ -1,4 +1,5 @@
 import { SectionCard } from '@/components/ui'
+import { formatUkDate } from '@/lib/uk-locale'
 import { buildJobsFromDialARideRequest } from '@/lib/dial-a-ride/job-generation'
 import type { DialARideMember, DialARideRequest } from '@/lib/dial-a-ride/types'
 
@@ -35,7 +36,7 @@ export function DarReviewStep({
       <SectionCard title="Request summary">
         <dl className="space-y-2 text-sm">
           <Row label="Member" value={`${request.memberName} (${request.memberNumber})`} />
-          <Row label="Date" value={request.travelDate} />
+          <Row label="Date" value={formatUkDate(request.travelDate)} />
           <Row label="Window" value={`${request.pickupWindowStart}–${request.pickupWindowEnd}`} />
           <Row label="Journey" value={`${request.pickupAddress} → ${request.destinationAddress}`} />
           <Row label="Service check" value={request.serviceCheckResult?.replace(/_/g, ' ') ?? 'Not run'} />

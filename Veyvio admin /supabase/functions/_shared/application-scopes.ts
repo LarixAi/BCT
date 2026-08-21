@@ -1,131 +1,128 @@
-import { HttpError } from './http.ts'
-import { admin, type RequestContext } from './supabase.ts'
-import { recordSecurityEvent } from './tenant-auth.ts'
-
-/** Blueprint Part F — application access scopes (deny-by-default). */
-export type ApplicationScope = 'COMMAND' | 'DRIVER' | 'YARD' | 'PLATFORM'
-
-const YARD_ROLE_KEYS = new Set(['yard_manager', 'yard_operative', 'contractor'])
-
-const COMMAND_ROLE_KEYS = new Set([
-  'company_owner',
-  'company_administrator',
-  'transport_manager',
-  'dispatcher',
-  'compliance_manager',
-  'safeguarding_lead',
-  'read_only_auditor',
-  'support',
-])
-
-/** Driver onboarding paths reachable before full driver_app_accounts linkage is complete. */
-const DRIVER_SCOPE_EXEMPT_PREFIXES = [
-  'driver/onboarding',
-  'driver/profile',
-  'driver/devices',
-] as const
-
-const PUBLIC_PATH_PREFIXES = ['auth/', 'system/', 'health'] as const
-
-export function normalizeApiPath(path: string): string {
-  return path.replace(/^\/+|\/+$/g, '')
-}
-
-export function isPublicApiPath(path: string): boolean {
-  const p = normalizeApiPath(path)
-  if (!p || p === 'health') return true
-  return PUBLIC_PATH_PREFIXES.some((prefix) => p.startsWith(prefix))
-}
-
 /**
- * Scopes required to call this path (any one match grants access unless noted).
- * Returns null when no application-scope gate applies.
+ * Blueprint Part F — application access scopes (deny-by-default).
+ * Wave 3B: explicit membership_application_access (+ support grant path) only.
+ *
+ * Wave 3F cutover 56: membership JWT reads/writes via UserScopedDb + RLS.
  */
-export function requiredScopesForApiPath(path: string): ApplicationScope[] | null {
-  const p = normalizeApiPath(path)
+import { companyScopedServiceDb, userScopedDb } from './db-authority.ts'
+import { HttpError } from './http.ts'
+import { type RequestContext } from './supabase.ts'
+import { recordSecurityEvent } from './tenant-auth.ts'
+import { normalizeAppType, type VeyvioAppType } from './account-authority.ts'
+import { decideExplicitApplicationScopes } from './explicit-application-scopes.ts'
+import {
+  type ApplicationScope,
+  isIntegrationIntakePath,
+  isPublicApiPath,
+  normalizeApiPath,
+  requiredScopesForApiPath,
+  roleGrantsCommandScope,
+  roleGrantsYardScope,
+  scopesSatisfyRequirement,
+  stripApiVersionPrefix,
+} from './application-scope-paths.ts'
 
-  if (isPublicApiPath(p)) return null
-  if (p.startsWith('platform/')) return ['PLATFORM']
-
-  if (p.startsWith('driver/')) {
-    if (DRIVER_SCOPE_EXEMPT_PREFIXES.some((prefix) => p.startsWith(prefix))) return null
-    return ['DRIVER']
-  }
-
-  if (p.startsWith('yard/')) {
-    // Yard app (YARD) and Command oversight (COMMAND) — never driver-only accounts.
-    return ['YARD', 'COMMAND']
-  }
-
-  if (p === 'notifications' || p.startsWith('notifications/')) {
-    return ['COMMAND', 'DRIVER']
-  }
-
-  // Licensed module paths and general Command API surface.
-  return ['COMMAND']
+export type { ApplicationScope }
+export {
+  isIntegrationIntakePath,
+  isPublicApiPath,
+  normalizeApiPath,
+  requiredScopesForApiPath,
+  roleGrantsCommandScope,
+  roleGrantsYardScope,
+  scopesSatisfyRequirement,
+  stripApiVersionPrefix,
 }
+export { decideExplicitApplicationScopes } from './explicit-application-scopes.ts'
 
-export function roleGrantsCommandScope(roleKey: string): boolean {
-  return COMMAND_ROLE_KEYS.has(roleKey)
-}
-
-export function roleGrantsYardScope(roleKey: string): boolean {
-  return YARD_ROLE_KEYS.has(roleKey)
+function applicationAccessDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'membership_application_access_support_grant')
+  }
+  return userScopedDb(context, 'membership_application_access')
 }
 
 export async function resolveApplicationScopes(
   context: RequestContext,
+  options: { clientClaimedApps?: readonly string[] | null } = {},
 ): Promise<Set<ApplicationScope>> {
-  const scopes = new Set<ApplicationScope>()
+  let explicitAppTypes: string[] = []
 
-  if (context.platformRole) {
-    scopes.add('PLATFORM')
-    // Platform operators with an active company context can use Command/Yard APIs for that tenant.
-    if (context.companyId) {
-      scopes.add('COMMAND')
-      scopes.add('YARD')
+  if (context.companyId && context.membershipId && context.workspaceAuthority === 'membership') {
+    const { data: accessRows, error: accessError } = await applicationAccessDb(context)
+      .from('membership_application_access')
+      .select('app_type')
+      .eq('company_id', context.companyId)
+      .eq('membership_id', context.membershipId)
+      .eq('status', 'active')
+
+    if (!accessError && accessRows?.length) {
+      explicitAppTypes = accessRows
+        .map((row) => normalizeAppType(String(row.app_type ?? '')))
+        .filter((app): app is VeyvioAppType => Boolean(app))
     }
   }
 
-  if (context.isSupportSession) {
-    scopes.add('COMMAND')
-    scopes.add('YARD')
-    return scopes
-  }
-
-  if (!context.companyId) return scopes
-
-  const { data: driverAccount } = await admin
-    .from('driver_app_accounts')
-    .select('id')
-    .eq('company_id', context.companyId)
-    .eq('user_id', context.user.id)
-    .maybeSingle()
-
-  if (driverAccount?.id) {
-    scopes.add('DRIVER')
-  }
-
-  if (context.membershipId && context.roleKey) {
-    if (roleGrantsCommandScope(context.roleKey)) {
-      scopes.add('COMMAND')
-    }
-    if (roleGrantsYardScope(context.roleKey)) {
-      scopes.add('YARD')
-    }
-  }
-
-  return scopes
+  return decideExplicitApplicationScopes({
+    platformRole: context.platformRole,
+    isSupportSession: context.workspaceAuthority === 'support' || context.isSupportSession,
+    companyId: context.companyId,
+    membershipId: context.membershipId,
+    explicitAppTypes,
+    clientClaimedApps: options.clientClaimedApps,
+  })
 }
 
-export function scopesSatisfyRequirement(
-  granted: Set<ApplicationScope>,
-  required: ApplicationScope[],
-): boolean {
-  if (required.includes('PLATFORM')) {
-    return granted.has('PLATFORM')
+/**
+ * High-assurance applications must never use the role-based compatibility
+ * fallback. The active application grant is an independent database fact.
+ */
+export async function assertExplicitApplicationAccess(
+  context: RequestContext,
+  appType: VeyvioAppType,
+): Promise<void> {
+  if (
+    !context.companyId ||
+    !context.membershipId ||
+    context.workspaceAuthority === 'support' ||
+    context.isSupportSession
+  ) {
+    throw new HttpError(
+      403,
+      `An active ${appType} application grant is required.`,
+      'explicit_application_access_required',
+    )
   }
-  return required.some((scope) => granted.has(scope))
+
+  const { data, error } = await applicationAccessDb(context)
+    .from('membership_application_access')
+    .select('id')
+    .eq('company_id', context.companyId)
+    .eq('membership_id', context.membershipId)
+    .eq('app_type', appType)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (!error && data?.id) return
+
+  await recordSecurityEvent({
+    companyId: context.companyId,
+    actorUserId: context.user.id,
+    eventType: 'auth.explicit_application_access_denied',
+    message: `Explicit ${appType} application access denied`,
+    severity: 'attention',
+    metadata: {
+      appType,
+      membershipId: context.membershipId,
+      roleKeys: context.roleKeys,
+    },
+  }).catch(() => undefined)
+
+  throw new HttpError(
+    403,
+    `An active ${appType} application grant is required.`,
+    'explicit_application_access_required',
+  )
 }
 
 export async function assertApplicationScope(
@@ -151,6 +148,7 @@ export async function assertApplicationScope(
       required: requiredLabel,
       granted: [...granted],
       roleKey: context.roleKey,
+      roleKeys: context.roleKeys,
     },
   }).catch(() => undefined)
 

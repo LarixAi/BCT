@@ -14,23 +14,25 @@ export function TransfersReportSection({ from, to }: { from: string; to: string 
   if (isLoading) return <p className="text-sm text-muted">Loading transfer report…</p>
   if (!report) return null
 
+  const totalTransfers = Number(report.totalTransfers ?? 0)
+
   return (
-    <SectionCard title="Transfer operations" description={`${report.totalTransfers} transfers in period`}>
+    <SectionCard title="Transfer operations" description={`${totalTransfers} transfers in period`}>
       <div className="grid gap-3 sm:grid-cols-4">
-        <Stat label="Total transfers" value={String(report.totalTransfers)} />
-        <Stat label="Driver-caused" value={String(report.driverCaused)} />
-        <Stat label="Vehicle-caused" value={String(report.vehicleCaused)} />
-        <Stat label="Late recovery" value={String(report.lateRecovery)} />
-        <Stat label="Manager overrides" value={String(report.managerOverrides)} />
-        <Stat label="Passengers affected" value={String(report.passengersAffected)} />
-        <Stat label="Avg recovery time" value={`${report.avgRecoveryMinutes} min`} />
+        <Stat label="Total transfers" value={String(totalTransfers)} />
+        <Stat label="Driver-caused" value={String(report.driverCaused ?? 0)} />
+        <Stat label="Vehicle-caused" value={String(report.vehicleCaused ?? 0)} />
+        <Stat label="Late recovery" value={String(report.lateRecovery ?? 0)} />
+        <Stat label="Manager overrides" value={String(report.managerOverrides ?? 0)} />
+        <Stat label="Passengers affected" value={String(report.passengersAffected ?? 0)} />
+        <Stat label="Avg recovery time" value={`${report.avgRecoveryMinutes ?? 0} min`} />
       </div>
 
-      {report.byReason.length > 0 && (
+      {(report.byReason?.length ?? 0) > 0 && (
         <div className="mt-4">
           <h3 className="text-xs font-semibold uppercase text-muted">By reason</h3>
           <ul className="mt-2 space-y-1 text-sm">
-            {report.byReason.map((r) => (
+            {(report.byReason ?? []).map((r) => (
               <li key={r.reason} className="flex justify-between">
                 <span className="capitalize text-ink-soft">{r.reason}</span>
                 <span className="font-medium tabular-nums">{r.count}</span>
@@ -40,7 +42,7 @@ export function TransfersReportSection({ from, to }: { from: string; to: string 
         </div>
       )}
 
-      {report.recentTransfers.length > 0 && (
+      {(report.recentTransfers?.length ?? 0) > 0 && (
         <div className="mt-4 overflow-x-auto">
           <h3 className="text-xs font-semibold uppercase text-muted">Recent transfers</h3>
           <table className="mt-2 w-full min-w-[480px] text-left text-sm">
@@ -53,7 +55,7 @@ export function TransfersReportSection({ from, to }: { from: string; to: string 
               </tr>
             </thead>
             <tbody>
-              {report.recentTransfers.map((t) => (
+              {(report.recentTransfers ?? []).map((t) => (
                 <tr key={t.id} className="border-b border-border/60 last:border-0">
                   <td className="py-2 pr-3 font-mono text-xs">{t.id}</td>
                   <td className="py-2 pr-3 capitalize">{t.scope.replace(/_/g, ' ')}</td>

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { OfflineContextError } from "@/lib/driver-workspace-storage";
+import { DurableStorageError, durablePut } from "@/lib/driver-durable-kv";
 import {
+  OPS_ITEM_RECONCILIATION,
   enqueueDutyOpsCommand,
   enqueueOpsCommand,
   loadOpsOutbox,
@@ -26,35 +29,106 @@ describe("driver-ops-outbox.storage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses tenant-scoped keys when company and membership are present", () => {
+  it("uses tenant-scoped keys from production builder when company and membership are present", () => {
     expect(opsOutboxKey("drv-1", "co-a", "mem-1")).toBe("driver:co-a:mem-1:ops-command-outbox");
   });
 
-  it("isolates ops queues per tenant workspace", () => {
-    enqueueOpsCommand(
+  it("fails closed when tenant context is missing", () => {
+    expect(() => opsOutboxKey("drv-1", null, "mem-1")).toThrow(OfflineContextError);
+    expect(() => opsOutboxKey("drv-1", "co-a", "")).toThrow(OfflineContextError);
+  });
+
+  it("isolates ops queues per tenant workspace", async () => {
+    await enqueueOpsCommand(
       "drv-1",
       { type: "defect", payload: { description: "Mirror" } },
       "co-a",
       "mem-1",
     );
-    enqueueOpsCommand(
+    await enqueueOpsCommand(
       "drv-1",
       { type: "incident", payload: { description: "Near miss" } },
       "co-b",
       "mem-2",
     );
 
-    expect(loadOpsOutbox("drv-1", "co-a", "mem-1")).toHaveLength(1);
-    expect(loadOpsOutbox("drv-1", "co-b", "mem-2")).toHaveLength(1);
-    expect(loadOpsOutbox("drv-1", "co-a", "mem-1")[0].type).toBe("defect");
-    expect(loadOpsOutbox("drv-1", "co-b", "mem-2")[0].type).toBe("incident");
+    expect(await loadOpsOutbox("drv-1", "co-a", "mem-1")).toHaveLength(1);
+    expect(await loadOpsOutbox("drv-1", "co-b", "mem-2")).toHaveLength(1);
+    expect((await loadOpsOutbox("drv-1", "co-a", "mem-1"))[0].type).toBe("defect");
+    expect((await loadOpsOutbox("drv-1", "co-b", "mem-2"))[0].type).toBe("incident");
   });
 
-  it("dedupes pending duty sign-on commands per duty id", () => {
-    enqueueDutyOpsCommand("drv-1", "duty_sign_on", "duty-9", "co-a", "mem-1");
-    enqueueDutyOpsCommand("drv-1", "duty_sign_on", "duty-9", "co-a", "mem-1");
+  it("preserves queued work after a simulated app restart (reload from durable store)", async () => {
+    await enqueueOpsCommand(
+      "drv-1",
+      { type: "defect", payload: { description: "Brake warning", clientId: "ops-keep-1" } },
+      "co-a",
+      "mem-1",
+    );
+    const afterRestart = await loadOpsOutbox("drv-1", "co-a", "mem-1");
+    expect(afterRestart).toHaveLength(1);
+    expect(afterRestart[0].idempotencyKey).toBe("ops-keep-1");
+    expect(afterRestart[0].payload.clientId).toBe("ops-keep-1");
+  });
 
-    expect(loadOpsOutbox("drv-1", "co-a", "mem-1")).toHaveLength(1);
-    expect(loadOpsOutbox("drv-1", "co-a", "mem-1")[0].payload.dutyId).toBe("duty-9");
+  it("migrates legacy localStorage queues into durable storage then removes the legacy copy", async () => {
+    const key = opsOutboxKey("drv-1", "co-a", "mem-1");
+    localStorage.setItem(
+      key,
+      JSON.stringify([{ id: "legacy-scoped", type: "defect", payload: { clientId: "legacy-scoped" } }]),
+    );
+    localStorage.setItem(
+      "csf_driver_ops_outbox:drv-1",
+      JSON.stringify([{ id: "legacy-driver", type: "incident", payload: { clientId: "legacy-driver" } }]),
+    );
+
+    const queue = await loadOpsOutbox("drv-1", "co-a", "mem-1");
+    expect(queue.map((item) => item.id).sort()).toEqual(["legacy-driver", "legacy-scoped"]);
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(localStorage.getItem("csf_driver_ops_outbox:drv-1")).toBeNull();
+    expect(await loadOpsOutbox("drv-1", "co-a", "mem-1")).toHaveLength(2);
+  });
+
+  it("does not treat unreadable durable storage as an empty queue", async () => {
+    await durablePut(opsOutboxKey("drv-1", "co-a", "mem-1"), { items: "not-an-array" });
+    await expect(loadOpsOutbox("drv-1", "co-a", "mem-1")).rejects.toBeInstanceOf(DurableStorageError);
+  });
+
+  it("dedupes pending duty sign-on commands per duty id", async () => {
+    await enqueueDutyOpsCommand("drv-1", "duty_sign_on", "duty-9", "co-a", "mem-1");
+    await enqueueDutyOpsCommand("drv-1", "duty_sign_on", "duty-9", "co-a", "mem-1");
+
+    const queue = await loadOpsOutbox("drv-1", "co-a", "mem-1");
+    expect(queue).toHaveLength(1);
+    expect(queue[0].payload.dutyId).toBe("duty-9");
+    expect(queue[0].status).not.toBe(OPS_ITEM_RECONCILIATION);
+  });
+
+  it("keeps concurrent enqueues instead of last-write-wins", async () => {
+    await Promise.all(
+      Array.from({ length: 40 }, (_, index) =>
+        enqueueOpsCommand(
+          "drv-1",
+          { type: "defect", payload: { description: `D${index}`, clientId: `ops-c-${index}` } },
+          "co-a",
+          "mem-1",
+        ),
+      ),
+    );
+    const queue = await loadOpsOutbox("drv-1", "co-a", "mem-1");
+    expect(queue).toHaveLength(40);
+    expect(new Set(queue.map((item) => item.idempotencyKey)).size).toBe(40);
+  });
+
+  it("quarantines legacy items that do not prove current tenant membership", async () => {
+    localStorage.setItem(
+      "csf_driver_ops_outbox:drv-1",
+      JSON.stringify([
+        { id: "foreign", type: "defect", companyId: "co-other", membershipId: "mem-x", payload: { clientId: "foreign" } },
+        { id: "mine", type: "defect", driverId: "drv-1", payload: { clientId: "mine" } },
+      ]),
+    );
+    const queue = await loadOpsOutbox("drv-1", "co-a", "mem-1");
+    expect(queue.map((item) => item.id)).toEqual(["mine"]);
   });
 });

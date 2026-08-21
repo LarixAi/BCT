@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { playNotificationSound } from "@/lib/notifications/notification-sound";
 import { notifyDriverNotificationsChanged } from "@/lib/notifications/unread-events";
+import { isDriverFacingNotification } from "@/services/notifications.service";
 
 /**
  * Plays an alert when a new in-app notification row is inserted for this driver.
@@ -22,7 +23,8 @@ export function useDriverNotificationAlert(userId) {
           table: "notifications",
           filter: `recipient_user_id=eq.${userId}`,
         },
-        () => {
+        (payload) => {
+          if (!isDriverFacingNotification(payload?.new ?? {})) return;
           playNotificationSound();
           notifyDriverNotificationsChanged();
         },

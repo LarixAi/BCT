@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import DriverOperationalHeader from "@/components/driver/operational/DriverOperationalHeader";
 import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
 import { op } from "@/lib/driver-operational-theme";
-import { formatUkTime } from "@/lib/uk-locale";
+import { formatUkDate, formatUkTime } from "@/lib/uk-locale";
 import { getJobExecutionState } from "@/lib/jobExecutionState";
 import {
   arriveAtStop,
@@ -131,7 +131,7 @@ export default function DriverSupabaseJobView({ driver }) {
     <div className="min-h-full bg-white">
       <DriverOperationalHeader
         title={job?.routeName ?? "Job details"}
-        subtitle={job ? `${job.serviceDate} · ${job.startTime}` : loading ? "Loading…" : "Job"}
+        subtitle={job ? `${formatUkDate(job.serviceDate)} · ${formatUkTime(job.startTime)}` : loading ? "Loading…" : "Job"}
         backTo="/jobs"
       />
 

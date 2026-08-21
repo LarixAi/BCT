@@ -50,10 +50,6 @@ export async function signInDriverWithBiometrics(driverId) {
     };
   }
 
-  console.log(
-    "[BIOMETRIC_DEBUG] retrieved token len=" + refreshToken.length + " prefix=" + refreshToken.slice(0, 6),
-  );
-
   const supabase = getSupabaseClient();
   const refreshed = await withTimeout(
     supabase.auth.refreshSession({ refresh_token: refreshToken }),
@@ -61,7 +57,6 @@ export async function signInDriverWithBiometrics(driverId) {
     null,
   );
   if (!refreshed) {
-    console.log("[BIOMETRIC_DEBUG] refreshSession timed out");
     return {
       ok: false,
       message: "Sign-in timed out. Check your connection, then try again or use your password.",
@@ -69,11 +64,6 @@ export async function signInDriverWithBiometrics(driverId) {
   }
 
   const { data, error } = refreshed;
-  console.log(
-    "[BIOMETRIC_DEBUG] refreshSession result: error=" +
-      (error ? error.message + " status=" + (error.status ?? "?") + " code=" + (error.code ?? "?") : "none") +
-      " hasSession=" + Boolean(data?.session),
-  );
   if (error || !data.session) {
     await invalidateBiometricAccess(driverId).catch(() => undefined);
     const raw = error?.message ?? "";

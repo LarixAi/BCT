@@ -1,8 +1,10 @@
 /**
  * F-10 — immutable audit service (append-only).
  * Material writes should prefer this helper so audit rows share one shape.
+ *
+ * Wave 3F cutover 50 + named capability `auditWriterDb` (no bare admin import).
  */
-import { admin } from './supabase.ts'
+import { auditWriterDb } from './db-authority.ts'
 
 export type ImmutableAuditInput = {
   companyId: string
@@ -19,7 +21,7 @@ export type ImmutableAuditInput = {
 }
 
 export async function writeImmutableAudit(input: ImmutableAuditInput): Promise<{ id: string }> {
-  const { data, error } = await admin
+  const { data, error } = await auditWriterDb(input.companyId, input.action)
     .from('audit_events')
     .insert({
       company_id: input.companyId,

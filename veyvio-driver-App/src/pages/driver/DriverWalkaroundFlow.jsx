@@ -6,13 +6,18 @@ import {
   CHECK_TYPES,
   declarationForCheckType,
   discardWalkaroundDraft,
+  discardWalkaroundDraftEvidence,
   flushPendingWalkaroundSubmissions,
+  getDriverCheckHistory,
   getPendingSyncCount,
+  loadPersistedWalkaroundDraftEvidence,
   loadWalkaroundSession,
   persistWalkaroundDraft,
+  persistWalkaroundDraftEvidence,
   previewWalkaroundSessionFromBootstrap,
   submitWalkaroundCheck,
   uploadWalkaroundPhoto,
+  shouldUploadWalkaroundPhotoNow,
 } from "@/services/vehicle-check.service";
 import { signOnDutyAfterVehicleCheck } from "@/services/command-driver-ops.service";
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
@@ -20,7 +25,9 @@ import { getSectionLabel } from "@/lib/walkaround-template-engine";
 import { getEndOfDutySectionLabel } from "@/lib/end-of-duty-template-engine";
 import { isChecklistFullyAnswered, normalizeChecklistProgress } from "@/lib/walkaround-progress";
 import DriverOperationalHeader from "@/components/driver/operational/DriverOperationalHeader";
-import CommandBackendNotice from "@/components/driver/operational/CommandBackendNotice";
+import DriverPageContainer from "@/components/driver/operational/DriverPageContainer";
+import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
+import CheckPageHeader from "@/components/driver/walkaround/CheckPageHeader";
 import WalkaroundStepper from "@/components/driver/walkaround/WalkaroundStepper";
 import WalkaroundFailSheet from "@/components/driver/walkaround/WalkaroundFailSheet";
 import WalkaroundAdvisorySheet from "@/components/driver/walkaround/WalkaroundAdvisorySheet";
@@ -32,6 +39,7 @@ import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import { DRIVER_SAFE_BOTTOM } from "@/lib/driverSafeArea";
 import { useDriverChrome } from "@/lib/driverChromeContext";
 import { compressImageToDataUrl } from "@/lib/walkaround-image";
+import { op } from "@/lib/driver-operational-theme";
 import { Loader2, MinusCircle, XCircle, CheckCircle2, AlertTriangle } from "lucide-react";
 
 function applyDraftToFlow(data, setters) {
@@ -98,6 +106,9 @@ export default function DriverWalkaroundFlow({ driver }) {
   const [syncHint, setSyncHint] = useState(null);
   const [pendingSync, setPendingSync] = useState(0);
   const [conditionAcknowledged, setConditionAcknowledged] = useState(false);
+  const [recentChecks, setRecentChecks] = useState([]);
+  const [recentChecksLoading, setRecentChecksLoading] = useState(true);
+  const [refreshingAssignment, setRefreshingAssignment] = useState(false);
 
   const flowInProgressRef = useRef(false);
   const submittedRef = useRef(false);
@@ -105,15 +116,44 @@ export default function DriverWalkaroundFlow({ driver }) {
 
   const workspace = resolveDriverWorkspaceScope(driver, authSession);
 
+  const vehicleReadiness = bootstrap?.assignedVehicleReadiness ?? null;
+  const expiringDocumentCount = (bootstrap?.eligibility?.warnings ?? []).filter((warning) =>
+    /document|licence|cpc|dbs|expir/i.test(String(warning)),
+  ).length;
+
   useEffect(() => {
-    void flushPendingWalkaroundSubmissions(driver);
-    setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
+    void flushPendingWalkaroundSubmissions(driver, authSession);
+    void getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId).then(setPendingSync);
   }, [driver, authSession, workspace.companyId, workspace.membershipId]);
 
   useEffect(() => {
-    setHideBottomNav(true);
+    let cancelled = false;
+    setRecentChecksLoading(true);
+    void getDriverCheckHistory(driver, { limit: 5 }).then((res) => {
+      if (cancelled) return;
+      const checks = Array.isArray(res.checks) ? res.checks : [];
+      setRecentChecks(
+        checks
+          .filter((c) => {
+            const r = String(c.result ?? "");
+            return r && r !== "draft" && r !== "in_progress";
+          })
+          .slice(0, 3),
+      );
+      setRecentChecksLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [driver]);
+
+  useEffect(() => {
+    // Keep bottom nav on the hub / empty states so Checks feels part of the app.
+    // Hide it only once the driver is inside the walkaround wizard.
+    const hideNav = step === "checklist" || step === "review" || step === "result";
+    setHideBottomNav(hideNav);
     return () => setHideBottomNav(false);
-  }, [setHideBottomNav]);
+  }, [setHideBottomNav, step]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,30 +168,52 @@ export default function DriverWalkaroundFlow({ driver }) {
       setSyncHint,
     };
 
-    // Paint from bootstrap cache while network enrichment runs.
-    if (!submittedRef.current && !flowInProgressRef.current) {
-      const instant = previewWalkaroundSessionFromBootstrap(driver, bootstrap, { checkType });
-      if (instant?.ok) {
-        setSession(instant);
-        const { goReview } = applyDraftToFlow(instant, setters);
-        if (goReview) {
-          flowInProgressRef.current = true;
-          suppressAutoReviewRef.current = false;
-          setStep("review");
-        } else {
-          setStep("confirm");
-        }
-      } else {
-        setStep((current) =>
-          current === "review" || current === "checklist" || current === "result"
-            ? current
-            : "loading",
-        );
+    const restoreDraftEvidence = async (vehicleId, hasDraft) => {
+      if (!vehicleId || !hasDraft) return null;
+      const evidence = await loadPersistedWalkaroundDraftEvidence(driver, vehicleId, authSession);
+      if (cancelled) return null;
+      if (evidence?.odometerPhotoDataUrl) {
+        setOdometerPhotoFile(null);
+        setOdometerPhotoDataUrl(evidence.odometerPhotoDataUrl);
+        setOdometerPhotoPreview(evidence.odometerPhotoDataUrl);
       }
-    }
+      if (evidence?.signatureDataUrl) {
+        setSignatureDataUrl(evidence.signatureDataUrl);
+      }
+      return evidence;
+    };
 
     void (async () => {
       setError("");
+
+      // Bootstrap paint, but await evidence before opening review so signature/photo
+      // are in React state before the review screen mounts.
+      if (!submittedRef.current && !flowInProgressRef.current) {
+        const instant = previewWalkaroundSessionFromBootstrap(driver, bootstrap, { checkType });
+        if (instant?.ok) {
+          setSession(instant);
+          const { goReview } = applyDraftToFlow(instant, setters);
+          const evidence = await restoreDraftEvidence(instant.vehicle?.id, Boolean(instant.draft));
+          if (cancelled) return;
+          if (instant.draft && !evidence?.odometerPhotoDataUrl && (instant.draft.startedAt || instant.draft.odometer)) {
+            setError("Odometer photo was not saved on this device — photograph the odometer again.");
+          }
+          if (goReview) {
+            flowInProgressRef.current = true;
+            suppressAutoReviewRef.current = false;
+            setStep("review");
+          } else {
+            setStep("confirm");
+          }
+        } else {
+          setStep((current) =>
+            current === "review" || current === "checklist" || current === "result"
+              ? current
+              : "loading",
+          );
+        }
+      }
+
       try {
         const data = await loadWalkaroundSession(driver, { checkType, bootstrap });
         if (cancelled) return;
@@ -167,11 +229,23 @@ export default function DriverWalkaroundFlow({ driver }) {
 
         setSession(data);
 
+        // Always re-apply durable evidence after reload — even if checklist UI already
+        // opened — so process-death restore cannot skip photo/signature.
+        if (data.vehicle?.id && data.draft) {
+          await restoreDraftEvidence(data.vehicle.id, true);
+          if (cancelled) return;
+        }
+
         if (submittedRef.current || flowInProgressRef.current) {
           return;
         }
 
         const { goReview } = applyDraftToFlow(data, setters);
+        const evidence = await restoreDraftEvidence(data.vehicle?.id, Boolean(data.draft));
+        if (cancelled) return;
+        if (data.draft && !evidence?.odometerPhotoDataUrl && (data.draft.startedAt || data.draft.odometer)) {
+          setError("Odometer photo was not saved on this device — photograph the odometer again.");
+        }
         if (goReview) {
           flowInProgressRef.current = true;
           suppressAutoReviewRef.current = false;
@@ -192,7 +266,7 @@ export default function DriverWalkaroundFlow({ driver }) {
     return () => {
       cancelled = true;
     };
-  }, [bootstrap, checkType, driver]);
+  }, [authSession, bootstrap, checkType, driver]);
 
   const isEndOfDutyCheck =
     checkType === CHECK_TYPES.end_of_duty.id || checkType === CHECK_TYPES.post_journey.id;
@@ -240,7 +314,7 @@ export default function DriverWalkaroundFlow({ driver }) {
   };
 
   const persistDraft = (patch = {}) => {
-    if (!session?.vehicle?.id) return;
+    if (!session?.vehicle?.id) return false;
     const draft = {
       answers: patch.answers ?? answers,
       odometer: patch.odometer ?? odometer,
@@ -250,8 +324,16 @@ export default function DriverWalkaroundFlow({ driver }) {
       startedAt,
       vehicleConfirmed: patch.vehicleConfirmed ?? vehicleConfirmed,
     };
-    persistWalkaroundDraft(driver, session.vehicle.id, draft);
-    setSyncHint("Saved on this device");
+    const result = persistWalkaroundDraft(driver, session.vehicle.id, draft);
+    if (result?.ok) {
+      setSyncHint("Saved on this device");
+      setError("");
+      return true;
+    }
+    // Fail closed: never show a saved hint when write/readback did not verify.
+    setSyncHint(null);
+    setError(result?.message ?? "Draft could not be saved on this device.");
+    return false;
   };
 
   const advanceAfterAnswer = (nextAnswers) => {
@@ -281,19 +363,94 @@ export default function DriverWalkaroundFlow({ driver }) {
       URL.revokeObjectURL(odometerPhotoPreview);
     }
     if (!file) {
+      if (session?.vehicle?.id) {
+        const cleared = await persistWalkaroundDraftEvidence(
+          driver,
+          session.vehicle.id,
+          { odometerPhotoDataUrl: null },
+          authSession,
+        );
+        if (!cleared?.ok) {
+          setError(cleared?.message ?? "Odometer photo could not be discarded on this device.");
+          return;
+        }
+      }
       setOdometerPhotoFile(null);
       setOdometerPhotoPreview(null);
       setOdometerPhotoDataUrl(null);
       return;
     }
-    setOdometerPhotoFile(file);
-    setOdometerPhotoPreview(URL.createObjectURL(file));
+    let dataUrl = null;
     try {
-      const dataUrl = await compressImageToDataUrl(file, 1280, 0.72);
-      setOdometerPhotoDataUrl(dataUrl);
+      dataUrl = await compressImageToDataUrl(file, 1280, 0.72);
     } catch {
+      setOdometerPhotoFile(null);
+      setOdometerPhotoPreview(null);
       setOdometerPhotoDataUrl(null);
+      setError("Odometer photo could not be prepared on this device.");
+      return;
     }
+    if (!session?.vehicle?.id) {
+      setOdometerPhotoFile(null);
+      setOdometerPhotoPreview(null);
+      setOdometerPhotoDataUrl(null);
+      setError("Odometer photo could not be saved — vehicle context is missing.");
+      return;
+    }
+    const persisted = await persistWalkaroundDraftEvidence(
+      driver,
+      session.vehicle.id,
+      { odometerPhotoDataUrl: dataUrl },
+      authSession,
+    );
+    if (!persisted?.ok) {
+      // Fail closed: never keep a recoverable-looking preview when persistence did not verify.
+      setOdometerPhotoFile(null);
+      setOdometerPhotoPreview(null);
+      setOdometerPhotoDataUrl(null);
+      setError(persisted?.message ?? "Odometer photo could not be saved on this device.");
+      return;
+    }
+    setOdometerPhotoFile(file);
+    setOdometerPhotoDataUrl(dataUrl);
+    setOdometerPhotoPreview(dataUrl);
+    setError("");
+  };
+
+  const setSignature = async (dataUrl) => {
+    if (!session?.vehicle?.id) {
+      setSignatureDataUrl(null);
+      setError("Signature could not be saved — vehicle context is missing.");
+      return;
+    }
+    if (!dataUrl) {
+      const cleared = await persistWalkaroundDraftEvidence(
+        driver,
+        session.vehicle.id,
+        { signatureDataUrl: null },
+        authSession,
+      );
+      if (!cleared?.ok) {
+        setError(cleared?.message ?? "Signature could not be discarded on this device.");
+        return;
+      }
+      setSignatureDataUrl(null);
+      setError("");
+      return;
+    }
+    const persisted = await persistWalkaroundDraftEvidence(
+      driver,
+      session.vehicle.id,
+      { signatureDataUrl: dataUrl },
+      authSession,
+    );
+    if (!persisted?.ok) {
+      setSignatureDataUrl(null);
+      setError(persisted?.message ?? "Signature could not be saved on this device.");
+      return;
+    }
+    setSignatureDataUrl(dataUrl);
+    setError("");
   };
 
   const ensureOdometerPhoto = async () => {
@@ -360,17 +517,19 @@ export default function DriverWalkaroundFlow({ driver }) {
     let photoPath = null;
     let photoDataUrl = null;
     if (data.photoFile && session?.vehicle?.id) {
-      const uploaded = await uploadWalkaroundPhoto({
-        driver,
-        vehicleId: session.vehicle.id,
-        itemId: `${item.id}_advisory`,
-        file: data.photoFile,
-      });
-      if (!uploaded.ok) {
-        setError(uploaded.message);
-        return;
+      if (shouldUploadWalkaroundPhotoNow()) {
+        const uploaded = await uploadWalkaroundPhoto({
+          driver,
+          vehicleId: session.vehicle.id,
+          itemId: `${item.id}_advisory`,
+          file: data.photoFile,
+        });
+        if (!uploaded.ok) {
+          setError(uploaded.message);
+          return;
+        }
+        photoPath = uploaded.path;
       }
-      photoPath = uploaded.path;
       try {
         photoDataUrl = await compressImageToDataUrl(data.photoFile, 1280, 0.72);
       } catch {
@@ -397,17 +556,19 @@ export default function DriverWalkaroundFlow({ driver }) {
     let photoPath = failData.photoPath ?? null;
     let photoDataUrl = null;
     if (failData.photoFile && session?.vehicle?.id) {
-      const uploaded = await uploadWalkaroundPhoto({
-        driver,
-        vehicleId: session.vehicle.id,
-        itemId: item.id,
-        file: failData.photoFile,
-      });
-      if (!uploaded.ok) {
-        setError(uploaded.message);
-        return;
+      if (shouldUploadWalkaroundPhotoNow()) {
+        const uploaded = await uploadWalkaroundPhoto({
+          driver,
+          vehicleId: session.vehicle.id,
+          itemId: item.id,
+          file: failData.photoFile,
+        });
+        if (!uploaded.ok) {
+          setError(uploaded.message);
+          return;
+        }
+        photoPath = uploaded.path;
       }
-      photoPath = uploaded.path;
       try {
         photoDataUrl = await compressImageToDataUrl(failData.photoFile, 1280, 0.72);
       } catch {
@@ -444,7 +605,7 @@ export default function DriverWalkaroundFlow({ driver }) {
         setStep("confirm");
         return;
       }
-      if (odometerPhotoFile && session?.vehicle?.id) {
+      if (odometerPhotoFile && session?.vehicle?.id && shouldUploadWalkaroundPhotoNow()) {
         await uploadWalkaroundPhoto({
           driver,
           vehicleId: session.vehicle.id,
@@ -469,11 +630,17 @@ export default function DriverWalkaroundFlow({ driver }) {
         gps,
         startedAt,
         driverSignatureDataUrl: signatureDataUrl,
+        session: authSession,
       });
 
       if (!result.ok) {
         setError(result.message ?? "Failed to submit walkaround check.");
         return;
+      }
+
+      // Authoritative/queued submit succeeded — clear obsolete pre-Submit evidence.
+      if (session?.vehicle?.id) {
+        await discardWalkaroundDraftEvidence(driver, session.vehicle.id, authSession);
       }
 
       let signedOn = null;
@@ -521,7 +688,7 @@ export default function DriverWalkaroundFlow({ driver }) {
             : signedOn?.message ?? null,
       });
       setStep("result");
-      void flushPendingWalkaroundSubmissions(driver);
+      void flushPendingWalkaroundSubmissions(driver, authSession);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong submitting your check.");
     } finally {
@@ -529,10 +696,43 @@ export default function DriverWalkaroundFlow({ driver }) {
     }
   };
 
+  const refreshAssignment = async () => {
+    setRefreshingAssignment(true);
+    setError("");
+    try {
+      await refreshAuth();
+      const data = await loadWalkaroundSession(driver, { checkType, bootstrap: null });
+      setSession(data);
+      if (!data.ok) {
+        setError(data.message || "No vehicle assigned yet.");
+      } else {
+        setError("");
+        setOdometer(String(data.vehicle?.odometer ?? odometer ?? ""));
+      }
+      setStep("confirm");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not refresh your vehicle assignment.");
+      setStep("confirm");
+    } finally {
+      setRefreshingAssignment(false);
+    }
+  };
+
   if (step === "loading") {
     return (
-      <div className={`${op.pageBg} flex items-center justify-center min-h-[60vh] gap-2 text-muted-foreground`}>
-        <Loader2 className="w-5 h-5 animate-spin" /> Loading walkaround…
+      <div className={op.pageBg}>
+        <DriverPageContainer>
+          <CheckPageHeader
+            title="Vehicle check"
+            subtitle="Loading your vehicle assignment…"
+          />
+          <div className="mt-4 space-y-4 pb-4">
+            <div className="h-40 animate-pulse rounded-[1.25rem] bg-muted/60" />
+            <div className="h-36 animate-pulse rounded-[1.25rem] bg-muted/40" />
+            <div className="h-14 animate-pulse rounded-full bg-muted/50" />
+            <DriverPageLoader label="Loading your vehicle assignment…" />
+          </div>
+        </DriverPageContainer>
       </div>
     );
   }
@@ -565,7 +765,7 @@ export default function DriverWalkaroundFlow({ driver }) {
         onDeclarationChange={setDeclarationSigned}
         declarationText={declarationForCheckType(checkType)}
         signatureDataUrl={signatureDataUrl}
-        onSignatureChange={setSignatureDataUrl}
+        onSignatureChange={(next) => void setSignature(next)}
         error={error}
         saving={saving}
         onBack={backFromReview}
@@ -577,16 +777,6 @@ export default function DriverWalkaroundFlow({ driver }) {
 
   if (step === "confirm") {
     return (
-      <div>
-        {!session?.ok ? (
-          <div className="px-4 pt-4">
-            <CommandBackendNotice
-              status="missing"
-              title="Vehicle checks are not on Command yet"
-              description="Admin cannot receive walkaround submissions until the Command vehicle-check API is added. Acknowledge duties and report defects/incidents from Home in the meantime."
-            />
-          </div>
-        ) : null}
       <WalkaroundVehicleConfirm
         driver={driver}
         session={session}
@@ -608,13 +798,41 @@ export default function DriverWalkaroundFlow({ driver }) {
         syncHint={syncHint}
         pendingSync={pendingSync}
         onDiscardDraft={() => {
-          if (session?.vehicle?.id) discardWalkaroundDraft(driver, session.vehicle.id);
-          setAnswers({});
-          setCurrentIndex(0);
-          setStartedAt(null);
-          setSyncHint(null);
-          setStep("confirm");
-          flowInProgressRef.current = false;
+          void (async () => {
+            if (session?.vehicle?.id) {
+              const cleared = discardWalkaroundDraft(driver, session.vehicle.id);
+              if (!cleared?.ok) {
+                setError(cleared?.message ?? "Draft could not be discarded on this device.");
+                return;
+              }
+              const evidenceCleared = await discardWalkaroundDraftEvidence(
+                driver,
+                session.vehicle.id,
+                authSession,
+              );
+              if (!evidenceCleared?.ok) {
+                setError(
+                  evidenceCleared?.message ?? "Check evidence could not be discarded on this device.",
+                );
+                return;
+              }
+            }
+            if (odometerPhotoPreview?.startsWith("blob:")) {
+              URL.revokeObjectURL(odometerPhotoPreview);
+            }
+            setAnswers({});
+            setCurrentIndex(0);
+            setStartedAt(null);
+            setOdometerPhotoFile(null);
+            setOdometerPhotoPreview(null);
+            setOdometerPhotoDataUrl(null);
+            setSignatureDataUrl(null);
+            setDeclarationSigned(false);
+            setSyncHint(null);
+            setError("");
+            setStep("confirm");
+            flowInProgressRef.current = false;
+          })();
         }}
         draftComplete={session?.draft?.allItemsAnswered || isChecklistFullyAnswered(session?.checklist?.items ?? [], answers)}
         onContinueReview={() => {
@@ -662,8 +880,13 @@ export default function DriverWalkaroundFlow({ driver }) {
           setSyncHint("Condition acknowledgement recorded");
           setError("");
         }}
+        recentChecks={recentChecks}
+        recentChecksLoading={recentChecksLoading}
+        onRefreshAssignment={refreshAssignment}
+        refreshing={refreshingAssignment}
+        vehicleReadiness={vehicleReadiness}
+        expiringDocumentCount={expiringDocumentCount}
       />
-      </div>
     );
   }
 

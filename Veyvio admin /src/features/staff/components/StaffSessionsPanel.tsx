@@ -43,7 +43,7 @@ export function StaffSessionsPanel({ staff }: { staff: StaffProfile }) {
         </ul>
       )}
       <p className="mt-3 text-xs text-muted">
-        SSO: {staff.account.ssoEnabled ? `Enabled (${staff.account.authProvider})` : 'Not enabled'} · MFA policy: {staff.account.mfaPolicy.replace(/_/g, ' ')}
+        SSO: {staff.account.ssoEnabled ? `Enabled (${staff.account.authProvider})` : 'Not enabled'} · MFA policy: {(staff.account.mfaPolicy ?? 'optional').replace(/_/g, ' ')}
       </p>
     </SectionCard>
   )

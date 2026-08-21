@@ -22,7 +22,7 @@ export function MemberStep({
   function selectMember(memberId: string) {
     const member = members.find((m) => m.id === memberId)
     if (!member) return
-    onChange(applyMemberDefaultsToRequest(request, member))
+    onChange(applyMemberDefaultsToRequest(request, member) as Partial<DialARideRequest>)
   }
 
   const selected = members.find((m) => m.id === request.memberId)

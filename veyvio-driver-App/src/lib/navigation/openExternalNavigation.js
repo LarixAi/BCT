@@ -6,6 +6,7 @@ import { logNavigationTelemetry } from "@/lib/navigation/navigationTelemetry";
 import { startExternalNavSession, loadExternalNavSession, clearExternalNavSession } from "@/lib/navigation/externalNavSession";
 import { prepareNavOverlayForExternalMaps, hideFloatingBubble } from "@/lib/navigation/floatingBubble";
 import { syncInCarActiveTrip } from "@/lib/navigation/activeTripInCar";
+import { confirmExternalNavigation } from "@/lib/navigation/externalNavConfirm";
 
 let launchInFlight = false;
 
@@ -47,13 +48,19 @@ function buildAndroidGoogleNavUrl({ latitude, longitude }) {
   return `google.navigation:q=${latitude},${longitude}&mode=d`;
 }
 
-export async function openGoogleMapsNavigation(destination, { driver, job } = {}) {
+export async function openGoogleMapsNavigation(destination, { driver, job, skipConfirm = false } = {}) {
   if (!destination?.latitude || !destination?.longitude) {
     toast({ title: "Navigation unavailable", description: "This stop has no coordinates." });
     return { ok: false };
   }
 
   if (launchInFlight) return { ok: true, debounced: true };
+
+  if (!skipConfirm) {
+    const proceed = await confirmExternalNavigation({ confirmLabel: "Open Google Maps" });
+    if (!proceed) return { ok: false, cancelled: true };
+  }
+
   launchInFlight = true;
 
   try {
@@ -126,11 +133,14 @@ export async function openWazeNavigation(destination, { driver, job } = {}) {
     return { ok: false };
   }
 
+  const proceed = await confirmExternalNavigation({ confirmLabel: "Open Waze" });
+  if (!proceed) return { ok: false, cancelled: true };
+
   const wazeUrl = buildWazeUrl(destination);
   let ok = await tryOpenUrl(wazeUrl);
 
   if (!ok) {
-    return openGoogleMapsNavigation(destination, { driver, job });
+    return openGoogleMapsNavigation(destination, { driver, job, skipConfirm: true });
   }
 
   void logNavigationTelemetry({

@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-marketing: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
+  --color-veyvio-deep: #173e48;
+  --color-veyvio-teal: #4a8fa3;
+  --color-veyvio-lime: #7ab82e;
+  --color-veyvio-green: #8ec63f;
+  --color-veyvio-ink: #101828;
+  --color-veyvio-muted: #475467;
+  --color-veyvio-border: #dce2ea;
+  --color-veyvio-surface: #f7fafb;
+  --color-veyvio-white: #ffffff;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  body {
+    @apply bg-veyvio-white font-sans text-veyvio-ink antialiased;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-veyvio-teal;
+  }
+}
+
+@layer components {
+  .section-container {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .section-heading {
+    @apply font-marketing text-3xl font-bold tracking-tight text-veyvio-deep sm:text-4xl;
+  }
+
+  .page-hero-title {
+    @apply mt-7 font-marketing text-[clamp(3.4rem,6.6vw,6.9rem)] font-extrabold leading-[0.9] tracking-[-0.065em];
+  }
+
+  .section-lead {
+    @apply mt-4 max-w-3xl text-lg text-veyvio-muted;
+  }
+
+  .btn-primary {
+    @apply inline-flex min-h-11 min-w-[9rem] items-center justify-center rounded-full bg-veyvio-lime px-6 py-2.5 text-sm font-semibold text-veyvio-deep shadow-[0_2px_8px_rgba(122,184,46,0.28)] transition hover:bg-veyvio-green focus-visible:outline-veyvio-deep;
+  }
+
+  .btn-secondary {
+    @apply inline-flex min-h-11 min-w-[9rem] items-center justify-center rounded-full border border-veyvio-border bg-white px-6 py-2.5 text-sm font-semibold text-veyvio-deep transition hover:border-veyvio-teal hover:bg-veyvio-surface;
+  }
+
+  .btn-ghost {
+    @apply inline-flex min-h-11 items-center justify-center rounded-lg px-3 py-2 text-sm font-medium text-veyvio-muted transition hover:bg-veyvio-surface hover:text-veyvio-deep;
+  }
+
+  .reveal {
+    @apply translate-y-6 opacity-0 transition duration-[600ms] ease-out;
+  }
+
+  .reveal.is-visible {
+    @apply translate-y-0 opacity-100;
+  }
+
+  .reveal-stagger > .reveal:nth-child(1) { transition-delay: 0ms; }
+  .reveal-stagger > .reveal:nth-child(2) { transition-delay: 80ms; }
+  .reveal-stagger > .reveal:nth-child(3) { transition-delay: 160ms; }
+  .reveal-stagger > .reveal:nth-child(4) { transition-delay: 240ms; }
+  .reveal-stagger > .reveal:nth-child(5) { transition-delay: 320ms; }
+
+  .platform-word-enter {
+    animation: platform-word-enter 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes platform-word-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.38em);
+    filter: blur(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}

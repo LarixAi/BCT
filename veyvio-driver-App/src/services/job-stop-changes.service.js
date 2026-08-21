@@ -1,6 +1,3 @@
-import { getSupabaseClient } from "@/lib/supabase/client";
-import { getFleetApiUrl } from "@/lib/auth-errors";
-
 /** Fired when job stops change so navigation can recalculate. */
 export const DRIVER_STOP_ITINERARY_CHANGED = "driver-stop-itinerary-changed";
 
@@ -10,40 +7,15 @@ export function notifyStopItineraryChanged(jobId) {
   }
 }
 
-async function getAccessToken() {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
-}
-
 /**
- * Submit a driver stop change through the fleet admin API (rules + approval).
+ * Hard rule: drivers cannot edit published job stops.
+ * Itinerary changes are Command-owned only (one operational truth).
  */
-export async function submitDriverStopChange(jobId, change) {
-  const token = await getAccessToken();
-  if (!token) return { ok: false, message: "Sign in required." };
-
-  const baseUrl = getFleetApiUrl();
-  if (!baseUrl) {
-    return { ok: false, message: "Fleet API URL not configured (VITE_FLEET_API_URL)." };
-  }
-
-  try {
-    const response = await fetch(`${baseUrl}/api/driver/itinerary-change`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ jobId, change }),
-    });
-
-    const result = await response.json();
-    if (result.ok) {
-      notifyStopItineraryChanged(jobId);
-    }
-    return result;
-  } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "Request failed." };
-  }
+export async function submitDriverStopChange(_jobId, _change) {
+  return {
+    ok: false,
+    code: "driver_itinerary_edit_blocked",
+    message:
+      "You cannot change stops from the Driver app. Ask your operator to update the route in Command.",
+  };
 }

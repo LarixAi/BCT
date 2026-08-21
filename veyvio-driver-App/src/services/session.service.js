@@ -16,11 +16,22 @@ import {
 import { withTimeout } from "@/lib/withTimeout";
 import { findEnabledBiometricEnrollment } from "@/features/auth/biometrics/biometric-preference";
 import { rebindBiometricCredentialIfEnabled } from "@/features/auth/biometrics/biometric-enrollment";
+import {
+  buildOfflineRecoverySession,
+  clearVerifiedRecoveryContext,
+  saveVerifiedRecoveryContext,
+} from "@/lib/driver-offline-recovery";
+import {
+  assertDriverTenantContextReady,
+  resolveCompanyAutoActivationPolicy,
+} from "@/lib/driver-tenant-context";
 
 /** Native/web storage can stall — never block the Signing in… spinner forever. */
 const APPLY_TOKENS_TIMEOUT_MS = 8000;
 const GET_SESSION_TIMEOUT_MS = 8000;
-const COMPLETE_SIGN_IN_TIMEOUT_MS = 45000;
+/** Keep below AuthEntry hard ceiling so the button can show an error. */
+const COMPLETE_SIGN_IN_TIMEOUT_MS = 22000;
+const LOCAL_SIGNOUT_TIMEOUT_MS = 2500;
 
 /** Map Command `driver_app_accounts.account_status` → fields the Ridova-shaped UI expects. */
 export function mapAccountStatusToDriverFields(accountStatus) {
@@ -86,10 +97,12 @@ function mapCommandSessionToDriver(commandSession, userId) {
     id: commandSession.driverId,
     user_id: userId,
     organisation_id: commandSession.companyId,
+    membership_id: commandSession.membershipId ?? null,
     full_name: fullName,
     email: commandSession.email ?? "",
     phone: commandSession.mobile ?? "",
     date_of_birth: commandSession.dateOfBirth ?? null,
+    profile_photo_url: commandSession.profilePhotoUrl ?? null,
     onboarding_status: fields.onboarding_status,
     status: fields.status,
     home_depot_id: depot?.id ?? null,
@@ -118,6 +131,7 @@ function mapCommandSessionToDriver(commandSession, userId) {
     driver: mapDriverRowToRecord(row, { depotName: depot?.name ?? null }),
     organisationId: commandSession.companyId,
     organisationName: commandSession.companyName ?? null,
+    membershipId: commandSession.membershipId ?? null,
     depots: commandSession.depots ?? [],
     accountStatus: commandSession.accountStatus,
   };
@@ -149,9 +163,8 @@ async function ensureCompanyOnSession(supabase, accessToken, refreshToken) {
     sessionResult.code === "company_required" ||
     /select a company/i.test(sessionResult.message ?? "");
   if (needsCompany && refreshToken) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const userProbe = await withTimeout(supabase.auth.getUser(), 4000, null);
+    const user = userProbe?.data?.user;
     if (!user) return { accessToken, refreshToken, sessionResult };
 
     // Ridova membership lookup can hang on network/RLS — never block sign-in forever.
@@ -165,35 +178,54 @@ async function ensureCompanyOnSession(supabase, accessToken, refreshToken) {
       4000,
       { data: null, error: { message: "timeout" } },
     );
-    const memberships = membershipsResult?.data ?? null;
+    const membershipRows = membershipsResult?.data ?? [];
+    const companyIds = membershipRows.map((row) => String(row.company_id));
+    const policy = resolveCompanyAutoActivationPolicy(companyIds);
 
-    const companyIds = (memberships ?? []).map((row) => String(row.company_id));
-    for (const companyId of companyIds) {
+    // Wave 3A: never silently iterate “first company that works”.
+    if (policy.action === "require_selection") {
+      const memberships = membershipRows.map((row) => ({
+        companyId: String(row.company_id),
+        tenantId: String(row.company_id),
+        companyName: String(row.company_id),
+        name: String(row.company_id),
+      }));
+      return {
+        accessToken,
+        refreshToken,
+        sessionResult,
+        requiresCompanySelection: true,
+        memberships,
+      };
+    }
+
+    if (policy.action === "activate") {
+      const companyId = policy.companyId;
       const selected = await withTimeout(
         commandSelectTenant(accessToken, refreshToken, companyId),
         12000,
         { ok: false },
       );
-      if (!selected.ok || !selected.accessToken) continue;
+      if (selected.ok && selected.accessToken) {
+        await withTimeout(
+          supabase.auth.setSession({
+            access_token: selected.accessToken,
+            refresh_token: selected.refreshToken ?? refreshToken,
+          }),
+          APPLY_TOKENS_TIMEOUT_MS,
+          null,
+        );
 
-      console.log(
-        "[BIOMETRIC_DEBUG] ensureCompanyOnSession rotated refresh via select-tenant " +
-          tokenTag(selected.refreshToken ?? refreshToken),
-      );
-      await supabase.auth.setSession({
-        access_token: selected.accessToken,
-        refresh_token: selected.refreshToken ?? refreshToken,
-      });
-
-      const retry = await fetchDriverSessionWithRetry(selected.accessToken);
-      if (retry.ok) {
-        return {
-          accessToken: selected.accessToken,
-          refreshToken: selected.refreshToken ?? refreshToken,
-          sessionResult: retry,
-        };
+        const retry = await fetchDriverSessionWithRetry(selected.accessToken);
+        if (retry.ok) {
+          return {
+            accessToken: selected.accessToken,
+            refreshToken: selected.refreshToken ?? refreshToken,
+            sessionResult: retry,
+          };
+        }
+        sessionResult = retry;
       }
-      sessionResult = retry;
     }
   }
 
@@ -227,6 +259,19 @@ export async function getDriverSessionContext() {
   );
   const { sessionResult } = ensured;
 
+  if (ensured.requiresCompanySelection) {
+    return {
+      userId: user.id,
+      routeTarget: "select_company",
+      driver: null,
+      requiresCompanySelection: true,
+      memberships: ensured.memberships ?? [],
+      accessToken: ensured.accessToken,
+      refreshToken: ensured.refreshToken,
+      linkError: "Select a company before continuing.",
+    };
+  }
+
   if (!sessionResult.ok) {
     if (sessionResult.status === 403) {
       return {
@@ -238,6 +283,8 @@ export async function getDriverSessionContext() {
       };
     }
     if (sessionResult.status === 0) {
+      const recovered = await buildOfflineRecoverySession(user.id).catch(() => ({ ok: false }))
+      if (recovered?.ok) return recovered.session
       return {
         userId: user.id,
         routeTarget: "session_error",
@@ -262,6 +309,20 @@ export async function getDriverSessionContext() {
   }
 
   const mapped = mapCommandSessionToDriver(sessionResult.session, user.id);
+  const tenantReady = assertDriverTenantContextReady({
+    companyId: mapped.organisationId,
+    membershipId: mapped.membershipId,
+    userId: user.id,
+    driverId: mapped.driverRow?.id,
+  });
+  if (!tenantReady.ok) {
+    return {
+      userId: user.id,
+      routeTarget: "not_driver",
+      driver: null,
+      linkError: tenantReady.message,
+    };
+  }
   const driverRow = mapped.driverRow;
   const driver = mapped.driver;
 
@@ -364,9 +425,13 @@ export async function getDriverSessionContext() {
   const enabledModules = Array.isArray(bootstrap?.entitlements?.enabledModules)
     ? bootstrap.entitlements.enabledModules
     : null;
-  // Soft-open until entitlements are present; then require workforce for Driver surface.
-  const { canUse } = await import("@veyvio/entitlements");
-  const moduleBlocked = !canUse(enabledModules, "workforce");
+  const entitlementsMod = await withTimeout(import("@veyvio/entitlements"), 3000, null);
+  // Fail closed when the helper is unavailable; soft-open only when bootstrap itself never arrived.
+  const canUse = entitlementsMod?.canUse ?? (() => false);
+  const moduleBlocked =
+    enabledModules == null
+      ? Boolean(bootstrap)
+      : !canUse(enabledModules, "workforce");
 
   let routeTarget = "home";
   const activationPhase = sessionResult.session?.activationPhase;
@@ -404,21 +469,44 @@ export async function getDriverSessionContext() {
     routeTarget = "home";
   }
 
-  return {
+  const liveContext = {
     userId: user.id,
     accessToken: ensured.accessToken ?? authSession.access_token,
     driverId: refreshedDriver.id,
-    organisationId: mapped.organisationId,
+    organisationId: tenantReady.tenant.organisationId,
     organisationName: mapped.organisationName,
-    membershipId: null,
+    companyId: tenantReady.tenant.companyId,
+    activeCompanyId: tenantReady.tenant.activeCompanyId,
+    membershipId: tenantReady.tenant.membershipId,
     driver: bootstrap?.driver?.displayName
       ? {
           ...refreshedDriver,
+          organisationId: tenantReady.tenant.organisationId,
+          organisation_id: tenantReady.tenant.organisationId,
+          membershipId: tenantReady.tenant.membershipId,
+          membership_id: tenantReady.tenant.membershipId,
           fullName: bootstrap.driver.displayName,
           organisationName: bootstrap.operator?.companyName,
+          profilePhotoUrl:
+            bootstrap.driver.profilePhotoUrl ||
+            bootstrap.driver.profile_photo_url ||
+            refreshedDriver.profilePhotoUrl ||
+            null,
           operationalStatus,
         }
-      : { ...refreshedDriver, operationalStatus },
+      : {
+          ...refreshedDriver,
+          organisationId: tenantReady.tenant.organisationId,
+          organisation_id: tenantReady.tenant.organisationId,
+          membershipId: tenantReady.tenant.membershipId,
+          membership_id: tenantReady.tenant.membershipId,
+          profilePhotoUrl:
+            bootstrap?.driver?.profilePhotoUrl ||
+            bootstrap?.driver?.profile_photo_url ||
+            refreshedDriver.profilePhotoUrl ||
+            null,
+          operationalStatus,
+        },
     driverRow,
     needsOnboarding: dispatchActivated ? false : needsOnboarding,
     restrictedMode,
@@ -436,15 +524,11 @@ export async function getDriverSessionContext() {
     homeSummary: bootstrap?.legacy?.homeSummary ?? null,
     activeDepotId,
   };
-}
-
-function tokenTag(token) {
-  if (typeof token !== "string" || !token) return "null";
-  return "len=" + token.length + " prefix=" + token.slice(0, 6);
+  await saveVerifiedRecoveryContext(liveContext).catch(() => ({ ok: false }));
+  return liveContext;
 }
 
 export async function applyCommandTokens(supabase, accessToken, refreshToken) {
-  console.log("[BIOMETRIC_DEBUG] applyCommandTokens setSession refresh " + tokenTag(refreshToken));
   const applied = await withTimeout(
     supabase.auth.setSession({
       access_token: accessToken,
@@ -473,25 +557,40 @@ export async function completeDriverSignIn() {
       linkError: "Sign-in timed out while loading your Driver account. Check your connection and try again.",
     },
   );
+  const supabase = getSupabaseClient();
+  // Never await unbounded supabase.auth.signOut() here — on native it can hang
+  // forever after a timed-out session load and leave "Signing in…" stuck.
+  async function clearFailedSignIn() {
+    await clearLocalSupabaseSession(supabase);
+    await withTimeout(supabase.auth.signOut({ scope: "local" }), LOCAL_SIGNOUT_TIMEOUT_MS, null);
+  }
+
   if (context?.routeTarget === "session_error") {
-    const supabase = getSupabaseClient();
-    await supabase.auth.signOut().catch(() => undefined);
+    await clearFailedSignIn();
     return {
       ok: false,
       message: context.linkError ?? "Could not finish signing in. Check your connection and try again.",
     };
   }
+  if (context?.requiresCompanySelection || context?.routeTarget === "select_company") {
+    return {
+      ok: false,
+      requiresCompanySelection: true,
+      memberships: context.memberships ?? [],
+      accessToken: context.accessToken,
+      refreshToken: context.refreshToken,
+      message: context.linkError ?? "Select a company before continuing.",
+    };
+  }
   if (context?.routeTarget === "not_driver") {
-    const supabase = getSupabaseClient();
-    await supabase.auth.signOut();
+    await clearFailedSignIn();
     return {
       ok: false,
       message: context.linkError ?? "This account is not registered as a driver.",
     };
   }
   if (!context?.driver) {
-    const supabase = getSupabaseClient();
-    await supabase.auth.signOut().catch(() => undefined);
+    await clearFailedSignIn();
     return {
       ok: false,
       message:
@@ -536,77 +635,80 @@ async function selectDriverCompany(accessToken, refreshToken, memberships) {
 }
 
 export async function signInDriver(email, password) {
-  const supabase = getSupabaseClient();
+  try {
+    const supabase = getSupabaseClient();
 
-  const login = await withTimeout(
-    commandLogin(email, password),
-    15000,
-    { ok: false, message: "Sign-in timed out. Check your connection and try again." },
-  );
-  if (!login.ok) {
-    if (isRateLimitError(login.message)) markRateLimitCooldown();
-    return { ok: false, message: formatAuthError(login.message) };
-  }
-
-  if (login.requiresMfaChallenge) {
-    return {
-      ok: false,
-      message: "This account needs a verification code. Finish sign-in in Veyvio Driver, or ask your office to disable MFA for testing.",
-    };
-  }
-
-  let accessToken = login.accessToken;
-  let refreshToken = login.refreshToken;
-
-  if (!accessToken || !refreshToken) {
-    return { ok: false, message: "Sign in did not return a session. Try again." };
-  }
-
-  if (login.requiresTenantSelection && Array.isArray(login.memberships) && login.memberships.length) {
-    const companyPick = await selectDriverCompany(accessToken, refreshToken, login.memberships);
-    if (!companyPick.ok) {
-      return { ok: false, message: companyPick.message };
+    const login = await withTimeout(
+      commandLogin(email, password),
+      15000,
+      { ok: false, message: "Sign-in timed out. Check your connection and try again." },
+    );
+    if (!login.ok) {
+      if (isRateLimitError(login.message)) markRateLimitCooldown();
+      return { ok: false, message: formatAuthError(login.message) };
     }
-    if (companyPick.requiresCompanySelection) {
+
+    if (login.requiresMfaChallenge) {
       return {
         ok: false,
-        requiresCompanySelection: true,
-        memberships: companyPick.memberships,
-        accessToken: companyPick.accessToken,
-        refreshToken: companyPick.refreshToken,
+        message:
+          "This account needs a verification code. Finish sign-in in Veyvio Driver, or ask your office to disable MFA for testing.",
       };
     }
-    accessToken = companyPick.accessToken;
-    refreshToken = companyPick.refreshToken;
+
+    let accessToken = login.accessToken;
+    let refreshToken = login.refreshToken;
+
+    if (!accessToken || !refreshToken) {
+      return { ok: false, message: "Sign in did not return a session. Try again." };
+    }
+
+    if (login.requiresTenantSelection && Array.isArray(login.memberships) && login.memberships.length) {
+      const companyPick = await selectDriverCompany(accessToken, refreshToken, login.memberships);
+      if (!companyPick.ok) {
+        return { ok: false, message: companyPick.message };
+      }
+      if (companyPick.requiresCompanySelection) {
+        return {
+          ok: false,
+          requiresCompanySelection: true,
+          memberships: companyPick.memberships,
+          accessToken: companyPick.accessToken,
+          refreshToken: companyPick.refreshToken,
+        };
+      }
+      accessToken = companyPick.accessToken;
+      refreshToken = companyPick.refreshToken;
+    }
+
+    const applied = await applyCommandTokens(supabase, accessToken, refreshToken);
+    if (!applied.ok) return applied;
+
+    return await completeDriverSignIn();
+  } catch (error) {
+    return {
+      ok: false,
+      message: formatAuthError(
+        error instanceof Error ? error.message : "Sign-in failed. Check your connection and try again.",
+      ),
+    };
   }
-
-  const applied = await applyCommandTokens(supabase, accessToken, refreshToken);
-  if (!applied.ok) return applied;
-
-  return completeDriverSignIn();
 }
 
 /**
- * Clear the persisted Supabase session from local storage WITHOUT calling the
- * server `/logout` endpoint. `supabase.auth.signOut()` — even with scope:'local' —
- * POSTs `/logout` and revokes the current session's refresh token on the server,
- * which is the exact token fingerprint unlock later replays (causing
- * `refresh_token_not_found`). The client re-reads the session from storage on every
- * call, so removing the stored entry logs the user out locally while the refresh
- * token stays valid server-side for biometric sign-in.
+ * Clear the persisted Supabase session WITHOUT calling the server `/logout`
+ * endpoint. `supabase.auth.signOut()` — even with scope:'local' — POSTs `/logout`
+ * and revokes the current session's refresh token on the server, which is the
+ * exact token fingerprint unlock later replays (causing `refresh_token_not_found`).
+ * Removing the stored entry logs the user out locally while the refresh token
+ * stays valid server-side for biometric sign-in.
+ *
+ * Wave 3E-2: clears native secure storage (and any legacy WebView localStorage copies).
  */
-function clearLocalSupabaseSession(supabase) {
+async function clearLocalSupabaseSession(supabase) {
   try {
-    const storage = globalThis.localStorage;
-    if (!storage) return;
-    const keys = new Set();
-    const explicitKey = supabase?.auth?.storageKey;
-    if (typeof explicitKey === "string" && explicitKey) keys.add(explicitKey);
-    for (let i = storage.length - 1; i >= 0; i -= 1) {
-      const key = storage.key(i);
-      if (key && /^sb-.*-auth-token$/.test(key)) keys.add(key);
-    }
-    for (const key of keys) storage.removeItem(key);
+    const { clearPersistedSupabaseAuth } = await import("@/lib/supabase/client");
+    await clearPersistedSupabaseAuth(supabase);
   } catch {
     // Best-effort — the auth context has already dropped the in-memory session.
   }
@@ -614,6 +716,7 @@ function clearLocalSupabaseSession(supabase) {
 
 export async function signOutDriver() {
   invalidateDriverBootstrapCache();
+  await clearVerifiedRecoveryContext().catch(() => undefined);
   const supabase = getSupabaseClient();
 
   const enrollment = await findEnabledBiometricEnrollment();
@@ -622,7 +725,7 @@ export async function signOutDriver() {
     // clear the session locally only — never hit the server logout, which would
     // revoke that token and force "set up fingerprint again".
     await rebindBiometricCredentialIfEnabled(enrollment.driverId).catch(() => undefined);
-    clearLocalSupabaseSession(supabase);
+    await clearLocalSupabaseSession(supabase);
     return;
   }
 

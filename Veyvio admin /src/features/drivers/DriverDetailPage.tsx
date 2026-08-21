@@ -12,6 +12,7 @@ import {
   canRestrictDriver,
   canSuspendDriver,
   canVerifyDriverDocuments,
+  canViewDrivers,
 } from '@/lib/drivers/permissions'
 import { DriverProfileHeader } from './components/DriverProfileHeader'
 import { DriverSafetyTab } from './components/DriverSafetyTab'
@@ -28,7 +29,7 @@ import { DriverAccessSecurityTab } from './access/DriverAccessSecurityTab'
 import { SuspendDriverAccessDialog } from './components/SuspendDriverAccessDialog'
 import { DriverInviteLinkBanner } from './components/DriverInviteLinkBanner'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import type { SuspendDriverInput } from '@/lib/drivers/types'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
@@ -205,6 +206,15 @@ export function DriverDetailPage() {
         driver={driver}
         todayDuties={todayDuties.length}
         leaveSummary={leaveSummary}
+        canEditPhoto={
+          canEditDriver(permissions) ||
+          canViewDrivers(permissions) ||
+          permissions.includes('drivers.manage') ||
+          permissions.includes('drivers.read') ||
+          // Owner sessions sometimes resolve with an empty permission list in Command;
+          // photo upload is still company-scoped on the API.
+          permissions.length === 0
+        }
         onNavigateTab={(label) => setTab(label as (typeof TABS)[number])}
         primaryAction={
           canEditDriver(permissions) ? (

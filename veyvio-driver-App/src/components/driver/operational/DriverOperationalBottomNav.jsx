@@ -55,8 +55,10 @@ function TabContent({ label, Icon, active, badge }) {
 
 export default function DriverOperationalBottomNav() {
   const { pathname } = useLocation();
-  const { session } = useDriverSupabaseAuth();
-  const unread = useDriverUnreadNotificationCount(session?.userId);
+  const { session, bootstrap } = useDriverSupabaseAuth();
+  const unreadNotifications = useDriverUnreadNotificationCount(session?.userId);
+  const unreadMessages = bootstrap?.messages?.unreadTotal ?? 0;
+  const inboxUnread = unreadNotifications + unreadMessages;
 
   return (
     <nav
@@ -66,7 +68,7 @@ export default function DriverOperationalBottomNav() {
     >
       <div className="max-w-lg mx-auto flex items-stretch justify-around px-1 pt-1.5 pb-1">
         {tabs.map((tab) => {
-          const badge = tab.showUnreadBadge && unread > 0 ? unread : null;
+          const badge = tab.showUnreadBadge && inboxUnread > 0 ? inboxUnread : null;
           const active = tabIsActive(pathname, tab);
           return (
             <NavLink

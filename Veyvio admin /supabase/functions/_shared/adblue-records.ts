@@ -1,5 +1,11 @@
-/** AdBlue refill validation and persistence for Driver / Yard / Command. */
-import { admin } from './supabase.ts'
+/**
+ * AdBlue refill validation and persistence for Driver / Yard / Command.
+ *
+ * Wave 3F UserScopedDb/RLS cutover 4: membership JWT writes `adblue_records`
+ * through RLS (INSERT + SELECT). Support-grant sessions stay on company-scoped service-role.
+ */
+import { companyScopedServiceDb, userScopedDb } from './db-authority.ts'
+import type { RequestContext } from './supabase.ts'
 
 type Row = Record<string, unknown>
 
@@ -85,8 +91,15 @@ export function validateAdBlueRefillInput(input: AdBlueRefillInput): { ok: true 
   return { ok: true }
 }
 
+function adBlueDb(context: RequestContext) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'adblue_records_support_grant')
+  }
+  return userScopedDb(context, 'adblue_records')
+}
+
 export async function recordAdBlueRefill(input: {
-  companyId: string
+  context: RequestContext
   depotId?: string | null
   vehicleId: string
   registration: string
@@ -98,6 +111,8 @@ export async function recordAdBlueRefill(input: {
   const validation = validateAdBlueRefillInput(input.payload)
   if (!validation.ok) throw new Error(validation.message)
 
+  const companyId = input.context.companyId
+  const db = adBlueDb(input.context)
   const occurredAt = input.payload.occurredAt ?? new Date().toISOString()
   const topUpAt = occurredAt
   const recordedAt = new Date().toISOString()
@@ -109,10 +124,10 @@ export async function recordAdBlueRefill(input: {
     spillOrContamination: Boolean(input.payload.spillOrContamination),
   })
 
-  const { data, error } = await admin
+  const { data, error } = await db
     .from('adblue_records')
     .insert({
-      company_id: input.companyId,
+      company_id: companyId,
       depot_id: input.depotId ?? null,
       vehicle_id: input.vehicleId,
       vehicle_registration: input.registration,
@@ -152,8 +167,14 @@ export async function recordAdBlueRefill(input: {
   }
 }
 
-export async function listAdBlueRecordsForVehicle(companyId: string, vehicleId: string, limit = 10) {
-  const { data, error } = await admin
+export async function listAdBlueRecordsForVehicle(
+  context: RequestContext,
+  vehicleId: string,
+  limit = 10,
+) {
+  const companyId = context.companyId
+  const db = adBlueDb(context)
+  const { data, error } = await db
     .from('adblue_records')
     .select(
       'id, amount_litres, mileage, top_up_at, recorded_at, recorded_by_name, warning_before, warning_cleared, fill_type, source_type, source_label',

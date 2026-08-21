@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
-import {
-  applyExceptionOverlays,
-  buildExceptionsInbox,
-  type ExceptionOverlay,
-} from '@/lib/exceptions/build-exceptions-inbox'
+import { buildExceptionsInbox } from '@/lib/exceptions/build-exceptions-inbox'
 import {
   countBySeverity,
   filterExceptions,
@@ -23,11 +19,14 @@ import { ExceptionQueue } from './ExceptionQueue'
 import { ExceptionControlBar, ExceptionSummaryStrip } from './ExceptionWorkspacePanels'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
-
 function severityFromParam(value: string | null): ExceptionSmartFilter | null {
   if (value === 'critical' || value === 'high') return 'critical'
   if (value === 'medium' || value === 'low') return 'open'
   return null
+}
+
+function isDurableCase(ex: OperationalException | null | undefined): boolean {
+  return Boolean(ex?.durableCase || ex?.source === 'Command')
 }
 
 type SummaryFocus = ExceptionSeverity | 'awaiting' | 'escalated' | 'sla' | null
@@ -50,8 +49,6 @@ export function ExceptionsPage() {
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [overlays, setOverlays] = useState<Record<string, ExceptionOverlay>>({})
-  const [localRaised, setLocalRaised] = useState<OperationalException[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createTitle, setCreateTitle] = useState('')
@@ -59,6 +56,15 @@ export function ExceptionsPage() {
   const { data: dashboard, isLoading: dashboardLoading, isFetching: dashboardFetching } = useQuery({
     queryKey: tKey(['dashboard']),
     queryFn: () => api.getDashboard(),
+  })
+
+  const {
+    data: durableExceptions = [],
+    isLoading: durableLoading,
+    isFetching: durableFetching,
+  } = useQuery({
+    queryKey: tKey(['exceptions', 'open']),
+    queryFn: () => api.getExceptions(),
   })
 
   const { data: defects = [], isLoading: defectsLoading, isFetching: defectsFetching } = useQuery({
@@ -107,16 +113,16 @@ export function ExceptionsPage() {
   }, [searchParams])
 
   const composed = useMemo(() => {
-    const inbox = buildExceptionsInbox({
+    return buildExceptionsInbox({
       alerts: dashboard?.alerts,
       defects,
       incidents,
       driverExceptions: driverEligibilityExceptions,
       vehicleExceptions: vehicleReleaseExceptions,
       yardExceptions: yardHub?.exceptions,
-      includeCatalog: true,
+      apiExceptions: durableExceptions,
+      includeCatalog: false,
     })
-    return [...localRaised, ...inbox]
   }, [
     dashboard,
     defects,
@@ -124,10 +130,8 @@ export function ExceptionsPage() {
     driverEligibilityExceptions,
     vehicleReleaseExceptions,
     yardHub,
-    localRaised,
+    durableExceptions,
   ])
-
-  const withOverlays = useMemo(() => applyExceptionOverlays(composed, overlays), [composed, overlays])
 
   const depotLabel =
     depotId === 'all' ? null : (depots.find((d) => d.id === depotId)?.name ?? depotId)
@@ -136,7 +140,7 @@ export function ExceptionsPage() {
     const smartFilter: ExceptionSmartFilter =
       listTab === 'resolved' ? 'resolved' : smart === 'resolved' ? 'open' : smart
 
-    let rows = filterExceptions(withOverlays, {
+    let rows = filterExceptions(composed, {
       smart: smartFilter,
       module,
       currentUserName,
@@ -169,19 +173,21 @@ export function ExceptionsPage() {
     }
 
     return rows
-  }, [withOverlays, smart, module, currentUserName, depotLabel, summaryFocus, search, listTab])
+  }, [composed, smart, module, currentUserName, depotLabel, summaryFocus, search, listTab])
 
-  const severityCounts = useMemo(() => countBySeverity(withOverlays), [withOverlays])
-  const kpis = useMemo(() => buildExceptionKpis(withOverlays), [withOverlays])
-  const openCount = useMemo(() => withOverlays.filter(isOpenException).length, [withOverlays])
+  const severityCounts = useMemo(() => countBySeverity(composed), [composed])
+  const kpis = useMemo(() => buildExceptionKpis(composed), [composed])
+  const openCount = useMemo(() => composed.filter(isOpenException).length, [composed])
 
   const selected =
     filtered.find((e) => e.id === selectedId) ??
-    withOverlays.find((e) => e.id === selectedId) ??
+    composed.find((e) => e.id === selectedId) ??
     null
+  const selectedDurable = isDurableCase(selected)
 
   const isLoading =
     dashboardLoading ||
+    durableLoading ||
     defectsLoading ||
     incidentsLoading ||
     driverExceptionsLoading ||
@@ -190,67 +196,16 @@ export function ExceptionsPage() {
 
   const isFetching =
     dashboardFetching ||
+    durableFetching ||
     defectsFetching ||
     incidentsFetching ||
     driverExceptionsFetching ||
     vehicleExceptionsFetching ||
     yardFetching
 
-  function patchOverlay(id: string, patch: ExceptionOverlay) {
-    setOverlays((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], ...patch },
-    }))
-  }
-
-  function bulkPatch(patch: ExceptionOverlay) {
-    setOverlays((prev) => {
-      const next = { ...prev }
-      for (const id of selectedIds) {
-        next[id] = { ...next[id], ...patch }
-      }
-      return next
-    })
-    setToast(`Updated ${selectedIds.size} exception${selectedIds.size === 1 ? '' : 's'}`)
-  }
-
-  function raiseException() {
-    const run = searchParams.get('run')
-    const id = `LOCAL-${Date.now()}`
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    const raised: OperationalException = {
-      id,
-      severity: 'high',
-      title: createTitle.trim() || 'Manual exception',
-      typeCode: 'manual_exception',
-      category: 'dispatch',
-      description: createTitle.trim() || 'Raised from Command',
-      relatedRecord: run ?? id,
-      relatedHref: run ? `/live-operations?duty=${encodeURIComponent(run)}` : '/exceptions',
-      depot: depotLabel ?? 'Wembley',
-      raisedAt: now,
-      ageMinutes: 0,
-      slaMinutesRemaining: 30,
-      owner: currentUserName,
-      status: 'new',
-      lastUpdate: now,
-      source: 'Command',
-      runRef: run,
-      timeline: [{ at: now, label: 'Exception raised manually' }],
-      audit: [{ id: `audit-${id}`, at: now, actor: currentUserName, action: 'Exception raised' }],
-    }
-    setLocalRaised((prev) => [raised, ...prev])
-    setSelectedId(id)
-    setCreateOpen(false)
-    setCreateTitle('')
-    const next = new URLSearchParams(searchParams)
-    next.delete('create')
-    setSearchParams(next, { replace: true })
-    setToast('Exception raised')
-  }
-
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: tKey(['dashboard']) })
+    void queryClient.invalidateQueries({ queryKey: tKey(['exceptions']) })
     void queryClient.invalidateQueries({ queryKey: tKey(['defects']) })
     void queryClient.invalidateQueries({ queryKey: tKey(['incidents']) })
     void queryClient.invalidateQueries({ queryKey: tKey(['driver-eligibility-exceptions']) })
@@ -258,7 +213,55 @@ export function ExceptionsPage() {
     void queryClient.invalidateQueries({ queryKey: tKey(['yard-hub']) })
   }
 
-  if (isLoading && withOverlays.length === 0) {
+  const raiseMutation = useMutation({
+    mutationFn: () => {
+      const run = searchParams.get('run')
+      return api.raiseException({
+        title: createTitle.trim() || 'Manual exception',
+        description: createTitle.trim() || 'Raised from Command',
+        severity: 'high',
+        category: 'dispatch',
+        typeCode: 'manual_exception',
+        relatedRecord: run ?? undefined,
+        relatedHref: run ? `/live-operations?duty=${encodeURIComponent(run)}` : '/exceptions',
+        depotId: depotId === 'all' ? null : depotId,
+        actorName: currentUserName,
+      })
+    },
+    onSuccess: (raised) => {
+      setSelectedId(raised.id)
+      setCreateOpen(false)
+      setCreateTitle('')
+      const next = new URLSearchParams(searchParams)
+      next.delete('create')
+      setSearchParams(next, { replace: true })
+      setToast('Exception raised and saved to Command')
+      refresh()
+    },
+    onError: (error) => {
+      setToast(error instanceof Error ? error.message : 'Exception could not be raised')
+    },
+  })
+
+  async function runCaseAction(
+    label: string,
+    action: () => Promise<OperationalException>,
+  ) {
+    if (!selected || !selectedDurable) {
+      setToast('Open the related record for signals that are not Command exception cases.')
+      return
+    }
+    try {
+      const next = await action()
+      setSelectedId(next.id)
+      setToast(label)
+      refresh()
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Exception update failed')
+    }
+  }
+
+  if (isLoading && composed.length === 0) {
     return <p className="text-sm text-muted">Loading exceptions…</p>
   }
 
@@ -296,6 +299,13 @@ export function ExceptionsPage() {
         </p>
       )}
 
+      {!selectedDurable && selected ? (
+        <p className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-ink-soft">
+          This inbox row is a linked signal (defect, incident, or yard alert). Use the related record to act. Case
+          assign / escalate / close apply only to Command exception cases.
+        </p>
+      ) : null}
+
       <ExceptionSummaryStrip
         counts={severityCounts}
         kpis={kpis}
@@ -305,12 +315,7 @@ export function ExceptionsPage() {
 
       <ExceptionBulkBar
         count={selectedIds.size}
-        onAssignDispatch={() => bulkPatch({ owner: 'Dispatch', status: 'assigned' })}
-        onAssignFleet={() => bulkPatch({ owner: 'Fleet', status: 'assigned' })}
-        onEscalate={() => bulkPatch({ escalated: true, status: 'action_in_progress' })}
-        onInvestigating={() => bulkPatch({ status: 'investigating' })}
-        onClose={() => bulkPatch({ status: 'resolved' })}
-        onExport={() => setToast('Export queued (mock)')}
+        onExport={() => setToast('Export is not available yet')}
       />
 
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_340px]">
@@ -336,23 +341,55 @@ export function ExceptionsPage() {
 
         <ExceptionInvestigationPanel
           exception={selected}
-          onAssignMe={() => selected && patchOverlay(selected.id, { owner: currentUserName, status: 'assigned' })}
-          onInvestigate={() => selected && patchOverlay(selected.id, { status: 'investigating' })}
-          onEscalate={() =>
-            selected && patchOverlay(selected.id, { escalated: true, status: 'action_in_progress' })
+          onAssignMe={
+            selectedDurable
+              ? () =>
+                  void runCaseAction('Assigned to you', () =>
+                    api.assignException(selected!.id, {
+                      assigneeName: currentUserName,
+                      actorName: currentUserName,
+                    }),
+                  )
+              : undefined
           }
-          onClose={() => selected && patchOverlay(selected.id, { status: 'resolved' })}
-          onAddNote={(body) => {
-            if (!selected) return
-            const entry = {
-              id: `note-${Date.now()}`,
-              at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              author: currentUserName,
-              body,
-            }
-            const existing = overlays[selected.id]?.notes ?? selected.notes ?? []
-            patchOverlay(selected.id, { notes: [...existing, entry] })
-          }}
+          onInvestigate={
+            selectedDurable
+              ? () =>
+                  void runCaseAction('Marked investigating', () =>
+                    api.investigateException(selected!.id, { actorName: currentUserName }),
+                  )
+              : undefined
+          }
+          onEscalate={
+            selectedDurable
+              ? () =>
+                  void runCaseAction('Escalated', () =>
+                    api.escalateException(selected!.id, {
+                      reason: 'Escalated from Exceptions inbox',
+                      actorName: currentUserName,
+                    }),
+                  )
+              : undefined
+          }
+          onClose={
+            selectedDurable
+              ? () =>
+                  void runCaseAction('Exception closed', () =>
+                    api.closeException(selected!.id, {
+                      resolution: 'Resolved from Exceptions inbox',
+                      actorName: currentUserName,
+                    }),
+                  )
+              : undefined
+          }
+          onAddNote={
+            selectedDurable
+              ? (body) =>
+                  void runCaseAction('Note saved', () =>
+                    api.addExceptionNote(selected!.id, { body, actorName: currentUserName }),
+                  )
+              : undefined
+          }
         />
       </div>
 
@@ -361,7 +398,7 @@ export function ExceptionsPage() {
           <div className="w-full max-w-md rounded-xl border border-border bg-surface p-4 shadow-xl">
             <h2 className="text-lg font-semibold text-ink">Raise exception</h2>
             <p className="mt-1 text-sm text-ink-soft">
-              Creates a local inbox item until the exceptions API accepts writes.
+              Saves a Command exception case with audit history. This is the durable write path.
             </p>
             <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-muted">
               Title
@@ -382,10 +419,11 @@ export function ExceptionsPage() {
               </button>
               <button
                 type="button"
-                onClick={raiseException}
-                className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100"
+                disabled={raiseMutation.isPending}
+                onClick={() => raiseMutation.mutate()}
+                className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-60"
               >
-                Raise
+                {raiseMutation.isPending ? 'Saving…' : 'Raise'}
               </button>
             </div>
           </div>

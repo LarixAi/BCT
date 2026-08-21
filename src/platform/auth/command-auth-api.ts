@@ -136,6 +136,18 @@ export interface YardHubResponse {
   driverMessages?: unknown[];
   vehicleChecks?: unknown[];
   platformEvents?: HubPlatformEventPayload[];
+  /** Durable equipment inventory keyed by vehicle id (F-03 / TD-027). */
+  equipmentByVehicle?: Record<
+    string,
+    {
+      fixed?: unknown[];
+      assigned?: unknown[];
+      consumables?: unknown[];
+      documents?: unknown[];
+    }
+  >;
+  /** Durable depot stock lines for the active depot. */
+  depotStock?: Array<{ defId: string; label: string; onHand: number; unit: string }>;
 }
 
 export type HubPlatformEventPayload = {
@@ -347,6 +359,38 @@ export async function commandFetchYardHub(
     headers: authedHeaders(accessToken),
   });
   return parseJson<YardHubResponse>(res, "Could not load yard hub");
+}
+
+export type CommandComplianceExpiryItem = {
+  id: string;
+  entityType?: string;
+  entity_type?: string;
+  entityId?: string;
+  entity_id?: string;
+  entityLabel?: string | null;
+  entity_label?: string | null;
+  documentType?: string;
+  document_type?: string;
+  expiryDate?: string;
+  expiry_date?: string;
+  source?: string;
+};
+
+/** Authoritative MOT / licence / retorque due rows from Command. */
+export async function commandFetchComplianceExpiring(
+  accessToken: string,
+  days = 60,
+): Promise<CommandComplianceExpiryItem[]> {
+  const res = await fetch(commandApiUrl(`/compliance/expiring?days=${days}`), {
+    method: "GET",
+    headers: authedHeaders(accessToken),
+  });
+  const data = await parseJson<{ items?: CommandComplianceExpiryItem[] } | CommandComplianceExpiryItem[]>(
+    res,
+    "Could not load compliance due items",
+  );
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data.items) ? data.items : [];
 }
 
 /** Map Command company role → Yard permission role. */

@@ -1,4 +1,4 @@
-import type { BootstrapPayload } from "@/data/mocks/bootstrap";
+import type { BootstrapPayload } from "@/platform/yard/bootstrap-payload";
 import type { YardRole } from "@/types/permissions";
 import type { OutboxMutation } from "@/types/sync";
 

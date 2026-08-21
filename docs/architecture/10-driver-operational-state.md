@@ -258,6 +258,6 @@ Business rules out of UI · domain/projection unit tests · Capacitor platform a
 
 ### Healthy path (keep, converge onto)
 
-`enqueueDriverMutation` → IDB outbox → `processOutbox` → transport → applicator → single projection update.
+`enqueueDriverMutation` → IDB outbox → `processOutbox` → Command `command-api` transport → applicator → single projection update.
 
-Today transport is **mock-only**; outbox verbs are command-like (good), not field patches.
+Transport is **Command-backed** in production (`VITE_API_URL` / command-api). Mock transport is opt-in for local/E2E only (`VITE_MOCK_API` / test harness) — never a silent production fallback (F-03).

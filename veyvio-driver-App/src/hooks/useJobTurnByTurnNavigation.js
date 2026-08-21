@@ -271,7 +271,7 @@ export function useJobTurnByTurnNavigation({
       return;
     }
 
-    const nearestStepIndex = getNearestStepIndex(probeLatLng, route.steps);
+    const nearestStepIndex = getNearestStepIndex(probeLatLng, route.steps, currentStepIndex);
     if (nearestStepIndex !== currentStepIndex) {
       setCurrentStepIndex(nearestStepIndex);
     }

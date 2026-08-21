@@ -8,7 +8,7 @@ import { VehicleBackLink, VehicleProfileHeader } from './components/VehicleProfi
 import { VehicleChecksTab } from './components/VehicleChecksTab'
 import { VehicleEquipmentTab } from './components/VehicleEquipmentTab'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

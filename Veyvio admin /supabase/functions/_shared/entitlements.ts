@@ -1,4 +1,10 @@
-import { admin } from './supabase.ts'
+/**
+ * Tenant entitlement resolution + platform role bootstrap.
+ *
+ * Wave 3F: named capabilities — entitlementReaderDb (company-scoped) and
+ * platformAdminDb (platform catalogue / platform_users). No bare admin import.
+ */
+import { entitlementReaderDb, platformAdminDb } from './db-authority.ts'
 import {
   PLATFORM_MODULE_KEYS,
   deriveTenantStatus,
@@ -40,9 +46,10 @@ function normalizePlanCode(planCode: string | null | undefined): string {
 }
 
 export async function resolveEntitlements(companyId: string): Promise<EntitlementSnapshot> {
+  const db = entitlementReaderDb(companyId, 'resolveEntitlements')
   const [{ data: company }, { data: subscription }] = await Promise.all([
-    admin.from('companies').select('tenant_status').eq('id', companyId).maybeSingle(),
-    admin
+    db.from('companies').select('tenant_status').eq('id', companyId).maybeSingle(),
+    db
       .from('company_subscriptions')
       .select('status, plan_code, trial_ends_at, current_period_end, grace_period_ends_at')
       .eq('company_id', companyId)
@@ -56,7 +63,8 @@ export async function resolveEntitlements(companyId: string): Promise<Entitlemen
     currentTenantStatus: company?.tenant_status ? String(company.tenant_status) : null,
   })
 
-  const { data: features } = await admin
+  const platform = platformAdminDb('plan_catalogue')
+  const { data: features } = await platform
     .from('plan_features')
     .select('module_key, enabled')
     .eq('plan_code', planCode)
@@ -69,7 +77,7 @@ export async function resolveEntitlements(companyId: string): Promise<Entitlemen
     planModules = FALLBACK_MODULES.filter((key) => key !== 'integrations')
   }
 
-  const { data: overrides } = await admin
+  const { data: overrides } = await db
     .from('company_entitlement_overrides')
     .select('module_key, enabled')
     .eq('company_id', companyId)
@@ -83,8 +91,8 @@ export async function resolveEntitlements(companyId: string): Promise<Entitlemen
   })
 
   const [{ data: planLimits }, { data: companyLimits }] = await Promise.all([
-    admin.from('plan_usage_limits').select('limit_key, limit_value').eq('plan_code', planCode),
-    admin.from('company_usage_limits').select('limit_key, limit_value').eq('company_id', companyId),
+    platform.from('plan_usage_limits').select('limit_key, limit_value').eq('plan_code', planCode),
+    db.from('company_usage_limits').select('limit_key, limit_value').eq('company_id', companyId),
   ])
 
   const usageLimits = mergeUsageLimits(
@@ -120,7 +128,8 @@ export function snapshotHasModule(snapshot: EntitlementSnapshot, moduleKey: stri
 }
 
 export async function resolvePlatformRole(userId: string): Promise<string | null> {
-  const { data } = await admin
+  const platform = platformAdminDb('resolvePlatformRole')
+  const { data } = await platform
     .from('platform_users')
     .select('platform_role, status')
     .eq('user_id', userId)
@@ -135,11 +144,11 @@ export async function resolvePlatformRole(userId: string): Promise<string | null
   const bootstrapEmail = (Deno.env.get('VEYVIO_PLATFORM_BOOTSTRAP_EMAIL') ?? '').trim().toLowerCase()
   if (!bootstrapEmail || bootstrapEmail === 'admin@veyvio.test') return null
 
-  const { data: user } = await admin.from('users').select('email').eq('id', userId).maybeSingle()
-  const { count } = await admin.from('platform_users').select('*', { count: 'exact', head: true })
+  const { data: user } = await platform.from('users').select('email').eq('id', userId).maybeSingle()
+  const { count } = await platform.from('platform_users').select('*', { count: 'exact', head: true })
   const email = String(user?.email ?? '').toLowerCase()
   if ((count ?? 0) === 0 && email === bootstrapEmail) {
-    await admin.from('platform_users').upsert({
+    await platform.from('platform_users').upsert({
       user_id: userId,
       platform_role: 'platform_admin',
       status: 'active',

@@ -1,0 +1,10 @@
+{
+  "generated_at": "2026-08-21T07:20:00Z",
+  "drill": "gate1-device-exit-api",
+  "status": "PASS",
+  "checks": "10/10",
+  "notes": [
+    "Sign-on gate accepts 403/409 acknowledgement_required|dispatch_blocked",
+    "No adb device attached \u2014 physical airplane/push residual remains"
+  ]
+}

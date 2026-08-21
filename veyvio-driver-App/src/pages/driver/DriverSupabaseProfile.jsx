@@ -93,9 +93,17 @@ export default function DriverSupabaseProfile({ driver, onLogout }) {
         <div className={`${op.listCard} p-4`}>
           <div className="flex items-center gap-4">
             <div className="relative shrink-0">
-              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[var(--ridova-navy)] text-xl font-bold text-white">
-                {initials}
-              </div>
+              {driver.profilePhotoUrl ? (
+                <img
+                  src={driver.profilePhotoUrl}
+                  alt=""
+                  className="h-[72px] w-[72px] rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[var(--ridova-navy)] text-xl font-bold text-white">
+                  {initials}
+                </div>
+              )}
               <div
                 className="absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-[var(--ridova-teal)] text-white"
                 aria-hidden

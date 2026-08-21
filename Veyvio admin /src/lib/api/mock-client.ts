@@ -38,7 +38,11 @@ import type {
   PerformanceMetrics,
   YardSummary,
   PricingRuleRecord,
+  ExceptionsPort,
 } from './types'
+import type { OperationalException } from '@/lib/types'
+import { EXCEPTION_CATALOG } from '@/lib/exceptions/mock-catalog'
+import { isOpenException } from '@/lib/exceptions/exception-filters'
 import { mockBookingsApi } from './mock-bookings'
 import { mockDialARideApi } from './mock-dial-a-ride'
 import { mockSchoolRoutesApi } from './mock-school-routes'
@@ -88,7 +92,7 @@ function getMockVehicles(): VehicleRecord[] {
   return mockVehiclesApi.list().map(profileToLegacyVehicleRecord)
 }
 
-const TOKEN_KEY = 'access_token'
+const TOKEN_KEY = 'mock_access_token'
 const MEMBERSHIPS_KEY = 'pending_memberships'
 export const MOCK_TOKEN = 'mock-demo-token'
 
@@ -568,7 +572,23 @@ const MOCK_COMPLIANCE_SETTINGS: ComplianceAutomationSettings = {
   blockAssignmentOnExpired: true,
   autoUnassignOnExpired: true,
   notifyRoles: ['company_owner', 'operations_manager', 'compliance_officer'],
+  blockExpiredLicence: true,
+  blockExpiredCpc: true,
+  blockExpiredDbs: true,
+  blockExpiredMedical: true,
+  blockExpiredMot: true,
+  blockExpiredInsurance: true,
+  blockExpiredTax: true,
+  blockExpiredPmi: true,
+  blockOverdueService: true,
+  blockOverdueTyreRetorque: true,
+  blockCriticalDefects: true,
+  blockVorVehicles: true,
+  requireTodaysCheckOnSignOn: true,
+  defectAutomationEnabled: true,
 }
+
+let mockPlaces: import('@/lib/places/types').PlaceRecord[] = []
 
 let mockMessages: MessageRecord[] = [
   {
@@ -756,18 +776,45 @@ function dutyToLiveVehicle(duty: DutyDetailRecord): LiveDispatchResponse['vehicl
   }
 }
 
-export class MockApiClient {
+const mockExceptionCases: OperationalException[] = EXCEPTION_CATALOG.map((ex) => ({
+  ...ex,
+  durableCase: true,
+  notes: ex.notes ? [...ex.notes] : [],
+  timeline: ex.timeline ? [...ex.timeline] : [],
+  audit: ex.audit ? [...ex.audit] : [],
+}))
+
+function stampException(
+  row: OperationalException,
+  status: OperationalException['status'],
+  actor: string,
+  action: string,
+  extra: Partial<OperationalException> = {},
+): OperationalException {
+  const nowIso = new Date().toISOString()
+  return {
+    ...row,
+    ...extra,
+    status,
+    lastUpdate: nowIso,
+    owner: extra.owner ?? row.owner,
+    timeline: [...(row.timeline ?? []), { at: nowIso, label: action }],
+    audit: [...(row.audit ?? []), { id: `aud-${Date.now()}`, at: nowIso, actor, action }],
+  }
+}
+
+export class MockApiClient implements ExceptionsPort {
   private accessToken: string | null = null
 
   setToken(token: string | null, hasTenant = true) {
     this.accessToken = token
     if (typeof window === 'undefined') return
     if (token) {
-      localStorage.setItem(TOKEN_KEY, token)
+      sessionStorage.setItem(TOKEN_KEY, token)
       if (hasTenant) sessionStorage.setItem('has_tenant', '1')
       else sessionStorage.removeItem('has_tenant')
     } else {
-      localStorage.removeItem(TOKEN_KEY)
+      sessionStorage.removeItem(TOKEN_KEY)
       sessionStorage.removeItem('has_tenant')
       sessionStorage.removeItem(MEMBERSHIPS_KEY)
     }
@@ -777,10 +824,15 @@ export class MockApiClient {
     this.setToken(null)
   }
 
+  clearTenantFlag() {
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem('has_tenant')
+  }
+
   getToken(): string | null {
     if (this.accessToken) return this.accessToken
     if (typeof window === 'undefined') return null
-    const stored = localStorage.getItem(TOKEN_KEY)
+    const stored = sessionStorage.getItem(TOKEN_KEY)
     if (stored) this.accessToken = stored
     return stored
   }
@@ -793,8 +845,22 @@ export class MockApiClient {
     return Boolean(this.getToken())
   }
 
+  async getSessionStatus() {
+    const token = this.getToken()
+    return { authenticated: Boolean(token), hasTenant: this.hasTenant() }
+  }
+
+  async logoutRemote() {
+    this.clearToken()
+  }
+
   setPendingMemberships(memberships: TenantMembershipOption[]) {
     sessionStorage.setItem(MEMBERSHIPS_KEY, JSON.stringify(memberships))
+  }
+
+  clearPendingMemberships() {
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem(MEMBERSHIPS_KEY)
   }
 
   getPendingMemberships(): TenantMembershipOption[] {
@@ -1557,6 +1623,11 @@ export class MockApiClient {
     return mockDriversApi.uploadDocument(id, input, actorName)
   }
 
+  async uploadDriverPhoto(id: string, input: import('@/lib/drivers/types').UploadDriverPhotoInput, actorName: string) {
+    await delay(100)
+    return mockDriversApi.uploadPhoto(id, input, actorName)
+  }
+
   async recordDriverTraining(
     id: string,
     input: import('@/lib/drivers/types').RecordDriverTrainingInput,
@@ -1651,7 +1722,7 @@ export class MockApiClient {
     return mockDriversApi.verifyDocument(id, documentId, actorName)
   }
 
-  async getDriverDocumentDownloadUrl(driverId: string, documentId: string) {
+  async getDriverDocumentDownloadUrl(_driverId: string, _documentId: string) {
     await delay(40)
     return {
       url: '#',
@@ -1725,6 +1796,45 @@ export class MockApiClient {
   async createVehicle(input: CreateVehicleInput, actorName: string): Promise<VehicleProfile> {
     await delay(120)
     return mockVehiclesApi.create(input, actorName)
+  }
+
+  async importVehicles(
+    vehicles: import('@/lib/vehicles/vehicle-csv-import').VehicleImportParsedRow[],
+    _actorName: string,
+  ) {
+    await delay(120)
+    let created = 0
+    let skippedDuplicates = 0
+    const failed: Array<{ row: number; registrationNumber: string; reason: string }> = []
+    const createdIds: string[] = []
+    for (const row of vehicles) {
+      try {
+        const profile = mockVehiclesApi.create(
+          {
+            registrationNumber: row.registrationNumber,
+            fleetNumber: row.fleetNumber ?? undefined,
+            make: row.make,
+            model: row.model,
+            modelYear: row.modelYear,
+            vehicleCategory: row.vehicleCategory as CreateVehicleInput['vehicleCategory'],
+            homeDepotId: row.homeDepotId ?? 'depot-wembley',
+            seatingCapacity: row.seatingCapacity,
+            wheelchairCapacity: row.wheelchairCapacity,
+            fuelType: row.fuelType as CreateVehicleInput['fuelType'],
+            ownershipType: row.ownershipType as CreateVehicleInput['ownershipType'],
+            colour: row.colour,
+          },
+          _actorName,
+        )
+        created += 1
+        createdIds.push(profile.id)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Create failed'
+        if (/already|exists|duplicate/i.test(message)) skippedDuplicates += 1
+        else failed.push({ row: row.rowNumber, registrationNumber: row.registrationNumber, reason: message })
+      }
+    }
+    return { rowsRead: vehicles.length, created, skippedDuplicates, failed, createdIds }
   }
 
   async updateVehicle(id: string, input: UpdateVehicleInput, actorName: string): Promise<VehicleProfile> {
@@ -1958,6 +2068,147 @@ export class MockApiClient {
     return defect
   }
 
+  async getExceptions(params?: { status?: string; openOnly?: boolean }): Promise<OperationalException[]> {
+    await delay()
+    let rows = [...mockExceptionCases]
+    if (params?.status) rows = rows.filter((row) => row.status === params.status)
+    if (params?.openOnly !== false) rows = rows.filter((row) => isOpenException(row))
+    return rows
+  }
+
+  async getException(id: string): Promise<OperationalException> {
+    await delay()
+    const row = mockExceptionCases.find((item) => item.id === id)
+    if (!row) throw new Error('Exception not found')
+    return row
+  }
+
+  async raiseException(input: {
+    title: string
+    description?: string
+    severity?: string
+    category?: string
+    typeCode?: string
+    relatedRecord?: string
+    relatedHref?: string
+    depotId?: string | null
+    actorName?: string
+  }): Promise<OperationalException> {
+    await delay()
+    const actor = input.actorName ?? 'Ops'
+    const nowIso = new Date().toISOString()
+    const row: OperationalException = {
+      id: `mock-ex-${Date.now()}`,
+      title: input.title,
+      description: input.description,
+      severity: (input.severity as OperationalException['severity']) || 'medium',
+      category: (input.category as OperationalException['category']) || 'dispatch',
+      typeCode: input.typeCode,
+      relatedRecord: input.relatedRecord ?? '—',
+      relatedHref: input.relatedHref ?? '/exceptions',
+      depot: input.depotId ?? '—',
+      raisedAt: nowIso,
+      ageMinutes: 0,
+      slaMinutesRemaining: 60,
+      owner: actor,
+      status: 'new',
+      lastUpdate: nowIso,
+      durableCase: true,
+      timeline: [{ at: nowIso, label: 'Raised' }],
+      notes: [],
+      audit: [{ id: `aud-${Date.now()}`, at: nowIso, actor, action: 'raised' }],
+    }
+    mockExceptionCases.unshift(row)
+    return row
+  }
+
+  async acknowledgeException(id: string, input: { notes?: string; actorName?: string } = {}) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const next = stampException(mockExceptionCases[idx]!, 'acknowledged', actor, 'Acknowledged')
+    if (input.notes) {
+      next.notes = [
+        ...(next.notes ?? []),
+        { id: `note-${Date.now()}`, at: new Date().toISOString(), author: actor, body: input.notes },
+      ]
+    }
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async assignException(
+    id: string,
+    input: { assigneeUserId?: string; assigneeName?: string; actorName?: string } = {},
+  ) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const next = stampException(mockExceptionCases[idx]!, 'assigned', actor, 'Assigned', {
+      owner: input.assigneeName ?? actor,
+      assignedToUserId: input.assigneeUserId ?? null,
+    })
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async investigateException(id: string, input: { actorName?: string } = {}) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const next = stampException(mockExceptionCases[idx]!, 'investigating', input.actorName ?? 'Ops', 'Investigating')
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async escalateException(id: string, input: { reason?: string; actorName?: string } = {}) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const next = stampException(mockExceptionCases[idx]!, 'investigating', actor, input.reason ?? 'Escalated', {
+      escalated: true,
+    })
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async closeException(
+    id: string,
+    input: { resolution?: string; dismiss?: boolean; actorName?: string } = {},
+  ) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const status = input.dismiss ? 'dismissed' : 'resolved'
+    const next = stampException(mockExceptionCases[idx]!, status, actor, input.resolution ?? 'Closed')
+    mockExceptionCases[idx] = next
+    return next
+  }
+
+  async addExceptionNote(id: string, input: { body: string; actorName?: string }) {
+    await delay()
+    const idx = mockExceptionCases.findIndex((item) => item.id === id)
+    if (idx < 0) throw new Error('Exception not found')
+    const actor = input.actorName ?? 'Ops'
+    const stamped = new Date().toISOString()
+    const current = mockExceptionCases[idx]!
+    const next: OperationalException = {
+      ...current,
+      lastUpdate: stamped,
+      notes: [
+        ...(current.notes ?? []),
+        { id: `note-${Date.now()}`, at: stamped, author: actor, body: input.body },
+      ],
+      audit: [...(current.audit ?? []), { id: `aud-${Date.now()}`, at: stamped, actor, action: 'note' }],
+    }
+    mockExceptionCases[idx] = next
+    return next
+  }
+
   async getIncidents(params?: { status?: string }): Promise<IncidentRecord[]> {
     await delay()
     const hub = mockIncidentsApi.hub()
@@ -2027,7 +2278,15 @@ export class MockApiClient {
 
   async getComplianceAutomationSettings(): Promise<ComplianceAutomationSettings> {
     await delay(50)
-    return MOCK_COMPLIANCE_SETTINGS
+    return { ...MOCK_COMPLIANCE_SETTINGS }
+  }
+
+  async updateComplianceAutomationSettings(
+    input: Partial<ComplianceAutomationSettings>,
+  ): Promise<ComplianceAutomationSettings> {
+    await delay(80)
+    Object.assign(MOCK_COMPLIANCE_SETTINGS, input)
+    return { ...MOCK_COMPLIANCE_SETTINGS }
   }
 
   async createMessage(input: {
@@ -2478,6 +2737,20 @@ export class MockApiClient {
     return mockFleetResourcesApi.assignEquipment(input)
   }
 
+  async createResourceEquipment(input: {
+    name: string
+    category?: string
+    vehicleId?: string | null
+    qrCode?: string | null
+    serialNumber?: string | null
+    expiryDate?: string | null
+    requiredForDuty?: boolean
+    actorName: string
+  }) {
+    await delay(80)
+    return mockFleetResourcesApi.createEquipment(input)
+  }
+
   async transferResourceStock(input: {
     resourceItemId: string
     resourceName: string
@@ -2562,9 +2835,58 @@ export class MockApiClient {
     return MOCK_INTEGRATIONS
   }
 
+  async getIntegrationApiKeys(): Promise<import('./types').IntegrationApiKeyRecord[]> {
+    await delay(40)
+    return []
+  }
+
+  async createIntegrationApiKey(input: {
+    name: string
+    scopes?: string[]
+    expiresAt?: string | null
+  }): Promise<import('./types').IntegrationApiKeyRecord> {
+    await delay(80)
+    return {
+      id: `key-${Date.now()}`,
+      name: input.name,
+      keyPrefix: 'vyv_live_mockxx',
+      scopes: input.scopes ?? ['interests:create'],
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      secret: 'vyv_live_mock_secret_shown_once_only',
+    }
+  }
+
+  async revokeIntegrationApiKey(id: string): Promise<import('./types').IntegrationApiKeyRecord> {
+    await delay(40)
+    return {
+      id,
+      name: 'revoked',
+      keyPrefix: 'vyv_live_',
+      scopes: [],
+      status: 'revoked',
+      revokedAt: new Date().toISOString(),
+    }
+  }
+
   async getAuditLogs(): Promise<AuditLogRecord[]> {
     await delay()
     return MOCK_AUDIT
+  }
+
+  async getOverrideAuditEvents() {
+    await delay()
+    return [] as Array<{
+      id: string
+      ruleCode?: string
+      reason?: string
+      entityType?: string
+      entityId?: string
+      blockers?: string[]
+      occurredAt?: string
+      createdAt?: string
+      actorUserId?: string | null
+    }>
   }
 
   async getPricingRules(): Promise<PricingRuleRecord[]> {
@@ -2977,6 +3299,76 @@ export class MockApiClient {
     return mockDepotsApi.opsSnapshot(id, { vehicles, drivers, duties, staff })
   }
 
+  async getPlaces(): Promise<import('@/lib/places/types').PlaceRecord[]> {
+    await delay(50)
+    return [...mockPlaces]
+  }
+
+  async createPlace(
+    input: import('@/lib/places/types').CreatePlaceInput,
+  ): Promise<import('@/lib/places/types').PlaceRecord> {
+    await delay(80)
+    const record: import('@/lib/places/types').PlaceRecord = {
+      id: `place-${Date.now()}`,
+      kind: input.kind,
+      name: input.name,
+      address: input.address ?? null,
+      lat: input.lat,
+      lng: input.lng,
+      radiusM: input.radiusM ?? 120,
+      createdAt: new Date().toISOString(),
+    }
+    mockPlaces = [record, ...mockPlaces]
+    return record
+  }
+
+  async getInterestSubmissions(
+    _params?: import('@/lib/interests/types').InterestListParams,
+  ): Promise<import('@/lib/interests/types').InterestListResponse> {
+    await delay(40)
+    return {
+      summary: {
+        newToday: 0,
+        awaitingReview: 0,
+        assigned: 0,
+        contacted: 0,
+        qualified: 0,
+        converted: 0,
+        closed: 0,
+        spam: 0,
+      },
+      items: [],
+    }
+  }
+
+  async getInterestSubmission(id: string): Promise<import('@/lib/interests/types').InterestDetail> {
+    await delay(40)
+    throw new Error(`Interest submission ${id} is not available in mock mode`)
+  }
+
+  async patchInterestSubmission(
+    id: string,
+    _input: import('@/lib/interests/types').InterestPatchInput,
+  ): Promise<import('@/lib/interests/types').InterestDetail> {
+    await delay(40)
+    throw new Error(`Interest submission ${id} cannot be updated in mock mode`)
+  }
+
+  async acceptInterestSubmission(
+    id: string,
+  ): Promise<import('@/lib/interests/types').InterestAcceptResult> {
+    await delay(40)
+    throw new Error(`Interest submission ${id} cannot be accepted in mock mode`)
+  }
+
+  async rejectInterestSubmission(
+    id: string,
+    _input?: { reason?: string; notifyCustomer?: boolean },
+  ): Promise<import('@/lib/interests/types').InterestRejectResult> {
+    await delay(40)
+    throw new Error(`Interest submission ${id} cannot be rejected in mock mode`)
+  }
+
   async createDepot(input: import('@/lib/depots/types').CreateDepotInput, _actorName: string) {
     await delay(100)
     return mockDepotsApi.create(input)
@@ -3088,7 +3480,11 @@ export class MockApiClient {
     })
   }
 
-  async getOperationalTrips(params?: { dutyId?: string; status?: string }): Promise<OperationalTrip[]> {
+  async getOperationalTrips(params?: {
+    dutyId?: string
+    status?: string
+    serviceDate?: string
+  }): Promise<OperationalTrip[]> {
     await delay(50)
     return mockTransfersApi.listTrips(params)
   }
@@ -3191,6 +3587,102 @@ export class MockApiClient {
   async commitTransfer(input: CreateTransferInput, actorName: string): Promise<TransferRecord> {
     await delay(150)
     return mockTransfersApi.commitTransfer(input, actorName, getMockDrivers(), getMockVehicles())
+  }
+
+  async commitJourneySequenceReorder(input: {
+    tripId: string
+    orderedPickupJobIds: string[]
+    reason: string
+    reasonNotes?: string
+    linkedReturnDecision?: string
+    sendNotifications?: boolean
+    actorName?: string
+    dutyId?: string | null
+  }) {
+    await delay(120)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    const result = mockJourneySequenceApi.commitReorder({
+      tripId: input.tripId,
+      orderedPickupJobIds: input.orderedPickupJobIds,
+      reason: input.reason as import('@/lib/journey-sequence/types').ReorganiseReasonCode,
+      reasonNotes: input.reasonNotes,
+      linkedReturnDecision:
+        (input.linkedReturnDecision as import('@/lib/journey-sequence/types').LinkedReturnDecision) ??
+        'keep_unchanged',
+      sendNotifications: Boolean(input.sendNotifications),
+      actorName: input.actorName ?? 'Operations',
+    })
+    return {
+      mode: 'run_trips' as const,
+      entityId: input.tripId,
+      originalOrder: result.audit.originalPickupOrder,
+      newOrder: result.audit.newPickupOrder,
+      changed: true,
+      auditId: result.audit.id,
+      trip: result.trip,
+      acknowledgement: result.acknowledgement,
+    }
+  }
+
+  async listJourneySequenceDestinations(tripId: string, _dutyId?: string | null) {
+    await delay(40)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    return mockJourneySequenceApi.listDestinationRuns(tripId)
+  }
+
+  async commitJourneySequenceMove(input: {
+    tripId: string
+    jobIds: string[]
+    action: string
+    destinationTripId?: string | null
+    reason?: string
+    actorName?: string
+    dutyId?: string | null
+  }) {
+    await delay(120)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    const result = mockJourneySequenceApi.commitMove({
+      sourceTripId: input.tripId,
+      jobIds: input.jobIds,
+      action: input.action as import('@/lib/journey-sequence/types').MoveJourneyAction,
+      destinationTripId: input.destinationTripId ?? null,
+      actorName: input.actorName ?? 'Operations',
+      reason: input.reason ?? 'Operational transfer',
+    })
+    return {
+      action: input.action,
+      movedTripIds: input.jobIds,
+      sourceRunId: input.tripId,
+      destinationRunId: result.destinationTripId,
+      message: result.message,
+      auditId: `move-audit-${Date.now()}`,
+      trip: null,
+      acknowledgement: result.destinationTripId
+        ? mockJourneySequenceApi.getAcknowledgement(result.destinationTripId)
+        : mockJourneySequenceApi.getAcknowledgement(input.tripId),
+    }
+  }
+
+  async getJourneySequenceAcknowledgement(tripId: string) {
+    await delay(40)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    return { acknowledgement: mockJourneySequenceApi.getAcknowledgement(tripId) }
+  }
+
+  async advanceJourneySequenceAcknowledgement(input: {
+    tripId: string
+    status: 'viewed' | 'acknowledged' | 'declined' | 'delivered'
+    declineReason?: string
+  }) {
+    await delay(80)
+    const { mockJourneySequenceApi } = await import('@/lib/journey-sequence/mock-hub')
+    return {
+      acknowledgement: mockJourneySequenceApi.advanceAcknowledgement(
+        input.tripId,
+        input.status,
+        input.declineReason as import('@/lib/journey-sequence/types').DriverDeclineReason | undefined,
+      ),
+    }
   }
 
   async getTransferHistory(tripId?: string): Promise<TransferRecord[]> {
@@ -3320,6 +3812,51 @@ export class MockApiClient {
   async getSchoolRouteAttendance(routeId: string) {
     await delay(50)
     return mockSchoolRoutesApi.attendance(routeId)
+  }
+
+  async listVehicleSwapRequests(_status = 'pending') {
+    await delay(50)
+    return []
+  }
+
+  async approveVehicleSwapRequest(id: string, _notes?: string) {
+    await delay(50)
+    return {
+      id,
+      dutyId: 'duty-mock',
+      driverId: 'drv-mock',
+      currentVehicleId: 'veh-1',
+      requestedVehicleId: 'veh-2',
+      reason: 'Mock swap',
+      status: 'approved',
+      requestedAt: new Date().toISOString(),
+    }
+  }
+
+  async rejectVehicleSwapRequest(id: string, _notes?: string) {
+    await delay(50)
+    return {
+      id,
+      dutyId: 'duty-mock',
+      driverId: 'drv-mock',
+      currentVehicleId: 'veh-1',
+      requestedVehicleId: 'veh-2',
+      reason: 'Mock swap',
+      status: 'rejected',
+      requestedAt: new Date().toISOString(),
+    }
+  }
+
+  async getJobExecution(_jobId: string) {
+    await delay(50)
+    return {
+      events: [],
+      acceptedAt: null,
+      startedAt: null,
+      completedAt: null,
+      stopStatusById: {},
+      stopStatusBySequence: {},
+    }
   }
 
   async getCommandResource<T>(path: string): Promise<T> {

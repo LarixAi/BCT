@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
+import { formatDate } from '@/components/ui/status'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
 import type { DutyRecord } from '@/lib/api/types'
@@ -262,7 +263,7 @@ export function RunsPage() {
                           {row.reference}
                         </Link>
                       </td>
-                      <td className="px-3 py-2.5 tabular-nums text-ink-soft">{row.dutyDate}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-ink-soft">{formatDate(row.dutyDate)}</td>
                       <td className="px-3 py-2.5 text-ink-soft">{row.depotName}</td>
                       <td className="px-3 py-2.5 font-medium text-ink">
                         {row.driverName ?? <span className="text-red-700">Unassigned</span>}

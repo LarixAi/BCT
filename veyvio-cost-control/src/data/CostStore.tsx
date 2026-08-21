@@ -1,0 +1,1102 @@
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import { useAuth } from '../auth/AuthContext'
+import { createSeedStore, type CostControlStore } from '../data/seed'
+import { CostStoreContext } from '../data/CostStoreContext'
+import {
+  createLiveOrganisationWorkspace,
+  isDemoOrganisationId,
+} from '../data/live-workspace'
+import {
+  readFinanceRepositoryConfig,
+  resolveCostControlRepository,
+} from '../repositories/cost-control-repository'
+import { importCostCsv } from '../domain/csv-import'
+import {
+  importPayrollSummaryCsv,
+  type PayrollSummaryImportResult,
+} from '../domain/payroll-summary-import'
+import { applyReviewDecision, type ReviewDecision } from '../domain/review-actions'
+import { buildFinancialSnapshot } from '../domain/snapshot'
+import { assertSameOrganisation, filterByOrganisation } from '../domain/tenancy'
+import {
+  createOpenBankingAdapter,
+  emptyBankConnection,
+  getBankIntegrationConfig,
+  resolveBankAdapter,
+} from '../integrations/bank'
+import type { ReviewItem } from '../domain/types'
+import type { EmployeeCostReference } from '../domain/org-structure'
+import {
+  advanceWageBatch,
+  createWageAdjustment,
+  buildWageCostBatch,
+} from '../domain/wage-period-workflow'
+import {
+  importDriverHoursForPersist,
+} from '../server/finance-driver-hours-import'
+import { isWageBatchLockedOrBeyond } from '../server/finance-wage-batches'
+
+/** Browser-local cost writes are demo-only. API mode must use durable finance commands. */
+function assertBrowserMutationAllowed(action: string) {
+  const config = readFinanceRepositoryConfig()
+  if (config.mode === 'api') {
+    throw new Error(
+      `Cost Control cannot apply "${action}" in the browser when VITE_FINANCE_DATA_MODE=api. Durable finance command APIs are required.`,
+    )
+  }
+}
+
+type StoreApi = CostControlStore & {
+  workspaceStatus: 'idle' | 'loading' | 'ready' | 'error'
+  workspaceError: string | null
+  refreshSnapshot: () => void
+  importCsv: (fileName: string, text: string) => Promise<{
+    accepted: number
+    quarantined: number
+    duplicatesSkipped: number
+  }>
+  importPayrollSummary: (
+    fileName: string,
+    text: string,
+  ) => Promise<{
+    matched: number
+    unmatched: number
+    variance: number
+    quarantined: number
+    exceptions: number
+  }>
+  importDriverHours: (
+    fileName: string,
+    text: string,
+  ) => Promise<{
+    accepted: number
+    ratesAccepted: number
+    quarantined: number
+    unmatched: number
+    batchStatus: string
+  }>
+  resolveReview: (reviewId: string, state: ReviewItem['state']) => void | Promise<void>
+  resolveReviewDecision: (reviewId: string, decision: ReviewDecision) => Promise<void>
+  advanceWageBatchStatus: (batchId: string) => Promise<void>
+  clearDriverDayDispute: (driverDayId: string) => Promise<void>
+  addWageAdjustment: (input: {
+    batchId: string
+    employeeCostReferenceId: string
+    reason: string
+    grossDeltaMinor: number
+  }) => Promise<void>
+  ensureWageBatch: () => Promise<void>
+  refreshBankFeed: (accountId?: string) => Promise<void>
+  startBankConnect: (institutionHint?: string) => Promise<{ consentUrl: string }>
+  completeBankConnect: (input: {
+    state: string
+    authorizationCode?: string
+    sandbox?: boolean
+  }) => Promise<void>
+  disconnectBank: () => Promise<void>
+  upsertEmployeeCostReferences: (
+    employees: Array<
+      Partial<EmployeeCostReference> & {
+        externalPayrollId: string
+        displayName: string
+      }
+    >,
+  ) => Promise<{ upserted: number }>
+  sourceKeys: Set<string>
+  lastPayrollSummaryImport: PayrollSummaryImportResult | null
+}
+
+function withSeedDefaults(store: CostControlStore): CostControlStore {
+  // Never mix Demo CEC seed slices into a live Command company workspace.
+  if (!isDemoOrganisationId(store.organisation.id)) return store
+  const seed = createSeedStore()
+  return {
+    ...store,
+    payPeriods: store.payPeriods?.length ? store.payPeriods : seed.payPeriods,
+    orgNodes: store.orgNodes?.length ? store.orgNodes : seed.orgNodes,
+    employeeCostReferences: store.employeeCostReferences?.length
+      ? store.employeeCostReferences
+      : seed.employeeCostReferences,
+    bankAccounts: store.bankAccounts?.length ? store.bankAccounts : seed.bankAccounts,
+    bankTransactions: store.bankTransactions?.length
+      ? store.bankTransactions
+      : seed.bankTransactions,
+    bankConnection: store.bankConnection ?? seed.bankConnection,
+    bankRestrictedMinor: store.bankRestrictedMinor ?? seed.bankRestrictedMinor,
+    sageIntegration: store.sageIntegration ?? seed.sageIntegration,
+    pendingBankConsentState:
+      store.pendingBankConsentState !== undefined
+        ? store.pendingBankConsentState
+        : seed.pendingBankConsentState,
+    auditEvents: store.auditEvents ?? seed.auditEvents,
+    budgetChanges: store.budgetChanges?.length ? store.budgetChanges : seed.budgetChanges,
+    quarterlyReview: store.quarterlyReview ?? seed.quarterlyReview,
+    incomeSummary: store.incomeSummary !== undefined ? store.incomeSummary : seed.incomeSummary,
+    driverDays: store.driverDays?.length ? store.driverDays : seed.driverDays,
+    payRates: store.payRates?.length ? store.payRates : seed.payRates,
+    wageBatches: store.wageBatches?.length ? store.wageBatches : seed.wageBatches,
+    clgProfile: store.clgProfile ?? seed.clgProfile,
+    clgPersons: store.clgPersons?.length ? store.clgPersons : seed.clgPersons,
+    approvalBands: store.approvalBands?.length ? store.approvalBands : seed.approvalBands,
+    fundingAwards: store.fundingAwards?.length ? store.fundingAwards : seed.fundingAwards,
+  }
+}
+
+export function CostStoreProvider({ children }: { children: ReactNode }) {
+  const auth = useAuth()
+  const [store, setStore] = useState<CostControlStore>(() => createSeedStore())
+  const [workspaceStatus, setWorkspaceStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle')
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null)
+  const [lastPayrollSummaryImport, setLastPayrollSummaryImport] =
+    useState<PayrollSummaryImportResult | null>(null)
+
+  // Bind workspace to the signed-in company — never show Demo CEC as Fleet LTD.
+  useEffect(() => {
+    const membership = auth.activeMembership
+    const identity = auth.identity
+    if (!membership) return
+
+    if (isDemoOrganisationId(membership.organisationId)) {
+      setStore(createSeedStore())
+      setWorkspaceStatus('ready')
+      setWorkspaceError(null)
+      return
+    }
+
+    const financeConfig = readFinanceRepositoryConfig()
+    const empty = createLiveOrganisationWorkspace({
+      organisationId: membership.organisationId,
+      organisationName: membership.organisationName,
+    })
+
+    if (financeConfig.mode !== 'api' || !financeConfig.apiBaseUrl || !identity?.accessToken) {
+      setStore(empty)
+      setWorkspaceStatus('ready')
+      setWorkspaceError(
+        financeConfig.mode === 'api' && !financeConfig.apiBaseUrl
+          ? 'VITE_FINANCE_API_URL is not configured'
+          : null,
+      )
+      return
+    }
+
+    let cancelled = false
+    setWorkspaceStatus('loading')
+    setWorkspaceError(null)
+    setStore(empty)
+
+    void resolveCostControlRepository(financeConfig)
+      .loadWorkspace({
+        accessToken: identity.accessToken,
+        userSubject: identity.userSubject,
+        activeOrganisationId: membership.organisationId,
+      })
+      .then((workspace) => {
+        if (cancelled) return
+        setStore(withSeedDefaults(workspace))
+        setWorkspaceStatus('ready')
+        setWorkspaceError(null)
+      })
+      .catch((reason) => {
+        if (cancelled) return
+        setStore(empty)
+        setWorkspaceStatus('error')
+        setWorkspaceError(
+          reason instanceof Error ? reason.message : 'Finance workspace could not be loaded',
+        )
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    auth.activeMembership?.organisationId,
+    auth.activeMembership?.organisationName,
+    auth.identity?.accessToken,
+    auth.identity?.userSubject,
+  ])
+
+  // After HMR, older in-memory state may lack Phase 1/2 seed fields — backfill demo only.
+  useEffect(() => {
+    setStore((prev) => {
+      const next = withSeedDefaults(prev)
+      if (
+        next.orgNodes === prev.orgNodes &&
+        next.employeeCostReferences === prev.employeeCostReferences &&
+        next.payPeriods === prev.payPeriods &&
+        next.bankAccounts === prev.bankAccounts &&
+        next.bankTransactions === prev.bankTransactions
+      ) {
+        return prev
+      }
+      return next
+    })
+  }, [])
+
+  const refreshSnapshot = useCallback(() => {
+    setStore((prev) => {
+      try {
+        const snap = buildFinancialSnapshot({
+          organisationId: prev.organisation.id,
+          budget: prev.budget,
+          costs: prev.costs,
+        })
+        return {
+          ...prev,
+          lastSnapshot: snap,
+          lastValidSnapshot: snap,
+        }
+      } catch {
+        // Last valid state protection — Blueprint §3 / §8.6
+        return prev
+      }
+    })
+  }, [])
+
+  const importCsv = useCallback(async (fileName: string, text: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to import costs')
+      }
+      const result = await resolveCostControlRepository(financeConfig).importCostCsv(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        { fileName, text },
+      )
+      setStore(withSeedDefaults(result.workspace))
+      return {
+        accepted: result.summary.accepted,
+        quarantined: result.summary.quarantined,
+        duplicatesSkipped: result.summary.duplicatesSkipped,
+      }
+    }
+
+    let summary = { accepted: 0, quarantined: 0, duplicatesSkipped: 0 }
+    setStore((prev) => {
+      const existing = new Set(prev.costs.map((c) => c.sourceKey))
+      const result = importCostCsv({
+        organisationId: prev.organisation.id,
+        text,
+        budgetId: prev.budget.id,
+        existingSourceKeys: existing,
+      })
+      summary = {
+        accepted: result.accepted.length,
+        quarantined: result.quarantined.length,
+        duplicatesSkipped: result.duplicatesSkipped,
+      }
+
+      const nextCosts = [...prev.costs, ...result.accepted]
+      const nextReviews = [...prev.reviews]
+      for (const cost of result.accepted) {
+        if (cost.reviewState === 'open') {
+          nextReviews.push({
+            id: crypto.randomUUID(),
+            organisationId: prev.organisation.id,
+            costId: cost.id,
+            signal: cost.evidence.length ? 'allocation_issue' : 'missing_evidence',
+            title: cost.evidence.length
+              ? 'Imported cost needs review'
+              : 'Imported cost missing evidence',
+            detail: `${cost.supplierName} · ${cost.reference}`,
+            state: 'open',
+            createdAt: new Date().toISOString(),
+          })
+        }
+      }
+
+      let lastSnapshot = prev.lastSnapshot
+      let lastValidSnapshot = prev.lastValidSnapshot
+      try {
+        const snap = buildFinancialSnapshot({
+          organisationId: prev.organisation.id,
+          budget: prev.budget,
+          costs: nextCosts,
+        })
+        lastSnapshot = snap
+        lastValidSnapshot = snap
+      } catch {
+        // keep last valid
+      }
+
+      const run = {
+        id: crypto.randomUUID(),
+        organisationId: prev.organisation.id,
+        fileName,
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        rowsRead: result.rowsRead,
+        accepted: result.accepted.length,
+        quarantined: result.quarantined.length,
+        duplicatesSkipped: result.duplicatesSkipped,
+      }
+
+      return {
+        ...prev,
+        costs: nextCosts,
+        quarantine: [...result.quarantined, ...prev.quarantine],
+        reviews: nextReviews,
+        imports: [run, ...prev.imports],
+        lastSnapshot,
+        lastValidSnapshot,
+      }
+    })
+    return summary
+  }, [auth.activeMembership, auth.identity])
+
+  const importPayrollSummary = useCallback(async (fileName: string, text: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to import payroll summaries')
+      }
+      const result = await resolveCostControlRepository(financeConfig).importPayrollSummary(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        { fileName, text },
+      )
+      setStore(withSeedDefaults(result.workspace))
+      setLastPayrollSummaryImport(result.result)
+      return {
+        matched: result.summary.matched,
+        unmatched: result.summary.unmatched,
+        variance: result.summary.variance,
+        quarantined: result.summary.quarantined,
+        exceptions: result.summary.exceptions,
+      }
+    }
+
+    let result!: PayrollSummaryImportResult
+    setStore((prev) => {
+      const wageCost =
+        prev.costs.find((c) => c.category === 'wages' && c.status === 'actual') ??
+        prev.costs.find((c) => c.category === 'wages')
+      const wageCostId = wageCost?.id ?? 'cost_wages_jul'
+      result = importPayrollSummaryCsv({
+        organisationId: prev.organisation.id,
+        text,
+        stage: 'pre_payroll',
+        employees: prev.employeeCostReferences ?? [],
+        wageCostId,
+      })
+
+      const nextReviews: ReviewItem[] = [
+        ...result.reviews.map((r) => ({
+          ...r,
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+        })),
+        ...prev.reviews,
+      ]
+
+      const payPeriods = (prev.payPeriods ?? []).map((period, index) => {
+        if (index !== 0) return period
+        return {
+          ...period,
+          status: 'review' as const,
+          prePayroll: result.rolledUp ?? period.prePayroll,
+          lastImportAt: new Date().toISOString(),
+          exceptions: result.exceptions.length ? result.exceptions : period.exceptions,
+          employeeCount: Math.max(period.employeeCount, result.totals.matchedCount),
+          formulaVersion: result.rolledUp?.formulaVersion ?? period.formulaVersion,
+        }
+      })
+
+      const run = {
+        id: crypto.randomUUID(),
+        organisationId: prev.organisation.id,
+        fileName: `[payroll-summary] ${fileName}`,
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        rowsRead: result.rowsRead,
+        accepted: result.totals.matchedCount,
+        quarantined: result.quarantined.length + result.totals.unmatchedCount,
+        duplicatesSkipped: 0,
+      }
+
+      return {
+        ...prev,
+        payPeriods,
+        reviews: nextReviews,
+        quarantine: [...result.quarantined, ...prev.quarantine],
+        imports: [run, ...prev.imports],
+      }
+    })
+    setLastPayrollSummaryImport(result)
+
+    return {
+      matched: result.totals.matchedCount,
+      unmatched: result.totals.unmatchedCount,
+      variance: result.totals.varianceCount,
+      quarantined: result.quarantined.length,
+      exceptions: result.exceptions.length,
+    }
+  }, [auth.activeMembership, auth.identity])
+
+  const importDriverHours = useCallback(async (fileName: string, text: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to import driver hours')
+      }
+      const result = await resolveCostControlRepository(financeConfig).importDriverHours(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        { fileName, text },
+      )
+      setStore(withSeedDefaults(result.workspace))
+      return {
+        accepted: result.summary.accepted,
+        ratesAccepted: result.summary.ratesAccepted,
+        quarantined: result.summary.quarantined,
+        unmatched: result.summary.unmatchedExternalIds.length,
+        batchStatus: result.summary.batchStatus,
+      }
+    }
+
+    let summary = {
+      accepted: 0,
+      ratesAccepted: 0,
+      quarantined: 0,
+      unmatched: 0,
+      batchStatus: 'draft',
+    }
+    setStore((prev) => {
+      const primary = prev.wageBatches?.[0]
+      if (primary && isWageBatchLockedOrBeyond(primary.status)) {
+        throw new Error(
+          'Locked wage-cost batches cannot be rebuilt from hours import. Use post-lock adjustments.',
+        )
+      }
+      const payPeriodId = prev.payPeriods?.[0]?.id ?? 'pp_current'
+      const parsed = importDriverHoursForPersist({
+        organisationId: prev.organisation.id,
+        payPeriodId,
+        text,
+        employees: (prev.employeeCostReferences ?? []).map((e) => ({
+          id: e.id,
+          externalPayrollId: e.externalPayrollId,
+          displayName: e.displayName,
+        })),
+        idFactory: () => crypto.randomUUID(),
+      })
+      const dayById = new Map((prev.driverDays ?? []).map((d) => [d.id, d]))
+      for (const day of parsed.days) dayById.set(day.id, day)
+      const rateById = new Map((prev.payRates ?? []).map((r) => [r.id, r]))
+      for (const rate of parsed.rates) rateById.set(rate.id, rate)
+      const days = [...dayById.values()].filter((d) => d.payPeriodId === payPeriodId)
+      const rates = [...rateById.values()]
+      const peopleInDays = new Set(days.map((d) => d.employeeCostReferenceId))
+      const people = (prev.employeeCostReferences ?? [])
+        .filter((e) => peopleInDays.has(e.id))
+        .map((e) => ({
+          id: e.id,
+          displayName: e.displayName,
+          externalPayrollId: e.externalPayrollId,
+        }))
+      const batch = buildWageCostBatch({
+        id: primary?.id ?? `wb_${prev.organisation.id}_current`,
+        organisationId: prev.organisation.id,
+        payPeriodId,
+        label: primary?.label ?? 'Current wage-cost batch',
+        days,
+        rates,
+        people,
+      })
+      summary = {
+        accepted: parsed.days.length,
+        ratesAccepted: parsed.rates.length,
+        quarantined: parsed.quarantined.length,
+        unmatched: parsed.unmatchedExternalIds.length,
+        batchStatus: batch.status,
+      }
+      const run = {
+        id: crypto.randomUUID(),
+        organisationId: prev.organisation.id,
+        fileName: `[driver-hours] ${fileName}`,
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        rowsRead: parsed.rowsRead,
+        accepted: parsed.days.length,
+        quarantined: parsed.quarantined.length,
+        duplicatesSkipped: 0,
+      }
+      return {
+        ...prev,
+        driverDays: [...dayById.values()],
+        payRates: rates,
+        wageBatches: [batch, ...(prev.wageBatches ?? []).filter((b) => b.id !== batch.id)],
+        quarantine: [...parsed.quarantined, ...prev.quarantine],
+        imports: [run, ...prev.imports],
+      }
+    })
+    return summary
+  }, [auth.activeMembership, auth.identity])
+
+  const resolveReviewDecision = useCallback(async (reviewId: string, decision: ReviewDecision) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to decide reviews')
+      }
+      const cost = store.costs.find((c) =>
+        store.reviews.some((r) => r.id === reviewId && r.costId === c.id),
+      )
+      const result = await resolveCostControlRepository(financeConfig).resolveReviewDecision(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        reviewId,
+        decision,
+        cost?.version,
+      )
+      setStore((prev) => {
+        const nextCosts = result.cost
+          ? prev.costs.map((c) => (c.id === result.cost!.id ? result.cost! : c))
+          : prev.costs
+        let lastSnapshot = prev.lastSnapshot
+        let lastValidSnapshot = prev.lastValidSnapshot
+        try {
+          const snap = buildFinancialSnapshot({
+            organisationId: prev.organisation.id,
+            budget: prev.budget,
+            costs: nextCosts,
+          })
+          lastSnapshot = snap
+          lastValidSnapshot = snap
+        } catch {
+          // keep last valid
+        }
+        return {
+          ...prev,
+          costs: nextCosts,
+          reviews: prev.reviews.map((r) => (r.id === result.review.id ? result.review : r)),
+          auditEvents: [result.audit, ...(prev.auditEvents ?? [])],
+          lastSnapshot,
+          lastValidSnapshot,
+        }
+      })
+      return
+    }
+
+    let failure: Error | null = null
+    setStore((prev) => {
+      try {
+        const orgId = prev.organisation.id
+        const review = filterByOrganisation(prev.reviews, orgId).find((r) => r.id === reviewId)
+        if (!review) throw new Error('Review not found in this organisation')
+        const localCost = prev.costs.find((c) => c.id === review.costId)
+        if (!localCost) throw new Error('Cost not found for review')
+        assertSameOrganisation(orgId, localCost.organisationId, 'cost')
+
+        const result = applyReviewDecision({
+          organisationId: orgId,
+          review,
+          cost: localCost,
+          decision,
+        })
+
+        const nextCosts = prev.costs.map((c) => (c.id === result.cost.id ? result.cost : c))
+        let lastSnapshot = prev.lastSnapshot
+        let lastValidSnapshot = prev.lastValidSnapshot
+        try {
+          const snap = buildFinancialSnapshot({
+            organisationId: orgId,
+            budget: prev.budget,
+            costs: nextCosts,
+          })
+          lastSnapshot = snap
+          lastValidSnapshot = snap
+        } catch {
+          // keep last valid
+        }
+
+        return {
+          ...prev,
+          costs: nextCosts,
+          reviews: prev.reviews.map((r) => (r.id === result.review.id ? result.review : r)),
+          auditEvents: [result.audit, ...(prev.auditEvents ?? [])],
+          lastSnapshot,
+          lastValidSnapshot,
+        }
+      } catch (err) {
+        failure = err instanceof Error ? err : new Error('Review decision failed')
+        return prev
+      }
+    })
+    if (failure) throw failure
+  }, [auth.activeMembership, auth.identity, store.costs, store.reviews])
+
+  const resolveReview = useCallback((reviewId: string, state: ReviewItem['state']) => {
+    const map: Record<Exclude<ReviewItem['state'], 'open'>, ReviewDecision> = {
+      approved: { type: 'approve' },
+      rejected: { type: 'reject', reason: 'Rejected from queue' },
+      snoozed: { type: 'snooze' },
+    }
+    if (state === 'open') return
+    return resolveReviewDecision(reviewId, map[state])
+  }, [resolveReviewDecision])
+
+  const clearDriverDayDispute = useCallback(async (driverDayId: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to clear disputes')
+      }
+      const result = await resolveCostControlRepository(financeConfig).clearDriverDayDispute(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        driverDayId,
+      )
+      setStore(withSeedDefaults(result.workspace))
+      return
+    }
+
+    setStore((prev) => {
+      const driverDays = (prev.driverDays ?? []).map((d) =>
+        d.id === driverDayId ? { ...d, disputed: false, notes: undefined } : d,
+      )
+      const wageBatches = (prev.wageBatches ?? []).map((batch) => {
+        if (!batch.driverDayIds.includes(driverDayId)) return batch
+        const remaining = batch.validationIssues.filter(
+          (i) => !(i.code === 'disputed_hours' && i.driverDayId === driverDayId),
+        )
+        const stillCritical = remaining.some((i) => i.severity === 'critical')
+        return {
+          ...batch,
+          validationIssues: remaining,
+          status: stillCritical
+            ? batch.status
+            : batch.status === 'exception'
+              ? 'draft'
+              : batch.status,
+        }
+      })
+      return { ...prev, driverDays, wageBatches }
+    })
+  }, [auth.activeMembership, auth.identity])
+
+  const advanceWageBatchStatus = useCallback(async (batchId: string) => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode === 'api') {
+      const membership = auth.activeMembership
+      const identity = auth.identity
+      if (!membership || !identity?.accessToken || !identity.userSubject) {
+        throw new Error('Signed-in finance membership is required to advance wage batches')
+      }
+      const result = await resolveCostControlRepository(financeConfig).advanceWageBatch(
+        {
+          accessToken: identity.accessToken,
+          userSubject: identity.userSubject,
+          activeOrganisationId: membership.organisationId,
+        },
+        batchId,
+      )
+      setStore(withSeedDefaults(result.workspace))
+      return
+    }
+
+    let failure: Error | null = null
+    setStore((prev) => {
+      try {
+        const wageBatches = (prev.wageBatches ?? []).map((batch) => {
+          if (batch.id !== batchId) return batch
+          return advanceWageBatch(batch, { nowIso: new Date().toISOString() })
+        })
+        return { ...prev, wageBatches }
+      } catch (err) {
+        failure = err instanceof Error ? err : new Error('Could not advance wage batch')
+        return prev
+      }
+    })
+    if (failure) throw failure
+  }, [auth.activeMembership, auth.identity])
+
+  const addWageAdjustment = useCallback(
+    async (input: {
+      batchId: string
+      employeeCostReferenceId: string
+      reason: string
+      grossDeltaMinor: number
+    }) => {
+      const financeConfig = readFinanceRepositoryConfig()
+      if (financeConfig.mode === 'api') {
+        const membership = auth.activeMembership
+        const identity = auth.identity
+        if (!membership || !identity?.accessToken || !identity.userSubject) {
+          throw new Error('Signed-in finance membership is required to add wage adjustments')
+        }
+        const result = await resolveCostControlRepository(financeConfig).addWageAdjustment(
+          {
+            accessToken: identity.accessToken,
+            userSubject: identity.userSubject,
+            activeOrganisationId: membership.organisationId,
+          },
+          input,
+        )
+        setStore(withSeedDefaults(result.workspace))
+        return
+      }
+
+      let failure: Error | null = null
+      setStore((prev) => {
+        try {
+          const wageBatches = (prev.wageBatches ?? []).map((batch) => {
+            if (batch.id !== input.batchId) return batch
+            return createWageAdjustment(batch, {
+              id: crypto.randomUUID(),
+              employeeCostReferenceId: input.employeeCostReferenceId,
+              reason: input.reason,
+              grossDeltaMinor: input.grossDeltaMinor,
+              createdByRole: 'payroll_manager',
+              nowIso: new Date().toISOString(),
+            })
+          })
+          return { ...prev, wageBatches }
+        } catch (err) {
+          failure = err instanceof Error ? err : new Error('Adjustment failed')
+          return prev
+        }
+      })
+      if (failure) throw failure
+    },
+    [auth.activeMembership, auth.identity],
+  )
+
+  const ensureWageBatch = useCallback(async () => {
+    const financeConfig = readFinanceRepositoryConfig()
+    if (financeConfig.mode !== 'api') return
+    const membership = auth.activeMembership
+    const identity = auth.identity
+    if (!membership || !identity?.accessToken || !identity.userSubject) return
+    if ((store.wageBatches ?? []).length) return
+    const result = await resolveCostControlRepository(financeConfig).ensureWageBatch({
+      accessToken: identity.accessToken,
+      userSubject: identity.userSubject,
+      activeOrganisationId: membership.organisationId,
+    })
+    setStore(withSeedDefaults(result.workspace))
+  }, [auth.activeMembership, auth.identity, store.wageBatches])
+
+  const startBankConnect = useCallback(async (institutionHint?: string) => {
+    const config = {
+      ...getBankIntegrationConfig(),
+      accessToken: auth.identity?.accessToken ?? null,
+    }
+    const adapter = createOpenBankingAdapter(
+      config,
+      config.providerId === 'demo' ? 'truelayer_sandbox' : config.providerId,
+    )
+    const orgId = store.organisation.id
+    const started = await adapter.startConsent({
+      organisationId: orgId,
+      institutionHint: institutionHint ?? 'NatWest Business',
+      redirectUri: config.redirectUri,
+    })
+    try {
+      sessionStorage.setItem(
+        'veyvio_cc_bank_consent',
+        JSON.stringify({
+          state: started.state,
+          connection: started.connection,
+        }),
+      )
+    } catch {
+      /* ignore */
+    }
+    setStore((prev) => ({
+      ...prev,
+      bankConnection: started.connection,
+      pendingBankConsentState: started.state,
+    }))
+    return { consentUrl: started.consentUrl }
+  }, [store.organisation.id, auth.identity?.accessToken])
+
+  const completeBankConnect = useCallback(
+    async (input: { state: string; authorizationCode?: string; sandbox?: boolean }) => {
+      let connection = store.bankConnection ?? emptyBankConnection(store.organisation.id)
+      let pendingState = store.pendingBankConsentState
+      try {
+        const raw = sessionStorage.getItem('veyvio_cc_bank_consent')
+        if (raw) {
+          const parsed = JSON.parse(raw) as {
+            state: string
+            connection: typeof connection
+          }
+          if (parsed.state) pendingState = parsed.state
+          if (parsed.connection) connection = parsed.connection
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (pendingState && input.state !== pendingState) {
+        throw new Error('Bank consent state mismatch — restart Connect from Settings')
+      }
+      const config = {
+        ...getBankIntegrationConfig(),
+        accessToken: auth.identity?.accessToken ?? null,
+      }
+      const adapter = createOpenBankingAdapter(
+        config,
+        connection.providerId === 'demo' ? 'truelayer_sandbox' : connection.providerId,
+      )
+      const completed = await adapter.completeConsent({
+        organisationId: store.organisation.id,
+        connection,
+        callbackState: input.state,
+        authorizationCode: input.authorizationCode,
+      })
+      if (completed.status !== 'connected') {
+        setStore((s) => ({ ...s, bankConnection: completed, pendingBankConsentState: null }))
+        throw new Error(completed.lastError ?? 'Bank consent failed')
+      }
+      const synced = await adapter.sync({
+        organisationId: store.organisation.id,
+        connection: completed,
+        existingAccounts: store.bankAccounts ?? [],
+      })
+      try {
+        sessionStorage.removeItem('veyvio_cc_bank_consent')
+      } catch {
+        /* ignore */
+      }
+      setStore((s) => ({
+        ...s,
+        bankConnection: completed,
+        pendingBankConsentState: null,
+        bankAccounts: synced.accounts,
+        bankTransactions: synced.transactions,
+      }))
+    },
+    [store, auth.identity?.accessToken],
+  )
+
+  const disconnectBank = useCallback(async () => {
+    const prev = store
+    const connection = prev.bankConnection
+    if (!connection) return
+    const config = {
+      ...getBankIntegrationConfig(),
+      accessToken: auth.identity?.accessToken ?? null,
+    }
+    const adapter = resolveBankAdapter(connection, config)
+    const revoked = await adapter.disconnect({
+      organisationId: prev.organisation.id,
+      connection,
+    })
+    setStore((s) => ({
+      ...s,
+      bankConnection: {
+        ...emptyBankConnection(s.organisation.id),
+        status: 'disconnected',
+        lastError: revoked.lastError,
+      },
+      pendingBankConsentState: null,
+      bankAccounts: isDemoOrganisationId(s.organisation.id)
+        ? createSeedStore().bankAccounts
+        : [],
+      bankTransactions: isDemoOrganisationId(s.organisation.id)
+        ? createSeedStore().bankTransactions
+        : [],
+    }))
+  }, [store, auth.identity?.accessToken])
+
+  const upsertEmployeeCostReferences = useCallback(
+    async (
+      employees: Array<
+        Partial<EmployeeCostReference> & {
+          externalPayrollId: string
+          displayName: string
+        }
+      >,
+    ) => {
+      const financeConfig = readFinanceRepositoryConfig()
+      if (financeConfig.mode === 'api') {
+        const membership = auth.activeMembership
+        const identity = auth.identity
+        if (!membership || !identity?.accessToken || !identity.userSubject) {
+          throw new Error('Signed-in finance membership is required to upsert wage-cost members')
+        }
+        const result = await resolveCostControlRepository(
+          financeConfig,
+        ).upsertEmployeeCostReferences(
+          {
+            accessToken: identity.accessToken,
+            userSubject: identity.userSubject,
+            activeOrganisationId: membership.organisationId,
+          },
+          employees,
+        )
+        setStore(withSeedDefaults(result.workspace))
+        return { upserted: result.upserted }
+      }
+
+      assertBrowserMutationAllowed('upsertEmployeeCostReferences')
+      // Demo path — merge into local store only.
+      setStore((prev) => {
+        const byExternal = new Map(
+          (prev.employeeCostReferences ?? []).map((e) => [
+            e.externalPayrollId.toUpperCase(),
+            e,
+          ]),
+        )
+        for (const incoming of employees) {
+          const key = incoming.externalPayrollId.toUpperCase()
+          const existing = byExternal.get(key)
+          const next: EmployeeCostReference = {
+            id: existing?.id ?? incoming.id ?? crypto.randomUUID(),
+            organisationId: prev.organisation.id,
+            externalPayrollId: incoming.externalPayrollId,
+            displayName: incoming.displayName,
+            orgNodeId: incoming.orgNodeId ?? existing?.orgNodeId ?? '',
+            roleTitle: incoming.roleTitle ?? existing?.roleTitle ?? '',
+            costCentre: incoming.costCentre ?? existing?.costCentre ?? '',
+            employmentKind: incoming.employmentKind ?? existing?.employmentKind ?? 'employed',
+            wageCostBearing: incoming.wageCostBearing ?? existing?.wageCostBearing ?? true,
+            expectedEmployerCostMinor:
+              incoming.expectedEmployerCostMinor ?? existing?.expectedEmployerCostMinor ?? 0,
+            overtimeMinor: incoming.overtimeMinor ?? existing?.overtimeMinor ?? 0,
+            employerNiMinor: incoming.employerNiMinor ?? existing?.employerNiMinor ?? 0,
+            employerPensionMinor:
+              incoming.employerPensionMinor ?? existing?.employerPensionMinor ?? 0,
+            allocationComplete:
+              incoming.allocationComplete ?? existing?.allocationComplete ?? true,
+            active: incoming.active ?? existing?.active ?? true,
+            payInputs: incoming.payInputs ?? existing?.payInputs,
+          }
+          byExternal.set(key, next)
+        }
+        return {
+          ...prev,
+          employeeCostReferences: [...byExternal.values()].sort((a, b) =>
+            a.displayName.localeCompare(b.displayName),
+          ),
+        }
+      })
+      return { upserted: employees.length }
+    },
+    [auth.activeMembership, auth.identity],
+  )
+
+  const refreshBankFeed = useCallback(async (_accountId?: string) => {
+    const prev = store
+    const connection = prev.bankConnection ?? emptyBankConnection(prev.organisation.id)
+    const config = {
+      ...getBankIntegrationConfig(),
+      accessToken: auth.identity?.accessToken ?? null,
+    }
+    const adapter = resolveBankAdapter(connection, config)
+    if (connection.status !== 'connected') {
+      const demo = resolveBankAdapter(emptyBankConnection(prev.organisation.id), config)
+      const synced = await demo.sync({
+        organisationId: prev.organisation.id,
+        connection: emptyBankConnection(prev.organisation.id),
+        existingAccounts: prev.bankAccounts ?? [],
+      })
+      setStore((s) => ({
+        ...s,
+        bankAccounts: synced.accounts.length ? synced.accounts : s.bankAccounts,
+      }))
+      return
+    }
+    const synced = await adapter.sync({
+      organisationId: prev.organisation.id,
+      connection,
+      existingAccounts: prev.bankAccounts ?? [],
+    })
+    setStore((s) => ({
+      ...s,
+      bankAccounts: synced.accounts,
+      bankTransactions: synced.transactions.length ? synced.transactions : s.bankTransactions,
+    }))
+  }, [store, auth.identity?.accessToken])
+
+  const value = useMemo<StoreApi>(() => {
+    const safe = withSeedDefaults(store)
+    return {
+      ...safe,
+      workspaceStatus,
+      workspaceError,
+      refreshSnapshot,
+      importCsv,
+      importPayrollSummary,
+      importDriverHours,
+      resolveReview,
+      resolveReviewDecision,
+      advanceWageBatchStatus,
+      clearDriverDayDispute,
+      addWageAdjustment,
+      ensureWageBatch,
+      refreshBankFeed,
+      startBankConnect,
+      completeBankConnect,
+      disconnectBank,
+      upsertEmployeeCostReferences,
+      sourceKeys: new Set(safe.costs.map((c) => c.sourceKey)),
+      lastPayrollSummaryImport,
+    }
+  }, [
+    store,
+    workspaceStatus,
+    workspaceError,
+    refreshSnapshot,
+    importCsv,
+    importPayrollSummary,
+    importDriverHours,
+    resolveReview,
+    resolveReviewDecision,
+    advanceWageBatchStatus,
+    clearDriverDayDispute,
+    addWageAdjustment,
+    ensureWageBatch,
+    refreshBankFeed,
+    startBankConnect,
+    completeBankConnect,
+    disconnectBank,
+    upsertEmployeeCostReferences,
+    lastPayrollSummaryImport,
+  ])
+
+  return <CostStoreContext.Provider value={value}>{children}</CostStoreContext.Provider>
+}
+
+export function useCostStore(): StoreApi {
+  const ctx = useContext(CostStoreContext)
+  if (!ctx) throw new Error('useCostStore requires CostStoreProvider')
+  return ctx
+}

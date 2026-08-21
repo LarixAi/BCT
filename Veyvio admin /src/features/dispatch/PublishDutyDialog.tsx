@@ -1,11 +1,8 @@
 import type { DutyRecord } from '@/lib/api/types'
+import { formatUkDate, formatUkTime } from '@/lib/uk-locale'
 
 function formatTime(value: string | null | undefined): string {
-  if (!value) return '—'
-  if (value.length >= 16 && value.includes('T')) {
-    return value.slice(11, 16)
-  }
-  return value.slice(0, 5)
+  return formatUkTime(value)
 }
 
 export function PublishDutyDialog({
@@ -39,7 +36,7 @@ export function PublishDutyDialog({
       <div className="w-full max-w-md rounded-2xl bg-surface p-5 shadow-xl">
         <h2 className="text-lg font-semibold text-ink">Publish duty to {driverName}?</h2>
         <p className="mt-2 text-sm text-ink-soft">
-          {duty.dutyDate}, {formatTime(duty.startTime)}–{formatTime(duty.endTime)}
+          {formatUkDate(duty.dutyDate)}, {formatTime(duty.startTime)}–{formatTime(duty.endTime)}
         </p>
         <ul className="mt-3 space-y-1 text-sm text-ink-soft">
           <li>Vehicle {vehicle}</li>

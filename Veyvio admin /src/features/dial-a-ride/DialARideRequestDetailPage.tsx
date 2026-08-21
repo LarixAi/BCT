@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
-import { StatusPill } from '@/components/ui/status'
+import { StatusPill, formatDate } from '@/components/ui/status'
 import { buildJobsFromDialARideRequest } from '@/lib/dial-a-ride/job-generation'
 import { canConfirmWithoutOverride } from '@/lib/dial-a-ride/eligibility'
 import { api } from '@/lib/api/client'
@@ -96,7 +96,7 @@ export function DialARideRequestDetailPage() {
           <h1 className="text-2xl font-semibold text-ink">{request.reference}</h1>
           <StatusPill status={request.status} />
         </div>
-        <p className="text-sm text-ink-soft">{request.memberName} · {request.travelDate}</p>
+        <p className="text-sm text-ink-soft">{request.memberName} · {formatDate(request.travelDate)}</p>
       </div>
 
       <SectionCard title="Journey">

@@ -121,11 +121,13 @@ function InspectionsDashboard() {
                 <AlertTriangle className="size-4" /> Damage review queue
               </HubSecondaryButton>
             </Link>
-            <Link to="/simulate/driver-report">
-              <HubSecondaryButton className="h-auto w-full justify-start py-3">
-                <Camera className="size-4" /> Simulate driver report
-              </HubSecondaryButton>
-            </Link>
+            {!import.meta.env.PROD ? (
+              <Link to="/simulate/driver-report">
+                <HubSecondaryButton className="h-auto w-full justify-start py-3">
+                  <Camera className="size-4" /> Simulate driver report
+                </HubSecondaryButton>
+              </Link>
+            ) : null}
           </div>
         </section>
 

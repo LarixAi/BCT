@@ -1,4 +1,3 @@
-import { INSPECTION_PROVIDERS } from './seed'
 import type { InspectionsHubData } from './types'
 
 export function emptyInspectionsHub(): InspectionsHubData {
@@ -15,7 +14,7 @@ export function emptyInspectionsHub(): InspectionsHubData {
     },
     register: [],
     calendar: [],
-    providers: INSPECTION_PROVIDERS,
+    providers: [],
   }
 }
 
@@ -26,6 +25,6 @@ export function safeInspectionsHub(hub: InspectionsHubData | null | undefined): 
     summary: { ...empty.summary, ...(hub.summary ?? {}) },
     register: Array.isArray(hub.register) ? hub.register : [],
     calendar: Array.isArray(hub.calendar) ? hub.calendar : [],
-    providers: Array.isArray(hub.providers) && hub.providers.length > 0 ? hub.providers : empty.providers,
+    providers: Array.isArray(hub.providers) ? hub.providers : [],
   }
 }

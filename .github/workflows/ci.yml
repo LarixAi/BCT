@@ -2,9 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - phase0/reproducibility
+      - 'wave3f/**'
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - phase0/reproducibility
+      - 'wave3f/**'
   workflow_dispatch:
 
 concurrency:
@@ -25,6 +31,9 @@ jobs:
 
       - name: Scan tracked files for committed secrets
         run: npm run audit:secrets
+
+      - name: Secret scanner unit tests
+        run: node scripts/audit-secrets.unit.mjs
 
   yard:
     name: Yard
@@ -48,6 +57,9 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: F-03 Gate 0 scanner
+        run: npm run test:f03-gate0
 
       - name: Build
         run: npm run build
@@ -87,12 +99,85 @@ jobs:
           cd "Veyvio admin "
           npm test
 
+      - name: F-03 production fallback inventory
+        run: |
+          cd "Veyvio admin "
+          npm run test:f03-fallback-inventory
+
+      - name: Typecheck
+        run: |
+          cd "Veyvio admin "
+          npm run typecheck
+
       - name: Build
         env:
           CI: "true"
+          VITE_API_URL: /api/command
         run: |
           cd "Veyvio admin "
-          npm run build:ci
+          npm run build
+
+  admin-fresh-db:
+    name: Admin fresh-DB gate (FIX-P1-048)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ format('{0} /package-lock.json', 'Veyvio admin') }}
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          # Pin: required gates must not resolve a floating `latest` tag (CI-CLI-001).
+          version: 2.114.0
+
+      - name: Install Admin deps
+        run: |
+          cd "Veyvio admin "
+          npm ci
+
+      - name: Fresh-DB gate (reset, inventory, JWT + structural proofs)
+        run: |
+          cd "Veyvio admin "
+          npm run test:fresh-db-gate
+
+  admin-storage-isolation:
+    name: Admin storage isolation (Wave 3F-E)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ format('{0} /package-lock.json', 'Veyvio admin') }}
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          # Pin: required gates must not resolve a floating `latest` tag (CI-CLI-001).
+          version: 2.114.0
+
+      - name: Install Admin deps
+        run: |
+          cd "Veyvio admin "
+          npm ci
+
+      - name: Storage tenant isolation (JWT matrix)
+        run: |
+          cd "Veyvio admin "
+          npm run test:storage-isolation-gate
 
   driver:
     name: Driver
@@ -208,8 +293,16 @@ jobs:
     name: Tenant isolation + dispatch gates
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Hosted Org A/B fixtures are shared. Per-ref workflow concurrency still lets
+    # distinct PRs login the same users in parallel (TI-401). Queue, do not cancel.
+    concurrency:
+      group: tenant-isolation-hosted-smoke
+      cancel-in-progress: false
     # Requires repo secrets against hosted Command API (see docs/plan/veyvio-multi-tenant-saas-roadmap.md).
-    # Fork PRs without secrets fail closed when CI=true and VEYVIO_ANON_KEY is unset.
+    # Fork PRs genuinely cannot access repo secrets (GitHub Actions restriction)
+    # and skip below. Every other trigger — push to main, same-repo PRs,
+    # workflow_dispatch — must have these secrets configured; missing them
+    # there is a CI misconfiguration and must FAIL, not silently pass.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -235,14 +328,123 @@ jobs:
           VEYVIO_PLATFORM_EMAIL: ${{ secrets.VEYVIO_PLATFORM_EMAIL }}
           VEYVIO_PLATFORM_PASSWORD: ${{ secrets.VEYVIO_PLATFORM_PASSWORD }}
           VEYVIO_ISOLATION_PASSWORD: ${{ secrets.VEYVIO_ISOLATION_PASSWORD }}
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           cd "Veyvio admin "
           if [ -z "${VEYVIO_ANON_KEY}" ]; then
-            echo "::warning::VEYVIO_ANON_KEY is not set — tenant isolation smoke skipped."
-            echo "Add VEYVIO_ANON_KEY and related secrets before merging tenant-isolation work to main."
-            exit 0
+            if [ "${IS_FORK_PR}" = "true" ]; then
+              echo "::warning::VEYVIO_ANON_KEY is not set — fork PRs cannot access repo secrets, skipping tenant isolation smoke."
+              exit 0
+            fi
+            echo "::error::VEYVIO_ANON_KEY is not set on a trusted trigger (push to main / same-repo PR / workflow_dispatch) — tenant isolation smoke MUST run here. Configure repo secrets before merging."
+            exit 1
           fi
+          npm run test:tenant-isolation
           npm run test:dispatch-gates-live
+
+  website:
+    name: Website
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: veyvio-website
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: veyvio-website/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Claims publish check
+        run: npm run verify:claims
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        env:
+          VITE_SITE_URL: https://veyvio.co.uk
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Accessibility smoke
+        run: npm run test:a11y
+
+  cost-control:
+    name: Cost Control
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: veyvio-cost-control
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: veyvio-cost-control/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build (production modes required)
+        env:
+          VITE_AUTH_MODE: command
+          VITE_FINANCE_DATA_MODE: api
+          VITE_API_URL: https://example.supabase.co/functions/v1/command-api
+          VITE_SUPABASE_ANON_KEY: ci-anon-key
+          VITE_FINANCE_API_URL: https://example.supabase.co/functions/v1/finance-api
+        run: npm run build
+
+  executive:
+    name: Executive
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: veyvio-executive
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.14"
+          cache: npm
+          cache-dependency-path: veyvio-executive/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Secret source scan
+        run: npm run security:scan:source
+
+      - name: Dependency audit
+        run: npm run security:audit
+
+      - name: Build then security tests (artifact HTML assertions)
+        run: npm test
 
   gate1-preflight:
     name: Gate 1 preflight (F-17)

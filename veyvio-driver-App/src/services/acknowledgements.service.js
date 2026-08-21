@@ -12,6 +12,24 @@ async function getAuthenticatedUserId(supabase) {
 const PENDING_DEBRIEF_STATUSES = ["issued", "overdue", "pending_acknowledgement"];
 const PENDING_CORRECTIVE_STATUSES = ["open", "in_progress", "overdue"];
 
+/** PostgREST / missing-table errors must not surface as driver-facing copy. */
+function isSchemaUnavailableError(error) {
+  if (!error) return false;
+  const message = String(error.message ?? error).toLowerCase();
+  const code = String(error.code ?? "");
+  return (
+    code === "PGRST205" ||
+    code === "42P01" ||
+    message.includes("schema cache") ||
+    message.includes("could not find the table") ||
+    message.includes("does not exist") ||
+    message.includes("relation") && message.includes("does not exist")
+  );
+}
+
+/**
+ * @returns {Promise<{ items: unknown[], unavailable: boolean }>}
+ */
 export async function listPendingDebriefNotices(driverId) {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
@@ -21,10 +39,18 @@ export async function listPendingDebriefNotices(driverId) {
     .in("notice_status", PENDING_DEBRIEF_STATUSES)
     .order("issued_at", { ascending: false });
 
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  if (error) {
+    if (isSchemaUnavailableError(error)) {
+      return { items: [], unavailable: true };
+    }
+    throw new Error(error.message);
+  }
+  return { items: data ?? [], unavailable: false };
 }
 
+/**
+ * @returns {Promise<{ items: unknown[], unavailable: boolean }>}
+ */
 export async function listPendingCorrectiveActions(driverId) {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
@@ -34,8 +60,13 @@ export async function listPendingCorrectiveActions(driverId) {
     .in("status", PENDING_CORRECTIVE_STATUSES)
     .order("due_at", { ascending: true });
 
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  if (error) {
+    if (isSchemaUnavailableError(error)) {
+      return { items: [], unavailable: true };
+    }
+    throw new Error(error.message);
+  }
+  return { items: data ?? [], unavailable: false };
 }
 
 export async function acknowledgeDebriefNotice(driver, debriefNoticeId, { comments } = {}) {
@@ -50,7 +81,12 @@ export async function acknowledgeDebriefNotice(driver, debriefNoticeId, { commen
     .eq("driver_id", driver.id)
     .maybeSingle();
 
-  if (fetchError) throw new Error(fetchError.message);
+  if (fetchError) {
+    if (isSchemaUnavailableError(fetchError)) {
+      return { ok: false, message: "Debriefs are not available yet. Speak to dispatch if you expected a notice." };
+    }
+    throw new Error(fetchError.message);
+  }
   if (!notice) return { ok: false, message: "Debrief notice not found." };
   if (!PENDING_DEBRIEF_STATUSES.includes(notice.notice_status)) {
     return { ok: false, message: "This debrief has already been acknowledged." };
@@ -66,7 +102,12 @@ export async function acknowledgeDebriefNotice(driver, debriefNoticeId, { commen
     })
     .eq("id", debriefNoticeId);
 
-  if (updateError) return { ok: false, message: updateError.message };
+  if (updateError) {
+    if (isSchemaUnavailableError(updateError)) {
+      return { ok: false, message: "Debriefs are not available yet. Speak to dispatch if you expected a notice." };
+    }
+    return { ok: false, message: updateError.message };
+  }
 
   await supabase.from("driver_acknowledgements").insert({
     organisation_id: driver.organisationId,
@@ -118,7 +159,15 @@ export async function acknowledgeCorrectiveAction(driver, correctiveActionId, { 
     .eq("driver_id", driver.id)
     .maybeSingle();
 
-  if (fetchError) throw new Error(fetchError.message);
+  if (fetchError) {
+    if (isSchemaUnavailableError(fetchError)) {
+      return {
+        ok: false,
+        message: "Corrective actions are not available yet. Speak to dispatch if you expected an action.",
+      };
+    }
+    throw new Error(fetchError.message);
+  }
   if (!action) return { ok: false, message: "Corrective action not found." };
   if (!PENDING_CORRECTIVE_STATUSES.includes(action.status)) {
     return { ok: false, message: "This action is no longer pending acknowledgement." };
@@ -134,7 +183,15 @@ export async function acknowledgeCorrectiveAction(driver, correctiveActionId, { 
     created_by: userId,
   });
 
-  if (ackError) return { ok: false, message: ackError.message };
+  if (ackError) {
+    if (isSchemaUnavailableError(ackError)) {
+      return {
+        ok: false,
+        message: "Corrective actions are not available yet. Speak to dispatch if you expected an action.",
+      };
+    }
+    return { ok: false, message: ackError.message };
+  }
 
   await logDriverAudit({
     organisation_id: driver.organisationId,

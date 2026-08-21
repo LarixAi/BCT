@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { api } from '@/lib/api/client'
@@ -55,6 +56,18 @@ export function CompanySettingsPage() {
         <h1 className="text-2xl font-semibold text-ink">Company Settings</h1>
         <p className="text-sm text-ink-soft">General company information and operator details</p>
       </div>
+
+      <SectionCard title="Integration API keys">
+        <p className="text-sm text-ink-soft">
+          Create partner keys for Register Interest and other website backends (for example CoLoop).
+        </p>
+        <Link
+          to="/settings/integrations"
+          className="mt-3 inline-flex rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white hover:bg-command-700"
+        >
+          Open Integrations &amp; API keys
+        </Link>
+      </SectionCard>
 
       {isLoading ? (
         <p className="text-sm text-muted">Loading…</p>

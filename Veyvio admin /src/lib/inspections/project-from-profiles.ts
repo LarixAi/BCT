@@ -1,6 +1,5 @@
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { buildInspectionsHub } from './aggregate'
-import { INSPECTION_PROVIDERS } from './seed'
 import type { InspectionRecord, InspectionsHubData } from './types'
 
 const daysFromNow = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -107,9 +106,10 @@ export function projectInspectionsFromProfiles(profiles: VehicleProfile[]): Insp
       },
       register: [],
       calendar: [],
-      providers: INSPECTION_PROVIDERS,
+      providers: [],
     }
   }
 
-  return buildInspectionsHub(register, list)
+  // Live projection must not invent demo workshop providers (F-03).
+  return buildInspectionsHub(register, list, [])
 }

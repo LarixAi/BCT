@@ -157,6 +157,7 @@ export type AttendanceBoardFilter =
   | 'not_arrived'
   | 'approved_leave'
   | 'sick'
+  | 'not_scheduled'
   | 'attendance_concern'
 
 export type CalendarDayMark =

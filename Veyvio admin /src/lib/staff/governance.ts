@@ -124,8 +124,8 @@ export function pendingAccessReviews(profiles: StaffProfile[]): StaffAccessRevie
         staffId: p.id,
         staffName: `${p.firstName} ${p.lastName}`,
         roleLabel: elevated[0]?.roleLabel ?? p.jobTitle,
-        lastReviewedAt: p.account.lastAccessReviewAt,
-        dueAt: p.account.accessReviewDueAt,
+        lastReviewedAt: p.account.lastAccessReviewAt ?? null,
+        dueAt: p.account.accessReviewDueAt ?? null,
         status: 'overdue' as const,
         elevatedRoles: elevated.map((r) => r.roleLabel),
       }]

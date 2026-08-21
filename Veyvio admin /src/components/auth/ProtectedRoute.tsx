@@ -16,7 +16,7 @@ export function ProtectedRoute() {
     )
   }
 
-  if (!api.getToken()) {
+  if (!api.hasAuthSession()) {
     return <Navigate to="/login" replace />
   }
 

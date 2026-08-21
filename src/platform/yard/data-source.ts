@@ -1,4 +1,4 @@
-import type { BootstrapDataSource } from "@/data/mocks/bootstrap";
+import type { BootstrapDataSource } from "@/platform/yard/bootstrap-payload";
 import { isMockApi } from "@/platform/api/config";
 
 export function isDevBypassAuth(): boolean {

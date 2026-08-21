@@ -8,12 +8,11 @@ import { DriverChromeContext } from "@/lib/driverChromeContext";
 
 /**
  * Primary tab routes + message stack always keep the bottom nav.
- * Full-screen flows (walkaround wizard) hide it via setHideBottomNav.
+ * Full-screen wizard steps hide it via setHideBottomNav (checklist / review).
  */
 function showBottomNav(pathname) {
-  // Walkaround wizard owns the full screen at /check — history/vehicles keep the tab bar.
-  if (pathname === "/check") return false;
-  if (pathname.startsWith("/check/")) return true;
+  // Vehicle check hub is a primary tab — keep the bar. Wizard hides via chrome flag.
+  if (pathname === "/check" || pathname.startsWith("/check/")) return true;
 
   if (pathname === "/" || pathname === "/jobs" || pathname === "/more") {
     return true;

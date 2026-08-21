@@ -1,6 +1,6 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { commandGetDriverMessageThread, commandStartDriverMessage } from "@/lib/command-api";
-import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import { requireDriverWorkspaceScope, resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import {
   clearMessageDraft,
   clearThreadReplyDraft,
@@ -13,7 +13,7 @@ import {
   markDriverMessageReadViaCommand,
   replyDriverMessageViaCommand,
 } from "@/services/command-driver-ops.service";
-import { enqueueOpsCommand } from "@/lib/driver-ops-outbox.storage";
+import { enqueueOpsCommand, listPendingMessageOps } from "@/lib/driver-ops-outbox.storage";
 import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
 
 async function accessToken() {
@@ -39,8 +39,25 @@ export async function getDriverMessageThread(threadId) {
       createdAt: m.created_at,
       fromDriver: Boolean(m.from_driver),
       senderName: m.sender_name ?? (m.from_driver ? "You" : "Transport office"),
+      deliveryStatus: m.deliveryStatus ?? (m.from_driver ? "delivered" : m.read_at ? "read" : "delivered"),
+      readAt: m.read_at ?? null,
     })),
   };
+}
+
+export async function listQueuedThreadMessages(driver, session, threadId) {
+  const { companyId, membershipId } = resolveDriverWorkspaceScope(driver, session);
+  if (!companyId || !membershipId) return [];
+  const pending = await listPendingMessageOps(driver?.id, companyId, membershipId, threadId);
+  return pending.map((item) => ({
+    id: item.id,
+    body: String(item.payload?.body ?? ""),
+    createdAt: item.createdAt,
+    fromDriver: true,
+    senderName: "You",
+    deliveryStatus: "pending",
+    readAt: null,
+  }));
 }
 
 export async function loadComposeDraft(driver, session) {
@@ -90,8 +107,12 @@ export async function contactAdmin(driver, { subject, message, audience = "dispa
   const payload = { subject: trimmedSubject, body: trimmedBody, audience };
 
   if (isOffline()) {
-    const { companyId, membershipId } = resolveDriverWorkspaceScope(driver, session);
-    enqueueOpsCommand(driver.id, { type: "message_start", payload }, companyId, membershipId);
+    try {
+      const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+      await enqueueOpsCommand(driver.id, { type: "message_start", payload }, companyId, membershipId);
+    } catch (error) {
+      return { ok: false, queued: false, message: error.message, code: error.code };
+    }
     await clearComposeDraft(driver, session);
     return {
       ok: true,
@@ -121,18 +142,30 @@ export async function replyToThread(driver, threadId, body, session = null) {
   if (!trimmed) return { ok: false, message: "Message cannot be empty." };
 
   if (isOffline()) {
-    const { companyId, membershipId } = resolveDriverWorkspaceScope(driver, session);
-    enqueueOpsCommand(
-      driver.id,
-      { type: "message_reply", payload: { conversationId: threadId, body: trimmed } },
-      companyId,
-      membershipId,
-    );
+    try {
+      const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+      await enqueueOpsCommand(
+        driver.id,
+        { type: "message_reply", payload: { conversationId: threadId, body: trimmed } },
+        companyId,
+        membershipId,
+      );
+    } catch (error) {
+      return { ok: false, queued: false, message: error.message, code: error.code };
+    }
     await clearReplyDraft(driver, session, threadId);
     return {
       ok: true,
       queued: true,
       message: "Reply saved on this device — will reach Command when connection returns.",
+      pendingMessage: {
+        id: `pending-${Date.now()}`,
+        body: trimmed,
+        createdAt: new Date().toISOString(),
+        fromDriver: true,
+        senderName: "You",
+        deliveryStatus: "pending",
+      },
     };
   }
 

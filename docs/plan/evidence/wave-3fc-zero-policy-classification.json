@@ -1,0 +1,56 @@
+{
+  "wave": "3F-C",
+  "fix": "FIX-P0-011 remediation item 1",
+  "date": "2026-08-17",
+  "migration": "202608170001_wave3f_zero_policy_tables.sql",
+  "zero_policy_tables_remaining": [],
+  "classifications": [
+    {
+      "table": "public.company_compliance_settings",
+      "class": "tenant_select",
+      "reason": "Company compliance automation settings. Operators may read via PostgREST under membership; writes stay Command API.",
+      "authenticated": { "select": "private.user_has_company(company_id)", "insert": false, "update": false, "delete": false },
+      "force_rls": false
+    },
+    {
+      "table": "public.domain_events",
+      "class": "tenant_select",
+      "reason": "Append-only F-09 domain event log. Tenant members may SELECT own company; inserts only via emitDomainEvent (service-role).",
+      "authenticated": { "select": "private.user_has_company(company_id)", "insert": false, "update": false, "delete": false },
+      "force_rls": false
+    },
+    {
+      "table": "public.fuel_records",
+      "class": "tenant_select",
+      "reason": "Operational fuel refill records written by Command/Driver API. Tenant SELECT; no authenticated writes.",
+      "authenticated": { "select": "private.user_has_company(company_id)", "insert": false, "update": false, "delete": false },
+      "force_rls": false
+    },
+    {
+      "table": "public.override_audit_events",
+      "class": "tenant_select",
+      "reason": "F-07 append-only safety override audit. Tenant SELECT; writes only via recordOverride (service-role).",
+      "authenticated": { "select": "private.user_has_company(company_id)", "insert": false, "update": false, "delete": false },
+      "force_rls": false
+    },
+    {
+      "table": "public.vehicle_equipment_checks",
+      "class": "tenant_select",
+      "reason": "Driver equipment confirmations via Command API. Tenant SELECT; no authenticated writes.",
+      "authenticated": { "select": "private.user_has_company(company_id)", "insert": false, "update": false, "delete": false },
+      "force_rls": false
+    },
+    {
+      "table": "public.integration_api_keys",
+      "class": "service_role_only",
+      "reason": "Stores key_hash of live integration secrets. Command API lists without the hash. Authenticated PostgREST denied (FORCE + using(false) + revoke).",
+      "authenticated": { "select": false, "insert": false, "update": false, "delete": false },
+      "force_rls": true
+    }
+  ],
+  "jwt_proof": {
+    "script": "scripts/rls-postgrest-isolation.unit.mjs",
+    "result": "31/31 pass",
+    "artifact": "docs/plan/evidence/wave-3fb-rls-postgrest-isolation.json"
+  }
+}

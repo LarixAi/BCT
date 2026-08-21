@@ -84,11 +84,11 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     }
 
     private static func openPhoneApp(jobRoute: String?, jobId: String) {
-        var urlString = "ridova-driver://"
+        var urlString = "uk.veyvio.driver://"
         if let jobRoute, !jobRoute.isEmpty {
-            urlString = "ridova-driver://\(jobRoute.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
+            urlString = "uk.veyvio.driver://\(jobRoute.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
         } else {
-            urlString = "ridova-driver://job/\(jobId)"
+            urlString = "uk.veyvio.driver://job/\(jobId)"
         }
 
         if let url = URL(string: urlString) {

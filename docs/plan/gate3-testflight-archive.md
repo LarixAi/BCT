@@ -1,0 +1,37 @@
+# Gate 3 — TestFlight archive runbook
+
+**Prerequisite:** [gate1-ios-xcode-runbook.md](./gate1-ios-xcode-runbook.md) device run succeeds  
+**Bundle:** `uk.veyvio.driver`
+
+---
+
+## Archive steps
+
+```bash
+cd veyvio-driver-App
+npm run build:ios
+open ios/App/App.xcworkspace
+```
+
+1. Select **Any iOS Device (arm64)** as destination (not Simulator).
+2. **Product → Archive**.
+3. When Organizer opens → **Distribute App** → **App Store Connect** → **Upload**.
+4. Wait for processing in App Store Connect → **TestFlight** tab.
+
+---
+
+## App Store Connect (operator)
+
+1. Create app record **Veyvio Driver** with bundle `uk.veyvio.driver`.
+2. Paste privacy URL: https://veyvio.co.uk/legal/product-privacy  
+3. Paste terms URL: https://veyvio.co.uk/legal/terms  
+4. Support URL: https://veyvio.co.uk/support  
+5. Add internal testers (pilot ops + driver accounts).
+
+---
+
+## Before public TestFlight
+
+- [ ] Gate 1 iOS physical checklist signed ([`.gate1-handset-ios.local.md`](./.gate1-handset-ios.local.md))
+- [ ] APNs configured ([gate3-apns-ios-setup.md](./gate3-apns-ios-setup.md))
+- [ ] Screenshots captured ([driver-store-listing-draft.md](./driver-store-listing-draft.md))

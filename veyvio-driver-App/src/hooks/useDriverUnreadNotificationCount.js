@@ -4,9 +4,49 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import { countUnread } from "@/services/notifications.service";
 import { DRIVER_NOTIFICATIONS_CHANGED } from "@/lib/notifications/unread-events";
 
+/** One realtime channel per user — Home, More and bottom nav share this hub. */
+const notificationHubs = new Map();
+
+function subscribeNotificationHub(userId, onUpdate) {
+  if (!userId) return () => {};
+
+  let hub = notificationHubs.get(userId);
+  if (!hub) {
+    const listeners = new Set();
+    const supabase = getSupabaseClient();
+    const channel = supabase
+      .channel(`driver-notifications-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `recipient_user_id=eq.${userId}`,
+        },
+        () => {
+          for (const listener of listeners) listener();
+        },
+      )
+      .subscribe();
+
+    hub = { channel, listeners, supabase };
+    notificationHubs.set(userId, hub);
+  }
+
+  hub.listeners.add(onUpdate);
+  return () => {
+    hub.listeners.delete(onUpdate);
+    if (hub.listeners.size === 0) {
+      void hub.supabase.removeChannel(hub.channel);
+      notificationHubs.delete(userId);
+    }
+  };
+}
+
 /**
- * Live unread notification count for the bottom nav badge.
- * Updates on push alerts, mark-read, polling, and inbox navigation — not every tab switch.
+ * Live unread notification count for nav badges and Home/More rows.
+ * Updates on mark-read, inbox navigation, polling, and realtime inserts.
  */
 export function useDriverUnreadNotificationCount(userId) {
   const { pathname } = useLocation();
@@ -50,27 +90,12 @@ export function useDriverUnreadNotificationCount(userId) {
       void refresh();
     }, 60_000);
 
-    const supabase = getSupabaseClient();
-    const channel = supabase
-      .channel(`driver-notifications-${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `recipient_user_id=eq.${userId}`,
-        },
-        () => {
-          void refresh();
-        },
-      )
-      .subscribe();
+    const unsubscribeHub = subscribeNotificationHub(userId, onChanged);
 
     return () => {
       window.removeEventListener(DRIVER_NOTIFICATIONS_CHANGED, onChanged);
       window.clearInterval(interval);
-      void supabase.removeChannel(channel);
+      unsubscribeHub();
     };
   }, [userId, refresh]);
 

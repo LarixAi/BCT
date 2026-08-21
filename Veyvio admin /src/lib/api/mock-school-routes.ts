@@ -126,9 +126,9 @@ function toListItem(route: SchoolRoute): SchoolRouteListItem {
 export const mockSchoolRoutesApi = {
   list(params?: { view?: string }): SchoolRouteListItem[] {
     seedRoutes()
-    const today = new Date().toISOString().slice(0, 10)
     let list = [...routes.values()]
     if (params?.view === 'today') {
+      const today = new Date().toISOString().slice(0, 10)
       list = list.filter((r) => r.nextServiceDate === today || r.status === 'published')
     }
     return list.map(toListItem)
@@ -201,7 +201,6 @@ export const mockSchoolRoutesApi = {
   summary() {
     seedRoutes()
     const all = [...routes.values()]
-    const today = new Date().toISOString().slice(0, 10)
     return {
       activeRoutes: all.filter((r) => r.status === 'published').length,
       pupilsToday: all.reduce((n, r) => n + r.pupils.length, 0),

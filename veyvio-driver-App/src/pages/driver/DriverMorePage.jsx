@@ -10,6 +10,7 @@ import {
   Clock3,
   FileText,
   GraduationCap,
+  KeyRound,
   MessageSquare,
   Settings,
   ShieldCheck,
@@ -23,10 +24,11 @@ import DriverSectionTitle from "@/components/driver/operational/DriverSectionTit
 import DriverIdBadge from "@/components/driver/DriverIdBadge";
 import CommandBackendNotice from "@/components/driver/operational/CommandBackendNotice";
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
+import { useDriverUnreadNotificationCount } from "@/hooks/useDriverUnreadNotificationCount";
 import { op } from "@/lib/driver-operational-theme";
 import { prefetchDriverRoute } from "@/lib/prefetch-routes";
 
-function Row({ to, icon: Icon, label, description }) {
+function Row({ to, icon: Icon, label, description, badge = null }) {
   return (
     <Link
       to={to}
@@ -35,8 +37,13 @@ function Row({ to, icon: Icon, label, description }) {
       onTouchStart={() => prefetchDriverRoute(to)}
       className="flex min-h-[58px] items-center gap-3 border-b border-border bg-card px-4 py-3 last:border-b-0 active:bg-muted/60"
     >
-      <div className={op.iconWrap}>
+      <div className={`${op.iconWrap} relative`}>
         <Icon className={`h-5 w-5 ${op.iconTeal}`} />
+        {badge ? (
+          <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#e5003c] px-1 text-[10px] font-bold text-white">
+            {badge > 9 ? "9+" : badge}
+          </span>
+        ) : null}
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[15px] font-medium">{label}</p>
@@ -49,6 +56,8 @@ function Row({ to, icon: Icon, label, description }) {
 
 export default function DriverMorePage({ driver, onLogout }) {
   const { session, bootstrap } = useDriverSupabaseAuth();
+  const unreadNotificationCount = useDriverUnreadNotificationCount(session?.userId);
+  const unreadMessageCount = bootstrap?.messages?.unreadTotal ?? 0;
   const orgName =
     bootstrap?.operator?.companyName || session?.organisationName || driver?.organisationName || "Your operator";
 
@@ -91,7 +100,13 @@ export default function DriverMorePage({ driver, onLogout }) {
 
       <DriverSectionTitle>Vehicle & safety</DriverSectionTitle>
       <div className={op.listCard}>
-        <Row to="/vehicle" icon={Bus} label="Current vehicle" description="Assignment, equipment and handback" />
+        <Row
+          to="/vehicle/handback"
+          icon={KeyRound}
+          label="Vehicle handback"
+          description="End of duty — confirm condition, parking and keys"
+        />
+        <Row to="/vehicle" icon={Bus} label="Current vehicle" description="Assignment, equipment and checks" />
         <Row to="/check/history" icon={ClipboardCheck} label="Vehicle check history" />
         <Row to="/defects" icon={Wrench} label="Report defect" description="Sends to Command defects register" />
         <Row to="/safety" icon={ShieldCheck} label="Emergency & safeguarding" />
@@ -105,9 +120,29 @@ export default function DriverMorePage({ driver, onLogout }) {
 
       <DriverSectionTitle>Communication & support</DriverSectionTitle>
       <div className={op.listCard}>
-        <Row to="/notifications" icon={Bell} label="Notifications" description="Training, compliance and ops alerts" />
-        <Row to="/messages" icon={MessageSquare} label="Messages" description="Dispatch and yard conversations" />
-        <Row to="/sync" icon={Wifi} label="Offline & sync" description="Command bootstrap status" />
+        <Row
+          to="/notifications"
+          icon={Bell}
+          label="Notifications"
+          description={
+            unreadNotificationCount > 0
+              ? `${unreadNotificationCount} unread from Command`
+              : "Training, compliance and ops alerts"
+          }
+          badge={unreadNotificationCount > 0 ? unreadNotificationCount : null}
+        />
+        <Row
+          to="/messages"
+          icon={MessageSquare}
+          label="Messages"
+          description={
+            unreadMessageCount > 0
+              ? `${unreadMessageCount} unread from Command`
+              : "Dispatch and yard conversations"
+          }
+          badge={unreadMessageCount > 0 ? unreadMessageCount : null}
+        />
+        <Row to="/sync" icon={Wifi} label="Offline & sync" description="Saved work, connection, and items that need attention" />
         <Row
           to="/profile/details"
           icon={User}

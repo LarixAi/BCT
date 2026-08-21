@@ -1,0 +1,54 @@
+name: executive-verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  executive-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VEYVIO_EXECUTIVE_LOCAL_DEMO: "0"
+      VEYVIO_EXECUTIVE_PRODUCTION_BUILD: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Source secret scan
+        run: npm run security:scan:source
+
+      - name: Build, secret scan and unit tests
+        run: npm test
+
+      - name: Dependency audit (high/critical)
+        run: npm run security:audit
+
+      - name: Generate SBOM inventory
+        run: npm run sbom
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: executive-npm-sbom
+          path: sbom/executive-npm-sbom.json
+
+      - name: Phase 11 assurance inventory
+        run: node --test tests/security-assurance.test.mjs
+
+      - name: Rotation dry-run checklist
+        run: npm run security:rotate:dry-run

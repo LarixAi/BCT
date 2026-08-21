@@ -4,7 +4,7 @@ import { canBulkDefectAction } from '@/lib/defects/permissions'
 import { defectsToCsv, downloadDefectsCsv } from '@/lib/defects/export'
 import type { DefectRegisterRow } from '@/lib/defects/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

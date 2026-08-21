@@ -10,7 +10,7 @@ import {
 import { canCreateDriver } from '@/lib/drivers/permissions'
 import type { DriverProfile } from '@/lib/drivers/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 
@@ -152,10 +152,24 @@ function DriverRow({ driver }: { driver: DriverProfile }) {
   return (
     <tr className="border-b border-border/60 last:border-0 hover:bg-surface-muted">
       <td className="py-2.5 pr-4">
-        <Link to={`/drivers/${driver.id}`} className="font-medium text-command-600 hover:underline">
-          {driver.firstName} {driver.lastName}
+        <Link to={`/drivers/${driver.id}`} className="flex items-center gap-3 font-medium text-command-600 hover:underline">
+          {driver.photoUrl ? (
+            <img
+              src={driver.photoUrl}
+              alt=""
+              className="h-8 w-8 shrink-0 rounded-full border border-border object-cover"
+            />
+          ) : (
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-ink-soft">
+              {driver.firstName?.[0]}
+              {driver.lastName?.[0]}
+            </span>
+          )}
+          <span>
+            {driver.firstName} {driver.lastName}
+            <span className="block text-xs font-normal text-muted no-underline">{driver.reference}</span>
+          </span>
         </Link>
-        <p className="text-xs text-muted">{driver.reference}</p>
       </td>
       <td className="py-2.5 pr-4 text-ink-soft">
         {driver.depotName ?? '—'}

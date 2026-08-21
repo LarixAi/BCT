@@ -197,7 +197,7 @@ export function ReportsPage() {
                 <p className="mt-1 flex-1 text-sm text-ink-soft">{report.description}</p>
                 {report.id === 'daily-operations' && summary ? (
                   <p className="mt-3 text-xs font-medium text-muted">
-                    {summary.operations.dutiesInPeriod} duties · {summary.safety.openDefects} open defects
+                    {summary.operations?.dutiesInPeriod ?? 0} duties · {summary.safety?.openDefects ?? 0} open defects
                   </p>
                 ) : null}
                 {report.id === 'fleet-availability' && dashboard ? (

@@ -1,0 +1,9 @@
+{
+  "tenant_bearing": 177,
+  "rls_enabled": 177,
+  "rls_forced_public": 171,
+  "rls_forced_cost_control": 34,
+  "zero_policies": [],
+  "note": "After 202608170003: every public table with RLS is FORCE; every cost_control table is FORCE. Tenant-bearing count still 177 (company_id and/or organisation_id). cost_control.organisations is tenant root (id) and is FORCE.",
+  "cost_control_branch": "bff_service_role_boundary"
+}

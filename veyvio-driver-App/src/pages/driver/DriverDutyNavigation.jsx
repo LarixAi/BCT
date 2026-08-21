@@ -8,8 +8,8 @@ import DriverPageLoader from "@/components/driver/operational/DriverPageLoader";
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { useDriverChrome } from "@/lib/driverChromeContext";
 import { op } from "@/lib/driver-operational-theme";
+import { applyDutyNavActionWithOutbox } from "@/lib/command-duty-nav-outbox";
 import {
-  applyDutyNavAction,
   commandDutyToNavJob,
   dutyHasNavigableStops,
 } from "@/lib/command-duty-nav-job";
@@ -78,7 +78,7 @@ export default function DriverDutyNavigation({ driver }) {
     if (!duty) return;
     setActionBusy(true);
     setActionMsg("");
-    const result = applyDutyNavAction(duty, action);
+    const result = await applyDutyNavActionWithOutbox(duty, action, { driver, session });
     setActionBusy(false);
     if (!result.ok) {
       setActionMsg(result.message ?? "Could not update stop.");

@@ -2,6 +2,10 @@ import { buildComplianceUpcomingItems } from "@/data/upcoming-compliance-fixture
 import type { YardTask } from "@/types/tasks";
 import type { Defect, Movement, Vehicle } from "@/types/yard";
 import type { UpcomingCategory, UpcomingItem, UpcomingPriority } from "@/types/upcoming";
+import {
+  mapComplianceDueItemsToUpcoming,
+  type ComplianceDueItem,
+} from "./map-compliance-due-items";
 import { classifyDueBucket, priorityFromDue } from "./upcoming-scheduling";
 
 const INACTIVE_MS = 72 * 60 * 60 * 1000;
@@ -12,6 +16,8 @@ export type UpcomingFeedInput = {
   vehicles: Vehicle[];
   defects: Defect[];
   movements: Movement[];
+  /** Authoritative Command compliance rows (MOT / retorque). Never invent when empty. */
+  complianceDueItems?: ComplianceDueItem[];
   includeComplianceFixtures?: boolean;
   now?: Date;
 };
@@ -194,7 +200,11 @@ export function buildUpcomingFeed(input: UpcomingFeedInput): UpcomingItem[] {
     if (inactive) items.push(inactive);
   }
 
-  if (input.includeComplianceFixtures !== false) {
+  if (input.complianceDueItems?.length) {
+    items.push(...mapComplianceDueItemsToUpcoming(input.complianceDueItems, input.vehicles, now));
+  }
+
+  if (input.includeComplianceFixtures === true) {
     items.push(...buildComplianceUpcomingItems(input.vehicles, now));
   }
 

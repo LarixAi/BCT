@@ -92,9 +92,11 @@ function DamageReviewQueue() {
           title={yardCopy.empty.noDamageReview}
           hint={yardCopy.empty.noDamageReviewHint}
           action={
-            <Link to="/simulate/driver-report" className="text-xs font-bold uppercase tracking-widest text-primary hover:underline">
-              Simulate a driver report →
-            </Link>
+            !import.meta.env.PROD ? (
+              <Link to="/simulate/driver-report" className="text-xs font-bold uppercase tracking-widest text-primary hover:underline">
+                Simulate a driver report →
+              </Link>
+            ) : undefined
           }
         />
       ) : (

@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-08-21T06:43:15.028Z",
+  "fix": "FIX-P1-048",
+  "status": "PASS",
+  "steps": [
+    "supabase start (cost_control schema excluded until reset)",
+    "supabase db reset",
+    "supabase restart with cost_control exposed",
+    "tenant-table-audit.sql",
+    "wave3f-same-company-triggers (static + forge including PR-03 P0 wave 2)",
+    "rls-postgrest-isolation JWT matrix"
+  ],
+  "storage": "explicit separate slice — not in this gate",
+  "hosted_migrations": "through 202608210001 (PR-03 P0 wave 2)"
+}

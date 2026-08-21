@@ -1,0 +1,169 @@
+# Gate 3 — signed Android AAB. Fail closed without production endpoints.
+# Push stays off until the production Firebase project is signed off.
+# Manual: Actions → Driver Android AAB → Run workflow
+
+name: Driver Android AAB
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: Semantic versionName (ignored when the ref is a driver-v* tag)
+        required: false
+        type: string
+  push:
+    tags:
+      - "driver-v*"
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  bundle-release:
+    name: bundleRelease AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    concurrency:
+      group: veyvio-driver-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: veyvio-driver-App
+    env:
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+      VITE_COMMAND_API_BASE_URL: ${{ vars.VITE_COMMAND_API_BASE_URL }}
+      VITE_AUTH_API_BASE_URL: ${{ vars.VITE_AUTH_API_BASE_URL }}
+      VITE_DRIVER_APP_URL: ${{ vars.VITE_DRIVER_APP_URL }}
+      VITE_ENABLE_PUSH: "false"
+      VITE_MOCK_API: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require production configuration
+        run: |
+          set -eu
+          : "${VITE_SUPABASE_URL:?missing VITE_SUPABASE_URL (GitHub Environment production var)}"
+          : "${VITE_SUPABASE_ANON_KEY:?missing VITE_SUPABASE_PUBLISHABLE_KEY or VITE_SUPABASE_ANON_KEY}"
+          : "${VITE_COMMAND_API_BASE_URL:?missing VITE_COMMAND_API_BASE_URL}"
+          : "${VITE_AUTH_API_BASE_URL:?missing VITE_AUTH_API_BASE_URL}"
+          case "$VITE_SUPABASE_URL" in
+            https://example.supabase.co*|http://localhost*|https://localhost*)
+              echo "::error::Production AAB must not use a demo/local Supabase URL"
+              exit 1
+              ;;
+          esac
+          host="${VITE_SUPABASE_URL#https://}"
+          host="${host#http://}"
+          host="${host%%/*}"
+          echo "EXPECTED_SUPABASE_HOST=$host" >> "$GITHUB_ENV"
+
+      - name: Resolve Android version
+        run: |
+          set -eu
+          ref="${GITHUB_REF_NAME}"
+          input_name="${{ github.event.inputs.version_name }}"
+          if [[ "$ref" == driver-v* ]]; then
+            version_name="${ref#driver-v}"
+          elif [ -n "$input_name" ]; then
+            version_name="$input_name"
+          else
+            version_name="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "VEYVIO_VERSION_NAME=$version_name" >> "$GITHUB_ENV"
+          echo "VEYVIO_VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "versionName=$version_name versionCode=${GITHUB_RUN_NUMBER}"
+
+      - name: Require upload signing secrets
+        env:
+          VEYVIO_UPLOAD_STORE_PASSWORD: ${{ secrets.VEYVIO_UPLOAD_STORE_PASSWORD }}
+          VEYVIO_UPLOAD_KEY_ALIAS: ${{ secrets.VEYVIO_UPLOAD_KEY_ALIAS }}
+          VEYVIO_UPLOAD_KEY_PASSWORD: ${{ secrets.VEYVIO_UPLOAD_KEY_PASSWORD }}
+          VEYVIO_UPLOAD_KEYSTORE_BASE64: ${{ secrets.VEYVIO_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          missing=0
+          for name in VEYVIO_UPLOAD_STORE_PASSWORD VEYVIO_UPLOAD_KEY_ALIAS VEYVIO_UPLOAD_KEY_PASSWORD VEYVIO_UPLOAD_KEYSTORE_BASE64; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing secret $name — add upload keystore secrets before signed AAB builds."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: veyvio-driver-App/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install
+        run: npm ci
+
+      - name: Build release web artifact
+        run: npm run build
+
+      - name: Production scan of the exact web artifact
+        run: npm run verify:production-build
+        env:
+          VERIFY_SKIP_BUILD: "1"
+
+      - name: Assert production endpoint identity
+        run: |
+          node scripts/assert-release-config.mjs \
+            --dist dist \
+            --expected-supabase-host "$EXPECTED_SUPABASE_HOST"
+
+      - name: Capacitor sync
+        run: npx cap sync android
+
+      - name: Decode upload keystore
+        env:
+          VEYVIO_UPLOAD_KEYSTORE_BASE64: ${{ secrets.VEYVIO_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/veyvio-signing"
+          echo "$VEYVIO_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/veyvio-signing/upload.jks"
+          echo "VEYVIO_UPLOAD_STORE_FILE=$RUNNER_TEMP/veyvio-signing/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Assemble signed AAB
+        env:
+          VEYVIO_UPLOAD_STORE_PASSWORD: ${{ secrets.VEYVIO_UPLOAD_STORE_PASSWORD }}
+          VEYVIO_UPLOAD_KEY_ALIAS: ${{ secrets.VEYVIO_UPLOAD_KEY_ALIAS }}
+          VEYVIO_UPLOAD_KEY_PASSWORD: ${{ secrets.VEYVIO_UPLOAD_KEY_PASSWORD }}
+        run: |
+          echo "commit_sha=${GITHUB_SHA}"
+          cd android
+          ./gradlew clean bundleRelease --no-daemon
+          aab=$(ls app/build/outputs/bundle/release/*.aab | head -n 1)
+          echo "aab_path=$aab"
+          shasum -a 256 "$aab"
+          {
+            echo "commit_sha=${GITHUB_SHA}"
+            echo "version_name=${VEYVIO_VERSION_NAME}"
+            echo "version_code=${VEYVIO_VERSION_CODE}"
+            echo "aab_path=$aab"
+            echo "aab_sha256=$(shasum -a 256 "$aab" | awk '{print $1}')"
+            echo "supabase_host=${EXPECTED_SUPABASE_HOST}"
+            echo "push_enabled=false"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veyvio-driver-release-aab
+          path: veyvio-driver-App/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+      # Operator TODO: wire Play Developer API upload to internal track after secrets exist.

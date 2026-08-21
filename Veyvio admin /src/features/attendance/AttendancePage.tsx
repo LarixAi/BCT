@@ -19,7 +19,7 @@ import type {
   ManagerClassification,
 } from '@/lib/attendance/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { cn } from '@/lib/cn'
 import { PersonAttendancePanel } from './PersonAttendancePanel'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
@@ -32,6 +32,7 @@ const FILTERS: { id: AttendanceBoardFilter; label: string }[] = [
   { id: 'not_arrived', label: 'Not arrived' },
   { id: 'approved_leave', label: 'Approved leave' },
   { id: 'sick', label: 'Sick' },
+  { id: 'not_scheduled', label: 'Available' },
   { id: 'attendance_concern', label: 'Attendance concern' },
 ]
 
@@ -231,7 +232,15 @@ export function AttendancePage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-8 text-center text-sm text-muted">
+                      {data.trends.mondayFridayPatternNote ||
+                        'No attendance rows for today. Publish a duty or run on Schedule to see clock status here.'}
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((r) => (
                   <tr
                     key={r.id}
                     className={cn(
@@ -252,14 +261,7 @@ export function AttendancePage() {
                     <td className="py-2.5 pr-3 text-ink-soft">{r.roleLabel}</td>
                     <td className="py-2.5 pr-3 text-ink-soft">{r.depotName}</td>
                     <td className="py-2.5 pr-3 tabular-nums">{r.scheduledStart ?? '—'}</td>
-                    <td className="py-2.5 pr-3 tabular-nums">
-                      {r.clockedInAt
-                        ? new Date(r.clockedInAt).toLocaleTimeString('en-GB', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : '—'}
-                    </td>
+                    <td className="py-2.5 pr-3 tabular-nums">{r.clockedInAt ?? '—'}</td>
                     <td className="py-2.5 pr-3">
                       <StatusBadge status={r.status} />
                     </td>
@@ -286,7 +288,8 @@ export function AttendancePage() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>

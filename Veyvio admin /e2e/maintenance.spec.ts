@@ -85,7 +85,7 @@ test.describe('Maintenance hub', () => {
 
   test('work orders show estimate approval queue', async ({ page }) => {
     await page.goto('/maintenance?tab=work-orders')
-    await expect(page.getByText('Estimates awaiting approval')).toBeVisible()
+    await expect(page.getByText('Awaiting approval').first()).toBeVisible()
     await expect(page.getByText('Brake system repair').first()).toBeVisible()
   })
 
@@ -102,13 +102,14 @@ test.describe('Maintenance hub', () => {
   test('work order board toggles to table view', async ({ page }) => {
     await page.goto('/maintenance?tab=work-orders')
     await page.getByRole('button', { name: 'Table', exact: true }).click()
-    await expect(page.getByRole('columnheader', { name: 'WO' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Work order' })).toBeVisible()
     await expect(page.getByRole('cell', { name: 'Brake system repair' })).toBeVisible()
   })
 
   test('work order deep link opens manage panel', async ({ page }) => {
     await page.goto('/maintenance?tab=work-orders&wo=wo-4')
-    await expect(page.getByText('Work order wo-4')).toBeVisible()
+    await expect(page.getByText('wo-4').first()).toBeVisible()
+    await expect(page.getByText('Work order details')).toBeVisible()
     await expect(page.getByText('Diagnosis / notes')).toBeVisible()
   })
 

@@ -2,64 +2,190 @@
  * Durable walkaround evidence store (IndexedDB blobs).
  * Survives process death; referenced from sync queue payloads via mediaRef.
  */
-import { driverWorkspaceStorageKey } from "@/lib/driver-workspace-storage";
+import { driverWorkspaceStorageKey, requireWorkspaceIds } from "@/lib/driver-workspace-storage";
+import { DurableStorageError, onMemoryIndexedDbReset } from "@/lib/driver-durable-kv";
 
-const DB_NAME = "veyvio_driver_media";
-const DB_VERSION = 1;
+export const MEDIA_DB_NAME = "veyvio_driver_media";
+export const MEDIA_DB_VERSION = 2;
 const STORE = "media";
 
-const memoryFallback = new Map();
+let mediaDbPromise = null;
+let mediaDbHandle = null;
 
 function scopedPrefix(companyId, membershipId) {
   return driverWorkspaceStorageKey(companyId, membershipId, "media:");
 }
 
-function openDb() {
-  if (typeof indexedDB === "undefined") return Promise.resolve(null);
+function resetMediaConnection() {
+  try {
+    mediaDbHandle?.close();
+  } catch {
+    /* already closed */
+  }
+  mediaDbHandle = null;
+  mediaDbPromise = null;
+}
+
+export function closeWalkaroundMediaConnection() {
+  resetMediaConnection();
+}
+
+onMemoryIndexedDbReset(resetMediaConnection);
+
+function schemaError(code, message) {
+  return new DurableStorageError(code, message);
+}
+
+function assertMediaStore(db) {
+  if (db?.objectStoreNames?.contains?.(STORE)) return;
+  try {
+    db?.close();
+  } catch {
+    /* ignore */
+  }
+  resetMediaConnection();
+  throw schemaError(
+    "OFFLINE_STORAGE_SCHEMA_INVALID",
+    "Required check evidence could not be saved on this device.",
+  );
+}
+
+function openMediaDatabase() {
+  if (typeof indexedDB === "undefined") {
+    return Promise.reject(
+      schemaError("OFFLINE_STORAGE_UNAVAILABLE", "Required check evidence could not be saved on this device."),
+    );
+  }
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      resetMediaConnection();
+      reject(
+        error instanceof DurableStorageError
+          ? error
+          : schemaError("OFFLINE_STORAGE_UNAVAILABLE", "Required check evidence could not be saved on this device."),
+      );
+    };
+    const request = indexedDB.open(MEDIA_DB_NAME, MEDIA_DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE);
       }
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB unavailable"));
+    request.onsuccess = () => {
+      if (settled) {
+        try {
+          request.result?.close();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      const db = request.result;
+      try {
+        assertMediaStore(db);
+      } catch (error) {
+        fail(error);
+        return;
+      }
+      db.onversionchange = () => {
+        try {
+          db.close();
+        } catch {
+          /* ignore */
+        }
+        resetMediaConnection();
+      };
+      settled = true;
+      resolve(db);
+    };
+    request.onerror = () =>
+      fail(request.error ?? schemaError("OFFLINE_STORAGE_UNAVAILABLE", "Required check evidence could not be saved on this device."));
+    request.onblocked = () =>
+      fail(
+        schemaError(
+          "OFFLINE_STORAGE_SCHEMA_BLOCKED",
+          "Required check evidence could not be saved on this device.",
+        ),
+      );
   });
 }
 
-async function putMedia(record) {
-  const db = await openDb();
-  if (!db) {
-    memoryFallback.set(record.id, record);
-    return record.id;
+async function openDb() {
+  if (!mediaDbPromise) {
+    mediaDbPromise = openMediaDatabase()
+      .then((db) => {
+        mediaDbHandle = db;
+        return db;
+      })
+      .catch((error) => {
+        mediaDbPromise = null;
+        throw error;
+      });
   }
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(record, record.id);
-    tx.oncomplete = () => resolve(record.id);
-    tx.onerror = () => reject(tx.error ?? new Error("Could not persist media"));
-  });
+  const db = await mediaDbPromise;
+  assertMediaStore(db);
+  return db;
+}
+
+async function putMedia(record) {
+  const blob = record.blob
+  const bytes = blob ? new Uint8Array(await blob.arrayBuffer()) : new Uint8Array()
+  const storedRecord = {
+    ...record,
+    blob: undefined,
+    blobBytes: Array.from(bytes),
+  }
+  const db = await openDb();
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(storedRecord, storedRecord.id);
+      tx.oncomplete = () => resolve(storedRecord.id);
+      tx.onerror = () =>
+        reject(tx.error ?? schemaError("OFFLINE_STORAGE_WRITE_FAILED", "Required check evidence could not be saved on this device."));
+    });
+  } catch (error) {
+    if (error instanceof DurableStorageError) throw error;
+    throw schemaError("OFFLINE_STORAGE_WRITE_FAILED", "Required check evidence could not be saved on this device.");
+  }
+  const stored = await getMedia(record.id);
+  if (!stored) {
+    throw new DurableStorageError("OFFLINE_STORAGE_WRITE_FAILED", "Required check evidence could not be confirmed on this device.");
+  }
+  return record.id;
+}
+
+function recordToBlob(record) {
+  if (record?.blob) return record.blob
+  if (Array.isArray(record?.blobBytes)) {
+    return new Blob([new Uint8Array(record.blobBytes)], { type: record.mimeType || "image/jpeg" })
+  }
+  return null
 }
 
 async function getMedia(mediaId) {
   const db = await openDb();
-  if (!db) return memoryFallback.get(mediaId) ?? null;
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
     const request = tx.objectStore(STORE).get(mediaId);
-    request.onsuccess = () => resolve(request.result ?? null);
+    request.onsuccess = () => {
+      const row = request.result ?? null
+      if (!row) {
+        resolve(null)
+        return
+      }
+      resolve({ ...row, blob: recordToBlob(row) })
+    }
     request.onerror = () => reject(request.error ?? new Error("Could not load media"));
   });
 }
 
 async function deleteMedia(mediaId) {
   const db = await openDb();
-  if (!db) {
-    memoryFallback.delete(mediaId);
-    return;
-  }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).delete(mediaId);
@@ -69,6 +195,14 @@ async function deleteMedia(mediaId) {
 }
 
 function blobToDataUrl(blob) {
+  if (typeof FileReader === "undefined") {
+    return blob.arrayBuffer().then((buffer) => {
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+      return `data:${blob.type || "image/jpeg"};base64,${btoa(binary)}`;
+    });
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ""));
@@ -87,8 +221,9 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([bytes], { type: mime });
 }
 
-export function createMediaId(prefix = "media") {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+export function createMediaId(prefix = "media", companyId, membershipId) {
+  const scope = scopedPrefix(companyId, membershipId);
+  return `${scope}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export async function persistWalkaroundMediaDataUrl({
@@ -100,30 +235,43 @@ export async function persistWalkaroundMediaDataUrl({
   clientCheckId = null,
 }) {
   if (!dataUrl?.startsWith("data:")) return null;
-  const id = createMediaId(kind ?? "walkaround");
+  const { companyId: company, membershipId: membership } = requireWorkspaceIds(companyId, membershipId);
+  const id = createMediaId(kind ?? "walkaround", company, membership);
   const blob = dataUrlToBlob(dataUrl);
+  let checksum = 0;
+  for (let i = 0; i < dataUrl.length; i += 1) checksum = (checksum * 31 + dataUrl.charCodeAt(i)) >>> 0;
   await putMedia({
     id,
-    companyId,
-    membershipId,
+    companyId: company,
+    membershipId: membership,
     kind: kind ?? "photo",
     itemKey,
     clientCheckId,
     mimeType: blob.type,
     bytes: blob.size,
+    checksum: String(checksum),
     blob,
-    dataUrlCache: dataUrl,
     status: "queued",
     capturedAt: new Date().toISOString(),
   });
   return id;
 }
 
-export async function loadWalkaroundMediaDataUrl(mediaId) {
+export async function hasWalkaroundMediaRecord(mediaId, { companyId, membershipId } = {}) {
+  requireWorkspaceIds(companyId, membershipId);
   const record = await getMedia(mediaId);
-  if (record?.dataUrlCache) return record.dataUrlCache;
-  if (!record?.blob) return null;
-  if (typeof FileReader === "undefined") return null;
+  if (!record) return false;
+  return String(record.companyId) === String(companyId) && String(record.membershipId) === String(membershipId);
+}
+
+export async function loadWalkaroundMediaDataUrl(mediaId, { companyId, membershipId } = {}) {
+  requireWorkspaceIds(companyId, membershipId);
+  const record = await getMedia(mediaId);
+  if (!record) return null;
+  if (String(record.companyId) !== String(companyId) || String(record.membershipId) !== String(membershipId)) {
+    throw new DurableStorageError("OFFLINE_CONTEXT_NOT_READY", "This evidence belongs to another workspace.");
+  }
+  if (!record.blob) return null;
   return blobToDataUrl(record.blob);
 }
 
@@ -145,9 +293,8 @@ function answerMediaFields(answer) {
 
 export async function externalizeWalkaroundPayloadMedia(payload, { companyId, membershipId }) {
   if (!payload) return payload;
-  const clientCheckId =
-    payload.clientCheckId ??
-    `chk_${payload.driver?.id ?? "driver"}_${payload.vehicle?.id ?? "vehicle"}_${Date.now()}`;
+  const clientCheckId = String(payload.clientCheckId ?? payload.clientId ?? "").trim()
+    || `chk_${payload.driver?.id ?? "driver"}_${payload.vehicle?.id ?? "vehicle"}_${Date.now()}`;
   const next = { ...payload, clientCheckId, mediaRefs: [...(payload.mediaRefs ?? [])] };
 
   const externalizeDataUrl = async (dataUrl, kind, itemKey = null) => {
@@ -193,15 +340,19 @@ export async function externalizeWalkaroundPayloadMedia(payload, { companyId, me
   return next;
 }
 
-export async function hydrateWalkaroundPayloadMedia(payload) {
+export async function hydrateWalkaroundPayloadMedia(payload, { companyId, membershipId } = {}) {
   if (!payload) return payload;
   const next = { ...payload };
+  const scope = {
+    companyId: companyId ?? payload.companyId,
+    membershipId: membershipId ?? payload.membershipId,
+  };
 
   if (!next.odometerPhotoDataUrl && next.odometerPhotoMediaRef) {
-    next.odometerPhotoDataUrl = await loadWalkaroundMediaDataUrl(next.odometerPhotoMediaRef);
+    next.odometerPhotoDataUrl = await loadWalkaroundMediaDataUrl(next.odometerPhotoMediaRef, scope);
   }
   if (!next.driverSignatureDataUrl && next.driverSignatureMediaRef) {
-    next.driverSignatureDataUrl = await loadWalkaroundMediaDataUrl(next.driverSignatureMediaRef);
+    next.driverSignatureDataUrl = await loadWalkaroundMediaDataUrl(next.driverSignatureMediaRef, scope);
   }
 
   if (next.answers && typeof next.answers === "object") {
@@ -209,7 +360,7 @@ export async function hydrateWalkaroundPayloadMedia(payload) {
     for (const [itemId, answer] of Object.entries(next.answers)) {
       const copy = { ...answer };
       if (!copy.photoDataUrl && copy.photoMediaRef) {
-        copy.photoDataUrl = await loadWalkaroundMediaDataUrl(copy.photoMediaRef);
+        copy.photoDataUrl = await loadWalkaroundMediaDataUrl(copy.photoMediaRef, scope);
       }
       answers[itemId] = copy;
     }
@@ -231,11 +382,31 @@ export async function releaseWalkaroundPayloadMedia(payload) {
   await Promise.all([...refs].map((id) => deleteMedia(id)));
 }
 
-export function countPendingWalkaroundMedia(companyId, membershipId) {
+export async function countPendingWalkaroundMedia(companyId, membershipId) {
+  requireWorkspaceIds(companyId, membershipId);
   const prefix = scopedPrefix(companyId, membershipId);
-  let count = 0;
-  for (const key of memoryFallback.keys()) {
-    if (String(key).startsWith(prefix)) count += 1;
-  }
-  return count;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readonly");
+    const request = tx.objectStore(STORE).getAllKeys?.() ?? tx.objectStore(STORE).openCursor();
+    if (tx.objectStore(STORE).getAllKeys) {
+      request.onsuccess = () => {
+        const keys = request.result ?? [];
+        resolve(keys.filter((key) => String(key).startsWith(prefix)).length);
+      };
+      request.onerror = () => reject(request.error);
+      return;
+    }
+    let count = 0;
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(count);
+        return;
+      }
+      if (String(cursor.key).startsWith(prefix)) count += 1;
+      cursor.continue();
+    };
+    request.onerror = () => reject(request.error);
+  });
 }

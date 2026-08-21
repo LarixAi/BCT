@@ -1,11 +1,43 @@
 /** Command read-model projections over shared platform tables. */
-import { admin } from './supabase.ts'
+import { resolveProjectionDb } from './db-authority.ts'
+
+function projDb(companyId: string) {
+  return resolveProjectionDb(companyId, 'projections_read')
+}
+
+import {
+  groupVehicleEquipmentItems,
+  listEquipmentRowsForCompany,
+} from './equipment-assets.ts'
+import { createTenantSignedUrl } from './signed-storage.ts'
 
 type Row = Record<string, unknown>
 
 function iso(value: unknown, fallback = new Date().toISOString()) {
   if (!value) return fallback
   return String(value)
+}
+
+/** Signed URL for a driver profile photo stored in `driver-documents`. */
+export async function signedDriverProfilePhotoUrl(
+  companyId: string,
+  storageKey: unknown,
+  expiresInSeconds = 60 * 60 * 12,
+): Promise<string | null> {
+  const key = storageKey ? String(storageKey).trim() : ''
+  if (!key) return null
+  try {
+    const { signedUrl } = await createTenantSignedUrl({
+      bucket: 'driver-documents',
+      storageKey: key,
+      companyId,
+      expiresInSeconds,
+    })
+    return signedUrl
+  } catch (error) {
+    console.error('driver profile photo signed url failed', error)
+    return null
+  }
 }
 
 function projectedDocumentExpiry(row: Row, requirementType: unknown, docExpiry: unknown): string | null {
@@ -488,7 +520,7 @@ function approvedOnboarding() {
 }
 
 async function loadDriverRows(companyId: string, driverId?: string) {
-  let embedded = admin
+  let embedded = projDb(companyId)
     .from('drivers')
     .select('*, staff_members(*), depots(id, name)')
     .eq('company_id', companyId)
@@ -499,7 +531,7 @@ async function loadDriverRows(companyId: string, driverId?: string) {
   if (!embeddedResult.error) return (embeddedResult.data ?? []) as Row[]
 
   // Fallback when PostgREST cannot resolve embeds (schema cache / missing FK).
-  let plain = admin.from('drivers').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
+  let plain = projDb(companyId).from('drivers').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
   if (driverId) plain = plain.eq('id', driverId)
   const { data, error } = await plain
   if (error) throw new Error(error.message || embeddedResult.error.message)
@@ -510,10 +542,10 @@ async function loadDriverRows(companyId: string, driverId?: string) {
 
   const [staffRes, depotRes] = await Promise.all([
     staffIds.length
-      ? admin.from('staff_members').select('*').in('id', staffIds)
+      ? projDb(companyId).from('staff_members').select('*').in('id', staffIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     depotIds.length
-      ? admin.from('depots').select('id, name').in('id', depotIds)
+      ? projDb(companyId).from('depots').select('id, name').in('id', depotIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
   ])
 
@@ -534,7 +566,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
   const today = new Date().toISOString().slice(0, 10)
 
   const [dutiesRes, docsRes, restrictionsRes, accountsRes, trainingRes, auditRes, devicesRes] = await Promise.all([
-    admin
+    projDb(companyId)
       .from('duties')
       .select('id, driver_id, service_date, planned_sign_on_at, status')
       .eq('company_id', companyId)
@@ -542,20 +574,20 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
       .order('service_date', { ascending: true })
       .limit(200),
     driverIds.length
-      ? admin.from('driver_documents').select('*').eq('company_id', companyId).in('driver_id', driverIds)
+      ? projDb(companyId).from('driver_documents').select('*').eq('company_id', companyId).in('driver_id', driverIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     driverIds.length
-      ? admin.from('driver_restrictions').select('*').eq('company_id', companyId).in('driver_id', driverIds)
+      ? projDb(companyId).from('driver_restrictions').select('*').eq('company_id', companyId).in('driver_id', driverIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     driverIds.length
-      ? admin.from('driver_app_accounts').select('*').eq('company_id', companyId).in('driver_id', driverIds)
+      ? projDb(companyId).from('driver_app_accounts').select('*').eq('company_id', companyId).in('driver_id', driverIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     driverIds.length
-      ? admin.from('driver_training').select('*').eq('company_id', companyId).in('driver_id', driverIds)
+      ? projDb(companyId).from('driver_training').select('*').eq('company_id', companyId).in('driver_id', driverIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     // Detail only — keep directory list light
     driverId
-      ? admin
+      ? projDb(companyId)
           .from('audit_events')
           .select('id, action, actor_id, occurred_at, created_at, before_snapshot, after_snapshot, reason')
           .eq('company_id', companyId)
@@ -565,7 +597,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
           .limit(100)
       : Promise.resolve({ data: [] as Row[], error: null }),
     driverIds.length
-      ? admin
+      ? projDb(companyId)
           .from('driver_app_devices')
           .select('*')
           .eq('company_id', companyId)
@@ -584,7 +616,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
 
   const actorIds = [...new Set(auditRows.map((a) => a.actor_id).filter(Boolean).map(String))]
   const { data: actorUsers } = actorIds.length
-    ? await admin.from('users').select('id, first_name, last_name, email').in('id', actorIds)
+    ? await projDb(companyId).from('users').select('id, first_name, last_name, email').in('id', actorIds)
     : { data: [] as Row[] }
   const actorNameById = new Map(
     (actorUsers ?? []).map((u: Row) => [
@@ -714,7 +746,7 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
     ) {
       accountStatus = 'active'
       if (app?.id && String(app.account_status) !== 'active') {
-        void admin
+        void projDb(companyId)
           .from('driver_app_accounts')
           .update({
             account_status: 'active',
@@ -811,6 +843,10 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
       firstName,
       lastName,
       preferredName: staff.preferred_name ?? null,
+      photoUrl: null,
+      profilePhotoStorageKey: row.profile_photo_storage_key
+        ? String(row.profile_photo_storage_key)
+        : null,
       dateOfBirth: staff.date_of_birth ?? null,
       status: mapDutyStatusFromDuty(nextDuty?.status),
       email: staff.email ?? null,
@@ -892,6 +928,14 @@ export async function projectDriverProfile(companyId: string, driverId?: string)
     return profile
   })
 
+  await Promise.all(
+    profiles.map(async (profile) => {
+      const key = profile.profilePhotoStorageKey
+      profile.photoUrl = await signedDriverProfilePhotoUrl(companyId, key)
+      delete profile.profilePhotoStorageKey
+    }),
+  )
+
   if (driverId) {
     if (!profiles.length) return null
     return profiles[0]
@@ -956,6 +1000,9 @@ function mapVehicleCheckEntry(row: Row) {
     ? [staff.first_name, staff.last_name].filter(Boolean).join(' ').trim() || 'Driver'
     : 'Driver'
   const checkType = mapProfileCheckType(row.check_type)
+  const fuelRaw = row.fuel_level
+  const fuelLevel =
+    fuelRaw != null && fuelRaw !== '' && Number.isFinite(Number(fuelRaw)) ? Number(fuelRaw) : null
   return {
     id: String(row.id),
     vehicleId: String(row.vehicle_id ?? ''),
@@ -965,16 +1012,17 @@ function mapVehicleCheckEntry(row: Row) {
     performedBy,
     sourceApplication: mapProfileCheckSource(row.source_app),
     mileage: row.odometer != null && row.odometer !== '' ? Number(row.odometer) : null,
+    fuelLevel,
     notes: row.ops_outcome ? String(row.ops_outcome) : null,
     defectIds: [] as string[],
   }
 }
 
 async function loadVehicleCheckEntries(companyId: string, vehicleId?: string) {
-  let query = admin
+  let query = projDb(companyId)
     .from('vehicle_checks')
     .select(
-      'id, vehicle_id, check_type, result, ops_outcome, odometer, submitted_at, created_at, source_app, drivers(staff_members(first_name, last_name))',
+      'id, vehicle_id, check_type, result, ops_outcome, odometer, fuel_level, submitted_at, created_at, source_app, drivers(staff_members(first_name, last_name))',
     )
     .eq('company_id', companyId)
     .order('submitted_at', { ascending: false })
@@ -989,8 +1037,330 @@ async function loadVehicleCheckEntries(companyId: string, vehicleId?: string) {
   return (data ?? []).map((row: Row) => mapVehicleCheckEntry(row))
 }
 
+function driverDisplayName(driver: Row | null | undefined): string | null {
+  if (!driver) return null
+  const staff = (driver.staff_members as Row | null) ?? null
+  const name = [staff?.first_name, staff?.last_name].filter(Boolean).join(' ').trim()
+  if (name) return name
+  if (driver.driver_number) return String(driver.driver_number)
+  return null
+}
+
+function ukDepartureLabel(value: unknown): string | null {
+  if (!value) return null
+  const d = new Date(String(value))
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/London',
+  })
+}
+
+type VehicleOpsContext = {
+  currentDriverId: string | null
+  currentDriverName: string | null
+  currentRunId: string | null
+  currentRunReference: string | null
+  nextDriverName: string | null
+  nextRunReference: string | null
+  nextDepartureTime: string | null
+  mileage: number | null
+  fuelLevelPercent: number | null
+}
+
+type VehicleOpsSlot = {
+  atMs: number
+  serviceDate: string
+  status: string
+  active: boolean
+  done: boolean
+  driverId: string | null
+  driverName: string | null
+  runId: string | null
+  runReference: string | null
+  departureAt: string | null
+}
+
+/** Current / next allocation + latest mileage/fuel from duties, runs, assignments and checks. */
+async function loadVehicleOperationalContexts(
+  companyId: string,
+  vehicleIds: string[],
+  checksByVehicle: Map<string, Array<{ mileage: number | null; checkDate: string; fuelLevel?: number | null }>>,
+): Promise<Map<string, VehicleOpsContext>> {
+  const out = new Map<string, VehicleOpsContext>()
+  for (const id of vehicleIds) {
+    const checks = checksByVehicle.get(id) ?? []
+    const withMiles = checks.find((c) => c.mileage != null && Number.isFinite(c.mileage))
+    const withFuel = checks.find((c) => c.fuelLevel != null && Number.isFinite(c.fuelLevel))
+    out.set(id, {
+      currentDriverId: null,
+      currentDriverName: null,
+      currentRunId: null,
+      currentRunReference: null,
+      nextDriverName: null,
+      nextRunReference: null,
+      nextDepartureTime: null,
+      mileage: withMiles?.mileage ?? null,
+      fuelLevelPercent: withFuel?.fuelLevel ?? null,
+    })
+  }
+  if (!vehicleIds.length) return out
+
+  const today = new Date().toISOString().slice(0, 10)
+  const nowMs = Date.now()
+  const slotsByVehicle = new Map<string, VehicleOpsSlot[]>()
+
+  const pushSlot = (vehicleId: string, slot: VehicleOpsSlot) => {
+    const list = slotsByVehicle.get(vehicleId) ?? []
+    list.push(slot)
+    slotsByVehicle.set(vehicleId, list)
+  }
+
+  const [{ data: runs }, { data: duties }, { data: assignments }, { data: fuelRows }, { data: adblueRows }] =
+    await Promise.all([
+      projDb(companyId)
+        .from('runs')
+        .select(
+          'id, run_reference, service_date, planned_start_at, status, vehicle_id, driver_id, drivers(id, driver_number, staff_members(first_name, last_name))',
+        )
+        .eq('company_id', companyId)
+        .in('vehicle_id', vehicleIds)
+        .gte('service_date', today)
+        .order('planned_start_at', { ascending: true })
+        .limit(400),
+      projDb(companyId)
+        .from('duties')
+        .select(
+          'id, service_date, planned_sign_on_at, status, vehicle_id, driver_id, drivers(id, driver_number, staff_members(first_name, last_name))',
+        )
+        .eq('company_id', companyId)
+        .in('vehicle_id', vehicleIds)
+        .gte('service_date', today)
+        .order('planned_sign_on_at', { ascending: true })
+        .limit(400),
+      projDb(companyId)
+        .from('trip_assignments')
+        .select(
+          'id, status, vehicle_id, driver_id, run_id, assigned_at, effective_from, drivers(id, driver_number, staff_members(first_name, last_name)), runs(id, run_reference, service_date, planned_start_at, status), trips(id, trip_reference, planned_pickup_at, status)',
+        )
+        .eq('company_id', companyId)
+        .in('vehicle_id', vehicleIds)
+        .eq('status', 'active')
+        .order('assigned_at', { ascending: false })
+        .limit(400),
+      projDb(companyId)
+        .from('fuel_records')
+        .select('vehicle_id, odometer, recorded_at')
+        .eq('company_id', companyId)
+        .in('vehicle_id', vehicleIds)
+        .not('odometer', 'is', null)
+        .order('recorded_at', { ascending: false })
+        .limit(200),
+      projDb(companyId)
+        .from('adblue_records')
+        .select('vehicle_id, mileage, top_up_at')
+        .eq('company_id', companyId)
+        .in('vehicle_id', vehicleIds)
+        .not('mileage', 'is', null)
+        .order('top_up_at', { ascending: false })
+        .limit(200),
+    ])
+
+  for (const row of runs ?? []) {
+    const vehicleId = String(row.vehicle_id ?? '')
+    if (!vehicleId) continue
+    const status = String(row.status ?? 'planned')
+    const start = row.planned_start_at ? String(row.planned_start_at) : `${String(row.service_date)}T08:00:00.000Z`
+    const driver = (row.drivers as Row | null) ?? null
+    pushSlot(vehicleId, {
+      atMs: new Date(start).getTime() || nowMs,
+      serviceDate: String(row.service_date ?? today),
+      status,
+      active: ['assigned', 'in_progress'].includes(status),
+      done: ['completed', 'cancelled'].includes(status),
+      driverId: row.driver_id ? String(row.driver_id) : driver?.id ? String(driver.id) : null,
+      driverName: driverDisplayName(driver),
+      runId: String(row.id),
+      runReference: row.run_reference ? String(row.run_reference) : null,
+      departureAt: start,
+    })
+  }
+
+  for (const row of duties ?? []) {
+    const vehicleId = String(row.vehicle_id ?? '')
+    if (!vehicleId) continue
+    const status = String(row.status ?? 'planned')
+    const start = row.planned_sign_on_at
+      ? String(row.planned_sign_on_at)
+      : `${String(row.service_date)}T08:00:00.000Z`
+    const driver = (row.drivers as Row | null) ?? null
+    pushSlot(vehicleId, {
+      atMs: new Date(start).getTime() || nowMs,
+      serviceDate: String(row.service_date ?? today),
+      status,
+      active: ['signed_on', 'in_progress'].includes(status),
+      done: ['signed_off', 'cancelled'].includes(status),
+      driverId: row.driver_id ? String(row.driver_id) : driver?.id ? String(driver.id) : null,
+      driverName: driverDisplayName(driver),
+      runId: null,
+      runReference: `DUTY-${String(row.id).slice(0, 8).toUpperCase()}`,
+      departureAt: start,
+    })
+  }
+
+  // Duties that only link the vehicle via duty_runs → runs.vehicle_id
+  const runIds = [...new Set((runs ?? []).map((row: Row) => String(row.id)).filter(Boolean))]
+  if (runIds.length) {
+    const { data: dutyLinks } = await projDb(companyId)
+      .from('duty_runs')
+      .select('duty_id, run_id, sequence, runs(id, vehicle_id, run_reference)')
+      .in('run_id', runIds)
+    const dutyIds = [...new Set((dutyLinks ?? []).map((link: Row) => String(link.duty_id)).filter(Boolean))]
+    if (dutyIds.length) {
+      const { data: linkedDuties } = await projDb(companyId)
+        .from('duties')
+        .select(
+          'id, service_date, planned_sign_on_at, status, vehicle_id, driver_id, drivers(id, driver_number, staff_members(first_name, last_name))',
+        )
+        .eq('company_id', companyId)
+        .in('id', dutyIds)
+        .gte('service_date', today)
+      const runVehicleByDuty = new Map<string, { vehicleId: string; runId: string; runReference: string | null }>()
+      for (const link of dutyLinks ?? []) {
+        const run = (link.runs as Row | null) ?? null
+        const vehicleId = String(run?.vehicle_id ?? '')
+        if (!vehicleId || !vehicleIds.includes(vehicleId)) continue
+        const dutyId = String(link.duty_id)
+        if (!runVehicleByDuty.has(dutyId) || Number(link.sequence) === 1) {
+          runVehicleByDuty.set(dutyId, {
+            vehicleId,
+            runId: String(run?.id ?? link.run_id ?? ''),
+            runReference: run?.run_reference ? String(run.run_reference) : null,
+          })
+        }
+      }
+      for (const row of linkedDuties ?? []) {
+        const linked = runVehicleByDuty.get(String(row.id))
+        if (!linked) continue
+        // Prefer direct duty.vehicle_id slots already pushed above.
+        if (row.vehicle_id && String(row.vehicle_id) === linked.vehicleId) continue
+        const status = String(row.status ?? 'planned')
+        const start = row.planned_sign_on_at
+          ? String(row.planned_sign_on_at)
+          : `${String(row.service_date)}T08:00:00.000Z`
+        const driver = (row.drivers as Row | null) ?? null
+        pushSlot(linked.vehicleId, {
+          atMs: new Date(start).getTime() || nowMs,
+          serviceDate: String(row.service_date ?? today),
+          status,
+          active: ['signed_on', 'in_progress'].includes(status),
+          done: ['signed_off', 'cancelled'].includes(status),
+          driverId: row.driver_id ? String(row.driver_id) : driver?.id ? String(driver.id) : null,
+          driverName: driverDisplayName(driver),
+          runId: linked.runId || null,
+          runReference: linked.runReference ?? `DUTY-${String(row.id).slice(0, 8).toUpperCase()}`,
+          departureAt: start,
+        })
+      }
+    }
+  }
+
+  for (const row of assignments ?? []) {
+    const vehicleId = String(row.vehicle_id ?? '')
+    if (!vehicleId) continue
+    const run = (row.runs as Row | null) ?? null
+    const trip = (row.trips as Row | null) ?? null
+    const driver = (row.drivers as Row | null) ?? null
+    const start =
+      (run?.planned_start_at ? String(run.planned_start_at) : null) ??
+      (trip?.planned_pickup_at ? String(trip.planned_pickup_at) : null) ??
+      (row.effective_from ? String(row.effective_from) : null) ??
+      (row.assigned_at ? String(row.assigned_at) : null)
+    if (!start) continue
+    const serviceDate = String(run?.service_date ?? start.slice(0, 10))
+    if (serviceDate < today) continue
+    const status = String(run?.status ?? trip?.status ?? 'assigned')
+    pushSlot(vehicleId, {
+      atMs: new Date(start).getTime() || nowMs,
+      serviceDate,
+      status,
+      active: ['assigned', 'in_progress', 'active'].includes(status),
+      done: ['completed', 'cancelled', 'no_show', 'aborted'].includes(status),
+      driverId: row.driver_id ? String(row.driver_id) : driver?.id ? String(driver.id) : null,
+      driverName: driverDisplayName(driver),
+      runId: run?.id ? String(run.id) : row.run_id ? String(row.run_id) : null,
+      runReference:
+        (run?.run_reference ? String(run.run_reference) : null) ??
+        (trip?.trip_reference ? String(trip.trip_reference) : null),
+      departureAt: start,
+    })
+  }
+
+  for (const row of fuelRows ?? []) {
+    const vehicleId = String(row.vehicle_id ?? '')
+    const ctx = out.get(vehicleId)
+    if (!ctx || ctx.mileage != null) continue
+    const miles = Number(row.odometer)
+    if (Number.isFinite(miles)) ctx.mileage = miles
+  }
+  for (const row of adblueRows ?? []) {
+    const vehicleId = String(row.vehicle_id ?? '')
+    const ctx = out.get(vehicleId)
+    if (!ctx || ctx.mileage != null) continue
+    const miles = Number(row.mileage)
+    if (Number.isFinite(miles)) ctx.mileage = miles
+  }
+
+  for (const [vehicleId, slots] of slotsByVehicle) {
+    const ctx = out.get(vehicleId)
+    if (!ctx) continue
+    const usable = slots
+      .filter((s) => !s.done && Number.isFinite(s.atMs))
+      .sort((a, b) => a.atMs - b.atMs)
+
+    const current =
+      usable.find((s) => s.active) ??
+      usable.find((s) => s.serviceDate === today && s.atMs <= nowMs) ??
+      usable.find((s) => s.serviceDate === today) ??
+      null
+
+    const next =
+      usable.find((s) => {
+        if (!current) return s.atMs > nowMs || s.serviceDate > today
+        if (s.runId && current.runId && s.runId === current.runId) return false
+        if (s.runReference && current.runReference && s.runReference === current.runReference && s.atMs === current.atMs) {
+          return false
+        }
+        return s.atMs > current.atMs
+      }) ?? null
+
+    if (current) {
+      ctx.currentDriverId = current.driverId
+      ctx.currentDriverName = current.driverName
+      ctx.currentRunId = current.runId
+      ctx.currentRunReference = current.runReference
+    }
+    if (next) {
+      ctx.nextDriverName = next.driverName
+      ctx.nextRunReference = next.runReference
+      ctx.nextDepartureTime = ukDepartureLabel(next.departureAt)
+    } else if (!current && usable[0] && usable[0].serviceDate > today) {
+      const upcoming = usable[0]
+      ctx.nextDriverName = upcoming.driverName
+      ctx.nextRunReference = upcoming.runReference
+      ctx.nextDepartureTime = ukDepartureLabel(upcoming.departureAt)
+    }
+  }
+
+  return out
+}
+
 export async function projectVehicleProfile(companyId: string, vehicleId?: string) {
-  let query = admin
+  let query = projDb(companyId)
     .from('vehicles')
     .select('*, depots(id, name)')
     .eq('company_id', companyId)
@@ -1000,14 +1370,19 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
   const { data, error } = await query
   if (error) throw new Error(error.message)
 
-  const [{ data: defectCounts }, checkEntries] = await Promise.all([
-    admin
+  const [{ data: defectCounts }, checkEntries, equipmentRows] = await Promise.all([
+    projDb(companyId)
       .from('defects')
       .select('vehicle_id, severity, status')
       .eq('company_id', companyId)
       .not('status', 'in', '("closed","rejected")'),
     loadVehicleCheckEntries(companyId, vehicleId),
+    listEquipmentRowsForCompany(companyId),
   ])
+
+  const equipmentByVehicle = groupVehicleEquipmentItems(
+    vehicleId ? equipmentRows.filter((row) => String(row.vehicle_id ?? '') === vehicleId) : equipmentRows,
+  )
 
   const openByVehicle = new Map<string, { open: number; critical: number }>()
   for (const defect of defectCounts ?? []) {
@@ -1026,6 +1401,9 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
     checksByVehicle.set(entry.vehicleId, list)
   }
 
+  const vehicleIds = (data ?? []).map((row: Row) => String(row.id))
+  const opsByVehicle = await loadVehicleOperationalContexts(companyId, vehicleIds, checksByVehicle)
+
   const profiles = (data ?? []).map((row: Row) => {
     const depot = (row.depots as Row | null) ?? {}
     const depotId = String(row.primary_depot_id ?? depot.id ?? '')
@@ -1033,21 +1411,31 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
     const op = mapVehicleOpStatus(row.operational_status)
     const counts = openByVehicle.get(String(row.id)) ?? { open: 0, critical: 0 }
     const vor = op === 'vor'
-    const releaseDecision = vor ? 'blocked' : counts.critical > 0 ? 'restricted_use' : 'released'
+    const regLabel = String(row.registration ?? '').trim()
+    const complianceFailures = vehicleDocumentExpiryFailures(row, regLabel)
+    const failures: Array<{ code: string; message: string; severity: string; category: string }> = []
+    if (vor) {
+      failures.push({ code: 'vor', message: 'Vehicle is VOR', severity: 'block', category: 'operational' })
+    }
+    failures.push(...complianceFailures)
+    const blocked = failures.some((f) => f.severity === 'block')
+    const releaseDecision = blocked ? 'blocked' : counts.critical > 0 ? 'restricted_use' : 'released'
     const conditionStatus =
       counts.critical > 0 ? 'safety_critical' : counts.open > 0 ? 'repair_required' : 'no_known_issues'
     const lifecycleStatus = row.operational_status === 'decommissioned' ? 'archived' : 'active'
-    const complianceStatus = 'compliant'
+    const complianceStatus = complianceFailures.length ? 'non_compliant' : 'compliant'
     const release = {
       releaseDecision,
-      failures: vor
-        ? [{ code: 'vor', message: 'Vehicle is VOR', severity: 'block', category: 'operational' }]
-        : [],
+      failures,
       warnings: [],
-      canAllocate: !vor && counts.critical === 0,
-      canLeaveYard: !vor,
-      canAcceptPassengers: !vor && counts.critical === 0,
-      summary: vor ? 'Blocked — VOR' : counts.critical > 0 ? 'Restricted use' : 'Released for service',
+      canAllocate: !blocked && counts.critical === 0,
+      canLeaveYard: !vor && !blocked,
+      canAcceptPassengers: !blocked && counts.critical === 0,
+      summary: blocked
+        ? `Blocked — ${failures[0]?.message ?? 'compliance'}`
+        : counts.critical > 0
+          ? 'Restricted use'
+          : 'Released for service',
       evaluatedAt: new Date().toISOString(),
     }
     const readiness = {
@@ -1062,8 +1450,21 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
       calculatedAt: release.evaluatedAt,
       releaseDecision,
     }
-    const checks = (checksByVehicle.get(String(row.id)) ?? []).map(({ vehicleId: _vehicleId, ...entry }) => entry)
+    const checks = (checksByVehicle.get(String(row.id)) ?? []).map(
+      ({ vehicleId: _vehicleId, fuelLevel: _fuelLevel, ...entry }) => entry,
+    )
     const latestCheck = checks[0]
+    const ops = opsByVehicle.get(String(row.id))
+    const motExpiry = row.mot_expiry ? iso(row.mot_expiry).slice(0, 10) : null
+    const insuranceExpiry = row.insurance_expiry ? iso(row.insurance_expiry).slice(0, 10) : null
+    const taxExpiry = row.tax_expiry ? iso(row.tax_expiry).slice(0, 10) : null
+    const tachographCalibrationExpiry = row.tachograph_calibration_expiry
+      ? iso(row.tachograph_calibration_expiry).slice(0, 10)
+      : null
+    const pmiDueAt = row.pmi_due_at ? iso(row.pmi_due_at).slice(0, 10) : null
+    const nextServiceDueAt = row.next_service_due_at ? iso(row.next_service_due_at).slice(0, 10) : null
+    const documents = buildVehicleComplianceDocuments(row, String(row.id))
+    const nearest = nearestVehicleComplianceExpiry(row)
     return {
       id: row.id,
       reference: row.fleet_number,
@@ -1088,39 +1489,42 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
       wheelchairCapacity: row.wheelchair_capacity ?? 0,
       standingCapacity: row.standing_capacity ?? 0,
       fuelType: row.fuel_type ?? 'diesel',
-      fuelLevelPercent: null,
+      fuelLevelPercent: ops?.fuelLevelPercent ?? null,
       batteryLevelPercent: null,
-      mileage: null,
+      mileage: ops?.mileage ?? null,
       lifecycleStatus,
       operationalStatus: op,
       complianceStatus,
       conditionStatus,
       yardStatus: vor ? 'workshop' : 'in_yard',
-      readinessStatus: vor ? 'cleaning_required' : 'ready',
+      readinessStatus: blocked ? 'not_ready' : vor ? 'cleaning_required' : 'ready',
       releaseDecision,
       readiness,
       capabilities: [],
-      motExpiry: null,
-      insuranceExpiry: null,
-      taxExpiry: null,
-      tachographCalibrationExpiry: null,
-      wheelRetorqueDueAt: null,
-      currentDriverId: null,
-      currentDriverName: null,
-      currentRunId: null,
-      currentRunReference: null,
-      nextDriverName: null,
-      nextRunReference: null,
-      nextDepartureTime: null,
+      motExpiry,
+      insuranceExpiry,
+      taxExpiry,
+      tachographCalibrationExpiry,
+      pmiDueAt,
+      nextServiceDueAt,
+      wheelRetorqueDueAt: row.wheel_retorque_due_at ? iso(row.wheel_retorque_due_at) : null,
+      currentDriverId: ops?.currentDriverId ?? null,
+      currentDriverName: ops?.currentDriverName ?? null,
+      currentRunId: ops?.currentRunId ?? null,
+      currentRunReference: ops?.currentRunReference ?? null,
+      nextDriverName: ops?.nextDriverName ?? null,
+      nextRunReference: ops?.nextRunReference ?? null,
+      nextDepartureTime: ops?.nextDepartureTime ?? null,
       lastCheckAt: latestCheck?.checkDate ?? null,
       lastCheckType: latestCheck?.checkType ?? null,
-      nextMaintenanceDate: null,
+      // PMI due date is the authoritative next maintenance window for schedule cards.
+      nextMaintenanceDate: pmiDueAt ?? nextServiceDueAt,
       nextMaintenanceMileage: null,
       openDefectCount: counts.open,
       criticalDefectCount: counts.critical,
       checksOverdue: false,
       dateAddedToFleet: iso(row.commissioned_at ?? row.created_at).slice(0, 10),
-      documents: [],
+      documents,
       restrictions: [],
       vorRecords: [],
       notes: [],
@@ -1131,15 +1535,15 @@ export async function projectVehicleProfile(companyId: string, vehicleId?: strin
       downtimeEvents: [],
       wheelLayout: [],
       retorqueTasks: [],
-      equipment: [],
+      equipment: equipmentByVehicle.get(String(row.id)) ?? [],
       tachograph: null,
       onboarding: approvedOnboarding(),
       damageRecords: [],
       telematics: null,
       platformEvents: [],
       release,
-      nearestExpiryDate: null,
-      nearestExpiryLabel: null,
+      nearestExpiryDate: nearest.date,
+      nearestExpiryLabel: nearest.label,
       status: op,
       createdAt: iso(row.created_at),
       updatedAt: iso(row.updated_at),
@@ -1183,6 +1587,89 @@ function documentStatusFromExpiry(expiryIso: string | null | undefined): 'valid'
   return 'valid'
 }
 
+/** Compliance cabinet rows derived from vehicle schedule date columns (one operational truth). */
+function buildVehicleComplianceDocuments(row: Row, vehicleId: string): Row[] {
+  const docs: Row[] = []
+  const push = (requirementType: string, label: string, expiry: unknown) => {
+    if (expiry == null || expiry === '') return
+    const expiryDate = iso(expiry).slice(0, 10)
+    if (!expiryDate || Number.isNaN(new Date(expiryDate).getTime())) return
+    const status = documentStatusFromExpiry(expiryDate)
+    docs.push({
+      id: `${vehicleId}-${requirementType}`,
+      requirementType,
+      label,
+      referenceNumber: null,
+      issuingOrganisation: null,
+      issueDate: null,
+      expiryDate,
+      verificationStatus: status === 'expired' ? 'rejected' : 'verified',
+      verifiedBy: 'Command schedule',
+      verifiedAt: null,
+      rejectionReason: status === 'expired' ? 'Past expiry on vehicle schedule' : null,
+      notes: 'Synced from vehicle compliance dates',
+      fileName: null,
+    })
+  }
+
+  push('mot', 'MOT / annual test', row.mot_expiry)
+  push('insurance', 'Fleet insurance', row.insurance_expiry)
+  push('tax', 'Road tax', row.tax_expiry)
+  push('tachograph_calibration', 'Tachograph calibration', row.tachograph_calibration_expiry)
+  push('pmi', 'PMI / safety inspection', row.pmi_due_at)
+  push('service', 'Next service due', row.next_service_due_at)
+  return docs
+}
+
+function nearestVehicleComplianceExpiry(row: Row): { date: string | null; label: string | null } {
+  const candidates: Array<{ date: string; label: string }> = []
+  const push = (date: unknown, label: string) => {
+    if (date == null || date === '') return
+    const value = iso(date).slice(0, 10)
+    if (!value || Number.isNaN(new Date(value).getTime())) return
+    candidates.push({ date: value, label })
+  }
+
+  push(row.mot_expiry, 'MOT')
+  push(row.insurance_expiry, 'Insurance')
+  push(row.tax_expiry, 'Tax')
+  push(row.tachograph_calibration_expiry, 'Tachograph')
+  push(row.pmi_due_at, 'PMI')
+  push(row.next_service_due_at, 'Service')
+
+  if (!candidates.length) return { date: null, label: null }
+  candidates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  return candidates[0]!
+}
+
+/** MOT / PMI / tax / insurance / tyres past due → hard block on allocate/dispatch. */
+function vehicleDocumentExpiryFailures(
+  row: Row,
+  registration: string,
+): Array<{ code: string; message: string; severity: string; category: string }> {
+  const prefix = registration ? `Vehicle ${registration}` : 'Vehicle'
+  const out: Array<{ code: string; message: string; severity: string; category: string }> = []
+  const pushExpired = (raw: unknown, code: string, label: string) => {
+    if (raw == null || raw === '') return
+    const status = documentStatusFromExpiry(String(raw))
+    if (status !== 'expired') return
+    out.push({
+      code,
+      message: `${prefix}: ${label} expired — cannot assign or dispatch.`,
+      severity: 'block',
+      category: 'compliance',
+    })
+  }
+  pushExpired(row.mot_expiry, 'mot_expired', 'MOT')
+  pushExpired(row.insurance_expiry, 'insurance_expired', 'Insurance')
+  pushExpired(row.tax_expiry, 'tax_expired', 'Road tax')
+  pushExpired(row.tachograph_calibration_expiry, 'tacho_cal_expired', 'Tachograph calibration')
+  pushExpired(row.pmi_due_at, 'pmi_overdue', 'PMI / safety inspection')
+  pushExpired(row.next_service_due_at, 'service_overdue', 'Next service')
+  pushExpired(row.wheel_retorque_due_at, 'tyre_retorque_overdue', 'Wheel re-torque')
+  return out
+}
+
 function formatUkExpiryLabel(expiryIso: string | null | undefined): string {
   if (!expiryIso) return 'Not on record in Command'
   const expiry = new Date(expiryIso)
@@ -1214,6 +1701,9 @@ export async function projectDriverVehicleReadiness(companyId: string, vehicleId
   pushDoc('insurance', 'Insurance', profile.insuranceExpiry)
   pushDoc('tax', 'Road tax', profile.taxExpiry)
   pushDoc('tachograph', 'Tachograph calibration', profile.tachographCalibrationExpiry)
+  pushDoc('pmi', 'PMI / safety inspection', profile.pmiDueAt ?? profile.nextMaintenanceDate)
+  pushDoc('service', 'Next service due', profile.nextServiceDueAt)
+  pushDoc('tyres', 'Wheel re-torque due', profile.wheelRetorqueDueAt)
 
   for (const doc of Array.isArray(profile.documents) ? (profile.documents as Row[]) : []) {
     const id = String(doc.id ?? doc.type ?? doc.label ?? 'document')
@@ -1247,6 +1737,9 @@ export async function projectDriverVehicleReadiness(companyId: string, vehicleId
     motExpiry: profile.motExpiry ? String(profile.motExpiry) : null,
     insuranceExpiry: profile.insuranceExpiry ? String(profile.insuranceExpiry) : null,
     taxExpiry: profile.taxExpiry ? String(profile.taxExpiry) : null,
+    pmiDueAt: profile.pmiDueAt ? String(profile.pmiDueAt) : null,
+    nextServiceDueAt: profile.nextServiceDueAt ? String(profile.nextServiceDueAt) : null,
+    wheelRetorqueDueAt: profile.wheelRetorqueDueAt ? String(profile.wheelRetorqueDueAt) : null,
     lastCheckAt: profile.lastCheckAt ? String(profile.lastCheckAt) : null,
     lastCheckType: profile.lastCheckType ? String(profile.lastCheckType) : null,
     documents,
@@ -1269,7 +1762,7 @@ function pushDriverTimelineEvent(events: DriverVehicleTimelineEvent[], event: Dr
 }
 
 export async function nextVehicleReportReference(companyId: string): Promise<string> {
-  const { count } = await admin
+  const { count } = await projDb(companyId)
     .from('vehicle_reports')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
@@ -1309,7 +1802,7 @@ export async function recordDriverVehicleHandbackReport(input: {
   ].filter(Boolean)
 
   const reference = await nextVehicleReportReference(input.companyId)
-  const { data, error } = await admin
+  const { data, error } = await projDb(companyId)
     .from('vehicle_reports')
     .insert({
       company_id: input.companyId,
@@ -1338,7 +1831,7 @@ export async function recordDriverVehicleHandbackReport(input: {
 
   if (error) throw new Error(error.message)
 
-  await admin.from('vehicle_report_status_history').insert({
+  await projDb(companyId).from('vehicle_report_status_history').insert({
     company_id: input.companyId,
     report_id: data.id,
     action: 'recorded',
@@ -1350,7 +1843,7 @@ export async function recordDriverVehicleHandbackReport(input: {
   let fuelReportReference: string | null = null
   if (input.fuelLevel) {
     fuelReportReference = await nextVehicleReportReference(input.companyId)
-    await admin.from('vehicle_reports').insert({
+    await projDb(companyId).from('vehicle_reports').insert({
       company_id: input.companyId,
       depot_id: input.depotId,
       vehicle_id: input.vehicleId,
@@ -1392,28 +1885,28 @@ export async function projectDriverVehicleTimeline(
     { data: fuelRows },
   ] =
     await Promise.all([
-    admin
+    projDb(companyId)
       .from('vehicle_checks')
       .select('id, check_type, result, fuel_level, odometer, submitted_at, drivers(staff_members(first_name, last_name))')
       .eq('company_id', companyId)
       .eq('vehicle_id', vehicleId)
       .order('submitted_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('defects')
       .select('id, category, component, description, severity, status, reported_at')
       .eq('company_id', companyId)
       .eq('vehicle_id', vehicleId)
       .order('reported_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('yard_movements')
       .select('id, to_location, reason, completed_at, completed_by, note')
       .eq('company_id', companyId)
       .eq('vehicle_id', vehicleId)
       .order('completed_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('vehicle_reports')
       .select(
         'id, reference, report_type, report_category, title, description, reported_at, reported_by, mileage, linked_work_order_id, status, stage',
@@ -1422,14 +1915,14 @@ export async function projectDriverVehicleTimeline(
       .eq('vehicle_id', vehicleId)
       .order('reported_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('adblue_records')
       .select('id, amount_litres, mileage, top_up_at, recorded_by_name, warning_before, warning_cleared')
       .eq('company_id', companyId)
       .eq('vehicle_id', vehicleId)
       .order('top_up_at', { ascending: false })
       .limit(limit),
-    admin
+    projDb(companyId)
       .from('fuel_records')
       .select('id, litres, odometer, fuel_type, recorded_at, notes')
       .eq('company_id', companyId)
@@ -1550,14 +2043,14 @@ export async function projectDriverVehicleTimeline(
 }
 
 export async function projectBookingList(companyId: string) {
-  const { data: bookings, error } = await admin
+  const { data: bookings, error } = await projDb(companyId)
     .from('bookings')
     .select('*, customers(trading_name, legal_name), depots(name)')
     .eq('company_id', companyId)
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
 
-  const { data: trips } = await admin.from('trips').select('id, booking_id').eq('company_id', companyId)
+  const { data: trips } = await projDb(companyId).from('trips').select('id, booking_id').eq('company_id', companyId)
   const tripCount = new Map<string, number>()
   for (const trip of trips ?? []) {
     const id = String(trip.booking_id ?? '')
@@ -1588,6 +2081,98 @@ export async function projectBookingList(companyId: string) {
       owner: null,
     }
   })
+}
+
+export async function projectSchoolRouteList(companyId: string) {
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: bookings, error } = await projDb(companyId)
+    .from('bookings')
+    .select('id, booking_reference, status, requested_date, passenger_ids, notes, customers(trading_name, legal_name)')
+    .eq('company_id', companyId)
+    .eq('booking_type', 'school_route')
+    .order('requested_date', { ascending: false })
+  if (error) throw new Error(error.message)
+
+  const bookingIds = (bookings ?? []).map((row: Row) => String(row.id))
+  const tripDatesByBooking = new Map<string, string[]>()
+  if (bookingIds.length) {
+    const { data: trips } = await projDb(companyId)
+      .from('trips')
+      .select('booking_id, service_date')
+      .eq('company_id', companyId)
+      .in('booking_id', bookingIds)
+    for (const trip of trips ?? []) {
+      const bookingId = String(trip.booking_id ?? '')
+      const serviceDate = trip.service_date ? String(trip.service_date).slice(0, 10) : ''
+      if (!bookingId || !serviceDate) continue
+      const list = tripDatesByBooking.get(bookingId) ?? []
+      list.push(serviceDate)
+      tripDatesByBooking.set(bookingId, list)
+    }
+  }
+
+  return (bookings ?? []).map((row: Row) => {
+    const customer = (row.customers as Row | null) ?? {}
+    const passengerIds = (row.passenger_ids as string[] | null) ?? []
+    const notes = String(row.notes ?? '')
+    const directionLabel = /pm|afternoon/i.test(notes)
+      ? 'PM'
+      : /am|morning/i.test(notes)
+        ? 'AM'
+        : 'AM'
+    const tripDates = [...(tripDatesByBooking.get(String(row.id)) ?? [])].sort()
+    const requestedDate = row.requested_date ? String(row.requested_date).slice(0, 10) : null
+    const nextService =
+      tripDates.find((date) => date >= today) ?? tripDates[0] ?? requestedDate
+
+    return {
+      id: row.id,
+      reference: row.booking_reference,
+      schoolName: customer.trading_name ?? customer.legal_name ?? 'School',
+      directionLabel,
+      pupilCount: passengerIds.length,
+      daysLabel: 'Term time',
+      vehicleRequirement: 'Section 19',
+      driverName: null,
+      assistantRequired: false,
+      nextService,
+      status: row.status === 'draft' ? 'draft' : 'published',
+      warningCount: 0,
+    }
+  })
+}
+
+export async function projectSchoolRouteSummary(companyId: string) {
+  const today = new Date().toISOString().slice(0, 10)
+  const routes = await projectSchoolRouteList(companyId)
+  const activeRoutes = routes.filter((route) => route.status !== 'draft' && route.status !== 'archived').length
+  const pupilsToday = routes
+    .filter((route) => route.nextService === today)
+    .reduce((sum, route) => sum + Number(route.pupilCount ?? 0), 0)
+
+  const routeBookingIds = routes.map((route) => String(route.id))
+  let unscheduledJobs = 0
+  if (routeBookingIds.length) {
+    const { data: trips } = await projDb(companyId)
+      .from('trips')
+      .select('id, booking_id')
+      .eq('company_id', companyId)
+      .eq('service_date', today)
+      .in('booking_id', routeBookingIds)
+    const tripIds = (trips ?? []).map((trip: Row) => String(trip.id))
+    if (tripIds.length) {
+      const { data: linked } = await projDb(companyId).from('run_trips').select('trip_id').in('trip_id', tripIds)
+      const linkedTripIds = new Set((linked ?? []).map((row: Row) => String(row.trip_id)))
+      unscheduledJobs = tripIds.filter((tripId) => !linkedTripIds.has(tripId)).length
+    }
+  }
+
+  return {
+    activeRoutes,
+    pupilsToday,
+    unscheduledJobs,
+    exceptions: 0,
+  }
 }
 
 function mapBookingTypeToUi(raw: unknown): string {
@@ -1732,7 +2317,7 @@ function dbTripToBookingTrip(trip: Row, index: number): Row {
 }
 
 export async function projectBookingDetail(companyId: string, bookingId: string) {
-  const { data: booking, error } = await admin
+  const { data: booking, error } = await projDb(companyId)
     .from('bookings')
     .select('*, customers(trading_name, legal_name), depots(name), contracts(contract_number, name)')
     .eq('company_id', companyId)
@@ -1746,13 +2331,13 @@ export async function projectBookingDetail(companyId: string, bookingId: string)
     : iso(booking.created_at).slice(0, 10)
 
   const [{ data: legs }, { data: trips }] = await Promise.all([
-    admin
+    projDb(companyId)
       .from('booking_legs')
       .select('*')
       .eq('company_id', companyId)
       .eq('booking_id', bookingId)
       .order('sequence', { ascending: true }),
-    admin
+    projDb(companyId)
       .from('trips')
       .select('*')
       .eq('company_id', companyId)
@@ -1763,7 +2348,7 @@ export async function projectBookingDetail(companyId: string, bookingId: string)
   const passengerIds = (booking.passenger_ids as string[] | null) ?? []
   let passengerRows: Row[] = []
   if (passengerIds.length) {
-    const { data } = await admin
+    const { data } = await projDb(companyId)
       .from('passengers')
       .select('id, first_name, last_name, safeguarding_flag, mobility_requirements')
       .eq('company_id', companyId)
@@ -1972,7 +2557,7 @@ function passengerDisplayName(passengerId: string, pickup: Row, names: Map<strin
 }
 
 export async function projectDuties(companyId: string, date?: string | null, dutyId?: string) {
-  let query = admin
+  let query = projDb(companyId)
     .from('duties')
     .select(
       '*, drivers(id, driver_number, staff_members(first_name, last_name), status), depots(id, name), vehicles(id, registration, operational_status)',
@@ -1987,7 +2572,7 @@ export async function projectDuties(companyId: string, date?: string | null, dut
 
   const dutyIds = (data ?? []).map((d: Row) => d.id as string)
   const { data: dutyRuns } = dutyIds.length
-    ? await admin.from('duty_runs').select('duty_id, run_id, sequence, runs(id, run_reference, vehicle_id, vehicles(id, registration, operational_status))').in('duty_id', dutyIds)
+    ? await projDb(companyId).from('duty_runs').select('duty_id, run_id, sequence, runs(id, run_reference, vehicle_id, vehicles(id, registration, operational_status))').in('duty_id', dutyIds)
     : { data: [] as Row[] }
 
   const runsByDuty = new Map<string, Row>()
@@ -2000,7 +2585,7 @@ export async function projectDuties(companyId: string, date?: string | null, dut
 
   const tripsByRun = new Map<string, Row[]>()
   if (runIds.length) {
-    const { data: runTrips } = await admin
+    const { data: runTrips } = await projDb(companyId)
       .from('run_trips')
       .select(
         'run_id, sequence, trips(id, trip_reference, planned_pickup_at, planned_arrival_at, pickup_location, destination_location, passenger_ids, status)',
@@ -2018,7 +2603,7 @@ export async function projectDuties(companyId: string, date?: string | null, dut
   }
 
   const { data: livePositions } = dutyIds.length
-    ? await admin
+    ? await projDb(companyId)
         .from('duty_live_positions')
         .select('duty_id, latitude, longitude, recorded_at, updated_at')
         .in('duty_id', dutyIds)
@@ -2092,7 +2677,7 @@ export async function projectDutyTrack(companyId: string, dutyId: string) {
   const duty = await projectDuties(companyId, null, dutyId)
   if (!duty) return null
 
-  const { data: live } = await admin
+  const { data: live } = await projDb(companyId)
     .from('duty_live_positions')
     .select('duty_id, latitude, longitude, recorded_at, updated_at, speed_mps, accuracy_meters')
     .eq('company_id', companyId)
@@ -2140,6 +2725,7 @@ function mapTripStatus(status: unknown): string {
 function operationalTripFromDutyRow(duty: Row): Row {
   const driver = duty.driver as Row | null
   const vehicle = duty.vehicle as Row | null
+  const depot = (duty.depot as Row | null) ?? (duty.depots as Row | null) ?? null
   return {
     id: duty.id,
     reference: duty.reference,
@@ -2150,8 +2736,9 @@ function operationalTripFromDutyRow(duty: Row): Row {
     driverName: driver ? `${driver.firstName ?? ''} ${driver.lastName ?? ''}`.trim() || null : null,
     vehicleId: vehicle?.id ?? null,
     vehicleRegistration: vehicle?.registrationNumber ?? null,
-    depotId: null,
-    depotName: null,
+    depotId: duty.depotId ?? duty.depot_id ?? depot?.id ?? null,
+    depotName: duty.depotName ?? depot?.name ?? null,
+    dispatcherName: null,
     assignmentStatus: driver ? 'assigned' : 'unassigned',
     acceptedAt: null,
     acknowledgedAt: null,
@@ -2185,32 +2772,65 @@ export function toOperationalPosition(trip: Row): Row {
   }
 }
 
-export async function projectOperationalTrips(companyId: string, tripId?: string) {
-  let query = admin
+export async function projectOperationalTrips(
+  companyId: string,
+  tripId?: string,
+  options?: { serviceDate?: string | null; bookingId?: string | null },
+) {
+  let query = projDb(companyId)
     .from('trips')
     .select('*')
     .eq('company_id', companyId)
     .order('planned_pickup_at', { ascending: true })
-  if (tripId) query = query.eq('id', tripId)
+  if (tripId) {
+    query = query.eq('id', tripId)
+  } else if (options?.bookingId) {
+    query = query.eq('booking_id', String(options.bookingId))
+  } else {
+    // Default list to one service day — otherwise historical assigned trips look like "today's" work.
+    const serviceDate = (options?.serviceDate && String(options.serviceDate).slice(0, 10)) ||
+      new Date().toISOString().slice(0, 10)
+    query = query.eq('service_date', serviceDate)
+  }
   const { data, error } = await query
   if (error) throw new Error(error.message)
 
   const rows = data ?? []
   const tripIds = rows.map((row: Row) => String(row.id))
 
+  const bookingIds = [...new Set(rows.map((row: Row) => String(row.booking_id ?? '')).filter(Boolean))]
+  const bookingMeta = new Map<string, { type: string; reference: string; depotId: string | null }>()
+  if (bookingIds.length) {
+    const { data: bookings } = await projDb(companyId)
+      .from('bookings')
+      .select('id, booking_type, booking_reference, depot_id')
+      .eq('company_id', companyId)
+      .in('id', bookingIds)
+    for (const booking of bookings ?? []) {
+      bookingMeta.set(String(booking.id), {
+        type: String(booking.booking_type ?? 'single'),
+        reference: String(booking.booking_reference ?? ''),
+        depotId: booking.depot_id ? String(booking.depot_id) : null,
+      })
+    }
+  }
+
   const [{ data: assignments }, { data: runLinks }] = await Promise.all([
     tripIds.length
-      ? admin
+      ? projDb(companyId)
           .from('trip_assignments')
           .select(
-            'trip_id, run_id, driver_id, vehicle_id, status, drivers(id, staff_members(first_name, last_name)), vehicles(id, registration)',
+            'trip_id, run_id, driver_id, vehicle_id, status, assigned_at, assigned_by, drivers(id, primary_depot_id, staff_members(first_name, last_name)), vehicles(id, registration, primary_depot_id)',
           )
           .eq('company_id', companyId)
           .eq('status', 'active')
           .in('trip_id', tripIds)
       : Promise.resolve({ data: [] as Row[] }),
     tripIds.length
-      ? admin.from('run_trips').select('trip_id, run_id, runs(id, run_reference)').in('trip_id', tripIds)
+      ? projDb(companyId)
+          .from('run_trips')
+          .select('trip_id, run_id, runs(id, run_reference, depot_id)')
+          .in('trip_id', tripIds)
       : Promise.resolve({ data: [] as Row[] }),
   ])
 
@@ -2223,9 +2843,50 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
     if (!runByTrip.has(String(row.trip_id))) runByTrip.set(String(row.trip_id), row)
   }
 
+  const depotIds = new Set<string>()
+  const dispatcherIds = new Set<string>()
+  for (const row of rows) {
+    if (row.depot_id) depotIds.add(String(row.depot_id))
+    if (row.created_by) dispatcherIds.add(String(row.created_by))
+    if (row.updated_by) dispatcherIds.add(String(row.updated_by))
+    const bookingDepotId = row.booking_id
+      ? bookingMeta.get(String(row.booking_id))?.depotId ?? null
+      : null
+    if (bookingDepotId) depotIds.add(bookingDepotId)
+  }
+  for (const row of assignments ?? []) {
+    if (row.assigned_by) dispatcherIds.add(String(row.assigned_by))
+    const driver = (row.drivers as Row | null) ?? null
+    const vehicle = (row.vehicles as Row | null) ?? null
+    if (driver?.primary_depot_id) depotIds.add(String(driver.primary_depot_id))
+    if (vehicle?.primary_depot_id) depotIds.add(String(vehicle.primary_depot_id))
+  }
+  for (const row of runLinks ?? []) {
+    const run = (row.runs as Row | null) ?? null
+    if (run?.depot_id) depotIds.add(String(run.depot_id))
+  }
+
+  const [{ data: depotRows }, { data: userRows }] = await Promise.all([
+    depotIds.size
+      ? projDb(companyId).from('depots').select('id, name').eq('company_id', companyId).in('id', [...depotIds])
+      : Promise.resolve({ data: [] as Row[] }),
+    dispatcherIds.size
+      ? projDb(companyId).from('users').select('id, first_name, last_name, email').in('id', [...dispatcherIds])
+      : Promise.resolve({ data: [] as Row[] }),
+  ])
+  const depotNameById = new Map<string, string>()
+  for (const depot of depotRows ?? []) {
+    depotNameById.set(String(depot.id), String(depot.name ?? 'Depot'))
+  }
+  const userNameById = new Map<string, string>()
+  for (const user of userRows ?? []) {
+    const name = `${String(user.first_name ?? '')} ${String(user.last_name ?? '')}`.trim()
+    userNameById.set(String(user.id), name || String(user.email ?? 'Dispatcher'))
+  }
+
   const runIds = [...new Set((runLinks ?? []).map((row: Row) => String(row.run_id)).filter(Boolean))]
   const { data: dutyLinks } = runIds.length
-    ? await admin.from('duty_runs').select('duty_id, run_id').in('run_id', runIds)
+    ? await projDb(companyId).from('duty_runs').select('duty_id, run_id').in('run_id', runIds)
     : { data: [] as Row[] }
   const dutyByRun = new Map<string, string>()
   for (const row of dutyLinks ?? []) {
@@ -2238,7 +2899,7 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
   }
   const passengerNames = new Map<string, string>()
   if (allPassengerIds.size) {
-    const { data: passengers } = await admin
+    const { data: passengers } = await projDb(companyId)
       .from('passengers')
       .select('id, first_name, last_name, preferred_name')
       .eq('company_id', companyId)
@@ -2252,13 +2913,36 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
 
   const dutyIdsForGps = [...new Set([...dutyByRun.values()])]
   const { data: liveRows } = dutyIdsForGps.length
-    ? await admin
+    ? await projDb(companyId)
         .from('duty_live_positions')
         .select('duty_id, latitude, longitude, recorded_at')
         .in('duty_id', dutyIdsForGps)
     : { data: [] as Row[] }
   const liveByDuty = new Map<string, Row>()
   for (const row of liveRows ?? []) liveByDuty.set(String(row.duty_id), row)
+
+  const [{ data: dutyLifecycleRows }, { data: dutyAckRows }] = await Promise.all([
+    dutyIdsForGps.length
+      ? projDb(companyId)
+          .from('duties')
+          .select('id, driver_lifecycle_status, updated_at')
+          .eq('company_id', companyId)
+          .in('id', dutyIdsForGps)
+      : Promise.resolve({ data: [] as Row[] }),
+    dutyIdsForGps.length
+      ? projDb(companyId)
+          .from('duty_acknowledgements')
+          .select('duty_id, acknowledged_at')
+          .eq('company_id', companyId)
+          .in('duty_id', dutyIdsForGps)
+      : Promise.resolve({ data: [] as Row[] }),
+  ])
+  const lifecycleByDuty = new Map<string, Row>()
+  for (const row of dutyLifecycleRows ?? []) lifecycleByDuty.set(String(row.id), row)
+  const ackAtByDuty = new Map<string, string>()
+  for (const row of dutyAckRows ?? []) {
+    if (row.acknowledged_at) ackAtByDuty.set(String(row.duty_id), String(row.acknowledged_at))
+  }
 
   const projected = rows.map((row: Row) => {
     const assignment = assignmentByTrip.get(String(row.id))
@@ -2268,13 +2952,32 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
     const runLink = runByTrip.get(String(row.id))
     const run = (runLink?.runs as Row | null) ?? null
     const dutyIdForTrip = runLink ? dutyByRun.get(String(runLink.run_id)) ?? null : null
+    const booking = row.booking_id ? bookingMeta.get(String(row.booking_id)) : null
     const pickup = (row.pickup_location as Row | null) ?? {}
     const destination = (row.destination_location as Row | null) ?? {}
     const passengerIds = (row.passenger_ids as string[] | null) ?? []
     const live = dutyIdForTrip ? liveByDuty.get(dutyIdForTrip) : null
+    const dutyLifecycle = dutyIdForTrip ? lifecycleByDuty.get(dutyIdForTrip) : null
+    const acknowledgedAt =
+      (dutyIdForTrip ? ackAtByDuty.get(dutyIdForTrip) ?? null : null) ??
+      (String(dutyLifecycle?.driver_lifecycle_status ?? '') === 'acknowledged'
+        ? dutyLifecycle?.updated_at
+          ? String(dutyLifecycle.updated_at)
+          : new Date().toISOString()
+        : null)
+    const depotId =
+      (row.depot_id ? String(row.depot_id) : null) ??
+      (run?.depot_id ? String(run.depot_id) : null) ??
+      (booking?.depotId ?? null) ??
+      (driver?.primary_depot_id ? String(driver.primary_depot_id) : null) ??
+      (vehicle?.primary_depot_id ? String(vehicle.primary_depot_id) : null)
+    const dispatcherId =
+      (assignment?.assigned_by ? String(assignment.assigned_by) : null) ??
+      (row.updated_by ? String(row.updated_by) : null) ??
+      (row.created_by ? String(row.created_by) : null)
 
     const jobs = passengerIds.map((passengerId, index) => ({
-      id: `${row.id}-pax-${index + 1}`,
+      id: `${row.id}-pax-${passengerId}`,
       tripId: row.id,
       sequence: index + 1,
       passengerId,
@@ -2305,11 +3008,12 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
         : null,
       vehicleId: assignment?.vehicle_id ?? vehicle?.id ?? null,
       vehicleRegistration: vehicle?.registration ?? null,
-      depotId: row.depot_id ?? null,
-      depotName: null,
+      depotId,
+      depotName: depotId ? depotNameById.get(depotId) ?? null : null,
+      dispatcherName: dispatcherId ? userNameById.get(dispatcherId) ?? null : null,
       assignmentStatus: assignment?.driver_id ? 'assigned' : 'unassigned',
-      acceptedAt: null,
-      acknowledgedAt: null,
+      acceptedAt: assignment?.assigned_at ? String(assignment.assigned_at) : null,
+      acknowledgedAt,
       manifestVersion: row.version ?? 1,
       lastAppSync: null,
       delayMinutes: 0,
@@ -2321,7 +3025,13 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
       gpsLat: live?.latitude != null ? Number(live.latitude) : null,
       gpsLng: live?.longitude != null ? Number(live.longitude) : null,
       driverOnline: Boolean(live),
-      routeName: run?.run_reference ?? null,
+      routeName:
+        run?.run_reference ??
+        (booking?.type === 'school_route'
+          ? `School route ${booking.reference}`
+          : booking?.type === 'dial_a_ride'
+            ? `Dial-a-Ride ${booking.reference}`
+            : null),
       bookingId: row.booking_id ?? null,
       serviceDate: row.service_date,
       plannedPickupAt: row.planned_pickup_at,
@@ -2332,6 +3042,11 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
   if (tripId) {
     const found = projected[0] ?? null
     if (found) return found
+    // Booking detail previously linked booking UUIDs into /live-operations/trips/:id.
+    const byBooking = (await projectOperationalTrips(companyId, undefined, {
+      bookingId: tripId,
+    })) as Row[]
+    if (byBooking.length > 0) return byBooking[0]!
     // Allow Manage Assignment to open against a duty id when no trip row exists.
     const duty = await projectDuties(companyId, null, tripId)
     return duty ? operationalTripFromDutyRow(duty as Row) : null
@@ -2339,15 +3054,19 @@ export async function projectOperationalTrips(companyId: string, tripId?: string
   return projected
 }
 
+export async function projectOperationalTripsByBooking(companyId: string, bookingId: string) {
+  return projectOperationalTrips(companyId, undefined, { bookingId }) as Promise<Row[]>
+}
+
 export async function projectOperationalTripByDuty(companyId: string, dutyId: string) {
-  const { data: dutyRuns } = await admin
+  const { data: dutyRuns } = await projDb(companyId)
     .from('duty_runs')
     .select('run_id, sequence')
     .eq('duty_id', dutyId)
     .order('sequence', { ascending: true })
   const runIds = (dutyRuns ?? []).map((row: Row) => String(row.run_id))
   if (runIds.length) {
-    const { data: runTrips } = await admin
+    const { data: runTrips } = await projDb(companyId)
       .from('run_trips')
       .select('trip_id, sequence')
       .in('run_id', runIds)
@@ -2384,4 +3103,112 @@ export async function projectOperationalTripByDuty(companyId: string, dutyId: st
   const duty = await projectDuties(companyId, null, dutyId)
   if (!duty) return null
   return operationalTripFromDutyRow(duty as Row)
+}
+
+function staffDisplayName(staff: Row | null | undefined): string | null {
+  if (!staff) return null
+  const name = `${String(staff.first_name ?? '')} ${String(staff.last_name ?? '')}`.trim()
+  return name || null
+}
+
+function assignmentChangeType(previous: Row | null, current: Row): string {
+  if (!previous) return current.driver_id || current.vehicle_id ? 'Assigned' : 'Assignment recorded'
+  const driverChanged = String(previous.driver_id ?? '') !== String(current.driver_id ?? '')
+  const vehicleChanged = String(previous.vehicle_id ?? '') !== String(current.vehicle_id ?? '')
+  if (driverChanged && vehicleChanged) return 'Driver and vehicle reassigned'
+  if (driverChanged) return 'Driver reassigned'
+  if (vehicleChanged) return 'Vehicle changed'
+  if (String(previous.status ?? '') !== String(current.status ?? '')) {
+    return `Assignment ${String(current.status ?? 'updated')}`
+  }
+  return 'Assignment updated'
+}
+
+/** Immutable assignment change list for Trip Assignments / Change history. */
+export async function projectAssignmentHistory(companyId: string, tripId: string) {
+  const { data: trip, error: tripError } = await projDb(companyId)
+    .from('trips')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('id', tripId)
+    .maybeSingle()
+  if (tripError) throw new Error(tripError.message)
+  if (!trip) return null
+
+  const { data: rows, error } = await projDb(companyId)
+    .from('trip_assignments')
+    .select(
+      'id, trip_id, run_id, driver_id, vehicle_id, status, assigned_at, assigned_by, created_at, drivers(id, staff_members(first_name, last_name)), vehicles(id, registration)',
+    )
+    .eq('company_id', companyId)
+    .eq('trip_id', tripId)
+    .order('assigned_at', { ascending: true })
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(error.message)
+
+  const assignments = rows ?? []
+  const runIds = [...new Set(assignments.map((row: Row) => (row.run_id ? String(row.run_id) : '')).filter(Boolean))]
+  const { data: dutyLinks } = runIds.length
+    ? await projDb(companyId).from('duty_runs').select('duty_id, run_id').in('run_id', runIds)
+    : { data: [] as Row[] }
+  const dutyByRun = new Map<string, string>()
+  for (const row of dutyLinks ?? []) {
+    dutyByRun.set(String(row.run_id), String(row.duty_id))
+  }
+
+  const adminIds = [
+    ...new Set(
+      assignments
+        .map((row: Row) => (row.assigned_by ? String(row.assigned_by) : ''))
+        .filter(Boolean),
+    ),
+  ]
+  const { data: userRows } = adminIds.length
+    ? await projDb(companyId).from('users').select('id, first_name, last_name, email').in('id', adminIds)
+    : { data: [] as Row[] }
+  const adminNameById = new Map<string, string>()
+  for (const user of userRows ?? []) {
+    const name = `${String(user.first_name ?? '')} ${String(user.last_name ?? '')}`.trim()
+    adminNameById.set(String(user.id), name || String(user.email ?? 'Dispatcher'))
+  }
+
+  const history: Row[] = []
+  for (let index = 0; index < assignments.length; index++) {
+    const current = assignments[index]!
+    const previous = index > 0 ? assignments[index - 1]! : null
+    const currentDriver = (current.drivers as Row | null) ?? null
+    const previousDriver = (previous?.drivers as Row | null) ?? null
+    const currentStaff = (currentDriver?.staff_members as Row | null) ?? null
+    const previousStaff = (previousDriver?.staff_members as Row | null) ?? null
+    const currentVehicle = (current.vehicles as Row | null) ?? null
+    const previousVehicle = (previous?.vehicles as Row | null) ?? null
+    const dutyId = current.run_id ? dutyByRun.get(String(current.run_id)) ?? null : null
+    const adminId = current.assigned_by ? String(current.assigned_by) : null
+
+    history.push({
+      id: String(current.id),
+      tripId,
+      dutyId,
+      changeType: assignmentChangeType(previous, current),
+      fromDriverId: previous?.driver_id ? String(previous.driver_id) : null,
+      fromDriverName: staffDisplayName(previousStaff),
+      toDriverId: current.driver_id ? String(current.driver_id) : null,
+      toDriverName: staffDisplayName(currentStaff),
+      fromVehicleId: previous?.vehicle_id ? String(previous.vehicle_id) : null,
+      fromVehicleRegistration: previousVehicle?.registration
+        ? String(previousVehicle.registration)
+        : null,
+      toVehicleId: current.vehicle_id ? String(current.vehicle_id) : null,
+      toVehicleRegistration: currentVehicle?.registration
+        ? String(currentVehicle.registration)
+        : null,
+      reason: String(current.status ?? 'recorded'),
+      adminName: adminId ? adminNameById.get(adminId) ?? 'Dispatcher' : 'System',
+      at: String(current.assigned_at ?? current.created_at ?? new Date().toISOString()),
+      transferId: null,
+      immutable: true,
+    })
+  }
+
+  return history.reverse()
 }

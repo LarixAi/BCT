@@ -6,7 +6,7 @@ import { EMPLOYMENT_TYPE_LABELS, WORK_PERMISSION_OPTIONS } from '@/lib/drivers/c
 import type { CreateDriverInput, EmploymentType, UpdateDriverInput } from '@/lib/drivers/types'
 import { DriverBackLink } from './components/DriverProfileHeader'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

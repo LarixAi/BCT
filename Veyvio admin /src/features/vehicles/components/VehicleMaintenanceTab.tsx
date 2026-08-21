@@ -23,6 +23,13 @@ const SCHEDULE_STATUS: Record<string, string> = {
   missing: 'warning',
 }
 
+function addDaysIso(days: number): string {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: VehicleProfile; actorName: string }) {
   const queryClient = useQueryClient()
   const [title, setTitle] = useState('')
@@ -31,17 +38,69 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
   const [partName, setPartName] = useState('')
   const [partQty, setPartQty] = useState(1)
   const [partCost, setPartCost] = useState(0)
+  const [editingSchedule, setEditingSchedule] = useState(false)
+  const [pmiDue, setPmiDue] = useState(vehicle.nextMaintenanceDate ?? '')
+  const [motDue, setMotDue] = useState(vehicle.motExpiry ?? '')
+  const [tachoDue, setTachoDue] = useState(vehicle.tachographCalibrationExpiry ?? '')
+  const [insuranceDue, setInsuranceDue] = useState(vehicle.insuranceExpiry ?? '')
+  const [taxDue, setTaxDue] = useState(vehicle.taxExpiry ?? '')
 
   const health = computeVehicleHealth(vehicle)
   const schedule = buildMaintenanceScheduleCards(vehicle)
   const openOrders = vehicle.workOrders.filter((w) => !['completed', 'cancelled'].includes(w.status))
   const defectsAwaiting = vehicle.defects.filter((d) => d.status !== 'closed')
+  const scheduleIncomplete =
+    !vehicle.nextMaintenanceDate || !vehicle.motExpiry || !vehicle.tachographCalibrationExpiry
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profile', vehicle.id]) })
     queryClient.invalidateQueries({ queryKey: tKey(['vehicle-profiles']) })
+    queryClient.invalidateQueries({ queryKey: tKey(['vehicle-directory-summary']) })
     queryClient.invalidateQueries({ queryKey: tKey(['maintenance-hub']) })
   }
+
+  const saveSchedule = useMutation({
+    mutationFn: () =>
+      api.updateVehicle(
+        vehicle.id,
+        {
+          nextMaintenanceDate: pmiDue || null,
+          motExpiry: motDue || null,
+          tachographCalibrationExpiry: tachoDue || null,
+          insuranceExpiry: insuranceDue || null,
+          taxExpiry: taxDue || null,
+        },
+        actorName,
+      ),
+    onSuccess: () => {
+      invalidate()
+      setEditingSchedule(false)
+    },
+  })
+
+  const applyReadinessDefaults = useMutation({
+    mutationFn: () =>
+      api.updateVehicle(
+        vehicle.id,
+        {
+          nextMaintenanceDate: vehicle.nextMaintenanceDate ?? addDaysIso(42),
+          motExpiry: vehicle.motExpiry ?? addDaysIso(365),
+          tachographCalibrationExpiry: vehicle.tachographCalibrationExpiry ?? addDaysIso(730),
+          insuranceExpiry: vehicle.insuranceExpiry ?? addDaysIso(365),
+          taxExpiry: vehicle.taxExpiry ?? addDaysIso(365),
+        },
+        actorName,
+      ),
+    onSuccess: (profile) => {
+      invalidate()
+      setPmiDue(profile.nextMaintenanceDate ?? '')
+      setMotDue(profile.motExpiry ?? '')
+      setTachoDue(profile.tachographCalibrationExpiry ?? '')
+      setInsuranceDue(profile.insuranceExpiry ?? '')
+      setTaxDue(profile.taxExpiry ?? '')
+      setEditingSchedule(false)
+    },
+  })
 
   const create = useMutation({
     mutationFn: () =>
@@ -120,7 +179,26 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
         </p>
       </SectionCard>
 
-      <SectionCard title="Scheduled maintenance" description="PMI, MOT and calibration windows">
+      <SectionCard
+        title="Scheduled maintenance"
+        description="PMI, MOT and calibration windows"
+        action={
+          <button
+            type="button"
+            onClick={() => {
+              setPmiDue(vehicle.nextMaintenanceDate ?? '')
+              setMotDue(vehicle.motExpiry ?? '')
+              setTachoDue(vehicle.tachographCalibrationExpiry ?? '')
+              setInsuranceDue(vehicle.insuranceExpiry ?? '')
+              setTaxDue(vehicle.taxExpiry ?? '')
+              setEditingSchedule((v) => !v)
+            }}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-command-700 hover:bg-surface-muted"
+          >
+            {editingSchedule ? 'Cancel' : 'Edit schedule'}
+          </button>
+        }
+      >
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {schedule.map((card) => (
             <div key={card.id} className="rounded-xl border border-border bg-surface p-3">
@@ -139,6 +217,91 @@ export function VehicleMaintenanceTab({ vehicle, actorName }: { vehicle: Vehicle
             </div>
           ))}
         </div>
+
+        {scheduleIncomplete && !editingSchedule && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            <p>
+              PMI, MOT or tachograph dates are missing — readiness and compliance records stay incomplete until
+              they are on file.
+            </p>
+            <button
+              type="button"
+              onClick={() => applyReadinessDefaults.mutate()}
+              disabled={applyReadinessDefaults.isPending}
+              className="mt-2 rounded-lg bg-command-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-command-700 disabled:opacity-60"
+            >
+              {applyReadinessDefaults.isPending ? 'Saving…' : 'Set readiness schedule defaults'}
+            </button>
+          </div>
+        )}
+
+        {editingSchedule && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <label className="text-sm">
+              <span className="text-muted">Next PMI</span>
+              <input
+                type="date"
+                value={pmiDue}
+                onChange={(e) => setPmiDue(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-muted">MOT expiry</span>
+              <input
+                type="date"
+                value={motDue}
+                onChange={(e) => setMotDue(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-muted">Tachograph calibration</span>
+              <input
+                type="date"
+                value={tachoDue}
+                onChange={(e) => setTachoDue(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-muted">Insurance expiry</span>
+              <input
+                type="date"
+                value={insuranceDue}
+                onChange={(e) => setInsuranceDue(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="text-muted">Road tax expiry</span>
+              <input
+                type="date"
+                value={taxDue}
+                onChange={(e) => setTaxDue(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2"
+              />
+            </label>
+            <div className="flex items-end gap-2">
+              <button
+                type="button"
+                onClick={() => saveSchedule.mutate()}
+                disabled={saveSchedule.isPending}
+                className="rounded-lg bg-command-600 px-3 py-2 text-sm font-medium text-white hover:bg-command-700 disabled:opacity-60"
+              >
+                {saveSchedule.isPending ? 'Saving…' : 'Save schedule'}
+              </button>
+            </div>
+            {(saveSchedule.isError || applyReadinessDefaults.isError) && (
+              <p className="text-sm text-red-700 sm:col-span-2 xl:col-span-3">
+                {(saveSchedule.error ?? applyReadinessDefaults.error) instanceof Error
+                  ? (saveSchedule.error ?? applyReadinessDefaults.error)!.message
+                  : 'Could not save schedule'}
+              </p>
+            )}
+          </div>
+        )}
+
         <Link to="/maintenance?tab=planner" className="mt-3 inline-block text-sm font-medium text-command-700 hover:underline">
           Open maintenance planner →
         </Link>

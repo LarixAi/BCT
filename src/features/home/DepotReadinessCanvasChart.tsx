@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, MoreHorizontal } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Calendar } from "lucide-react";
 import type { DayReadiness } from "./depot-readiness-series";
 import {
   CHART_COLORS,
@@ -12,16 +13,6 @@ import {
   yAt,
   type ChartPoint,
 } from "./canvas-chart-utils";
-import { SegmentedControl } from "./HomeDashboardPrimitives";
-
-type WeekTab = "week1" | "week2" | "week3" | "week4";
-
-const WEEK_TABS: { id: WeekTab; label: string }[] = [
-  { id: "week1", label: "Week 1" },
-  { id: "week2", label: "Week 2" },
-  { id: "week3", label: "Week 3" },
-  { id: "week4", label: "Week 4" },
-];
 
 type Props = {
   series: DayReadiness[];
@@ -76,7 +67,6 @@ export function DepotReadinessCanvasChart({ series }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [activeIndex, setActiveIndex] = useState(() => Math.max(0, series.findIndex(d => d.isToday)));
-  const [week, setWeek] = useState<WeekTab>("week2");
   const [chartWidth, setChartWidth] = useState(360);
 
   const today = useMemo(() => series.find(d => d.isToday) ?? series[0], [series]);
@@ -242,23 +232,14 @@ export function DepotReadinessCanvasChart({ series }: Props) {
     <div>
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-base font-semibold text-ink">Depot readiness overview</h2>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e4e7ec] bg-white px-2.5 text-xs font-medium text-ink sm:h-9 sm:px-3"
-          >
-            <Calendar className="size-3.5 text-[#667085]" />
-            <span className="hidden sm:inline">{monthLabel}</span>
-            <span className="sm:hidden">{shortMonth}</span>
-          </button>
-          <button
-            type="button"
-            className="grid size-8 place-items-center rounded-lg border border-[#e4e7ec] text-[#667085] sm:size-9"
-            aria-label="More options"
-          >
-            <MoreHorizontal className="size-4" />
-          </button>
-        </div>
+        <Link
+          to="/yard"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e4e7ec] bg-white px-2.5 text-xs font-medium text-ink sm:h-9 sm:px-3"
+        >
+          <Calendar className="size-3.5 text-[#667085]" />
+          <span className="hidden sm:inline">{monthLabel}</span>
+          <span className="sm:hidden">{shortMonth}</span>
+        </Link>
       </div>
 
       <div className="mt-3 space-y-3 sm:mt-4">
@@ -273,12 +254,15 @@ export function DepotReadinessCanvasChart({ series }: Props) {
                 {avgDelta}%
               </span>
             </div>
-            <p className="mt-1 text-xs text-[#667085]">Week average</p>
+            <p className="mt-1 text-xs text-[#667085]">This week · live fleet picture</p>
             <p className="text-xs text-[#98a2b3]">Tap a day on the chart</p>
           </div>
-          <div className="-mx-1 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:pb-0">
-            <SegmentedControl value={week} onChange={setWeek} options={WEEK_TABS} className="min-w-max" />
-          </div>
+          <Link
+            to="/checks"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-[#e4e7ec] px-4 text-xs font-semibold text-ink"
+          >
+            Open checks
+          </Link>
         </div>
 
         <div

@@ -10,10 +10,18 @@ import { DRIVER_NAV_TOTAL_OFFSET } from "@/lib/driverSafeArea";
 import {
   clearReplyDraft,
   getDriverMessageThread,
+  listQueuedThreadMessages,
   loadReplyDraft,
   replyToThread,
   saveReplyDraft,
 } from "@/services/messages.service";
+
+function deliveryLabel(msg) {
+  if (msg.deliveryStatus === "pending") return "Waiting for connection";
+  if (msg.fromDriver) return "Delivered to Command";
+  if (msg.deliveryStatus === "read" || msg.readAt) return "Read";
+  return null;
+}
 
 function audienceLabel(audience) {
   if (audience === "yard") return "Yard";
@@ -29,6 +37,8 @@ export default function DriverMessageThread({ driver }) {
   const [error, setError] = useState("");
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [queuedNotice, setQueuedNotice] = useState("");
+  const [pendingMessages, setPendingMessages] = useState([]);
   const listRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -37,13 +47,16 @@ export default function DriverMessageThread({ driver }) {
     try {
       const data = await getDriverMessageThread(threadId);
       if (!data) setError("Conversation not found.");
-      else setDetail(data);
+      else {
+        setDetail(data);
+        setPendingMessages(await listQueuedThreadMessages(driver, session, threadId));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load conversation");
     } finally {
       setLoading(false);
     }
-  }, [threadId]);
+  }, [threadId, driver, session]);
 
   useEffect(() => {
     setLoading(true);
@@ -69,7 +82,7 @@ export default function DriverMessageThread({ driver }) {
     const el = listRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [detail?.messages?.length]);
+  }, [detail?.messages?.length, pendingMessages.length]);
 
   useEffect(() => {
     if (!threadId) return;
@@ -88,6 +101,7 @@ export default function DriverMessageThread({ driver }) {
 
   const sendReply = async () => {
     setSending(true);
+    setQueuedNotice("");
     const result = await replyToThread(driver, threadId, reply, session);
     setSending(false);
     if (!result.ok) {
@@ -96,6 +110,10 @@ export default function DriverMessageThread({ driver }) {
     }
     if (result.queued) {
       setError("");
+      setQueuedNotice(result.message);
+      if (result.pendingMessage) {
+        setPendingMessages((prev) => [...prev, result.pendingMessage]);
+      }
       setReply("");
       await clearReplyDraft(driver, session, threadId);
       return;
@@ -104,6 +122,8 @@ export default function DriverMessageThread({ driver }) {
     await clearReplyDraft(driver, session, threadId);
     await load();
   };
+
+  const visibleMessages = [...(detail?.messages ?? []), ...pendingMessages];
 
   const audience = detail?.thread?.audience;
 
@@ -123,12 +143,16 @@ export default function DriverMessageThread({ driver }) {
         {error && !detail ? <p className="py-4 text-sm text-red-600">{error}</p> : null}
 
         <div className="space-y-3 pb-2">
-          {(detail?.messages ?? []).map((msg) => (
+          {visibleMessages.map((msg) => {
+            const statusLabel = deliveryLabel(msg);
+            return (
             <div
               key={msg.id}
               className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                 msg.fromDriver
-                  ? "ml-auto bg-[#1eaeae] text-white"
+                  ? msg.deliveryStatus === "pending"
+                    ? "ml-auto border border-amber-200 bg-amber-50 text-amber-950"
+                    : "ml-auto bg-[#1eaeae] text-white"
                   : "mr-auto border border-border bg-card text-foreground"
               }`}
             >
@@ -138,16 +162,22 @@ export default function DriverMessageThread({ driver }) {
                 </p>
               ) : null}
               <p className="whitespace-pre-wrap leading-relaxed">{msg.body}</p>
-              <p className={`mt-2 text-[10px] ${msg.fromDriver ? "text-white/75" : "text-muted-foreground"}`}>
+              <p className={`mt-2 text-[10px] ${msg.fromDriver && msg.deliveryStatus !== "pending" ? "text-white/75" : "text-muted-foreground"}`}>
                 {formatUkDateTime(msg.createdAt)}
+                {statusLabel ? ` · ${statusLabel}` : ""}
               </p>
             </div>
-          ))}
+          )})}
         </div>
       </div>
 
       {detail ? (
         <div className="border-t border-border bg-card/95 px-4 py-3 backdrop-blur">
+          {queuedNotice ? (
+            <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              {queuedNotice}
+            </p>
+          ) : null}
           {error ? <p className="mb-2 text-xs text-red-600">{error}</p> : null}
           <textarea
             value={reply}

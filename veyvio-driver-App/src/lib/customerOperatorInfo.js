@@ -3,12 +3,12 @@
 export const CUSTOMER_APP_VERSION = "1.0.0";
 
 export const CUSTOMER_OPERATOR_INFO = {
-  name: import.meta.env.VITE_OPERATOR_NAME || "Core Support Fleet",
-  tagline: "Private hire · TfL licensed operator",
+  name: import.meta.env.VITE_OPERATOR_NAME || "Your operator",
+  tagline: "Transport operations · licensed operator",
   tflOperatorLicence: import.meta.env.VITE_OPERATOR_TFL_LICENCE || "",
   supportPhone: import.meta.env.VITE_OPERATOR_SUPPORT_PHONE || "",
   supportEmail:
-    import.meta.env.VITE_OPERATOR_SUPPORT_EMAIL || "support@coresupportfleet.com",
+    import.meta.env.VITE_OPERATOR_SUPPORT_EMAIL || "support@veyvio.co.uk",
   website: import.meta.env.VITE_OPERATOR_WEBSITE || "",
   officeHours: "Mon–Fri, 9:00–18:00 · 24/7 support for active trips",
 };

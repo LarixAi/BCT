@@ -9,7 +9,10 @@ import { tKey } from '@/lib/tenant/tenant-query-scope'
 export function DialARideMembersPage() {
   const { data: members = [], isLoading } = useQuery({
     queryKey: tKey(['dial-a-ride-members']),
-    queryFn: () => api.getDialARideMembers(),
+    queryFn: async () => {
+      const rows = await api.getDialARideMembers()
+      return Array.isArray(rows) ? rows : []
+    },
   })
 
   return (

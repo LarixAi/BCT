@@ -62,7 +62,17 @@ export default defineConfig({
         ]
       : []),
     react(),
+    {
+      name: "capacitor-strip-crossorigin",
+      transformIndexHtml(html) {
+        // WKWebView on iOS fails to load ES modules when crossorigin is set on capacitor:// URLs.
+        return html.replace(/\s+crossorigin(?:="[^"]*")?/g, "");
+      },
+    },
   ],
+  build: {
+    modulePreload: false,
+  },
   server: {
     host: true,
     port: 5173,
@@ -76,6 +86,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    setupFiles: ["src/test/setup-durable-kv.js"],
     include: ["src/**/*.{test,e2e.test}.{js,jsx,ts,tsx}"],
   },
 })

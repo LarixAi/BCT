@@ -40,8 +40,8 @@ export default function VehicleCheckTrainingGuide({ acknowledgments, onAckChange
         <div>
           <p className="font-semibold text-foreground text-sm">Daily walkaround checks in this app</p>
           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-            Core Support Fleet uses the driver app to record TfL-required daily safety checks. Your operator can see
-            every submission — including nil-defect reports when the vehicle is safe to drive.
+            Veyvio Driver records TfL-required daily safety checks for your operator. They can see every
+            submission — including nil-defect reports when the vehicle is safe to drive.
           </p>
         </div>
       </div>

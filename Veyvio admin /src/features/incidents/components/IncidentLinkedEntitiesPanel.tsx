@@ -5,7 +5,7 @@ import { linkedEntitiesSummary } from '@/lib/incidents/linking'
 import { canInvestigateIncident } from '@/lib/incidents/permissions'
 import type { IncidentDetailRecord } from '@/lib/incidents/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

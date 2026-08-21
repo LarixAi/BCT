@@ -14,22 +14,59 @@ export function loadWalkaroundDraft(driverId, vehicleId) {
   }
 }
 
+/**
+ * Persist an in-progress walkaround draft only after write-readback verifies.
+ * Callers must not claim "saved" unless ok is true.
+ */
 export function saveWalkaroundDraft(driverId, vehicleId, draft) {
+  const key = draftStorageKey(driverId, vehicleId);
+  const payload = {
+    ...draft,
+    savedAt: new Date().toISOString(),
+    syncStatus: "local",
+  };
   try {
-    localStorage.setItem(
-      draftStorageKey(driverId, vehicleId),
-      JSON.stringify({ ...draft, savedAt: new Date().toISOString(), syncStatus: "local" }),
-    );
-    return true;
+    const serialized = JSON.stringify(payload);
+    localStorage.setItem(key, serialized);
+    const readBack = localStorage.getItem(key);
+    if (readBack !== serialized) {
+      return {
+        ok: false,
+        code: "DRAFT_SAVE_VERIFY_FAILED",
+        message: "Draft could not be verified on this device.",
+      };
+    }
+    return { ok: true, draft: payload };
   } catch {
-    return false;
+    return {
+      ok: false,
+      code: "DRAFT_SAVE_FAILED",
+      message: "Draft could not be saved on this device.",
+    };
   }
 }
 
+/**
+ * Remove a draft only after verifying the key is gone.
+ * Callers must not claim the draft was discarded unless ok is true.
+ */
 export function clearWalkaroundDraft(driverId, vehicleId) {
+  const key = draftStorageKey(driverId, vehicleId);
   try {
-    localStorage.removeItem(draftStorageKey(driverId, vehicleId));
+    localStorage.removeItem(key);
+    if (localStorage.getItem(key) != null) {
+      return {
+        ok: false,
+        code: "DRAFT_CLEAR_VERIFY_FAILED",
+        message: "Draft could not be discarded on this device.",
+      };
+    }
+    return { ok: true };
   } catch {
-    /* ignore */
+    return {
+      ok: false,
+      code: "DRAFT_CLEAR_FAILED",
+      message: "Draft could not be discarded on this device.",
+    };
   }
 }

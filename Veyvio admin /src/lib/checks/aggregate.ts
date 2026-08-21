@@ -33,6 +33,7 @@ function rowFromProfileCheck(
     registrationNumber: v.registrationNumber,
     fleetNumber: v.fleetNumber,
     makeModel: `${v.make} ${v.model}`,
+    modelYear: v.modelYear ?? null,
     vehicleCategory: v.vehicleCategory,
     depotId: v.currentDepotId,
     depotName: v.currentDepotName,

@@ -26,8 +26,12 @@
 | `GOOGLE_ROUTES_API_KEY` | Supabase secrets (`check-nav-secrets.mjs`) | Driver production bundle |
 | `FCM_SERVICE_ACCOUNT_JSON` | Supabase secrets | Repo |
 | GitHub Actions secrets | `Veyvio admin /scripts/set-github-ci-secrets.mjs` | Logs |
+| `VEYVIO_EXECUTIVE_SESSION_SECRET` | ChatGPT Sites / Worker secret storage | Client bundles, git, Wrangler generated config |
+| Executive Command publishable/anon key | Sites secrets; local gitignored env | Browser bundles, git |
 
 Firebase `google-services.json` in the Driver Android tree is **client config** (package-restricted). Rotate in Firebase console if compromised; it is allowlisted in `audit-secrets.mjs`.
+
+Executive inventory and least-privilege matrix: [executive-secrets.md](../deploy/executive-secrets.md).
 
 ---
 
@@ -103,3 +107,23 @@ CI job `secrets-audit` runs this on every push to `main`.
 | Live dispatch smoke green after deploy | Engineering | 25 Jul 2026 | ☑ |
 
 Record completion in `veyvio-production-gates.md` §3.1 when BCT pilot preflight passes.
+
+---
+
+## 6. Executive appendix
+
+Dry-run (no live secret values printed):
+
+```bash
+cd veyvio-executive
+npm run security:rotate:dry-run
+```
+
+Live Executive session-secret cut-over:
+
+1. Generate a new ≥32-character `VEYVIO_EXECUTIVE_SESSION_SECRET`.
+2. Store it in Sites/Worker secrets; keep the previous value for ≤1 hour rollback.
+3. Republish the verified Executive archive with `VEYVIO_EXECUTIVE_LOCAL_DEMO=0`.
+4. Confirm reserved Executive login creates fresh binding cookies.
+5. Remove the previous secret and confirm old bindings fail closed.
+6. If Command publishable/anon keys are implicated, rotate with platform owners and update Sites secrets.

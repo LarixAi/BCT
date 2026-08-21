@@ -20,6 +20,7 @@ export interface ConversationMessage {
   senderRole: string
   body: string
   createdAt: string
+  readAt?: string | null
   mine?: boolean
 }
 

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EQUIPMENT_STATUS_LABEL } from '@/lib/fleet-resources/constants'
 import type { FleetResourcesHubData } from '@/lib/fleet-resources/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { useState } from 'react'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 

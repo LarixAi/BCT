@@ -1,4 +1,4 @@
-import type { BodyConditionHubData } from './types'
+import type { BodyConditionHubData } from '@/lib/body-condition/types'
 
 export function mockBodyConditionHub(): BodyConditionHubData {
   return {

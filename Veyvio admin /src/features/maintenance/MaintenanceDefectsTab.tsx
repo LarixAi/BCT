@@ -7,7 +7,7 @@ import { DEFECT_SEVERITY_LABELS } from '@/lib/vehicles/defects'
 import type { FleetDefectRow } from '@/lib/maintenance/types'
 import type { DefectTriageStatus } from '@/lib/vehicles/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

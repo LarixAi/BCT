@@ -59,9 +59,9 @@ function normalizePassenger(passenger: Partial<BookingPassengerRef> & Record<str
 export function normalizeBookingRecord(raw: Record<string, unknown>): BookingRecord {
   const bookingType = asBookingType(raw.bookingType ?? raw.booking_type)
   const defaults = createDefaultDraft(bookingType)
-  const trips = Array.isArray(raw.trips) ? raw.trips.map(t => normalizeTrip(t as BookingTrip)) : []
+  const trips = Array.isArray(raw.trips) ? raw.trips.map(t => normalizeTrip(t as unknown as Partial<BookingTrip> & Record<string, unknown>)) : []
   const passengers = Array.isArray(raw.passengers)
-    ? raw.passengers.map(p => normalizePassenger(p as BookingPassengerRef))
+    ? raw.passengers.map(p => normalizePassenger(p as unknown as Partial<BookingPassengerRef> & Record<string, unknown>))
     : []
 
   return {

@@ -25,26 +25,28 @@ https://localhost/auth/verify
 https://localhost/auth/reset-password
 https://localhost:5173/auth/verify
 https://localhost:5173/auth/reset-password
-com.coresupport.fleet.driver://auth/verify
-com.coresupport.fleet.driver://auth/reset-password
-com.coresupport.fleet.driver://verify
-com.coresupport.fleet.driver://reset-password
+uk.veyvio.driver://auth/verify
+uk.veyvio.driver://auth/reset-password
+uk.veyvio.driver://verify
+uk.veyvio.driver://reset-password
 ```
 
-On **installed Android APKs**, native redirects use `com.coresupport.fleet.driver://verify`.
+Also allow-list production Pages / hosted Driver URL when used (e.g. `https://driver.veyvio.co.uk/**` if that host is live).
 
-Rebuild after URL changes: `npm run driver:run`
+On **installed Android APKs**, native redirects use `uk.veyvio.driver://verify`.
+
+Rebuild after URL changes: `npm run build:android` (or Capacitor sync + run).
 
 ## 3. Google and Apple sign-in
 
 **Authentication** → **Providers**:
 
-- **Google** — enable; Web client for Supabase + Android client for package `com.coresupport.fleet.driver` (with SHA-1).
+- **Google** — enable; Web client for Supabase + Android client for package `uk.veyvio.driver` (with SHA-1).
 - **Apple** — enable; Services ID + key from Apple Developer.
 
 Redirect URLs from section 2 must be allow-listed in Supabase (and Apple/Google consoles where applicable).
 
-Native flow: system browser → `com.coresupport.fleet.driver://verify` → app provisions via `link_driver_account`.
+Native flow: system browser → `uk.veyvio.driver://verify` → app provisions via `link_driver_account`.
 
 ## 4. Test the flow
 
@@ -55,7 +57,7 @@ Native flow: system browser → `com.coresupport.fleet.driver://verify` → app 
 
 ## 5. Environment variables
 
-`driver/.env.local`:
+`veyvio-driver-App/.env.local`:
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co

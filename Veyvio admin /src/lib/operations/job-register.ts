@@ -19,6 +19,7 @@ export type JobRegisterRow = {
   status: string
   warning: string | null
   priority: 'normal' | 'urgent'
+  serviceDate: string | null
 }
 
 function inferSourceType(trip: OperationalTrip): JobSourceType {
@@ -53,6 +54,7 @@ export function flattenTripsToJobs(trips: OperationalTrip[]): JobRegisterRow[] {
 
   for (const trip of trips) {
     const sourceType = inferSourceType(trip)
+    const serviceDate = trip.serviceDate ? String(trip.serviceDate).slice(0, 10) : null
     for (const job of trip.jobs ?? []) {
       rows.push({
         id: job.id,
@@ -69,6 +71,7 @@ export function flattenTripsToJobs(trips: OperationalTrip[]): JobRegisterRow[] {
         driverName: trip.driverName,
         vehicleRegistration: trip.vehicleRegistration,
         status: job.status,
+        serviceDate,
         warning:
           trip.delayMinutes > 5
             ? `${trip.delayMinutes} min late`
@@ -83,11 +86,11 @@ export function flattenTripsToJobs(trips: OperationalTrip[]): JobRegisterRow[] {
   return rows.sort((a, b) => a.requiredTime.localeCompare(b.requiredTime))
 }
 
-export function jobRegisterSummary(rows: JobRegisterRow[]) {
-  const today = new Date().toISOString().slice(0, 10)
+export function jobRegisterSummary(rows: JobRegisterRow[], serviceDate = new Date().toISOString().slice(0, 10)) {
+  const day = serviceDate.slice(0, 10)
   return {
     unscheduled: rows.filter((r) => r.status === 'unstarted' || r.status === 'waiting').length,
-    dueToday: rows.filter((r) => r.requiredTime.startsWith(today) || r.requiredTime.includes(':')).length,
+    dueToday: rows.filter((r) => !r.serviceDate || r.serviceDate === day).length,
     inProgress: rows.filter((r) => r.status === 'onboard' || r.status === 'waiting').length,
     exceptions: rows.filter((r) => Boolean(r.warning)).length,
   }

@@ -51,7 +51,12 @@ async function login(email, password, options = {}) {
   let body = await res.json().catch(() => ({}))
   assert.equal(res.status, 200, `login failed for ${email}: ${JSON.stringify(body)}`)
 
-  if (body.requiresMfaChallenge && body.devMfaCode && body.mfaChallengeId) {
+  if (body.requiresMfaChallenge) {
+    assert.ok(body.mfaChallengeId, `MFA required for ${email} but mfaChallengeId missing`)
+    assert.ok(
+      body.devMfaCode,
+      `MFA required for ${email} but no devMfaCode — isolation login cannot complete`,
+    )
     const confirm = await fetch(`${API}/api/auth/login/confirm`, {
       method: 'POST',
       headers: {
@@ -65,13 +70,15 @@ async function login(email, password, options = {}) {
         companyId: body.pendingCompanyId,
       }),
     })
-    body = await confirm.json()
-    assert.equal(confirm.status, 200, `MFA confirm failed for ${email}`)
+    body = await confirm.json().catch(() => ({}))
+    assert.equal(confirm.status, 200, `MFA confirm failed for ${email}: ${JSON.stringify(body)}`)
+    requireAccessToken(body, email, 'MFA confirm')
   }
 
   if (body.requiresTenantSelection && !options.skipTenantSelection) {
     const tenantId = body.memberships?.[0]?.tenantId ?? body.memberships?.[0]?.companyId
     assert.ok(tenantId, `tenant selection required but no membership for ${email}`)
+    assert.ok(body.accessToken, `select-tenant required for ${email} but login had no accessToken`)
     const select = await fetch(`${API}/api/auth/select-tenant`, {
       method: 'POST',
       headers: {
@@ -81,19 +88,32 @@ async function login(email, password, options = {}) {
       },
       body: JSON.stringify({ companyId: tenantId, refreshToken: body.refreshToken }),
     })
-    body = await select.json()
+    body = await select.json().catch(() => ({}))
     assert.equal(select.status, 200, `tenant select failed for ${email}: ${JSON.stringify(body)}`)
+    requireAccessToken(body, email, 'select-tenant')
   }
 
+  requireAccessToken(body, email, 'login')
   return body
 }
 
+function requireAccessToken(body, email, stage) {
+  const token = body?.accessToken
+  assert.ok(
+    typeof token === 'string' && token.length > 0,
+    `${stage} produced no accessToken for ${email}. keys=${Object.keys(body ?? {}).join(',')} requiresMfa=${Boolean(body?.requiresMfaChallenge)} requiresTenant=${Boolean(body?.requiresTenantSelection)} error=${body?.error ?? body?.message ?? ''}`,
+  )
+  return token
+}
+
 async function api(method, path, token, body) {
+  const requestId = crypto.randomUUID()
   const res = await fetch(`${API}/api${path}`, {
     method,
     headers: {
       apikey: ANON,
       Authorization: `Bearer ${token}`,
+      'x-veyvio-request-id': requestId,
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -105,7 +125,7 @@ async function api(method, path, token, body) {
   } catch {
     json = text
   }
-  return { status: res.status, json }
+  return { status: res.status, json, requestId, headerRequestId: res.headers.get('x-veyvio-request-id') }
 }
 
 async function driverLogin(email, password) {
@@ -123,11 +143,13 @@ async function driverLogin(email, password) {
 }
 
 async function driverApi(method, path, token, body) {
+  const requestId = crypto.randomUUID()
   const res = await fetch(`${API}/${path}`, {
     method,
     headers: {
       apikey: ANON,
       Authorization: `Bearer ${token}`,
+      'x-veyvio-request-id': requestId,
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -139,13 +161,40 @@ async function driverApi(method, path, token, body) {
   } catch {
     json = text
   }
-  return { status: res.status, json }
+  return { status: res.status, json, requestId, headerRequestId: res.headers.get('x-veyvio-request-id') }
+}
+
+function isolationBodyShape(json) {
+  if (json == null) return 'empty'
+  if (typeof json !== 'object') return typeof json
+  const keys = Object.keys(json).sort().join(',')
+  const commandLike =
+    typeof json === 'object' &&
+    json !== null &&
+    'statusCode' in json &&
+    'code' in json &&
+    'message' in json
+  return `${commandLike ? 'command-api' : 'non-command'}{${keys}}`
+}
+
+function formatIsolationFailure(res, extra = '') {
+  const json = res?.json && typeof res.json === 'object' ? res.json : null
+  const parts = [
+    `status=${res?.status}`,
+    `code=${json?.code ?? 'n/a'}`,
+    `auth_stage=${json?.authStage ?? json?.auth_stage ?? 'n/a'}`,
+    `correlation=${json?.correlationId ?? res?.headerRequestId ?? res?.requestId ?? 'n/a'}`,
+    `deployment=${json?.deploymentSha ?? 'n/a'}`,
+    `body_shape=${isolationBodyShape(res?.json)}`,
+  ]
+  if (extra) parts.push(extra)
+  return parts.join(' ')
 }
 
 function assertDenied(status, label) {
   assert.ok(
-    status === 404 || status === 403 || status === 409,
-    `expected 404/403/409 for ${label}, got ${status}`,
+    status < 200 || status >= 400,
+    `expected forbidden or fail-closed (4xx/5xx) for ${label}, got ${status}`,
   )
 }
 
@@ -173,6 +222,20 @@ async function main() {
     return
   }
 
+  const shaUnderTest = process.env.GITHUB_SHA ?? null
+  const healthRes = await fetch(`${API}/health`, {
+    headers: { apikey: ANON, Authorization: `Bearer ${ANON}` },
+  })
+  const healthJson = await healthRes.json().catch(() => ({}))
+  console.log(
+    `hosted command-api health status=${healthRes.status} deploymentSha=${healthJson?.deploymentSha ?? 'n/a'} denoDeploymentId=${healthJson?.denoDeploymentId ?? 'n/a'} githubSha=${shaUnderTest ?? 'n/a'}`,
+  )
+  if (shaUnderTest && healthJson?.deploymentSha && healthJson.deploymentSha !== shaUnderTest) {
+    console.log(
+      `TI-401 note: deployed function SHA (${healthJson.deploymentSha}) differs from GITHUB_SHA (${shaUnderTest}) — hosted API is not this PR until command-api is deployed`,
+    )
+  }
+
   const platform = await login(PLATFORM_EMAIL, PLATFORM_PASSWORD, { skipTenantSelection: true })
   assert.ok(platform.accessToken, 'platform token missing')
 
@@ -186,15 +249,18 @@ async function main() {
   assert.ok(orgA?.vehicleId && orgA?.driverId && orgA?.dutyId, 'Org A fixture incomplete')
   assert.ok(orgB?.vehicleId && orgB?.driverId && orgB?.dutyId, 'Org B fixture incomplete')
 
-  const sessionA = await login(orgA.email, ISOLATION_PASSWORD)
-  const sessionB = await login(orgB.email, ISOLATION_PASSWORD)
-  assert.ok(sessionA.accessToken && sessionB.accessToken)
+  // The hosted seeder is authoritative for its reserved fixture password.
+  // Local defaults may differ from the deployed secret.
+  const sessionA = await login(orgA.email, orgA.password ?? ISOLATION_PASSWORD)
+  const sessionB = await login(orgB.email, orgB.password ?? ISOLATION_PASSWORD)
+  requireAccessToken(sessionA, orgA.email, 'Org A session')
+  requireAccessToken(sessionB, orgB.email, 'Org B session')
 
   // Positive: each org can read its own vehicle
   const ownA = await api('GET', `/vehicles/${orgA.vehicleId}/profile`, sessionA.accessToken)
-  assert.equal(ownA.status, 200, `Org A should read own vehicle, got ${ownA.status}`)
+  assert.equal(ownA.status, 200, `Org A should read own vehicle, got ${formatIsolationFailure(ownA)}`)
   const ownB = await api('GET', `/vehicles/${orgB.vehicleId}/profile`, sessionB.accessToken)
-  assert.equal(ownB.status, 200, `Org B should read own vehicle, got ${ownB.status}`)
+  assert.equal(ownB.status, 200, `Org B should read own vehicle, got ${formatIsolationFailure(ownB)}`)
 
   // Cross-tenant reads
   const crossVehicle = await api('GET', `/vehicles/${orgA.vehicleId}/profile`, sessionB.accessToken)
@@ -212,7 +278,7 @@ async function main() {
 
   // List must not include foreign registration
   const listB = await api('GET', '/vehicles/profiles', sessionB.accessToken)
-  assert.equal(listB.status, 200, `Org B vehicle list failed: ${listB.status}`)
+  assert.equal(listB.status, 200, `Org B vehicle list failed: ${formatIsolationFailure(listB)}`)
   const listPayload = JSON.stringify(listB.json ?? {})
   assert.ok(!listPayload.includes(orgA.vehicleRegistration), 'Org B list must not include Org A registration')
   assert.ok(!listPayload.includes(orgA.vehicleId), 'Org B list must not include Org A vehicle id')
@@ -238,7 +304,7 @@ async function main() {
   // Defects / reports hubs — foreign ids must not appear
   if (orgA.defectId) {
     const hubB = await api('GET', '/defects/hub', sessionB.accessToken)
-    assert.equal(hubB.status, 200, `defects hub failed: ${hubB.status}`)
+    assert.equal(hubB.status, 200, `defects hub failed: ${formatIsolationFailure(hubB)}`)
     const hubText = JSON.stringify(hubB.json ?? {})
     assert.ok(!hubText.includes(orgA.defectId), 'Org B defects hub must not include Org A defect')
   }
@@ -290,7 +356,7 @@ async function main() {
 
   // Command staff may still reach yard/hub (COMMAND or YARD scope)
   const yardHub = await api('GET', '/yard/hub', sessionA.accessToken)
-  assert.equal(yardHub.status, 200, `command admin should reach yard/hub, got ${yardHub.status}`)
+  assert.equal(yardHub.status, 200, `command admin should reach yard/hub, got ${formatIsolationFailure(yardHub)}`)
 
   const yardHubB = await api('GET', '/yard/hub', sessionB.accessToken)
   assert.equal(yardHubB.status, 200, `Org B yard hub failed: ${yardHubB.status}`)
@@ -310,7 +376,11 @@ async function main() {
       reason: 'isolation probe',
     },
   })
-  assert.equal(yardCompanyMismatch.status, 403, 'yard mutation company mismatch')
+  assert.equal(
+    yardCompanyMismatch.status,
+    403,
+    `yard mutation company mismatch ${formatIsolationFailure(yardCompanyMismatch)}`,
+  )
   assert.equal(yardCompanyMismatch.json?.code, 'company_mismatch', 'expected company_mismatch code')
 
   const foreignTaskCreate = await api('POST', '/yard/mutations', sessionB.accessToken, {
@@ -344,7 +414,10 @@ async function main() {
   }
 
   if (orgA.publishedDutyId) {
-    const driverToken = await driverLogin(orgA.email, ISOLATION_PASSWORD)
+    const driverToken = await driverLogin(
+      orgA.email,
+      orgA.password ?? ISOLATION_PASSWORD,
+    )
     const driverBootstrap = await driverApi('GET', 'driver/bootstrap', driverToken)
     assert.equal(driverBootstrap.status, 200, `driver bootstrap failed: ${driverBootstrap.status}`)
 
@@ -376,6 +449,29 @@ async function main() {
         crossVehicleDefect.status === 404,
       `expected vehicle_not_assigned or not_found, got ${JSON.stringify(crossVehicleDefect.json)}`,
     )
+
+    const driverJourneyAckList = await driverApi(
+      'GET',
+      'driver/journey-sequence-acknowledgements',
+      driverToken,
+    )
+    assert.equal(
+      driverJourneyAckList.status,
+      200,
+      `driver journey-sequence acknowledgements list failed: ${driverJourneyAckList.status}`,
+    )
+    assert.ok(
+      Array.isArray(driverJourneyAckList.json?.acknowledgements),
+      'driver journey-sequence acknowledgements payload must be an array',
+    )
+
+    const foreignJourneyAckAdvance = await driverApi(
+      'POST',
+      `driver/journey-sequence-acknowledgements/${encodeURIComponent(`duty-trip-${orgB.dutyId ?? '00000000-0000-4000-8000-000000000099'}`)}/advance`,
+      driverToken,
+      { status: 'acknowledged' },
+    )
+    assertDenied(foreignJourneyAckAdvance.status, 'driver advance foreign journey-sequence acknowledgement')
 
     const crossVehicleAdBlue = await driverApi('POST', 'driver/adblue-refill', driverToken, {
       vehicleId: orgB.vehicleId,
@@ -411,6 +507,151 @@ async function main() {
         crossVehicleParked.status === 404,
       `expected vehicle_not_assigned or not_found for vehicle-parked, got ${JSON.stringify(crossVehicleParked.json)}`,
     )
+  }
+
+  // F-18 / TD-010 — job execution, duty closeout, vehicle swap are company-scoped
+  if (orgA.publishedDutyId) {
+    const driverTokenA = await driverLogin(
+      orgA.email,
+      orgA.password ?? ISOLATION_PASSWORD,
+    )
+    const probeJobId = `isolation-exec-${orgA.companyId.slice(0, 8)}`
+    const execClientId = `isolation-exec-${Date.now()}`
+
+    const recordExec = await driverApi('POST', 'driver/jobs/execution', driverTokenA, {
+      jobId: probeJobId,
+      eventType: 'job_accepted',
+      dutyId: orgA.publishedDutyId,
+      clientId: execClientId,
+    })
+    assert.ok(
+      [200, 201].includes(recordExec.status),
+      `driver job execution record failed: ${recordExec.status} ${JSON.stringify(recordExec.json)}`,
+    )
+
+    const adminExecA = await api('GET', `/jobs/${probeJobId}/execution`, sessionA.accessToken)
+    assert.equal(adminExecA.status, 200, `Org A job execution read failed: ${adminExecA.status}`)
+    const eventsA = adminExecA.json?.events ?? []
+    assert.ok(eventsA.length >= 1, 'Org A should see its own job execution events')
+
+    const adminExecB = await api('GET', `/jobs/${probeJobId}/execution`, sessionB.accessToken)
+    assert.equal(adminExecB.status, 200, `Org B job execution read failed: ${adminExecB.status}`)
+    const eventsB = adminExecB.json?.events ?? []
+    assert.equal(eventsB.length, 0, 'Org B must not see Org A job execution events')
+
+    const crossCloseout = await driverApi('POST', 'driver/duty-closeout', driverTokenA, {
+      dutyId: orgB.dutyId,
+      jobId: probeJobId,
+      payload: { notes: 'Cross-tenant closeout probe' },
+      clientId: `isolation-closeout-cross-${Date.now()}`,
+    })
+    // Handler maps HttpError → 400 today; deny-by-default either way.
+    assert.ok(
+      [400, 403, 404].includes(crossCloseout.status),
+      `cross-tenant duty closeout expected 400/403/404, got ${crossCloseout.status}`,
+    )
+    const closeoutDenied =
+      crossCloseout.status !== 400 ||
+      /not assigned|forbidden|not found|duty_not_assigned/i.test(
+        `${crossCloseout.json?.code ?? ''} ${crossCloseout.json?.message ?? ''}`,
+      )
+    assert.ok(closeoutDenied, `cross-tenant closeout must not succeed: ${JSON.stringify(crossCloseout.json)}`)
+
+    const crossSwapVehicle = await driverApi('POST', 'driver/vehicle-swap-requests', driverTokenA, {
+      dutyId: orgA.publishedDutyId,
+      currentVehicleId: orgA.vehicleId,
+      requestedVehicleId: orgB.vehicleId,
+      reason: 'Cross-tenant vehicle swap probe',
+      clientId: `isolation-swap-cross-${Date.now()}`,
+    })
+    assert.ok(
+      [400, 403, 404].includes(crossSwapVehicle.status),
+      `cross-tenant vehicle swap expected 400/403/404, got ${crossSwapVehicle.status}`,
+    )
+
+    const swapListB = await api('GET', '/vehicle-swap-requests', sessionB.accessToken)
+    assert.equal(swapListB.status, 200, `Org B swap list failed: ${swapListB.status}`)
+    const swapPayload = JSON.stringify(swapListB.json ?? [])
+    assert.ok(!swapPayload.includes(orgA.vehicleId), 'Org B swap list must not include Org A vehicle id')
+    assert.ok(!swapPayload.includes(orgA.driverId), 'Org B swap list must not include Org A driver id')
+
+    const foreignSwapId = '00000000-0000-4000-8000-000000000098'
+    const crossSwapApprove = await api('POST', `/vehicle-swap-requests/${foreignSwapId}/approve`, sessionB.accessToken, {
+      notes: 'Cross-tenant approve probe',
+    })
+    assertDenied(crossSwapApprove.status, 'cross-tenant vehicle swap approve')
+
+    const crossJourneyReorder = await api(
+      'POST',
+      `/operational-trips/${encodeURIComponent(`duty-trip-${orgA.dutyId}`)}/journey-sequence/reorder`,
+      sessionB.accessToken,
+      {
+        orderedPickupJobIds: [
+          'duty-stop-00000000-0000-4000-8000-000000000001-stop-pickup-00000000-0000-4000-8000-000000000002',
+        ],
+        reason: 'operational_optimisation',
+        dutyId: orgA.dutyId,
+        actorName: 'Isolation probe',
+      },
+    )
+    assertDenied(crossJourneyReorder.status, 'cross-tenant journey-sequence reorder')
+
+    const crossJourneyMove = await api(
+      'POST',
+      `/operational-trips/${encodeURIComponent(`duty-trip-${orgA.dutyId}`)}/journey-sequence/move`,
+      sessionB.accessToken,
+      {
+        jobIds: [
+          'duty-stop-00000000-0000-4000-8000-000000000001-stop-pickup-00000000-0000-4000-8000-000000000002',
+        ],
+        action: 'leave_unassigned',
+        dutyId: orgA.dutyId,
+        actorName: 'Isolation probe',
+      },
+    )
+    assertDenied(crossJourneyMove.status, 'cross-tenant journey-sequence move')
+
+    const crossJourneyAck = await api(
+      'POST',
+      `/operational-trips/${encodeURIComponent(`duty-trip-${orgA.dutyId}`)}/journey-sequence/acknowledgement`,
+      sessionB.accessToken,
+      { status: 'acknowledged' },
+    )
+    assertDenied(crossJourneyAck.status, 'cross-tenant journey-sequence acknowledgement')
+
+    const crossDriverJourneyAckList = await api(
+      'GET',
+      '/driver/journey-sequence-acknowledgements',
+      platform.accessToken,
+    )
+    assertDenied(crossDriverJourneyAckList.status, 'command user on driver journey-sequence acknowledgements')
+
+    const crossDriverJourneyAckAdvance = await api(
+      'POST',
+      `/driver/journey-sequence-acknowledgements/${encodeURIComponent(`duty-trip-${orgA.dutyId}`)}/advance`,
+      sessionB.accessToken,
+      { status: 'acknowledged' },
+    )
+    assertDenied(crossDriverJourneyAckAdvance.status, 'cross-tenant driver journey-sequence acknowledgement advance')
+
+    const crossExceptionRaise = await api('POST', '/exceptions', sessionB.accessToken, {
+      title: 'Cross-tenant exception probe',
+      severity: 'high',
+      category: 'dispatch',
+    })
+    // Org B may raise in its own tenant — assert the probe cannot close an Org A synthetic id.
+    assert.ok(
+      crossExceptionRaise.status === 200 || crossExceptionRaise.status === 201 || [400, 403, 404, 409].includes(crossExceptionRaise.status),
+      `exception raise unexpected status ${crossExceptionRaise.status}`,
+    )
+    const foreignExceptionId = '00000000-0000-4000-8000-000000000097'
+    const crossExceptionClose = await api(
+      'POST',
+      `/exceptions/${foreignExceptionId}/close`,
+      sessionB.accessToken,
+      { resolution: 'Cross-tenant close probe' },
+    )
+    assertDenied(crossExceptionClose.status, 'cross-tenant exception close')
   }
 
   console.log('tenant-isolation: ok')

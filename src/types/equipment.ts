@@ -77,6 +77,14 @@ export interface VehicleEquipment {
   documents: DocumentItem[];
 }
 
+/** Depot stock line for restock / inventory views. */
+export interface StockLine {
+  defId: string;
+  label: string;
+  onHand: number;
+  unit: string;
+}
+
 export interface Requirement {
   key: string;
   label: string;

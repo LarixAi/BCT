@@ -1,11 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { Calendar, ChevronDown, Plus, RefreshCw } from "lucide-react";
+import { Calendar, ListTodo, RefreshCw } from "lucide-react";
 import { useSyncStore } from "@/platform/sync/outbox";
 import { SegmentedControl } from "./HomeDashboardPrimitives";
 
-type Range = "daily" | "weekly" | "monthly" | "yearly";
+export type HomeRange = "daily" | "weekly" | "monthly" | "yearly";
 
-const RANGE_OPTIONS: { id: Range; label: string }[] = [
+const RANGE_OPTIONS: { id: HomeRange; label: string }[] = [
   { id: "daily", label: "Daily" },
   { id: "weekly", label: "Weekly" },
   { id: "monthly", label: "Monthly" },
@@ -21,14 +21,23 @@ function formatLastSync(iso: string | null): string {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+function todayLabel(): string {
+  return new Date().toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 export function HomeDashboardHeader({
   range,
   onRangeChange,
 }: {
-  range: Range;
-  onRangeChange: (range: Range) => void;
+  range: HomeRange;
+  onRangeChange: (range: HomeRange) => void;
 }) {
   const lastSyncedAt = useSyncStore(s => s.lastSyncedAt);
+  const isToday = range === "daily";
 
   return (
     <header className="flex flex-col gap-4">
@@ -45,19 +54,24 @@ export function HomeDashboardHeader({
           to="/tasks"
           className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-white sm:w-auto"
         >
-          <Plus className="size-4" />
-          Add task
+          <ListTodo className="size-4" />
+          Open tasks
         </Link>
       </div>
 
       <div className="-mx-1 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <button
           type="button"
-          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border border-[#e4e7ec] bg-white px-4 text-sm font-medium text-ink shadow-sm sm:w-auto"
+          onClick={() => onRangeChange("daily")}
+          aria-pressed={isToday}
+          className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm sm:w-auto ${
+            isToday
+              ? "border-[var(--brand-yard-teal,#12A89D)] bg-[var(--brand-yard-teal,#12A89D)]/10 text-ink"
+              : "border-[#e4e7ec] bg-white text-ink"
+          }`}
         >
           <Calendar className="size-4 text-[#667085]" />
-          Today
-          <ChevronDown className="size-4 text-[#98a2b3]" />
+          Today · {todayLabel()}
         </button>
 
         <div className="overflow-x-auto pb-1 sm:pb-0">

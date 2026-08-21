@@ -91,6 +91,7 @@ export interface OperationalTrip {
   darRequestReference?: string | null
   schoolRouteId?: string | null
   schoolRouteReference?: string | null
+  serviceDate?: string | null
 }
 
 export type TransferScope =

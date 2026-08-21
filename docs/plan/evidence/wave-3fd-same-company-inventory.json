@@ -1,0 +1,36 @@
+{
+  "wave": "3F-D FIX-P1-013",
+  "date": "2026-08-17",
+  "migration": "202608170004_wave3f_same_company_triggers.sql",
+  "status": "FIRST WAVE CLOSED locally",
+  "hosted": "local only — hold 202608170001–004 until fresh-DB CI green",
+  "helper": "private.assert_same_company_pair + private.trg_assert_company_fks (TG_ARGV FK triplets)",
+  "existing_join_triggers": ["depot_access_same_company", "duty_runs_same_company", "run_trips_same_company"],
+  "first_wave_triggers": [
+    "drivers_same_company",
+    "duties_same_company",
+    "defects_same_company",
+    "runs_same_company",
+    "trip_assignments_same_company",
+    "duty_live_positions_same_company",
+    "vehicle_swap_requests_same_company",
+    "fuel_records_same_company"
+  ],
+  "skipped_single_parent_joins": {
+    "driver_capabilities": "single FK (driver_id); parent EXISTS policy only",
+    "vehicle_capabilities": "single FK (vehicle_id); parent EXISTS policy only"
+  },
+  "forge_proof": {
+    "script": "scripts/wave3f-same-company-triggers.unit.mjs",
+    "authority": "service_role INSERT/UPDATE forge only",
+    "result": "13/13 pass",
+    "artifact": "docs/plan/evidence/wave-3fd-same-company-triggers.json",
+    "acceptance": "cross-company links return SQLSTATE 23514 cross-tenant link refused at DB layer"
+  },
+  "jwt_regression": {
+    "script": "scripts/rls-postgrest-isolation.unit.mjs",
+    "result": "72/72 pass after triggers",
+    "note": "BEFORE INSERT/UPDATE triggers do not affect own-tenant SELECT"
+  },
+  "residual": "40+ dual-FK tables remain for later waves; Storage objects separate proof slice"
+}

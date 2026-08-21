@@ -4,7 +4,7 @@ import { SectionCard } from '@/components/ui'
 import { YARD_TASK_PRIORITY_LABELS, YARD_TASK_TYPE_LABELS } from '@/lib/yard/constants'
 import type { CreateYardTaskInput, YardHubData, YardTaskPriority, YardTaskType } from '@/lib/yard/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

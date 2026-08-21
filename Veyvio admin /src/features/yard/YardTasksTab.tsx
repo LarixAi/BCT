@@ -5,7 +5,7 @@ import { YARD_TASK_PRIORITY_LABELS, YARD_TASK_TYPE_LABELS } from '@/lib/yard/con
 import { canCreateYardTask } from '@/lib/yard/permissions'
 import type { YardHubData, YardTask } from '@/lib/yard/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 import { YardTaskProgress } from './components/YardTaskProgress'
 

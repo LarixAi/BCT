@@ -1,61 +1,33 @@
 import type { VehicleProfile } from '@/lib/vehicles/types'
-import { buildFleetResourcesHub } from './aggregate'
 import { emptyFleetResourcesHub, safeFleetResourcesHub } from './empty-hub'
-import { enrichSparseLiveHub } from './enrich-sparse-hub'
-import { createFleetResourcesSeed } from './seed'
 import type { FleetResourcesHubData } from './types'
 
-export type FleetResourcesHubSource = 'live' | 'demo' | 'empty'
+export type FleetResourcesHubSource = 'live' | 'unavailable'
 
 export interface ResolvedFleetResourcesHub {
   hub: FleetResourcesHubData
   source: FleetResourcesHubSource
+  errorMessage?: string
 }
 
-async function loadProfiles(
-  fetchProfiles?: () => Promise<VehicleProfile[]>,
-): Promise<VehicleProfile[]> {
-  if (!fetchProfiles) return []
-  try {
-    const profiles = await fetchProfiles()
-    return Array.isArray(profiles) ? profiles : []
-  } catch {
-    return []
-  }
-}
-
-/** Never throws — always returns a renderable hub. */
+/**
+ * Live Command hub only (F-03). Never invent kit/cards/tyres/purchasing from demo seed.
+ * When live fails, return empty + unavailable so the UI can say the truth.
+ */
 export async function resolveFleetResourcesHub(opts: {
   fetchLiveHub: () => Promise<FleetResourcesHubData>
+  /** Kept for call-site compatibility; not used for invent/fallback. */
   fetchProfiles?: () => Promise<VehicleProfile[]>
 }): Promise<ResolvedFleetResourcesHub> {
   try {
     const live = await opts.fetchLiveHub()
-    let hub = safeFleetResourcesHub(live)
-    const sparse =
-      hub.equipment.length === 0 || hub.cards.length === 0 || hub.tyres.length === 0
-    if (sparse) {
-      const profiles = await loadProfiles(opts.fetchProfiles)
-      hub = enrichSparseLiveHub(hub, profiles)
-    }
-    return { hub, source: 'live' }
-  } catch {
-    // continue
-  }
-
-  try {
-    const seed = createFleetResourcesSeed()
-    const profiles = await loadProfiles(opts.fetchProfiles)
+    return { hub: safeFleetResourcesHub(live), source: 'live' }
+  } catch (error) {
     return {
-      hub: safeFleetResourcesHub(
-        buildFleetResourcesHub({
-          ...seed,
-          profiles,
-        }),
-      ),
-      source: 'demo',
+      hub: emptyFleetResourcesHub(),
+      source: 'unavailable',
+      errorMessage:
+        error instanceof Error ? error.message : 'Fleet resources could not be loaded from Command',
     }
-  } catch {
-    return { hub: emptyFleetResourcesHub(), source: 'empty' }
   }
 }

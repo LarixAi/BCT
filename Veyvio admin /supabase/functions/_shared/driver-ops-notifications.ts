@@ -1,9 +1,14 @@
 /**
  * Driver operational notifications — duty publish, compliance warnings, vehicle status.
- * In-app minimum for Gate 2; push delivery is Gate 3.
+ * In-app + best-effort FCM push (Gate 3). Push never creates business state (F-29).
+ *
+ * Wave 3F: notifications already UserScopedDb (cutover 27). This helper uses
+ * company-scoped service-role for dedupe reads + driver_app_accounts lookup
+ * (no bare admin import).
  */
-import { admin } from './supabase.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import { notifyDriverAppUser, type NotificationSeverity } from './notifications.ts'
+import { sendFcmToDriver } from './fcm-send.ts'
 
 export const DRIVER_OPS_NOTIFICATION = {
   dutyPublished: 'driver.duty.published',
@@ -11,6 +16,7 @@ export const DRIVER_OPS_NOTIFICATION = {
   vehicleVor: 'driver.vehicle.vor',
   vehicleAwaitingCheck: 'driver.vehicle.awaiting_check',
   defectFollowUp: 'driver.defect.follow_up',
+  journeySequenceChanged: 'driver.journey_sequence.changed',
 } as const
 
 function formatDutyTime(iso: string | null | undefined): string {
@@ -32,7 +38,7 @@ async function hasRecentNotification(input: {
   withinHours: number
 }): Promise<boolean> {
   const since = new Date(Date.now() - input.withinHours * 3_600_000).toISOString()
-  const { data } = await admin
+  const { data } = await resolveTenantDb(input.companyId, 'driver_ops_notification_dedupe')
     .from('notifications')
     .select('id')
     .eq('company_id', input.companyId)
@@ -45,7 +51,7 @@ async function hasRecentNotification(input: {
 }
 
 async function resolveDriverAppUserId(companyId: string, driverId: string): Promise<string | null> {
-  const { data: account } = await admin
+  const { data: account } = await resolveTenantDb(companyId, 'driver_ops_app_account_lookup')
     .from('driver_app_accounts')
     .select('user_id')
     .eq('company_id', companyId)
@@ -78,7 +84,7 @@ async function notifyDriverDeduped(input: {
   })
   if (duplicate) return { inserted: 0, deduped: true }
 
-  return notifyDriverAppUser({
+  const result = await notifyDriverAppUser({
     companyId: input.companyId,
     driverId: input.driverId,
     type: input.type,
@@ -89,6 +95,24 @@ async function notifyDriverDeduped(input: {
     sourceEntityType: input.sourceEntityType,
     sourceEntityId: input.sourceEntityId,
   })
+
+  if ((result.inserted ?? 0) > 0) {
+    try {
+      await sendFcmToDriver({
+        companyId: input.companyId,
+        driverId: input.driverId,
+        title: input.title,
+        body: input.body,
+        type: input.type,
+        dutyId: input.sourceEntityType === 'duty' ? input.sourceEntityId : null,
+        actionUrl: input.actionUrl ?? null,
+      })
+    } catch (error) {
+      console.error('fcm send after in-app notification failed', error)
+    }
+  }
+
+  return result
 }
 
 export async function notifyDriverDutyPublished(input: {
@@ -190,5 +214,26 @@ export async function notifyDriverVehicleOperationalAlert(input: {
     sourceEntityType: 'vehicle',
     sourceEntityId: input.defectId ? `${input.vehicleId}:${input.defectId}` : input.vehicleId,
     dedupeWithinHours: 12,
+  })
+}
+
+/** F-29: notification only — acknowledgement state is written elsewhere. */
+export async function notifyDriverJourneySequenceChanged(input: {
+  companyId: string
+  driverId: string
+  tripKey: string
+  summary: string
+}) {
+  return notifyDriverDeduped({
+    companyId: input.companyId,
+    driverId: input.driverId,
+    type: DRIVER_OPS_NOTIFICATION.journeySequenceChanged,
+    title: 'Journey sequence updated',
+    body: input.summary || 'Your run stop order changed. Open Acknowledgements to confirm.',
+    severity: 'attention',
+    actionUrl: '/acknowledgements',
+    sourceEntityType: 'journey_sequence_acknowledgement',
+    sourceEntityId: input.tripKey,
+    dedupeWithinHours: 1,
   })
 }

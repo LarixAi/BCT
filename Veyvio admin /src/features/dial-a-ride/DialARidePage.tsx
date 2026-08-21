@@ -1,7 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
-import { StatusPill } from '@/components/ui/status'
+import { StatusPill, formatDate } from '@/components/ui/status'
 import { DIAL_A_RIDE_TABS } from '@/lib/dial-a-ride/constants'
 import { api } from '@/lib/api/client'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
@@ -18,7 +18,10 @@ export function DialARidePage() {
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: tKey(['dial-a-ride-requests', tab]),
-    queryFn: () => api.getDialARideRequests({ view: tab === 'requests' ? undefined : tab }),
+    queryFn: async () => {
+      const rows = await api.getDialARideRequests({ view: tab === 'requests' ? undefined : tab })
+      return Array.isArray(rows) ? rows : []
+    },
     enabled: tab !== 'members',
   })
 
@@ -108,7 +111,7 @@ export function DialARidePage() {
                       </Link>
                     </td>
                     <td className="px-3 py-2">{r.memberName}</td>
-                    <td className="px-3 py-2">{r.travelDate}</td>
+                    <td className="px-3 py-2">{formatDate(r.travelDate)}</td>
                     <td className="px-3 py-2">{r.pickupWindow}</td>
                     <td className="max-w-xs truncate px-3 py-2 text-ink-soft">{r.journey}</td>
                     <td className="px-3 py-2">

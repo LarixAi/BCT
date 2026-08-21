@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Repeat2 } from 'lucide-react'
 import { SectionCard } from '@/components/ui'
-import { StatusPill } from '@/components/ui/status'
+import { StatusPill, formatDate } from '@/components/ui/status'
 import { BOOKING_LIST_VIEWS, NON_ORDINARY_BOOKING_TYPES } from '@/lib/bookings/constants'
 import { api } from '@/lib/api/client'
 import { useActiveCompanyId } from '@/lib/auth-context'
@@ -169,7 +169,7 @@ export function BookingsPage() {
                   <td className="py-2.5 pr-4 text-ink-soft">{b.customerName}</td>
                   <td className="py-2.5 pr-4 text-ink-soft">{b.passengerSummary}</td>
                   <td className="py-2.5 pr-4 text-ink-soft">{journeyLabel(b.bookingType)}</td>
-                  <td className="py-2.5 pr-4 text-ink-soft">{b.firstJourneyDate}</td>
+                  <td className="py-2.5 pr-4 text-ink-soft">{formatDate(b.firstJourneyDate)}</td>
                   <td className="py-2.5 pr-4 text-ink-soft">{b.tripCount || '—'}</td>
                   <td className="py-2.5 pr-4">
                     <StatusPill status={b.status} />

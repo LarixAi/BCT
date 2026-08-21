@@ -27,7 +27,25 @@ describe('resolveInspectionsHub', () => {
     expect(resolved.hub.summary.dueToday).toBe(1)
   })
 
-  it('falls back to demo seed when live and profiles fail', async () => {
+  it('projects from live vehicle profiles when hub fails (no demo seed)', async () => {
+    const resolved = await resolveInspectionsHub({
+      fetchLiveHub: async () => {
+        throw new Error('hub missing')
+      },
+      fetchProfiles: async () =>
+        [
+          {
+            id: 'veh-1',
+            registrationNumber: 'BX21 ABC',
+            motExpiry: '2026-09-01',
+          },
+        ] as never,
+    })
+    expect(resolved.source).toBe('projected')
+    expect(resolved.hub.register.length).toBeGreaterThan(0)
+  })
+
+  it('fails closed to unavailable when live and profiles fail — never demo seed', async () => {
     const resolved = await resolveInspectionsHub({
       fetchLiveHub: async () => {
         throw new Error('hub missing')
@@ -36,7 +54,8 @@ describe('resolveInspectionsHub', () => {
         throw new Error('profiles missing')
       },
     })
-    expect(resolved.source).toBe('demo')
-    expect(resolved.hub.register.length).toBeGreaterThan(0)
+    expect(resolved.source).toBe('unavailable')
+    expect(resolved.hub.register).toEqual([])
+    expect(resolved.hub.providers).toEqual([])
   })
 })

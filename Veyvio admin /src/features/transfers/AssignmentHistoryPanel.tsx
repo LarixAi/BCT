@@ -5,10 +5,11 @@ import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 
 export function AssignmentHistoryPanel({ tripId }: { tripId: string }) {
-  const { data: history = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: tKey(['assignment-history', tripId]),
     queryFn: () => api.getAssignmentHistory(tripId),
   })
+  const history = Array.isArray(data) ? data : []
 
   return (
     <SectionCard title="Change history" description="Immutable assignment and transfer records">

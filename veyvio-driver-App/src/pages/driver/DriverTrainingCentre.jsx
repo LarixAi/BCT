@@ -83,6 +83,10 @@ function ProgressBar({ value }) {
   );
 }
 
+function complianceDisplayPercent(value) {
+  return Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+}
+
 function TrainingCard({ assignment }) {
   const action = trainingPrimaryAction(assignment);
   const href =
@@ -201,7 +205,12 @@ export default function DriverTrainingCentre({ driver }) {
     [payload?.assignments, filter, query],
   );
 
-  const summary = payload?.summary;
+  const summary = payload?.summary
+    ? {
+        ...payload.summary,
+        compliancePercent: complianceDisplayPercent(payload.summary.compliancePercent),
+      }
+    : null;
   const openRequired = (payload?.assignments ?? []).filter(
     (a) => a.mandatory && !["completed", "waived", "superseded"].includes(a.status),
   );

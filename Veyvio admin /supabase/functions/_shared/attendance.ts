@@ -1,8 +1,37 @@
-/** Live Attendance projections — duties for clock reality + leave/notes tables. */
-import { admin, authenticate } from './supabase.ts'
+/** Live Attendance projections — duties for clock reality + leave/notes tables.
+ *
+ * Wave 3F UserScopedDb/RLS cutovers 34 + 38–41: membership JWT writes
+ * `attendance_day_overrides`, `attendance_leave_requests`, `attendance_leave_audit`,
+ * `attendance_notes`, and `attendance_return_to_work` through RLS
+ * (SELECT/INSERT/UPDATE). Support-grant and companyId-only hub lookups stay on
+ * company-scoped service-role. Duty/driver/depot/vehicle/run projections stay
+ * service-role side effects.
+ */
+import { resolveTenantDb } from './db-authority.ts'
+import { authenticate, type RequestContext } from './supabase.ts'
 import { apiError, json } from './http.ts'
 
 type Row = Record<string, unknown>
+
+function attendanceOverridesLookupDb(companyId: string) {
+  return resolveTenantDb(companyId, 'attendance_day_overrides_lookups')
+}
+
+function attendanceOverridesDb(context: RequestContext) {
+  return resolveTenantDb(context.companyId, 'attendance_day_overrides', context)
+}
+
+
+function attendanceTableDb(
+  table: string,
+  input: { companyId: string; context?: RequestContext },
+) {
+  return resolveTenantDb(input.companyId, table, input.context)
+}
+
+function attendanceSideEffectsDb(companyId: string) {
+  return resolveTenantDb(companyId, 'attendance_side_effects')
+}
 
 const GRACE_MINUTES = 5
 const LATE_MARK_MINUTES = 6
@@ -60,14 +89,25 @@ function computeAttendanceScore(input: {
 }
 
 function todayIso(now = new Date()): string {
-  return now.toISOString().slice(0, 10)
+  // Operational day is UK calendar date, not UTC (avoids empty boards after evening UTC rollover).
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now)
 }
 
 function clockLabel(value: unknown): string | null {
   if (!value) return null
   const d = new Date(String(value))
   if (Number.isNaN(d.getTime())) return null
-  return d.toISOString().slice(11, 16)
+  return d.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/London',
+  })
 }
 
 function minutesLate(planned: unknown, actual: unknown): number | null {
@@ -91,7 +131,7 @@ function defaultImpact(): Row {
 }
 
 async function loadLeaveRows(companyId: string, personId?: string): Promise<Row[]> {
-  let query = admin
+  let query = attendanceTableDb('attendance_leave_requests', { companyId })
     .from('attendance_leave_requests')
     .select('*')
     .eq('company_id', companyId)
@@ -103,7 +143,7 @@ async function loadLeaveRows(companyId: string, personId?: string): Promise<Row[
   if (!rows.length) return []
 
   const ids = rows.map((r) => String(r.id))
-  const { data: audits } = await admin
+  const { data: audits } = await attendanceTableDb('attendance_leave_audit', { companyId })
     .from('attendance_leave_audit')
     .select('*')
     .in('leave_request_id', ids)
@@ -240,7 +280,7 @@ function statusFromDuty(
 }
 
 async function loadDriverPeople(companyId: string): Promise<Map<string, Row>> {
-  const { data, error } = await admin
+  const { data, error } = await attendanceSideEffectsDb(companyId)
     .from('drivers')
     .select('id, driver_number, status, primary_depot_id, staff_members(first_name, last_name)')
     .eq('company_id', companyId)
@@ -249,7 +289,7 @@ async function loadDriverPeople(companyId: string): Promise<Map<string, Row>> {
   const depotIds = [...new Set((data ?? []).map((r) => r.primary_depot_id).filter(Boolean).map(String))]
   const depotById = new Map<string, string>()
   if (depotIds.length) {
-    const { data: depots } = await admin.from('depots').select('id, name').in('id', depotIds)
+    const { data: depots } = await attendanceSideEffectsDb(companyId).from('depots').select('id, name').in('id', depotIds)
     for (const d of depots ?? []) depotById.set(String(d.id), String(d.name ?? '—'))
   }
 
@@ -276,7 +316,7 @@ async function scoreForPerson(
   from.setUTCDate(from.getUTCDate() - periodDays)
   const fromDate = from.toISOString().slice(0, 10)
 
-  const { data: duties } = await admin
+  const { data: duties } = await attendanceSideEffectsDb(companyId)
     .from('duties')
     .select('id, service_date, status, planned_sign_on_at, actual_sign_on_at, planned_sign_off_at, actual_sign_off_at')
     .eq('company_id', companyId)
@@ -284,7 +324,7 @@ async function scoreForPerson(
     .gte('service_date', fromDate)
     .neq('status', 'cancelled')
 
-  const { data: overrides } = await admin
+  const { data: overrides } = await attendanceOverridesLookupDb(companyId)
     .from('attendance_day_overrides')
     .select('*')
     .eq('company_id', companyId)
@@ -360,24 +400,34 @@ async function scoreForPerson(
 export async function projectAttendanceHub(companyId: string) {
   const now = new Date()
   const date = todayIso(now)
-  const [people, leaveRows, { data: duties }, { data: overrides }, { data: vehicles }] = await Promise.all([
-    loadDriverPeople(companyId),
-    loadLeaveRows(companyId),
-    admin
-      .from('duties')
-      .select(
-        'id, driver_id, service_date, status, planned_sign_on_at, actual_sign_on_at, planned_sign_off_at, vehicle_id, special_instructions, depots(name), vehicles(registration)',
-      )
-      .eq('company_id', companyId)
-      .eq('service_date', date)
-      .neq('status', 'cancelled'),
-    admin
-      .from('attendance_day_overrides')
-      .select('*')
-      .eq('company_id', companyId)
-      .eq('operational_date', date),
-    admin.from('vehicles').select('id, registration').eq('company_id', companyId),
-  ])
+  const [people, leaveRows, { data: duties }, { data: runs }, { data: overrides }, { data: vehicles }] =
+    await Promise.all([
+      loadDriverPeople(companyId),
+      loadLeaveRows(companyId),
+      attendanceSideEffectsDb(companyId)
+        .from('duties')
+        .select(
+          'id, driver_id, service_date, status, planned_sign_on_at, actual_sign_on_at, planned_sign_off_at, vehicle_id, special_instructions, depots(name), vehicles(registration)',
+        )
+        .eq('company_id', companyId)
+        .eq('service_date', date)
+        .neq('status', 'cancelled'),
+      attendanceSideEffectsDb(companyId)
+        .from('runs')
+        .select(
+          'id, run_reference, driver_id, vehicle_id, planned_start_at, status, service_date, vehicles(registration)',
+        )
+        .eq('company_id', companyId)
+        .eq('service_date', date)
+        .not('driver_id', 'is', null)
+        .neq('status', 'cancelled'),
+      attendanceOverridesLookupDb(companyId)
+        .from('attendance_day_overrides')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('operational_date', date),
+      attendanceSideEffectsDb(companyId).from('vehicles').select('id, registration').eq('company_id', companyId),
+    ])
 
   const overrideByPerson = new Map<string, Row>()
   for (const row of overrides ?? []) overrideByPerson.set(String(row.person_id), row)
@@ -387,6 +437,15 @@ export async function projectAttendanceHub(companyId: string) {
 
   const board: Row[] = []
   const seen = new Set<string>()
+  const scoreCache = new Map<string, Awaited<ReturnType<typeof scoreForPerson>>>()
+
+  async function cachedScore(personId: string) {
+    const hit = scoreCache.get(personId)
+    if (hit) return hit
+    const score = await scoreForPerson(companyId, personId)
+    scoreCache.set(personId, score)
+    return score
+  }
 
   for (const duty of duties ?? []) {
     const driverId = duty.driver_id ? String(duty.driver_id) : ''
@@ -405,7 +464,7 @@ export async function projectAttendanceHub(companyId: string) {
       Boolean(leave),
       leave ? String(leave.leaveType) : null,
     )
-    const score = await scoreForPerson(companyId, driverId)
+    const score = await cachedScore(driverId)
     const vehicleReg =
       (duty.vehicles as Row | null)?.registration != null
         ? String((duty.vehicles as Row).registration)
@@ -436,14 +495,67 @@ export async function projectAttendanceHub(companyId: string) {
     })
   }
 
-  // People on approved leave today without a duty row
+  // Runs with a driver for today when no duty row exists yet (schedule-first assignments).
+  for (const run of runs ?? []) {
+    const driverId = run.driver_id ? String(run.driver_id) : ''
+    if (!driverId || seen.has(driverId)) continue
+    seen.add(driverId)
+    const person = people.get(driverId) ?? {
+      personName: 'Driver',
+      personNumber: '—',
+      depotName: '—',
+    }
+    const leave = leaveRows.find((l) => String(l.personId) === driverId && leaveCoversDate(l, date))
+    const syntheticDuty = {
+      status: String(run.status ?? 'planned'),
+      planned_sign_on_at: run.planned_start_at,
+      actual_sign_on_at: null,
+    }
+    const derived = statusFromDuty(
+      syntheticDuty,
+      now,
+      overrideByPerson.get(driverId) ?? null,
+      Boolean(leave),
+      leave ? String(leave.leaveType) : null,
+    )
+    const score = await cachedScore(driverId)
+    const vehicleReg =
+      (run.vehicles as Row | null)?.registration != null
+        ? String((run.vehicles as Row).registration)
+        : run.vehicle_id
+          ? vehicleById.get(String(run.vehicle_id)) ?? null
+          : null
+
+    board.push({
+      id: `att-${driverId}-${date}`,
+      personId: driverId,
+      personName: person.personName,
+      role: 'driver',
+      roleLabel: 'Driver',
+      depotName: person.depotName,
+      scheduledStart: clockLabel(run.planned_start_at),
+      clockedInAt: clockLabel(derived.clockedInAt),
+      status: derived.status,
+      differenceLabel: derived.differenceLabel,
+      currentDutyLabel: run.run_reference ? String(run.run_reference) : `RUN-${String(run.id).slice(0, 8).toUpperCase()}`,
+      dutyId: null,
+      vehicleRegistration: vehicleReg,
+      passengersAtRisk: 0,
+      schoolRoute: false,
+      attendanceScore: score.score,
+      scoreBand: score.band,
+      reportedReason: overrideByPerson.get(driverId)?.reported_reason ?? null,
+      managerClassification: overrideByPerson.get(driverId)?.manager_classification ?? null,
+    })
+  }
+
+  // People on approved leave today without a duty/run row
   for (const leave of leaveRows) {
     if (!leaveCoversDate(leave, date)) continue
     const personId = String(leave.personId)
     if (seen.has(personId)) continue
     seen.add(personId)
-    const person = people.get(personId)
-    const score = await scoreForPerson(companyId, personId)
+    const score = await cachedScore(personId)
     board.push({
       id: `att-${personId}-${date}`,
       personId,
@@ -465,8 +577,49 @@ export async function projectAttendanceHub(companyId: string) {
       reportedReason: null,
       managerClassification: null,
     })
-    void person
   }
+
+  // Active drivers with no duty/run/leave today — still show on availability board.
+  for (const [driverId, person] of people) {
+    if (seen.has(driverId)) continue
+    const driverStatus = String(person.status ?? 'active')
+    if (['draft', 'inactive', 'left', 'suspended'].includes(driverStatus)) continue
+    seen.add(driverId)
+    board.push({
+      id: `att-${driverId}-${date}`,
+      personId: driverId,
+      personName: person.personName,
+      role: 'driver',
+      roleLabel: 'Driver',
+      depotName: person.depotName,
+      scheduledStart: null,
+      clockedInAt: null,
+      status: 'not_scheduled',
+      differenceLabel: null,
+      currentDutyLabel: null,
+      dutyId: null,
+      vehicleRegistration: null,
+      passengersAtRisk: 0,
+      schoolRoute: false,
+      attendanceScore: 100,
+      scoreBand: 'excellent',
+      reportedReason: null,
+      managerClassification: null,
+    })
+  }
+
+  board.sort((a, b) => {
+    const rank = (status: unknown) => {
+      const s = String(status)
+      if (s === 'not_arrived' || s === 'late') return 0
+      if (s === 'on_time' || s === 'cover_assigned') return 1
+      if (s === 'sick' || s === 'approved_leave') return 2
+      return 3
+    }
+    const diff = rank(a.status) - rank(b.status)
+    if (diff !== 0) return diff
+    return String(a.personName).localeCompare(String(b.personName))
+  })
 
   const scheduled = board.filter((b) => b.status !== 'not_scheduled').length
   const onTime = board.filter((b) => b.status === 'on_time').length
@@ -475,7 +628,7 @@ export async function projectAttendanceHub(companyId: string) {
   const approvedLeave = board.filter((b) => b.status === 'approved_leave').length
   const sick = board.filter((b) => b.status === 'sick').length
   const attendanceRatePercent =
-    scheduled === 0 ? 100 : Math.round(((onTime + late) / scheduled) * 100)
+    scheduled === 0 ? 100 : Math.round(((onTime + late) / Math.max(1, onTime + late + notArrived)) * 100)
 
   return {
     summary: {
@@ -503,7 +656,10 @@ export async function projectAttendanceHub(companyId: string) {
       operationalDelaysFromAttendance: late + notArrived,
       standbyOvertimeCostEstimate: '—',
       strongestTeam: board[0] ? String(board[0].depotName) : '—',
-      mondayFridayPatternNote: 'Punctuality is derived from planned vs actual duty sign-on.',
+      mondayFridayPatternNote:
+        scheduled === 0
+          ? 'No duties or runs scheduled for today — active drivers are listed as available.'
+          : 'Punctuality is derived from planned vs actual duty/run start.',
       scoreChangesNote: 'Scores update from live duty clock events over the last 90 days.',
     },
     graceMinutes: GRACE_MINUTES,
@@ -564,7 +720,7 @@ export async function projectAttendanceProfile(
 
   const [{ data: monthDuties }, { data: notes }, { data: rtw }, { data: overrides }, hub] =
     await Promise.all([
-      admin
+      attendanceSideEffectsDb(companyId)
         .from('duties')
         .select('id, service_date, status, planned_sign_on_at, actual_sign_on_at')
         .eq('company_id', companyId)
@@ -572,21 +728,21 @@ export async function projectAttendanceProfile(
         .gte('service_date', fromDate)
         .lte('service_date', toDate)
         .neq('status', 'cancelled'),
-      admin
+      attendanceTableDb('attendance_notes', { companyId })
         .from('attendance_notes')
         .select('*')
         .eq('company_id', companyId)
         .eq('person_id', id)
         .order('at', { ascending: false })
         .limit(20),
-      admin
+      attendanceTableDb('attendance_return_to_work', { companyId })
         .from('attendance_return_to_work')
         .select('*')
         .eq('company_id', companyId)
         .eq('person_id', id)
         .order('interview_date', { ascending: false })
         .limit(10),
-      admin
+      attendanceOverridesLookupDb(companyId)
         .from('attendance_day_overrides')
         .select('*')
         .eq('company_id', companyId)
@@ -776,7 +932,7 @@ export async function attendanceLeaveUpsert(request: Request) {
     const body = (await request.json()) as Row
     const id = body.id ? String(body.id) : crypto.randomUUID()
 
-    const { data: previous } = await admin
+    const { data: previous } = await attendanceTableDb('attendance_leave_requests', { companyId: context.companyId, context })
       .from('attendance_leave_requests')
       .select('status')
       .eq('company_id', context.companyId)
@@ -808,7 +964,7 @@ export async function attendanceLeaveUpsert(request: Request) {
       previous_window: body.previousWindow ?? null,
       updated_at: new Date().toISOString(),
     }
-    const { data, error } = await admin
+    const { data, error } = await attendanceTableDb('attendance_leave_requests', { companyId: context.companyId, context })
       .from('attendance_leave_requests')
       .upsert(payload)
       .select('*')
@@ -818,7 +974,7 @@ export async function attendanceLeaveUpsert(request: Request) {
     const audit = Array.isArray(body.audit) ? (body.audit as Row[]) : []
     const latest = audit[audit.length - 1]
     if (latest) {
-      await admin.from('attendance_leave_audit').insert({
+      await attendanceTableDb('attendance_leave_audit', { companyId: context.companyId, context }).from('attendance_leave_audit').insert({
         company_id: context.companyId,
         leave_request_id: id,
         at: latest.at ?? new Date().toISOString(),
@@ -882,17 +1038,20 @@ export async function attendanceClassify(request: Request) {
     if (classification === 'operational_issue') status = 'late'
     if (classification === 'recording_error') status = 'on_time'
 
-    await admin.from('attendance_day_overrides').upsert({
-      company_id: context.companyId,
-      person_id: personId,
-      operational_date: date,
-      status,
-      reported_reason: body.reason ?? null,
-      manager_classification: classification,
-      note: body.note ?? null,
-      actor_name: body.actorName ?? 'Operations',
-      updated_at: new Date().toISOString(),
-    })
+    await attendanceOverridesDb(context).from('attendance_day_overrides').upsert(
+      {
+        company_id: context.companyId,
+        person_id: personId,
+        operational_date: date,
+        status,
+        reported_reason: body.reason ?? null,
+        manager_classification: classification,
+        note: body.note ?? null,
+        actor_name: body.actorName ?? 'Operations',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'company_id,person_id,operational_date' },
+    )
 
     const hub = await projectAttendanceHub(context.companyId)
     return json(hub.board.find((b) => String(b.id) === rowId) ?? null)
@@ -945,7 +1104,7 @@ export async function attendanceAssignCover(request: Request) {
     const coverPersonId = body.coverPersonId ? String(body.coverPersonId) : null
     if (!dutyId || !coverPersonId) return apiError(400, 'dutyId and coverPersonId are required')
 
-    const { error } = await admin
+    const { error } = await attendanceSideEffectsDb(context.companyId)
       .from('duties')
       .update({ driver_id: coverPersonId })
       .eq('company_id', context.companyId)

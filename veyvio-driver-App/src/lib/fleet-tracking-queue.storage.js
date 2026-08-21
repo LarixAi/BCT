@@ -1,83 +1,78 @@
-import { driverWorkspaceStorageKey } from "@/lib/driver-workspace-storage";
+import { driverWorkspaceStorageKey, requireWorkspaceIds } from "@/lib/driver-workspace-storage"
+import {
+  ITEM_PENDING,
+  QUEUE_FLEET,
+  deleteQueueItem,
+  listQueueItems,
+  migrateLegacyQueues,
+  putQueueItem,
+  workspaceProvenance,
+} from "@/lib/driver-durable-queue"
 
-const LEGACY_QUEUE_PREFIX = "csf_fleet_tracking_ping_queue:";
+export const LEGACY_QUEUE_PREFIX = "csf_fleet_tracking_ping_queue:"
 
 export function fleetPingQueueKey(driverId, companyId, membershipId) {
-  if (companyId && membershipId) {
-    return driverWorkspaceStorageKey(companyId, membershipId, "fleet-ping-queue");
-  }
-  return `${LEGACY_QUEUE_PREFIX}${driverId}`;
+  requireWorkspaceIds(companyId, membershipId)
+  return driverWorkspaceStorageKey(companyId, membershipId, "fleet-ping-queue")
 }
 
-function migrateLegacyFleetPingQueue(driverId, companyId, membershipId) {
-  if (!companyId || !membershipId || typeof localStorage === "undefined") return;
-  const legacyKey = `${LEGACY_QUEUE_PREFIX}${driverId}`;
-  const scopedKey = fleetPingQueueKey(driverId, companyId, membershipId);
-  if (legacyKey === scopedKey) return;
-
-  try {
-    const legacyRaw = localStorage.getItem(legacyKey);
-    if (!legacyRaw) return;
-    const legacyQueue = JSON.parse(legacyRaw);
-    if (!Array.isArray(legacyQueue) || legacyQueue.length === 0) return;
-
-    const existingRaw = localStorage.getItem(scopedKey);
-    if (existingRaw) {
-      const existing = JSON.parse(existingRaw);
-      if (Array.isArray(existing) && existing.length > 0) return;
-    }
-
-    localStorage.setItem(scopedKey, legacyRaw);
-    localStorage.removeItem(legacyKey);
-  } catch {
-    /* ignore */
-  }
+async function ensureMigrated(driverId, companyId, membershipId, userId) {
+  await migrateLegacyQueues({
+    driverId,
+    companyId,
+    membershipId,
+    queueType: QUEUE_FLEET,
+    scopedLocalKey: fleetPingQueueKey(driverId, companyId, membershipId),
+    driverLocalPrefix: LEGACY_QUEUE_PREFIX,
+    kvKey: fleetPingQueueKey(driverId, companyId, membershipId),
+    proof: workspaceProvenance(driverId, companyId, membershipId, userId),
+  })
 }
 
-export function loadFleetPingQueue(driverId, companyId, membershipId) {
-  migrateLegacyFleetPingQueue(driverId, companyId, membershipId);
-  try {
-    const raw = localStorage.getItem(fleetPingQueueKey(driverId, companyId, membershipId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+export async function loadFleetPingQueue(driverId, companyId, membershipId, userId = null) {
+  await ensureMigrated(driverId, companyId, membershipId, userId)
+  return listQueueItems(companyId, membershipId, QUEUE_FLEET)
+}
+
+export async function saveFleetPingQueue(driverId, queue, companyId, membershipId) {
+  const existing = await loadFleetPingQueue(driverId, companyId, membershipId)
+  const keep = new Set((queue ?? []).map((item) => item.id))
+  for (const item of existing) {
+    if (!keep.has(item.id)) await deleteQueueItem(companyId, membershipId, QUEUE_FLEET, item.id)
+  }
+  for (const item of queue ?? []) {
+    await putQueueItem({
+      ...item,
+      queueType: QUEUE_FLEET,
+      companyId,
+      membershipId,
+      driverId: item.driverId ?? driverId,
+    })
   }
 }
 
-export function saveFleetPingQueue(driverId, queue, companyId, membershipId) {
-  try {
-    localStorage.setItem(
-      fleetPingQueueKey(driverId, companyId, membershipId),
-      JSON.stringify(queue),
-    );
-  } catch {
-    /* ignore */
-  }
-}
-
-export function enqueueFleetPing(driverId, payload, companyId, membershipId) {
-  const queue = loadFleetPingQueue(driverId, companyId, membershipId);
-  queue.push({
-    id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+export async function enqueueFleetPing(driverId, payload, companyId, membershipId, userId = null) {
+  requireWorkspaceIds(companyId, membershipId)
+  await ensureMigrated(driverId, companyId, membershipId, userId)
+  const id = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  await putQueueItem({
+    id,
     createdAt: new Date().toISOString(),
-    companyId: companyId ?? null,
-    membershipId: membershipId ?? null,
+    companyId,
+    membershipId,
+    driverId,
+    queueType: QUEUE_FLEET,
+    status: ITEM_PENDING,
     payload,
-  });
-  saveFleetPingQueue(driverId, queue, companyId, membershipId);
-  return queue.length;
+  })
+  return (await listQueueItems(companyId, membershipId, QUEUE_FLEET)).length
 }
 
-export function dequeueFleetPing(driverId, pendingId, companyId, membershipId) {
-  const queue = loadFleetPingQueue(driverId, companyId, membershipId).filter(
-    (item) => item.id !== pendingId,
-  );
-  saveFleetPingQueue(driverId, queue, companyId, membershipId);
-  return queue;
+export async function dequeueFleetPing(driverId, pendingId, companyId, membershipId) {
+  await deleteQueueItem(companyId, membershipId, QUEUE_FLEET, pendingId)
+  return listQueueItems(companyId, membershipId, QUEUE_FLEET)
 }
 
-export function clearFleetPingQueue(driverId, companyId, membershipId) {
-  saveFleetPingQueue(driverId, [], companyId, membershipId);
+export async function clearFleetPingQueue(driverId, companyId, membershipId) {
+  await saveFleetPingQueue(driverId, [], companyId, membershipId)
 }

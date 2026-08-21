@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Veyvio</string>
+        <string>Veyvio Driver</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -49,6 +49,12 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Use Face ID to securely unlock your Veyvio Driver account.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Veyvio Driver needs the camera to capture vehicle check and defect evidence photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Veyvio Driver needs photo library access when you attach existing evidence to a report.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Veyvio Driver uses your location during a signed-on duty for fleet tracking and parking updates.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

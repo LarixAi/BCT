@@ -46,6 +46,7 @@ export function FleetResourcesPage() {
 
   const hub = data?.hub
   const source = data?.source
+  const errorMessage = data?.errorMessage
 
   useEffect(() => {
     const f = searchParams.get('filter')
@@ -87,9 +88,11 @@ export function FleetResourcesPage() {
 
   return (
     <div className="space-y-6">
-      {source === 'demo' && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Live fleet resources hub is unavailable — showing demo ledger so you can keep working.
+      {source === 'unavailable' && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950">
+          Fleet resources could not be loaded from Command
+          {errorMessage ? ` — ${errorMessage}` : ''}. Showing empty registers until the live hub
+          responds. Demo ledger is not used.
         </div>
       )}
 

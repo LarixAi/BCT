@@ -14,6 +14,8 @@ type DispatchSidePanelsProps = {
   activeRuns: DispatchActiveRun[]
   lateJobs: DispatchLateJob[]
   exceptions: OperationalException[]
+  /** True when exception source APIs failed — distinct from empty inbox. */
+  exceptionsUnavailable?: boolean
   messages: MessageRecord[]
   urgentJobs: DispatchUrgentJob[]
   selectedDutyId: string | null
@@ -24,6 +26,7 @@ export function DispatchSidePanels({
   activeRuns,
   lateJobs,
   exceptions,
+  exceptionsUnavailable = false,
   messages,
   urgentJobs,
   selectedDutyId,
@@ -86,8 +89,10 @@ export function DispatchSidePanels({
       </SectionCard>
 
       <SectionCard title="Exceptions" description="Critical and high priority">
-        {exceptions.length === 0 ? (
-          <p className="text-sm text-muted">No open dispatch exceptions.</p>
+        {exceptionsUnavailable ? (
+          <p className="text-sm text-amber-900">Dispatch exception data is currently unavailable.</p>
+        ) : exceptions.length === 0 ? (
+          <p className="text-sm text-muted">No current dispatch exceptions.</p>
         ) : (
           <ul className="space-y-2">
             {exceptions.map((ex) => (

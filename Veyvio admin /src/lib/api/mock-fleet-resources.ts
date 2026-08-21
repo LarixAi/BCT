@@ -351,6 +351,36 @@ export const mockFleetResourcesApi = {
     return equipment.find((e) => e.id === input.equipmentId)!
   },
 
+  createEquipment(input: {
+    name: string
+    category?: string
+    vehicleId?: string | null
+    qrCode?: string | null
+    serialNumber?: string | null
+    expiryDate?: string | null
+    requiredForDuty?: boolean
+    actorName: string
+  }): EquipmentAsset {
+    const profile = input.vehicleId ? mockVehiclesApi.get(input.vehicleId) : null
+    const id = `eq-new-${seq++}`
+    const row: EquipmentAsset = {
+      id,
+      qrCode: input.qrCode?.trim() || `EQ-${String(seq).padStart(4, '0')}`,
+      name: input.name.trim(),
+      category: (input.category as EquipmentAsset['category']) || 'equipment',
+      status: input.vehicleId ? 'assigned' : 'available',
+      vehicleId: input.vehicleId ?? null,
+      registrationNumber: profile?.registrationNumber ?? null,
+      depotId: input.vehicleId ? null : 'depot-wembley',
+      depotName: input.vehicleId ? null : 'Wembley Depot',
+      expiryDate: input.expiryDate ?? null,
+      lastCheckedAt: null,
+      requiredForDuty: Boolean(input.requiredForDuty),
+    }
+    equipment = [row, ...equipment]
+    return row
+  },
+
   transferStock(input: {
     resourceItemId: string
     resourceName: string

@@ -1,32 +1,42 @@
-import { getCommandApiBaseUrl, commandStartDriverMessage, commandSignOffDuty, commandSignOnDuty } from "@/lib/command-api";
+import { getCommandApiBaseUrl, commandStartDriverMessage, commandSignOffDuty, commandSignOnDuty, commandPostDriverVehicleParked, commandSubmitDutyCloseout, commandCreateVehicleSwapRequest, commandRecordJobExecution } from "@/lib/command-api";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import {
   dequeueOpsCommand,
   enqueueDutyOpsCommand,
   enqueueOpsCommand,
   hasPendingDutyOps,
+  isAutoReplayEligible,
   loadOpsOutbox,
+  markOpsCommandReconciliation,
+  markOpsCommandRetryable,
 } from "@/lib/driver-ops-outbox.storage";
+import { requireDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
 import {
+  arriveJourneyStop,
+  completeJourney,
+  completeJourneyStop,
   reportDefectViaCommand,
   reportIncidentViaCommand,
   replyDriverMessageViaCommand,
+  startJourney,
 } from "@/services/command-driver-ops.service";
 
-async function accessToken() {
+async function accessToken(session) {
+  if (session?.accessToken || session?.access_token) {
+    return session.accessToken ?? session.access_token;
+  }
   const supabase = getSupabaseClient();
   const {
-    data: { session },
+    data: { session: authSession },
   } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
+  return authSession?.access_token ?? null;
 }
 
 function isOffline() {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
-function shouldQueueOnFailure(result) {
+export function shouldQueueOnFailure(result) {
   const message = String(result?.message ?? "").toLowerCase();
   if (typeof result?.status === "number") {
     if (result.status >= 500) return true;
@@ -41,12 +51,27 @@ function shouldQueueOnFailure(result) {
   );
 }
 
-function isPermanentOpsFailure(result) {
+export function isPermanentOpsFailure(result) {
   if (result?.ok) return false;
   if (typeof result?.status === "number") {
+    // 401 means the session expired mid-shift, not that Command rejected the
+    // report — never treat it as permanent. Dropping a defect/incident here
+    // would silently lose a safety report instead of retrying after refresh.
+    if (result.status === 401) return false;
     return result.status >= 400 && result.status < 500 && result.status !== 429;
   }
   return false;
+}
+
+async function tryRefreshSession(session) {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data?.session?.access_token) return null;
+    return { ...(session ?? {}), accessToken: data.session.access_token, access_token: data.session.access_token };
+  } catch {
+    return null;
+  }
 }
 
 function withClientId(input, clientId) {
@@ -56,28 +81,37 @@ function withClientId(input, clientId) {
   };
 }
 
-function workspaceFrom(driver, session) {
-  return resolveDriverWorkspaceScope(driver, session);
+function persistFailure(error) {
+  return {
+    ok: false,
+    queued: false,
+    code: error?.code ?? "OFFLINE_STORAGE_WRITE_FAILED",
+    message: error?.message ?? "Could not save this action on the device.",
+  };
 }
 
-async function signOnDutyViaCommand(dutyId) {
-  const token = await accessToken();
+function workspaceFrom(driver, session) {
+  return requireDriverWorkspaceScope(driver, session);
+}
+
+async function signOnDutyViaCommand(dutyId, session) {
+  const token = await accessToken(session);
   if (!token) return { ok: false, message: "Not signed in.", status: 401 };
   return commandSignOnDuty(token, dutyId);
 }
 
-async function signOffDutyViaCommand(dutyId) {
-  const token = await accessToken();
+async function signOffDutyViaCommand(dutyId, session) {
+  const token = await accessToken(session);
   if (!token) return { ok: false, message: "Not signed in.", status: 401 };
   return commandSignOffDuty(token, dutyId);
 }
 
-export function countPendingOpsCommands(driverId, companyId, membershipId) {
-  return loadOpsOutbox(driverId, companyId, membershipId).length;
+export async function countPendingOpsCommands(driverId, companyId, membershipId) {
+  return (await loadOpsOutbox(driverId, companyId, membershipId)).length;
 }
 
-export function describeOpsOutbox(driverId, companyId, membershipId) {
-  const queue = loadOpsOutbox(driverId, companyId, membershipId);
+export async function describeOpsOutbox(driverId, companyId, membershipId) {
+  const queue = await loadOpsOutbox(driverId, companyId, membershipId);
   return {
     total: queue.length,
     defects: queue.filter((item) => item.type === "defect").length,
@@ -85,11 +119,29 @@ export function describeOpsOutbox(driverId, companyId, membershipId) {
     messages: queue.filter((item) => item.type === "message_start" || item.type === "message_reply").length,
     dutySignOn: queue.filter((item) => item.type === "duty_sign_on").length,
     dutySignOff: queue.filter((item) => item.type === "duty_sign_off").length,
+    journeySteps: queue.filter((item) => String(item.type ?? "").startsWith("journey_")).length,
+    handbacks: queue.filter((item) => item.type === "handback").length,
+    dutyCloseouts: queue.filter((item) => item.type === "duty_closeout").length,
+    vehicleSwapRequests: queue.filter((item) => item.type === "vehicle_swap_request").length,
+    jobExecution: queue.filter((item) => item.type === "job_execution").length,
   };
 }
 
-function queueDutyCommand(driverId, type, dutyId, companyId, membershipId, message) {
-  enqueueDutyOpsCommand(driverId, type, dutyId, companyId, membershipId);
+async function persistQueuedCommand(driverId, entry, companyId, membershipId, message) {
+  try {
+    await enqueueOpsCommand(driverId, entry, companyId, membershipId);
+  } catch (error) {
+    return persistFailure(error);
+  }
+  return { ok: true, queued: true, message };
+}
+
+async function queueDutyCommand(driverId, type, dutyId, companyId, membershipId, message) {
+  try {
+    await enqueueDutyOpsCommand(driverId, type, dutyId, companyId, membershipId);
+  } catch (error) {
+    return persistFailure(error);
+  }
   return {
     ok: true,
     queued: true,
@@ -99,7 +151,13 @@ function queueDutyCommand(driverId, type, dutyId, companyId, membershipId, messa
 }
 
 export async function signOnDutyWithOutbox(driver, session, dutyId) {
-  const { companyId, membershipId } = workspaceFrom(driver, session);
+  let companyId;
+  let membershipId;
+  try {
+    ;({ companyId, membershipId } = workspaceFrom(driver, session));
+  } catch (error) {
+    return persistFailure(error);
+  }
   const driverId = driver?.id;
   if (!driverId) return { ok: false, message: "Driver session missing." };
   if (!dutyId) return { ok: false, message: "Duty is missing." };
@@ -133,7 +191,13 @@ export async function signOnDutyWithOutbox(driver, session, dutyId) {
 }
 
 export async function signOffDutyWithOutbox(driver, session, dutyId) {
-  const { companyId, membershipId } = workspaceFrom(driver, session);
+  let companyId;
+  let membershipId;
+  try {
+    ;({ companyId, membershipId } = workspaceFrom(driver, session));
+  } catch (error) {
+    return persistFailure(error);
+  }
   const driverId = driver?.id;
   if (!driverId) return { ok: false, message: "Driver session missing." };
   if (!dutyId) return { ok: false, message: "Duty is missing." };
@@ -169,117 +233,241 @@ export async function signOffDutyWithOutbox(driver, session, dutyId) {
 export { hasPendingDutyOps };
 
 export async function submitDefectWithOutbox(driver, session, input) {
-  const { companyId, membershipId } = workspaceFrom(driver, session);
+  let companyId;
+  let membershipId;
+  try {
+    ;({ companyId, membershipId } = workspaceFrom(driver, session));
+  } catch (error) {
+    return persistFailure(error);
+  }
   const driverId = driver?.id;
   if (!driverId) return { ok: false, message: "Driver session missing." };
 
   const payload = withClientId(input);
 
   if (isOffline()) {
-    enqueueOpsCommand(driverId, { type: "defect", payload }, companyId, membershipId);
-    return {
-      ok: true,
-      queued: true,
-      message: "Defect saved on this device — will reach Command when connection returns.",
-    };
+    return persistQueuedCommand(
+      driverId,
+      { type: "defect", payload },
+      companyId,
+      membershipId,
+      "Defect saved on this device — will reach Command when connection returns.",
+    );
   }
 
   const result = await reportDefectViaCommand(payload);
   if (result.ok) return result;
 
   if (getCommandApiBaseUrl() && shouldQueueOnFailure(result)) {
-    enqueueOpsCommand(driverId, { type: "defect", payload }, companyId, membershipId);
-    return {
-      ok: true,
-      queued: true,
-      message: "Defect saved on this device — will reach Command when connection returns.",
-    };
+    return persistQueuedCommand(
+      driverId,
+      { type: "defect", payload },
+      companyId,
+      membershipId,
+      "Defect saved on this device — will reach Command when connection returns.",
+    );
   }
 
   return result;
 }
 
 export async function submitIncidentWithOutbox(driver, session, input) {
-  const { companyId, membershipId } = workspaceFrom(driver, session);
+  let companyId;
+  let membershipId;
+  try {
+    ;({ companyId, membershipId } = workspaceFrom(driver, session));
+  } catch (error) {
+    return persistFailure(error);
+  }
   const driverId = driver?.id;
   if (!driverId) return { ok: false, message: "Driver session missing." };
 
   const payload = withClientId(input);
 
   if (isOffline()) {
-    enqueueOpsCommand(driverId, { type: "incident", payload }, companyId, membershipId);
-    return {
-      ok: true,
-      queued: true,
-      message: "Incident saved on this device — will reach Command when connection returns.",
-    };
+    return persistQueuedCommand(
+      driverId,
+      { type: "incident", payload },
+      companyId,
+      membershipId,
+      "Incident saved on this device — will reach Command when connection returns.",
+    );
   }
 
   const result = await reportIncidentViaCommand(payload);
   if (result.ok) return result;
 
   if (getCommandApiBaseUrl() && shouldQueueOnFailure(result)) {
-    enqueueOpsCommand(driverId, { type: "incident", payload }, companyId, membershipId);
-    return {
-      ok: true,
-      queued: true,
-      message: "Incident saved on this device — will reach Command when connection returns.",
-    };
+    return persistQueuedCommand(
+      driverId,
+      { type: "incident", payload },
+      companyId,
+      membershipId,
+      "Incident saved on this device — will reach Command when connection returns.",
+    );
   }
 
   return result;
 }
 
-export async function flushOpsOutbox(driver, session) {
-  const { companyId, membershipId } = workspaceFrom(driver, session);
-  const driverId = driver?.id;
-  if (!driverId || isOffline()) {
-    return { synced: 0, blocked: 0, remaining: loadOpsOutbox(driverId, companyId, membershipId).length };
+async function flushJourneyOpsItem(item) {
+  const payload = item.payload ?? {};
+  const journeyId = payload.journeyId;
+  if (!journeyId) return { ok: false, message: "Journey id missing from queued step.", status: 400 };
+
+  if (item.type === "journey_start") {
+    return startJourney(journeyId);
   }
 
-  const queue = loadOpsOutbox(driverId, companyId, membershipId);
+  const stopInput = payload.stopInput ?? {};
+
+  if (item.type === "journey_stop_arrive") {
+    const started = await startJourney(journeyId);
+    if (!started.ok) {
+      const message = String(started.message ?? "").toLowerCase();
+      if (!message.includes("already") && !message.includes("in_progress")) return started;
+    }
+    return arriveJourneyStop(journeyId, stopInput);
+  }
+
+  if (item.type === "journey_stop_complete") {
+    const started = await startJourney(journeyId);
+    if (!started.ok) {
+      const message = String(started.message ?? "").toLowerCase();
+      if (!message.includes("already") && !message.includes("in_progress")) return started;
+    }
+    const completeStop = await completeJourneyStop(journeyId, {
+      ...stopInput,
+      outcome: payload.outcome ?? "stop_complete",
+    });
+    if (!completeStop.ok) return completeStop;
+    if (payload.completeJourney) {
+      return completeJourney(journeyId, { outcome: "duty_stops_complete" });
+    }
+    return completeStop;
+  }
+
+  return { ok: false, message: "Unknown journey queue type.", status: 400 };
+}
+
+async function runOpsItem(item, session) {
+  if (item.type === "incident") {
+    return reportIncidentViaCommand(item.payload);
+  }
+  if (item.type === "defect") {
+    return reportDefectViaCommand(item.payload);
+  }
+  if (item.type === "message_start") {
+    const token = await accessToken(session);
+    return token
+      ? commandStartDriverMessage(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (item.type === "message_reply") {
+    return replyDriverMessageViaCommand(item.payload);
+  }
+  if (item.type === "handback") {
+    const token = await accessToken(session);
+    return token
+      ? commandPostDriverVehicleParked(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (item.type === "duty_sign_on") {
+    return signOnDutyViaCommand(item.payload?.dutyId, session);
+  }
+  if (item.type === "duty_sign_off") {
+    return signOffDutyViaCommand(item.payload?.dutyId, session);
+  }
+  if (item.type === "duty_closeout") {
+    const token = await accessToken(session);
+    return token
+      ? commandSubmitDutyCloseout(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (item.type === "vehicle_swap_request") {
+    const token = await accessToken(session);
+    return token
+      ? commandCreateVehicleSwapRequest(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (item.type === "job_execution") {
+    const token = await accessToken(session);
+    return token
+      ? commandRecordJobExecution(token, item.payload)
+      : { ok: false, message: "Not signed in.", status: 401 };
+  }
+  if (String(item.type ?? "").startsWith("journey_")) {
+    return flushJourneyOpsItem(item);
+  }
+  return null;
+}
+
+export async function flushOpsOutbox(driver, session) {
+  let companyId;
+  let membershipId;
+  try {
+    ;({ companyId, membershipId } = workspaceFrom(driver, session));
+  } catch {
+    return {
+      synced: 0,
+      blocked: 0,
+      remaining: null,
+      status: "CONTEXT_UNAVAILABLE",
+      code: "OFFLINE_CONTEXT_NOT_READY",
+      blockedItems: [],
+    };
+  }
+  const driverId = driver?.id;
+  if (!driverId || isOffline()) {
+    const remaining = driverId ? (await loadOpsOutbox(driverId, companyId, membershipId)).length : 0;
+    return { synced: 0, blocked: 0, remaining, blockedItems: [] };
+  }
+
+  const queue = await loadOpsOutbox(driverId, companyId, membershipId);
   let synced = 0;
   let blocked = 0;
   const blockedItems = [];
+  let refreshedSession = null;
+  let refreshAttempted = false;
 
   for (const item of queue) {
+    if (!isAutoReplayEligible(item)) continue;
     if (item.companyId && companyId && item.companyId !== companyId) continue;
 
-    let result;
-    if (item.type === "incident") {
-      result = await reportIncidentViaCommand(item.payload);
-    } else if (item.type === "defect") {
-      result = await reportDefectViaCommand(item.payload);
-    } else if (item.type === "message_start") {
-      const token = await accessToken();
-      result = token
-        ? await commandStartDriverMessage(token, item.payload)
-        : { ok: false, message: "Not signed in.", status: 401 };
-    } else if (item.type === "message_reply") {
-      result = await replyDriverMessageViaCommand(item.payload);
-    } else if (item.type === "duty_sign_on") {
-      result = await signOnDutyViaCommand(item.payload?.dutyId);
-    } else if (item.type === "duty_sign_off") {
-      result = await signOffDutyViaCommand(item.payload?.dutyId);
-    } else {
-      continue;
+    let result = await runOpsItem(item, refreshedSession ?? session);
+    if (result === null) continue;
+
+    if (!result.ok && result.status === 401 && !refreshAttempted) {
+      refreshAttempted = true;
+      refreshedSession = await tryRefreshSession(refreshedSession ?? session);
+      if (refreshedSession) {
+        result = await runOpsItem(item, refreshedSession);
+      }
     }
 
     if (!result.ok) {
       if (isPermanentOpsFailure(result)) {
-        dequeueOpsCommand(driverId, item.id, companyId, membershipId);
+        await markOpsCommandReconciliation(driverId, item.id, companyId, membershipId, {
+          status: result.status,
+          code: result.code ?? null,
+          message: result.message ?? "Command rejected this report.",
+        });
         blocked += 1;
         blockedItems.push({
           id: item.id,
           type: item.type,
-          message: result.message ?? "Command rejected this report.",
+          message: result.message ?? "Command rejected this report. It remains on this device for reconciliation.",
         });
         continue;
       }
+      await markOpsCommandRetryable(driverId, item.id, companyId, membershipId, {
+        status: result.status,
+        message: result.message ?? "Retry later",
+      });
       break;
     }
 
-    dequeueOpsCommand(driverId, item.id, companyId, membershipId);
+    await dequeueOpsCommand(driverId, item.id, companyId, membershipId);
     synced += 1;
   }
 
@@ -287,6 +475,6 @@ export async function flushOpsOutbox(driver, session) {
     synced,
     blocked,
     blockedItems,
-    remaining: loadOpsOutbox(driverId, companyId, membershipId).length,
+    remaining: (await loadOpsOutbox(driverId, companyId, membershipId)).length,
   };
 }

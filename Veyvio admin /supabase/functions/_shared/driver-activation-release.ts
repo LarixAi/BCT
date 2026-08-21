@@ -1,8 +1,19 @@
-/** After admin approves compliance documents, unlock Driver app onboarding for activation training steps. */
-import { admin } from './supabase.ts'
+/** After admin approves compliance documents, unlock Driver app onboarding for activation training steps.
+ *
+ * PROD-1 Batch 05 — authority declaration / bare-admin removal.
+ * Not UserScopedDb / RLS cutover. Reads/writes still use company-scoped service-role
+ * via companyScopedServiceDbForCompany; company_id filters remain defence-in-depth.
+ *
+ * notifyDriverAppUser stays on transitional notifications — do not wrap that hub here.
+ */
+import { resolveTenantDb } from './db-authority.ts'
 import { DRIVER_ONBOARDING_NOTIFICATION, notifyDriverAppUser } from './notifications.ts'
 
 type Row = Record<string, unknown>
+
+function activationDb(companyId: string) {
+  return resolveTenantDb(companyId, 'driver_activation_release')
+}
 
 const PENDING_DOC_STATUSES = new Set(['awaiting_review', 'uploaded'])
 
@@ -16,7 +27,7 @@ export async function countPendingDriverDocumentReviews(
   companyId: string,
   driverId: string,
 ): Promise<number> {
-  const { data, error } = await admin
+  const { data, error } = await activationDb(companyId)
     .from('driver_documents')
     .select('verification_status')
     .eq('company_id', companyId)
@@ -29,7 +40,7 @@ export async function countPendingDriverDocumentReviews(
 
 async function loadCompletedStepKeys(companyId: string, driverId: string): Promise<Set<string>> {
   const keys = new Set<string>()
-  const { data: requirements } = await admin
+  const { data: requirements } = await activationDb(companyId)
     .from('driver_requirements')
     .select('definition_key, status_override')
     .eq('company_id', companyId)
@@ -39,7 +50,7 @@ async function loadCompletedStepKeys(companyId: string, driverId: string): Promi
     const override = String(row.status_override ?? '')
     if (override === 'submitted' || override === 'approved') keys.add(key)
   }
-  const { data: auditRows } = await admin
+  const { data: auditRows } = await activationDb(companyId)
     .from('audit_events')
     .select('action, after_snapshot')
     .eq('company_id', companyId)
@@ -80,7 +91,7 @@ export async function resolveDriverActivationPhase(
   if (!['pending_compliance', 'onboarding', 'draft'].includes(op)) return 'active'
 
   // Fast path for session bootstrap — avoid audit history scans on the hot path.
-  const { count, error } = await admin
+  const { count, error } = await activationDb(companyId)
     .from('driver_documents')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
@@ -108,7 +119,7 @@ export async function releaseDriverForActivationTraining(input: {
   const pending = await countPendingDriverDocumentReviews(input.companyId, input.driverId)
   if (pending > 0) return { released: false }
 
-  const { data: driver } = await admin
+  const { data: driver } = await activationDb(input.companyId)
     .from('drivers')
     .select('id, onboarding_step, operational_status')
     .eq('company_id', input.companyId)
@@ -127,7 +138,7 @@ export async function releaseDriverForActivationTraining(input: {
 
   const now = new Date().toISOString()
 
-  await admin
+  await activationDb(input.companyId)
     .from('drivers')
     .update({
       onboarding_step: nextStepKey,
@@ -138,7 +149,7 @@ export async function releaseDriverForActivationTraining(input: {
     .eq('id', input.driverId)
     .eq('company_id', input.companyId)
 
-  await admin
+  await activationDb(input.companyId)
     .from('driver_app_accounts')
     .update({
       account_status: 'active',
@@ -150,7 +161,7 @@ export async function releaseDriverForActivationTraining(input: {
 
   for (const key of ACTIVATION_TRAINING_STEP_KEYS) {
     if (completed.has(key)) continue
-    await admin.from('driver_requirements').upsert(
+    await activationDb(input.companyId).from('driver_requirements').upsert(
       {
         company_id: input.companyId,
         driver_id: input.driverId,
@@ -176,7 +187,7 @@ export async function releaseDriverForActivationTraining(input: {
     actionUrl: '/onboarding',
   })
 
-  await admin.from('audit_events').insert({
+  await activationDb(input.companyId).from('audit_events').insert({
     company_id: input.companyId,
     entity_type: 'driver',
     entity_id: input.driverId,

@@ -354,7 +354,7 @@ export async function seedDemoCompany(companyId: string, userId: string) {
     company_id: companyId,
     type: 'vehicle_vor',
     severity: 'high',
-    status: 'open',
+    status: 'new',
     source_entity_type: 'vehicle',
     source_entity_id: vorVehicle?.id ?? null,
     title: 'VOR vehicle needs replacement before afternoon school runs',

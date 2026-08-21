@@ -18,6 +18,7 @@ type YardMessage = {
   conversationId: string;
   driverId: string | null;
   driverName: string | null;
+  driverPhotoUrl?: string | null;
   subject: string;
   body: string;
   sentAt: string;
@@ -146,9 +147,30 @@ function YardDriverMessagesPage() {
                     selected?.id === m.id ? "bg-[#fcfcfd]" : ""
                   }`}
                 >
-                  <p className="text-sm font-semibold text-ink">{m.driverName || "Driver"}</p>
-                  <p className="text-sm text-ink">{m.subject}</p>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-[#667085]">{m.body}</p>
+                  <div className="flex items-start gap-3">
+                    {m.driverPhotoUrl ? (
+                      <img
+                        src={m.driverPhotoUrl}
+                        alt=""
+                        className="mt-0.5 h-9 w-9 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaecf0] text-xs font-semibold text-[#667085]">
+                        {(m.driverName || "D")
+                          .split(" ")
+                          .filter(Boolean)
+                          .map((p) => p[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-ink">{m.driverName || "Driver"}</p>
+                      <p className="text-sm text-ink">{m.subject}</p>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-[#667085]">{m.body}</p>
+                    </div>
+                  </div>
                 </button>
               ))}
             </div>

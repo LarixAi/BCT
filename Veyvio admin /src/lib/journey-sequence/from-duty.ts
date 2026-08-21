@@ -1,6 +1,6 @@
 import type { DutyDetailRecord, RouteStopRecord } from '@/lib/api/types'
 import type { OperationalJob, OperationalTrip } from '@/lib/transfers/types'
-import { buildWorkspace } from './build-sequence'
+import { journeySequenceApi } from './api'
 import type { JourneySequenceWorkspace } from './types'
 
 function stopTime(stop: RouteStopRecord): string | null {
@@ -106,8 +106,6 @@ export function dutyToSyntheticTrip(duty: DutyDetailRecord): OperationalTrip {
 
 export function workspaceFromDuty(duty: DutyDetailRecord): JourneySequenceWorkspace {
   const trip = dutyToSyntheticTrip(duty)
-  return {
-    ...buildWorkspace(trip, [trip]),
-    acknowledgement: null,
-  }
+  // Cache through the journey-sequence API so live preview/commit can resolve this duty trip.
+  return journeySequenceApi.ensureWorkspaceFromTrips(trip, [trip])
 }

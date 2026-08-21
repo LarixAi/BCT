@@ -11,7 +11,7 @@ import { PriorityIncidentBanner } from './components/PriorityIncidentBanner'
 import { ReportIncidentPanel } from './components/ReportIncidentPanel'
 import { api } from '@/lib/api/client'
 import { safeIncidentsHub } from '@/lib/api/safe-hubs'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

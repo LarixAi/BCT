@@ -147,6 +147,16 @@ export function buildAccessContext(session, driver, extras = {}) {
     temporaryAccessExpired: extras.temporaryAccessExpired ?? false,
   });
 
+  if (session?.routeTarget === "offline_recovery") {
+    return {
+      mode: "offline_recovery",
+      onboardingStatus: normalizeOnboardingStatus(onboardingRaw),
+      accountStatus: normalizeAccountStatus({ status: driver?.status, onboarding_status: onboardingRaw }),
+      dispatchBand,
+      isOnboardingEditable: false,
+    };
+  }
+
   if (session?.routeTarget === "session_error") {
     return {
       mode: "unlinked",

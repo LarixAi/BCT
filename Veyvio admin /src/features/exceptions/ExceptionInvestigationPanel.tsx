@@ -16,11 +16,11 @@ export function ExceptionInvestigationPanel({
   onAddNote,
 }: {
   exception: OperationalException | null
-  onAssignMe: () => void
-  onInvestigate: () => void
-  onEscalate: () => void
-  onClose: () => void
-  onAddNote: (body: string) => void
+  onAssignMe?: () => void
+  onInvestigate?: () => void
+  onEscalate?: () => void
+  onClose?: () => void
+  onAddNote?: (body: string) => void
 }) {
   const [tab, setTab] = useState<DrawerTab>('overview')
   const [note, setNote] = useState('')
@@ -160,34 +160,46 @@ export function ExceptionInvestigationPanel({
               <ActionLink label="Reassign vehicle" href="/dispatch" />
               <ActionLink label="Transfer driver" href="/dispatch" />
               <ActionLink label="Create incident" href="/incidents" />
-              <button
-                type="button"
-                onClick={onEscalate}
-                className="rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-xs font-medium text-red-800 hover:bg-red-100"
-              >
-                Escalate
-              </button>
-              <button
-                type="button"
-                onClick={onAssignMe}
-                className="rounded-lg border border-border px-2 py-2 text-xs font-medium text-ink-soft hover:bg-surface-muted"
-              >
-                Assign to me
-              </button>
-              <button
-                type="button"
-                onClick={onInvestigate}
-                className="rounded-lg border border-border px-2 py-2 text-xs font-medium text-ink-soft hover:bg-surface-muted"
-              >
-                Investigating
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
-              >
-                Close exception
-              </button>
+              {onEscalate ? (
+                <button
+                  type="button"
+                  onClick={onEscalate}
+                  className="rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-xs font-medium text-red-800 hover:bg-red-100"
+                >
+                  Escalate
+                </button>
+              ) : null}
+              {onAssignMe ? (
+                <button
+                  type="button"
+                  onClick={onAssignMe}
+                  className="rounded-lg border border-border px-2 py-2 text-xs font-medium text-ink-soft hover:bg-surface-muted"
+                >
+                  Assign to me
+                </button>
+              ) : null}
+              {onInvestigate ? (
+                <button
+                  type="button"
+                  onClick={onInvestigate}
+                  className="rounded-lg border border-border px-2 py-2 text-xs font-medium text-ink-soft hover:bg-surface-muted"
+                >
+                  Investigating
+                </button>
+              ) : null}
+              {onClose ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+                >
+                  Close exception
+                </button>
+              ) : (
+                <p className="col-span-2 rounded-lg border border-border bg-surface-muted px-2 py-2 text-xs text-ink-soft">
+                  Case status changes are not saved to Command yet. Use related records to act.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -207,29 +219,33 @@ export function ExceptionInvestigationPanel({
                 </li>
               ))}
             </ul>
-            <form
-              className="space-y-2"
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (!note.trim()) return
-                onAddNote(note.trim())
-                setNote('')
-              }}
-            >
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                placeholder="Add an investigation note…"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-              />
-              <button
-                type="submit"
-                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
+            {onAddNote ? (
+              <form
+                className="space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (!note.trim()) return
+                  onAddNote(note.trim())
+                  setNote('')
+                }}
               >
-                Add note
-              </button>
-            </form>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows={3}
+                  placeholder="Add an investigation note…"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                />
+                <button
+                  type="submit"
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
+                >
+                  Add note
+                </button>
+              </form>
+            ) : (
+              <p className="text-xs text-muted">Notes cannot be saved to Command from this screen yet.</p>
+            )}
           </div>
         )}
       </div>

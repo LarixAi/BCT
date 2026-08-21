@@ -3,15 +3,15 @@
  */
 import { projectPublishedDutiesForDriver } from './duty-publication.ts'
 import { HttpError } from './http.ts'
-import { admin } from './supabase.ts'
+import { resolveTenantDb } from './db-authority.ts'
+import { assertRequestCompanyId } from './request-company-guard.ts'
+
+export { assertRequestCompanyId }
 
 type Row = Record<string, unknown>
 
-export function assertRequestCompanyId(bodyCompanyId: unknown, contextCompanyId: string): void {
-  const raw = String(bodyCompanyId ?? '').trim()
-  if (raw && raw !== contextCompanyId) {
-    throw new HttpError(403, 'Company mismatch — sign in to the correct operator', 'company_mismatch')
-  }
+function driverGuardDb(companyId: string) {
+  return resolveTenantDb(companyId, 'driver_write_guards')
 }
 
 export async function resolveDriverAssignedVehicleIds(input: {
@@ -103,7 +103,8 @@ export async function assertDriverConversation(input: {
   driverId: string
   conversationId: string
 }): Promise<void> {
-  const { data } = await admin
+  const companyId = input.companyId
+  const { data } = await driverGuardDb(companyId)
     .from('messages')
     .select('id')
     .eq('company_id', input.companyId)

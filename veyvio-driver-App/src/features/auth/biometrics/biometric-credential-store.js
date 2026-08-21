@@ -147,9 +147,6 @@ export const biometricCredentialStore = {
       negativeButtonText: "Cancel",
     };
 
-    console.log(
-      "[BIOMETRIC_DEBUG] saving token len=" + refreshToken.length + " prefix=" + refreshToken.slice(0, 6) + " useCrypto=" + useCrypto,
-    );
     try {
       await withRejectTimeout(
         NativeBiometric.setData(payload),
@@ -232,10 +229,6 @@ export const biometricCredentialStore = {
           "Fingerprint check timed out. Try again, or use your password.",
         );
         const refreshToken = stored?.value || null;
-        console.log(
-          "[BIOMETRIC_DEBUG] read (NONE) token len=" + (refreshToken ? refreshToken.length : "null") +
-            " prefix=" + (refreshToken ? refreshToken.slice(0, 6) : "null"),
-        );
         if (!isPlausibleRefreshToken(refreshToken)) {
           return { kind: "missing", message: "Biometric sign-in must be set up again." };
         }
@@ -261,10 +254,6 @@ export const biometricCredentialStore = {
       return { kind: "ok", refreshToken, message: "ok" };
     } catch (err) {
       const kind = classifyBiometricCredentialError(err);
-      console.log(
-        "[BIOMETRIC_DEBUG] readRefreshCredential threw kind=" + kind + " raw=" +
-          (err instanceof Error ? err.message : String(err)),
-      );
       if (kind === "cancelled") {
         return {
           kind,

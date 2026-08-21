@@ -26,7 +26,8 @@ test.describe('Select company page', () => {
         'pending_memberships',
         JSON.stringify([{ tenantId: 'co_demo', tenantName: 'Demo Operator', role: 'member' }]),
       )
-      localStorage.setItem('access_token', 'mock_token_demo')
+      sessionStorage.setItem('mock_access_token', 'mock_token_demo')
+      sessionStorage.setItem('has_tenant', '1')
     })
 
     await page.goto('/select-company')

@@ -1,0 +1,3 @@
+date,supplier,description,reference,category,status,net,vat,gross,vehicle,evidence,source_key
+2026-07-22,Shell,Fuel top-up BX62 BCT,SH-9912,fuel,actual,120.00,24.00,144.00,BX62BCT,receipt-9912.pdf,shell|SH-9912
+2026-07-18,BT Business,Depot connectivity,BT-7721,technology,actual,89.00,17.80,106.80,,bt-invoice-7721.pdf,bt|BT-7721

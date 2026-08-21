@@ -118,7 +118,7 @@ export function listDispatchExceptions(exceptions: OperationalException[]): Oper
     .filter(
       (ex) =>
         ex.status !== 'resolved' &&
-        ex.status !== 'closed' &&
+        String(ex.status) !== 'closed' &&
         (ex.severity === 'critical' || ex.severity === 'high'),
     )
     .slice(0, 6)

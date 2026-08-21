@@ -1,7 +1,23 @@
-/** Live Command hub projections from shared operational tables. */
-import { admin } from './supabase.ts'
+/** Live Command hub projections from shared operational tables.
+ *
+ * Wave 3F: hub reads use resolveTenantDb (JWT + RLS when ALS/request context is
+ * bound; company-scoped service-role only for JWT-less callers). company_id
+ * filters remain defence-in-depth.
+ *
+ * Equipment, stock, tyre, and purchase callees are already wrapped — do not reopen them here.
+ */
+import { resolveTenantDb } from './db-authority.ts'
+import { mapIncidentRegisterRow } from './incident-workflow.ts'
+import { listEquipmentAssets } from './equipment-assets.ts'
+import { listPurchaseRequests } from './purchase-requests.ts'
+import { listDepotStock, listFuelCards, listStockTransfers } from './depot-stock.ts'
+import { countTyresNeedingAttention, listTyreAssets } from './tyre-assets.ts'
 
 type Row = Record<string, unknown>
+
+function hubDb(companyId: string) {
+  return resolveTenantDb(companyId, 'hubs')
+}
 
 function today() {
   return new Date().toISOString().slice(0, 10)
@@ -14,13 +30,13 @@ function ageMinutes(iso: string | null | undefined) {
 
 export async function projectDefectsHub(companyId: string) {
   const [{ data: defects }, { data: depots }, { data: vorCases }] = await Promise.all([
-    admin
+    hubDb(companyId)
       .from('defects')
       .select('*, vehicles(id, registration, fleet_number, make, model, primary_depot_id), depots(id, name)')
       .eq('company_id', companyId)
       .order('reported_at', { ascending: false }),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
-    admin.from('vor_cases').select('id, vehicle_id, status').eq('company_id', companyId).eq('status', 'active'),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId).from('vor_cases').select('id, vehicle_id, status').eq('company_id', companyId).eq('status', 'active'),
   ])
 
   const open = (defects ?? []).filter((d) => !['closed', 'rejected'].includes(String(d.status)))
@@ -160,72 +176,51 @@ export async function projectDefectsHub(companyId: string) {
 
 export async function projectIncidentsHub(companyId: string) {
   const [{ data: incidents }, { data: depots }] = await Promise.all([
-    admin
+    hubDb(companyId)
       .from('incidents')
       .select('*, vehicles(registration), drivers(driver_number)')
       .eq('company_id', companyId)
       .order('occurred_at', { ascending: false }),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
   ])
 
-  const open = (incidents ?? []).filter((i) => i.status !== 'closed')
-  const critical = open.filter((i) => i.severity === 'critical' || i.severity === 'high')
   const monthPrefix = today().slice(0, 7)
 
-  const register = (incidents ?? []).map((row: Row) => {
-    const vehicle = (row.vehicles as Row | null) ?? {}
-    const driver = (row.drivers as Row | null) ?? {}
-    return {
-      id: row.id,
-      incidentRef: row.incident_reference,
-      title: row.incident_type ?? 'Incident',
-      shortDescription: row.description,
-      severity: row.severity === 'critical' ? 'critical' : row.severity === 'high' ? 'high' : row.severity === 'low' ? 'low' : 'medium',
-      status: row.status === 'closed' ? 'closed' : 'open',
-      category: row.incident_type ?? 'other',
-      reportingSource: row.source_app ?? 'command',
-      reportedAt: row.reported_at,
-      occurredAt: row.occurred_at,
-      location: typeof row.location === 'object' ? JSON.stringify(row.location) : row.location ?? null,
-      depotId: (depots ?? [])[0]?.id ?? '',
-      depotName: (depots ?? [])[0]?.name ?? 'Depot',
-      ownerName: null,
-      ownerId: null,
-      involvedSummary: Array.isArray(row.passenger_ids) && row.passenger_ids.length
-        ? `${row.passenger_ids.length} passenger(s)`
-        : 'No passengers linked',
-      journeyReference: row.trip_id ?? null,
-      vehicleRegistration: vehicle.registration ?? null,
-      vehicleId: row.vehicle_id ?? null,
-      driverName: driver.driver_number ?? null,
-      driverId: row.driver_id ?? null,
-      isSafeguarding: row.incident_type === 'safeguarding',
-      isAcknowledged: true,
-      acknowledgedAt: row.reported_at,
-      nextDeadline: null,
-    }
-  })
+  const register = (incidents ?? []).map((row: Row) =>
+    mapIncidentRegisterRow(row, (depots ?? [])[0] ?? null),
+  )
+
+  const openRows = register.filter((r) => r.status !== 'closed')
+  const critical = openRows.filter((r) => r.severity === 'critical' || r.severity === 'high')
+  const unacknowledged = openRows.filter((r) => !r.isAcknowledged)
 
   return {
     operationalDate: today(),
     summary: {
       openCritical: critical.length,
-      awaitingTriage: open.filter((i) => i.status === 'open').length,
-      overdueActions: 0,
+      awaitingTriage: unacknowledged.length,
+      overdueActions: unacknowledged.filter((r) => r.isOverdue).length,
       externalAssessmentRequired: 0,
-      openInvestigations: open.length,
+      openInvestigations: openRows.length,
       incidentsThisMonth: (incidents ?? []).filter((i) => String(i.occurred_at ?? '').startsWith(monthPrefix)).length,
       previousMonthCount: 0,
       nearMissThisMonth: (incidents ?? []).filter((i) => i.incident_type === 'near_miss').length,
     },
     register,
-    priorityAlerts: critical.slice(0, 5).map((i: Row) => ({
-      id: i.id,
-      title: i.description,
-      severity: 'danger',
-      incidentId: i.id,
-      message: String(i.description),
-      href: `/incidents/${i.id}`,
+    priorityAlerts: critical.slice(0, 5).map((r) => ({
+      id: String(r.id),
+      incidentId: String(r.id),
+      incidentRef: r.incidentRef,
+      title: r.title,
+      severity: r.severity,
+      summary: r.shortDescription,
+      reportedAt: r.reportedAt,
+      location: r.location ?? '',
+      ownerName: r.ownerName,
+      isSafeguarding: r.isSafeguarding,
+      requiresAcknowledgement: !r.isAcknowledged,
+      message: r.shortDescription,
+      href: `/incidents/${r.id}`,
     })),
     depots: (depots ?? []).map((d) => ({ id: d.id, name: d.name })),
     regulatory: register.filter((r) => r.isSafeguarding || r.severity === 'critical'),
@@ -274,10 +269,10 @@ export async function projectIncidentsHub(companyId: string) {
 
 export async function projectMaintenanceHub(companyId: string) {
   const [{ data: vehicles }, { data: workOrders }, { data: defects }, { data: depots }] = await Promise.all([
-    admin.from('vehicles').select('*, depots(name)').eq('company_id', companyId),
-    admin.from('maintenance_work_orders').select('*, vehicles(registration, fleet_number, primary_depot_id)').eq('company_id', companyId).order('created_at', { ascending: false }),
-    admin.from('defects').select('*').eq('company_id', companyId).not('status', 'in', '("closed","rejected")'),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId).from('vehicles').select('*, depots(name)').eq('company_id', companyId),
+    hubDb(companyId).from('maintenance_work_orders').select('*, vehicles(registration, fleet_number, primary_depot_id)').eq('company_id', companyId).order('created_at', { ascending: false }),
+    hubDb(companyId).from('defects').select('*').eq('company_id', companyId).not('status', 'in', '("closed","rejected")'),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
   ])
 
   const total = (vehicles ?? []).length
@@ -285,8 +280,31 @@ export async function projectMaintenanceHub(companyId: string) {
   const inMaintenance = (vehicles ?? []).filter((v) => ['maintenance', 'awaiting_check'].includes(String(v.operational_status))).length
   const vor = (vehicles ?? []).filter((v) => v.operational_status === 'vor').length
 
+  const openWorkOrders = (workOrders ?? []).filter(
+    (w) => w.status !== 'completed' && w.status !== 'cancelled',
+  )
+  const utcDay = (iso: unknown): number | null => {
+    if (!iso) return null
+    const d = new Date(String(iso))
+    if (Number.isNaN(d.getTime())) return null
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  }
+  const todayUtc = utcDay(new Date().toISOString()) ?? 0
+  const dueToday = openWorkOrders.filter((w) => utcDay(w.scheduled_start) === todayUtc).length
+  const overdue = openWorkOrders.filter((w) => {
+    const t = utcDay(w.scheduled_start)
+    return t != null && t < todayUtc
+  }).length
+  const dueWithin14Days = openWorkOrders.filter((w) => {
+    const t = utcDay(w.scheduled_start)
+    if (t == null) return false
+    const diff = (t - todayUtc) / 86_400_000
+    return diff >= 0 && diff <= 14
+  }).length
+
   const workOrderRows = (workOrders ?? []).map((row: Row) => {
     const vehicle = (row.vehicles as Row | null) ?? {}
+    const scheduledDate = row.scheduled_start ? String(row.scheduled_start) : null
     return {
       workOrderId: row.id,
       vehicleId: row.vehicle_id,
@@ -300,9 +318,11 @@ export async function projectMaintenanceHub(companyId: string) {
       provider: null,
       technicianName: null,
       managerName: null,
-      requestedDate: row.scheduled_start ?? null,
-      targetCompletionDate: row.scheduled_end ?? null,
-      expectedCompletion: row.scheduled_end ?? null,
+      scheduledDate,
+      requestedDate: scheduledDate,
+      scheduledStart: scheduledDate,
+      targetCompletionDate: row.scheduled_end ? String(row.scheduled_end) : null,
+      expectedCompletion: row.scheduled_end ? String(row.scheduled_end) : scheduledDate,
       defectId: row.source_id ?? null,
       creationSource: row.source_app ?? 'command',
       diagnosis: null,
@@ -321,9 +341,9 @@ export async function projectMaintenanceHub(companyId: string) {
   return {
     summary: {
       attention: {
-        dueToday: 0,
-        dueWithin14Days: 0,
-        overdue: 0,
+        dueToday,
+        dueWithin14Days,
+        overdue,
         vor,
         safetyCriticalDefects: (defects ?? []).filter((d) =>
           ['critical', 'dangerous', 'major'].includes(String(d.severity)),
@@ -444,9 +464,9 @@ export async function projectMaintenanceHub(companyId: string) {
 /** Formal inspections hub — Phase 1 projection until dedicated inspections table lands. */
 export async function projectInspectionsHub(companyId: string) {
   const [{ data: vehicles }, { data: depots }, { data: workOrders }] = await Promise.all([
-    admin.from('vehicles').select('*, depots(name)').eq('company_id', companyId),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
-    admin
+    hubDb(companyId).from('vehicles').select('*, depots(name)').eq('company_id', companyId),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId)
       .from('maintenance_work_orders')
       .select('id, vehicle_id, work_order_reference, status, source_type, scheduled_start')
       .eq('company_id', companyId)
@@ -531,25 +551,16 @@ export async function projectInspectionsHub(companyId: string) {
       eventKind: 'inspection',
       status: r.status,
     })),
-    providers: [
-      {
-        id: 'prov-internal',
-        name: 'Fleet Workshop (internal)',
-        type: 'internal',
-        approved: true,
-        services: ['Safety Inspection (PMI)', 'Post-repair', 'Return-to-service'],
-        slaHours: 48,
-        contactEmail: 'workshop@example.com',
-      },
-    ],
+    // No durable provider register yet — honest empty (F-03), not invented workshops.
+    providers: [],
   }
 }
 
 /** Fleet Resources hub — Phase 1 live stub until dedicated resource tables land. */
 export async function projectFleetResourcesHub(companyId: string) {
   const [{ data: vehicles }, { data: depots }] = await Promise.all([
-    admin.from('vehicles').select('id, registration, fleet_number, primary_depot_id, operational_status, depots(name)').eq('company_id', companyId),
-    admin.from('depots').select('id, name').eq('company_id', companyId),
+    hubDb(companyId).from('vehicles').select('id, registration, fleet_number, primary_depot_id, operational_status, depots(name)').eq('company_id', companyId),
+    hubDb(companyId).from('depots').select('id, name').eq('company_id', companyId),
   ])
 
   const vehicleRows = vehicles ?? []
@@ -570,42 +581,22 @@ export async function projectFleetResourcesHub(companyId: string) {
     costPerMile: null,
   }))
 
-  // Until dedicated equipment / card tables exist, project a working register from the fleet.
-  const kit = [
-    { key: 'fe', name: 'Fire extinguisher', category: 'safety_equipment', required: true },
-    { key: 'fa', name: 'First aid kit', category: 'safety_equipment', required: true },
-    { key: 'gh', name: 'Glass hammer', category: 'safety_equipment', required: true },
-  ] as const
-
-  const equipment = vehicleRows.flatMap((v: Row) =>
-    kit.map((item) => ({
-      id: `eq-live-${v.id}-${item.key}`,
-      qrCode: `EQ-${String(v.fleet_number ?? v.registration ?? v.id).slice(0, 8)}-${item.key.toUpperCase()}`,
-      name: item.name,
-      category: item.category,
-      status: 'assigned',
-      vehicleId: v.id,
-      registrationNumber: v.registration ?? '—',
-      depotId: null,
-      depotName: null,
-      expiryDate: null,
-      lastCheckedAt: null,
-      requiredForDuty: item.required,
-    })),
-  )
-
-  const cards = vehicleRows.slice(0, 20).map((v: Row, index: number) => ({
-    id: `card-live-${v.id}`,
-    provider: index % 2 === 0 ? 'Allstar' : 'FuelGenie',
-    maskedNumber: `•••• ${String(1000 + ((index * 137) % 9000))}`,
-    status: 'active',
-    assignmentModel: 'vehicle',
-    assignedVehicleId: v.id,
-    assignedRegistration: v.registration ?? '—',
-    assignedDriverName: null,
-    dailyLimit: 200,
-    lastTransactionAt: null,
-  }))
+  // F-03: do not invent kit, fuel cards, stock, tyres, or purchases — durable tables only.
+  const [equipment, stock, cards, stockTransfers, tyres, purchaseRequests] = await Promise.all([
+    listEquipmentAssets(companyId),
+    listDepotStock(companyId),
+    listFuelCards(companyId),
+    listStockTransfers(companyId),
+    listTyreAssets(companyId),
+    listPurchaseRequests(companyId),
+  ])
+  const missingEquipment = equipment.filter(
+    (item) => item.status === 'missing' || item.status === 'expired' || item.status === 'unserviceable',
+  ).length
+  const lowDepotStock = stock.filter((item) => item.status === 'low' || item.status === 'reorder' || item.status === 'out').length
+  const minTread = 2
+  const tyresNeedingAttention = countTyresNeedingAttention(tyres, minTread)
+  const unapprovedPurchases = purchaseRequests.filter((p) => p.status === 'pending').length
 
   return {
     summary: {
@@ -613,10 +604,10 @@ export async function projectFleetResourcesHub(companyId: string) {
       lowAdBlueVehicles: 0,
       missingReceipts: 0,
       suspectedCardMisuse: 0,
-      tyresNeedingAttention: 0,
-      lowDepotStock: (depots ?? []).length,
-      unapprovedPurchases: 0,
-      missingEquipment: 0,
+      tyresNeedingAttention,
+      lowDepotStock,
+      unapprovedPurchases,
+      missingEquipment,
       resourceBlocks: 0,
       spendThisMonth: 0,
       costPerMileThisMonth: null,
@@ -624,27 +615,13 @@ export async function projectFleetResourcesHub(companyId: string) {
     alerts: [],
     catalogue: [],
     transactions: [],
-    stock: (depots ?? []).flatMap((d) => [
-      {
-        id: `stk-live-adblue-${d.id}`,
-        depotId: d.id,
-        depotName: d.name,
-        resourceItemId: 'res-adblue',
-        resourceName: 'AdBlue',
-        category: 'adblue',
-        available: 0,
-        reserved: 0,
-        minimum: 40,
-        unit: 'L',
-        status: 'out',
-      },
-    ]),
+    stock,
     cards,
-    purchaseRequests: [],
+    purchaseRequests,
     vehicleCosts,
-    tyres: [],
+    tyres,
     equipment,
-    stockTransfers: [],
+    stockTransfers,
     forecasts: [],
     anomalies: [],
     baselines: [],
@@ -658,7 +635,7 @@ export async function projectFleetResourcesHub(companyId: string) {
       maxLitresPerTransaction: 200,
       managerApprovalAbove: 250,
       companyMpgBaseline: 9.5,
-      minTreadDepthMm: 2,
+      minTreadDepthMm: minTread,
       lowFuelPercent: 25,
     },
   }

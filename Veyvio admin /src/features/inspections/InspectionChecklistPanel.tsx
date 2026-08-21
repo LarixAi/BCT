@@ -12,7 +12,7 @@ import {
 } from '@/lib/maintenance/pmi-checklist'
 import type { InspectionRecord } from '@/lib/inspections/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

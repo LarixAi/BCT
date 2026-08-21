@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "590158999464",
-    "project_id": "core-support-fleet-8c5a6",
-    "storage_bucket": "core-support-fleet-8c5a6.firebasestorage.app"
+    "project_number": "487773857783",
+    "project_id": "veyvio-d3632",
+    "storage_bucket": "veyvio-d3632.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:590158999464:android:f86a49b76d1e102079779d",
+        "mobilesdk_app_id": "1:487773857783:android:306c1d77a7577b719670f2",
         "android_client_info": {
           "package_name": "uk.veyvio.driver"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCiTjybS9J6ePoWAw1eBBqfBv-06a-l2Vw"
+          "current_key": "AIzaSyCD_lYAzVmmjn1zG_azLxCkoryzyMQDNiE"
         }
       ],
       "services": {

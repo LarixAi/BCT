@@ -13,8 +13,12 @@ export default function DriverIdBadge({ driver, organisationName, compact = fals
     <div className={`${op.card} ${compact ? "p-3.5" : "p-4"}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--ridova-navy)] text-sm font-bold text-white">
-            {initials}
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--ridova-navy)] text-sm font-bold text-white">
+            {driver.profilePhotoUrl ? (
+              <img src={driver.profilePhotoUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
           </div>
           <div className="min-w-0">
             <p className={`${op.appLabel} !text-[10px]`}>Digital driver ID</p>

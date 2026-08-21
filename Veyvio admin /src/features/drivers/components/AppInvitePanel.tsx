@@ -124,7 +124,7 @@ export function AppInvitePanel({
     const href =
       account.inviteUrl?.trim() ||
       (token
-        ? `${(import.meta.env.VITE_DRIVER_APP_URL as string | undefined)?.replace(/\/$/, '') ?? window.location.origin}/accept-invitation?token=${encodeURIComponent(token)}`
+        ? `${(import.meta.env.VITE_ADMIN_APP_URL as string | undefined)?.replace(/\/$/, '') ?? window.location.origin}/accept-invitation?token=${encodeURIComponent(token)}`
         : null)
     if (!href) {
       setError('No invite link is available yet. Send an invitation first.')

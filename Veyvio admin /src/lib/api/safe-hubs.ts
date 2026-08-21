@@ -8,8 +8,23 @@ import type {
 import type { DefectAnalytics, DefectsHubData } from '@/lib/defects/types'
 import type { IncidentAnalytics, IncidentsHubData } from '@/lib/incidents/types'
 import type { MaintenanceIntelligence } from '@/lib/maintenance/intelligence'
-import type { MaintenanceHubData } from '@/lib/maintenance/types'
+import type { FleetWorkOrderRow, MaintenanceHubData } from '@/lib/maintenance/types'
 import type { YardHubData, YardSummary } from '@/lib/yard/types'
+
+/** Coerce API/fixture year values without comparing number | null to ''. */
+export function parseOptionalModelYear(value: unknown): number | null {
+  if (value == null) return null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  return null
+}
 
 const EMPTY_DEFECT_ANALYTICS: DefectAnalytics = {
   byDepot: [],
@@ -193,12 +208,24 @@ export function safeMaintenanceHub(hub: MaintenanceHubData): MaintenanceHubData 
       deadline: item.deadline ?? item.expectedCompletion ?? null,
     })),
     fleetRows: hub.fleetRows ?? [],
-    workOrders: (hub.workOrders ?? []).map((w) => ({
-      ...w,
-      pmiChecklistProgress: w.pmiChecklistProgress ?? null,
-      estimateStatus: w.estimateStatus ?? null,
-      estimateTotal: w.estimateTotal ?? null,
-    })),
+    workOrders: (hub.workOrders ?? []).map((w) => {
+      const raw = w as FleetWorkOrderRow & {
+        requestedDate?: string | null
+        scheduledStart?: string | null
+      }
+      const scheduledDate =
+        raw.scheduledDate ?? raw.requestedDate ?? raw.scheduledStart ?? null
+      return {
+        ...w,
+        scheduledDate,
+        targetCompletionDate: raw.targetCompletionDate ?? null,
+        expectedCompletion: raw.expectedCompletion ?? raw.targetCompletionDate ?? scheduledDate,
+        createdAt: raw.createdAt ?? new Date().toISOString(),
+        pmiChecklistProgress: w.pmiChecklistProgress ?? null,
+        estimateStatus: w.estimateStatus ?? null,
+        estimateTotal: w.estimateTotal ?? null,
+      }
+    }),
     parts: (hub.parts ?? []).map((p) => ({
       ...p,
       stockOnHand: p.stockOnHand ?? 0,
@@ -359,6 +386,7 @@ export function normalizeChecksOperationalRow(
     registrationNumber: String(row.registrationNumber ?? '—'),
     fleetNumber: row.fleetNumber != null ? String(row.fleetNumber) : null,
     makeModel: row.makeModel ? String(row.makeModel) : '—',
+    modelYear: parseOptionalModelYear(row.modelYear),
     vehicleCategory: row.vehicleCategory ? String(row.vehicleCategory) : 'vehicle',
     depotId: String(row.depotId ?? ''),
     depotName: String(row.depotName ?? '—'),

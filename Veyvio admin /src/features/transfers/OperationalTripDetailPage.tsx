@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
 import { StatusPill } from '@/components/ui/status'
@@ -24,6 +24,7 @@ const TABS = [
 
 export function OperationalTripDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')?.toLowerCase()
   const initialTab =
@@ -47,6 +48,14 @@ export function OperationalTripDetailPage() {
     enabled: !!id,
   })
 
+  useEffect(() => {
+    if (!trip || !id || trip.id === id) return
+    // Canonicalise booking/duty ids that resolve to a real trip row.
+    navigate(`/live-operations/trips/${trip.id}${searchParams.toString() ? `?${searchParams}` : ''}`, {
+      replace: true,
+    })
+  }, [trip, id, navigate, searchParams])
+
   const setTabAndUrl = (next: (typeof TABS)[number]) => {
     setTab(next)
     const key =
@@ -68,9 +77,16 @@ export function OperationalTripDetailPage() {
   if (isLoading) return <p className="text-sm text-muted">Loading trip…</p>
   if (isError || !trip) {
     return (
-      <p className="text-sm text-red-800">
-        {error instanceof Error ? error.message : 'Trip not found'}
-      </p>
+      <div className="space-y-2 text-sm">
+        <p className="text-red-800">{error instanceof Error ? error.message : 'Trip not found'}</p>
+        <p className="text-ink-soft">
+          If you opened this from a booking, use{' '}
+          <Link to={id ? `/bookings/${id}` : '/bookings'} className="font-medium text-command-600 hover:underline">
+            the booking page
+          </Link>{' '}
+          or Jobs for the service date.
+        </p>
+      </div>
     )
   }
 

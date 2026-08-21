@@ -5,7 +5,7 @@ import { savePendingCompanySelection } from "@/pages/driver/DriverAuthSelectComp
 import { linkDriverAccountIfNeeded } from "@/services/link-driver.service";
 import { buildAccessContext } from "@/lib/driver-access-mode";
 import { withTimeout } from "@/lib/withTimeout";
-import { rebindBiometricCredentialIfEnabled } from "@/features/auth/biometrics/biometric-enrollment";
+import { rebindBiometricCredentialIfEnabled, invalidateBiometricAccess } from "@/features/auth/biometrics/biometric-enrollment";
 import { signInDriverWithBiometrics } from "@/features/auth/biometrics/biometric-login";
 import {
   markBiometricUnlocked,
@@ -16,6 +16,8 @@ import {
 import { enforceRemoteDeviceSecurity } from "@/features/auth/biometrics/biometric-security-sync";
 import { clearDriverSensitiveWorkspace } from "@/lib/driver-sensitive-storage";
 import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import { OFFLINE_RECOVERY_ROUTE } from "@/lib/driver-offline-recovery";
+import { resolveRefreshedSession } from "@/lib/driver-session-refresh-guard";
 
 const DriverSupabaseAuthContext = createContext(null);
 
@@ -48,6 +50,9 @@ export function DriverSupabaseAuthProvider({ children }) {
   const hasBootedRef = useRef(false);
   /** Password/biometric login already loads context — skip SIGNED_IN refresh race. */
   const loginInFlightRef = useRef(false);
+  /** Latest session for offline keep-alive (refresh must not clobber mid-flight). */
+  const sessionRef = useRef(null);
+  sessionRef.current = session;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -70,29 +75,48 @@ export function DriverSupabaseAuthProvider({ children }) {
       // Timeout ≠ signed out. Keep prior session so a slow Command call cannot
       // bounce the driver back to the password screen mid-sign-in.
       if (ctx === SESSION_REFRESH_TIMED_OUT) {
-        console.log("[BIOMETRIC_DEBUG] getDriverSessionContext timed out — keeping prior session");
-        return null;
+        return sessionRef.current;
+      }
+
+      // Airplane / patchy 4G: Command is unreachable, so getDriverSessionContext
+      // returns session_error or the cached-identity recovery shell. Neither may
+      // replace an already-good operational session — that drops the driver out of a
+      // walkaround in progress and loses evidence held in memory until submit.
+      const guarded = resolveRefreshedSession(ctx, sessionRef.current);
+      if (guarded.keptPrior) return guarded.session;
+
+      if (ctx?.requiresCompanySelection) {
+        savePendingCompanySelection({
+          memberships: ctx.memberships ?? [],
+          accessToken: ctx.accessToken,
+          refreshToken: ctx.refreshToken,
+        });
+        setPendingCompanySelection(true);
+        setSession(null);
+        return ctx;
       }
 
       const driverId = ctx?.driver?.id;
       if (driverId) {
         const security = await withTimeout(
           enforceRemoteDeviceSecurity(driverId)
-            .catch((err) => {
-              console.log("[BIOMETRIC_DEBUG] enforceRemoteDeviceSecurity threw: " + (err instanceof Error ? err.message : String(err)));
-              return { revoked: false, requirePassword: false };
+            .catch(() => {
+              // Fail closed for biometrics; keep operational session below.
+              return { revoked: false, requirePassword: true };
             }),
           DEVICE_SECURITY_TIMEOUT_MS,
-          { revoked: false, requirePassword: false },
+          { revoked: false, requirePassword: true },
         );
-        console.log("[BIOMETRIC_DEBUG] security result: " + JSON.stringify(security));
-        if (security.revoked || security.requirePassword) {
-          console.log("[BIOMETRIC_DEBUG] forcing sign-out due to device security check");
+        if (security.revoked) {
           refreshGeneration.current += 1;
           resetBiometricLockOnSignOut();
           await signOutDriver().catch(() => undefined);
           setSession(null);
           return null;
+        }
+        if (security.requirePassword) {
+          // Network / status failure: wipe biometric unlock, keep duty session.
+          await invalidateBiometricAccess(driverId).catch(() => undefined);
         }
       }
 
@@ -115,6 +139,16 @@ export function DriverSupabaseAuthProvider({ children }) {
     void refresh();
   }, [refresh]);
 
+  // Recovery shell must not need a manual tap to leave once the network is back.
+  useEffect(() => {
+    if (session?.routeTarget !== OFFLINE_RECOVERY_ROUTE) return undefined;
+    const onOnline = () => {
+      void refresh();
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [refresh, session?.routeTarget]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setLoading((still) => {
@@ -133,11 +167,6 @@ export function DriverSupabaseAuthProvider({ children }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, sessionArg) => {
-      const rt = sessionArg?.refresh_token;
-      console.log(
-        "[BIOMETRIC_DEBUG] onAuthStateChange event=" + event + " refresh " +
-          (typeof rt === "string" && rt ? "len=" + rt.length + " prefix=" + rt.slice(0, 6) : "null"),
-      );
       window.setTimeout(() => {
         void (async () => {
           if (event === "SIGNED_IN" && window.location.pathname === "/auth/verify") {
@@ -165,6 +194,14 @@ export function DriverSupabaseAuthProvider({ children }) {
             }
           }
           if (event === "SIGNED_OUT") {
+            // Token refresh fails hard while airplane is on; Supabase emits SIGNED_OUT.
+            // Keep the in-memory operational session so offline queue / walkaround continue.
+            const offline =
+              typeof navigator !== "undefined" && navigator.onLine === false;
+            if (offline && sessionRef.current?.driver) {
+              setLoading(false);
+              return;
+            }
             refreshGeneration.current += 1;
             resetBiometricLockOnSignOut();
             setSession(null);
@@ -269,7 +306,13 @@ export function DriverSupabaseAuthProvider({ children }) {
       refreshGeneration.current += 1;
       resetBiometricLockOnSignOut();
       const scope = resolveDriverWorkspaceScope(
-        { id: session?.driverId, organisation_id: session?.activeCompanyId ?? session?.companyId },
+        {
+          id: session?.driverId,
+          organisation_id: session?.organisationId ?? session?.activeCompanyId ?? session?.companyId,
+          organisationId: session?.organisationId ?? session?.activeCompanyId ?? session?.companyId,
+          membership_id: session?.membershipId,
+          membershipId: session?.membershipId,
+        },
         session,
       );
       if (scope.companyId && scope.membershipId) {

@@ -13,6 +13,7 @@ import type {
   DutyTrackResponse,
   DriverRecord,
   VehicleRecord,
+  VehicleSwapRequestRecord,
   RouteRecord,
   CustomerRecord,
   VehicleCheckRecord,
@@ -32,10 +33,12 @@ import type {
   InspectionRecord,
   MessageTemplateRecord,
   IntegrationRecord,
+  IntegrationApiKeyRecord,
   AuditLogRecord,
   PerformanceMetrics,
   YardSummary,
   PricingRuleRecord,
+  ExceptionsPort,
 } from './types'
 import type { BookingDraft, BookingListItem, BookingRecord, CustomerBookingContext, CreateDraftOptions, CancelBookingInput, AutoPlanProposal, EditImpact } from '@/lib/bookings/types'
 import {
@@ -49,26 +52,53 @@ import { normalizeDriverProfileDocuments } from '@/lib/drivers/document-display'
 import { normalizeBookingRecord } from '@/lib/bookings/normalize-booking'
 import { safeMaintenanceHub } from '@/lib/api/safe-hubs'
 
-const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
-const TOKEN_KEY = 'access_token'
-const REFRESH_TOKEN_KEY = 'refresh_token'
+/**
+ * Wave 3E-1: production SPA talks only to the same-origin Pages Functions BFF.
+ * Credentials live in HttpOnly cookies — never in localStorage/sessionStorage.
+ */
+const API_URL = (import.meta.env.VITE_API_URL ?? '/api/command').replace(/\/$/, '')
 const MEMBERSHIPS_KEY = 'pending_memberships'
+const HAS_TENANT_KEY = 'has_tenant'
 
-import { isAccessTokenExpired, resolveSupabaseProjectUrl } from './auth-session'
-
-/** Resolve `/api/...` against either a Nest-style origin or a Supabase Edge Function base URL. */
+/** Command data plane via same-origin BFF proxy (or legacy direct URL in non-prod). */
 function apiUrl(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`
+  if (API_URL.startsWith('/')) {
+    return `${API_URL}${normalized}`
+  }
   if (API_URL.includes('/functions/v1/')) {
     return `${API_URL}/api${normalized}`
   }
   return `${API_URL}/api${normalized}`
 }
 
+function sessionUrl(path: string): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return `/api/session${normalized}`
+}
+
 function apiErrorMessage(err: { message?: string | string[] }, fallback: string): string {
   if (Array.isArray(err.message)) return err.message.join(', ')
   return err.message ?? fallback
+}
+
+/** Command sometimes returns page hubs `{ items: [] }` for unimplemented lists — never treat as array. */
+function asRecordList<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw as T[]
+  if (raw && typeof raw === 'object' && Array.isArray((raw as { items?: unknown }).items)) {
+    return (raw as { items: T[] }).items
+  }
+  return []
+}
+
+function isCommandPageHub(raw: unknown): boolean {
+  return Boolean(
+    raw &&
+      typeof raw === 'object' &&
+      !Array.isArray(raw) &&
+      'path' in (raw as object) &&
+      'items' in (raw as object),
+  )
 }
 
 /** Live API payloads sometimes omit nested jobs; keep the UI board resilient. */
@@ -88,6 +118,7 @@ function normalizeOperationalTrip(
     vehicleRegistration: trip.vehicleRegistration ?? null,
     depotId: trip.depotId ?? null,
     depotName: trip.depotName ?? null,
+    dispatcherName: trip.dispatcherName ?? null,
     assignmentStatus: trip.assignmentStatus ?? (trip.driverId ? 'assigned' : 'unassigned'),
     acceptedAt: trip.acceptedAt ?? null,
     acknowledgedAt: trip.acknowledgedAt ?? null,
@@ -103,6 +134,10 @@ function normalizeOperationalTrip(
     gpsLng: trip.gpsLng ?? null,
     driverOnline: trip.driverOnline ?? false,
     routeName: trip.routeName ?? null,
+    serviceDate:
+      trip.serviceDate ??
+      (trip as { plannedPickupAt?: string }).plannedPickupAt?.slice(0, 10) ??
+      null,
   }
 }
 
@@ -125,51 +160,65 @@ function normalizeOperationalPosition(
   throw new Error('Operational position could not be loaded')
 }
 
-export class ApiClient {
-  private accessToken: string | null = null
+export class ApiClient implements ExceptionsPort {
+  /** In-memory only — never holds access/refresh credential material. */
+  private sessionActive = false
 
-  setToken(token: string | null, hasTenant = true) {
-    this.accessToken = token
+  /**
+   * @deprecated Wave 3E-1 — cookies hold credentials. Prefer markSession / clearSession.
+   * Kept so call sites can clear or mark tenant without touching tokens.
+   */
+  setToken(_token: string | null, hasTenant = true) {
+    if (_token) this.markSession(hasTenant)
+    else this.clearSession()
+  }
+
+  markSession(hasTenant = true) {
+    this.sessionActive = true
     if (typeof window === 'undefined') return
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token)
-      if (hasTenant) {
-        sessionStorage.setItem('has_tenant', '1')
-      } else {
-        sessionStorage.removeItem('has_tenant')
-      }
-    } else {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(REFRESH_TOKEN_KEY)
-      sessionStorage.removeItem('has_tenant')
-      sessionStorage.removeItem(MEMBERSHIPS_KEY)
-    }
+    if (hasTenant) sessionStorage.setItem(HAS_TENANT_KEY, '1')
+    else sessionStorage.removeItem(HAS_TENANT_KEY)
+  }
+
+  clearTenantFlag() {
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem(HAS_TENANT_KEY)
   }
 
   clearToken() {
-    this.setToken(null)
+    this.clearSession()
   }
 
+  clearSession() {
+    this.sessionActive = false
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem(HAS_TENANT_KEY)
+    sessionStorage.removeItem(MEMBERSHIPS_KEY)
+    // Purge any pre-3E-1 credential leftovers.
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+  }
+
+  /** Session gate only — never returns a real Bearer credential. */
   getToken(): string | null {
-    if (this.accessToken) return this.accessToken
-    if (typeof window === 'undefined') return null
-    const stored = localStorage.getItem(TOKEN_KEY)
-    if (stored) this.accessToken = stored
-    return stored
+    return this.sessionActive ? 'cookie-session' : null
   }
 
   hasTenant(): boolean {
-    return typeof window !== 'undefined' && sessionStorage.getItem('has_tenant') === '1'
+    return typeof window !== 'undefined' && sessionStorage.getItem(HAS_TENANT_KEY) === '1'
   }
 
-  /** True when we can call authenticated APIs (access token and/or refresh token). */
   hasAuthSession(): boolean {
-    if (this.getToken()) return true
-    return typeof window !== 'undefined' && Boolean(localStorage.getItem(REFRESH_TOKEN_KEY))
+    return this.sessionActive
   }
 
   setPendingMemberships(memberships: TenantMembershipOption[]) {
     sessionStorage.setItem(MEMBERSHIPS_KEY, JSON.stringify(memberships))
+  }
+
+  clearPendingMemberships() {
+    if (typeof window === 'undefined') return
+    sessionStorage.removeItem(MEMBERSHIPS_KEY)
   }
 
   getPendingMemberships(): TenantMembershipOption[] {
@@ -182,77 +231,70 @@ export class ApiClient {
     }
   }
 
+  /** Server-side refresh via Pages Functions BFF (rotates HttpOnly cookies). */
   async refreshAccessToken(): Promise<string> {
-    if (typeof window === 'undefined') {
+    const res = await fetch(sessionUrl('/refresh'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    if (!res.ok) {
+      this.clearSession()
       throw new Error('Session expired — sign in again')
     }
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
-    if (!refreshToken) throw new Error('Session expired — sign in again')
-
-    const supabaseUrl = resolveSupabaseProjectUrl(API_URL)
-    if (!supabaseUrl || !SUPABASE_ANON_KEY) {
-      throw new Error('Sign-in service is not configured')
-    }
-
-    const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    })
-
-    if (!res.ok) throw new Error('Session expired — sign in again')
-    const data = (await res.json()) as { access_token?: string; refresh_token?: string }
-    if (!data.access_token) throw new Error('Session expired — sign in again')
-
-    this.setToken(data.access_token, this.hasTenant())
-    if (data.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token)
-    return data.access_token
+    this.markSession(this.hasTenant())
+    return 'cookie-session'
   }
 
   async ensureValidAccessToken(options?: { force?: boolean }): Promise<string | null> {
-    const hasRefresh =
-      typeof window !== 'undefined' && Boolean(localStorage.getItem(REFRESH_TOKEN_KEY))
-    const token = this.getToken()
-
-    if (!token) {
-      if (!hasRefresh) return null
-      return this.refreshAccessToken()
+    if (!this.sessionActive && !this.hasTenant()) {
+      // Cold start may still have HttpOnly cookies — probe status when forced.
+      if (!options?.force) return null
     }
+    if (options?.force) {
+      await this.refreshAccessToken()
+    }
+    return this.sessionActive ? 'cookie-session' : null
+  }
 
-    if (!options?.force && !isAccessTokenExpired(token)) return token
-    if (!hasRefresh) throw new Error('Session expired — sign in again')
-    return this.refreshAccessToken()
+  async getSessionStatus(): Promise<{ authenticated: boolean; hasTenant: boolean }> {
+    const res = await fetch(sessionUrl('/status'), {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    })
+    if (!res.ok) {
+      this.clearSession()
+      return { authenticated: false, hasTenant: false }
+    }
+    const data = (await res.json()) as { authenticated?: boolean; hasTenant?: boolean }
+    if (data.authenticated) this.markSession(Boolean(data.hasTenant))
+    else this.clearSession()
+    return {
+      authenticated: Boolean(data.authenticated),
+      hasTenant: Boolean(data.hasTenant),
+    }
   }
 
   async listMemberships() {
-    await this.ensureValidAccessToken()
     const data = await this.fetch<{ memberships?: TenantMembershipOption[] }>('/auth/memberships')
     return Array.isArray(data.memberships) ? data.memberships : []
   }
 
   async fetch<T = unknown>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
-    const token = this.getToken()
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> | undefined),
     }
-    if (SUPABASE_ANON_KEY) {
-      headers.apikey = SUPABASE_ANON_KEY
-    }
-    if (token) {
-      headers.Authorization = `Bearer ${token}`
-    } else if (SUPABASE_ANON_KEY) {
-      // Supabase gateway still expects a Bearer token on public Edge Function routes.
-      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`
-    }
 
     let res: Response
     try {
-      res = await fetch(apiUrl(path), { ...options, headers })
+      res = await fetch(apiUrl(path), {
+        ...options,
+        headers,
+        credentials: 'include',
+      })
     } catch (error) {
       // Safari reports CORS/network failures as TypeError: "Load failed"
       const raw = error instanceof Error ? error.message : 'Network request failed'
@@ -263,13 +305,7 @@ export class ApiClient {
     }
 
     if (!res.ok) {
-      if (
-        res.status === 401 &&
-        token &&
-        !retried &&
-        typeof window !== 'undefined' &&
-        localStorage.getItem(REFRESH_TOKEN_KEY)
-      ) {
+      if (res.status === 401 && this.sessionActive && !retried) {
         try {
           await this.refreshAccessToken()
           return this.fetch<T>(path, options, true)
@@ -277,8 +313,8 @@ export class ApiClient {
           // Fall through to session expiry handling.
         }
       }
-      if (res.status === 401 && token) {
-        this.clearToken()
+      if (res.status === 401 && this.sessionActive) {
+        this.clearSession()
         if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
           window.location.assign('/session-expired')
         }
@@ -294,21 +330,13 @@ export class ApiClient {
   }
 
   async login(email: string, password: string, rememberMe = false) {
-    // Drop any previous session so a new sign-in cannot inherit stale tokens.
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY)
-      this.accessToken = null
-    }
+    // Clear prior SPA workspace state; BFF login replaces HttpOnly cookies.
+    this.clearSession()
 
-    // Public auth: never attach a leftover session token on login.
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (SUPABASE_ANON_KEY) {
-      headers.apikey = SUPABASE_ANON_KEY
-      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`
-    }
-    const res = await fetch(apiUrl('/auth/login'), {
+    const res = await fetch(sessionUrl('/login'), {
       method: 'POST',
-      headers,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, rememberMe }),
     })
     if (!res.ok) {
@@ -316,23 +344,45 @@ export class ApiClient {
       throw new Error(apiErrorMessage(err, res.statusText || 'Request failed'))
     }
     const result = (await res.json()) as LoginResponse
-    if (result.refreshToken && typeof window !== 'undefined') {
-      localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken)
+    if (result.requiresMfaChallenge) {
+      return result
     }
+    if (result.requiresTenantSelection) {
+      this.markSession(false)
+      return result
+    }
+    // Fully signed in with company — cookies set by BFF; no tokens in body.
+    this.markSession(true)
     return result
   }
 
   async selectTenant(tenantId: string) {
-    await this.ensureValidAccessToken()
-    const refreshToken = typeof window === 'undefined' ? null : localStorage.getItem(REFRESH_TOKEN_KEY)
-    const result = await this.fetch<AuthTokensResponse>('/auth/select-tenant', {
+    const res = await fetch(sessionUrl('/select-tenant'), {
       method: 'POST',
-      body: JSON.stringify({ tenantId, refreshToken }),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId }),
     })
-    if (result.refreshToken && typeof window !== 'undefined') {
-      localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken)
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: res.statusText }))
+      throw new Error(apiErrorMessage(err, res.statusText || 'Request failed'))
     }
+    const result = (await res.json()) as AuthTokensResponse
+    this.markSession(true)
     return result
+  }
+
+  async logoutRemote() {
+    try {
+      await fetch(sessionUrl('/logout'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+    } finally {
+      this.clearSession()
+    }
   }
 
   signupCompany(input: {
@@ -459,19 +509,10 @@ export class ApiClient {
     code: string
     companyId?: string
   }) {
-    // Same public-auth fetch pattern as login. Avoid "/mfa/" and "/factor" in the path —
-    // Safari / privacy filters often block those and surface TypeError "Load failed".
-    // No session bearer to send — the challengeId + code is the whole credential;
-    // the backend holds the pending session against the challenge itself.
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (SUPABASE_ANON_KEY) {
-      headers.apikey = SUPABASE_ANON_KEY
-      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`
-    }
-
-    return fetch(apiUrl('/auth/login/confirm'), {
+    return fetch(sessionUrl('/confirm'), {
       method: 'POST',
-      headers,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         challengeId: input.challengeId,
         code: input.code,
@@ -489,11 +530,10 @@ export class ApiClient {
         }>
       })
       .then((result) => {
-        if (typeof window !== 'undefined') {
-          if (result.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken)
-          if (result.accessToken) {
-            this.setToken(result.accessToken, false)
-          }
+        if (result.requiresTenantSelection) {
+          this.markSession(false)
+        } else {
+          this.markSession(true)
         }
         return result
       })
@@ -848,6 +888,13 @@ export class ApiClient {
     }).then((profile) => normalizeDriverProfileDocuments(profile))
   }
 
+  uploadDriverPhoto(id: string, input: import('@/lib/drivers/types').UploadDriverPhotoInput, actorName: string) {
+    return this.fetch<import('@/lib/drivers/types').DriverProfile>(`/drivers/${id}/photo`, {
+      method: 'POST',
+      body: JSON.stringify({ ...input, actorName }),
+    }).then((profile) => normalizeDriverProfileDocuments(profile))
+  }
+
   getDriverDocumentDownloadUrl(driverId: string, documentId: string) {
     return this.fetch<{ url: string; fileName: string; mimeType: string; label: string | null }>(
       `/drivers/${driverId}/documents/${documentId}/download`,
@@ -1044,6 +1091,22 @@ export class ApiClient {
     })
   }
 
+  importVehicles(
+    vehicles: import('@/lib/vehicles/vehicle-csv-import').VehicleImportParsedRow[],
+    actorName: string,
+  ) {
+    return this.fetch<{
+      rowsRead: number
+      created: number
+      skippedDuplicates: number
+      failed: Array<{ row: number; registrationNumber: string; reason: string }>
+      createdIds: string[]
+    }>('/vehicles/import', {
+      method: 'POST',
+      body: JSON.stringify({ vehicles, actorName }),
+    })
+  }
+
   updateVehicle(id: string, input: import('@/lib/vehicles/types').UpdateVehicleInput, actorName: string) {
     return this.fetch<import('@/lib/vehicles/types').VehicleProfile>(`/vehicles/${id}`, {
       method: 'PATCH',
@@ -1108,20 +1171,8 @@ export class ApiClient {
   }
 
   getVehicleReportsHub() {
-    return this.fetch<import('@/lib/vehicle-reports/types').VehicleReportsHubData>('/vehicle-reports/hub').catch(() => ({
-      operationalDate: new Date().toISOString().slice(0, 10),
-      summary: {
-        openReports: 0,
-        criticalReports: 0,
-        vehiclesVor: 0,
-        awaitingReview: 0,
-        awaitingVerification: 0,
-        overdueActions: 0,
-        repeatDefects: 0,
-        submittedToday: 0,
-      },
-      reports: [],
-    }))
+    // Live hub only — never fall back to empty mock summary in production Command.
+    return this.fetch<import('@/lib/vehicle-reports/types').VehicleReportsHubData>('/vehicle-reports/hub')
   }
 
   async getBodyConditionHub(depotId?: string) {
@@ -1129,8 +1180,8 @@ export class ApiClient {
     try {
       return await this.fetch<import('@/lib/body-condition/types').BodyConditionHubData>(`/body-condition/hub${q}`)
     } catch {
-      const { mockBodyConditionHub } = await import('@/lib/api/mock-body-condition')
-      return mockBodyConditionHub()
+      const { emptyBodyConditionHub } = await import('@/lib/body-condition/empty-hub')
+      return emptyBodyConditionHub()
     }
   }
 
@@ -1321,6 +1372,85 @@ export class ApiClient {
     return this.fetch<IncidentRecord[]>(`/incidents${q ? `?${q}` : ''}`)
   }
 
+  getExceptions(params?: { status?: string; openOnly?: boolean }) {
+    const qs = new URLSearchParams()
+    if (params?.status) qs.set('status', params.status)
+    if (params?.openOnly === false) qs.set('openOnly', 'false')
+    const q = qs.toString()
+    return this.fetch<import('@/lib/types').OperationalException[]>(`/exceptions${q ? `?${q}` : ''}`)
+  }
+
+  getException(id: string) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}`,
+    )
+  }
+
+  raiseException(input: {
+    title: string
+    description?: string
+    severity?: string
+    category?: string
+    typeCode?: string
+    relatedRecord?: string
+    relatedHref?: string
+    depotId?: string | null
+    actorName?: string
+  }) {
+    return this.fetch<import('@/lib/types').OperationalException>('/exceptions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  }
+
+  acknowledgeException(id: string, input: { notes?: string; actorName?: string } = {}) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/acknowledge`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  assignException(
+    id: string,
+    input: { assigneeUserId?: string; assigneeName?: string; actorName?: string } = {},
+  ) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/assign`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  investigateException(id: string, input: { actorName?: string } = {}) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/investigate`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  escalateException(id: string, input: { reason?: string; actorName?: string } = {}) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/escalate`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  closeException(
+    id: string,
+    input: { resolution?: string; dismiss?: boolean; actorName?: string } = {},
+  ) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/close`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
+  addExceptionNote(id: string, input: { body: string; actorName?: string }) {
+    return this.fetch<import('@/lib/types').OperationalException>(
+      `/exceptions/${encodeURIComponent(id)}/notes`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  }
+
   getIncident(id: string) {
     return this.fetch<IncidentRecord>(`/incidents/${id}`)
   }
@@ -1364,8 +1494,8 @@ export class ApiClient {
     }
   }
 
-  updateComplianceAutomationSettings(input: Record<string, unknown>) {
-    return this.fetch('/compliance/automation-settings', {
+  updateComplianceAutomationSettings(input: Partial<ComplianceAutomationSettings>) {
+    return this.fetch<ComplianceAutomationSettings>('/compliance/automation-settings', {
       method: 'PATCH',
       body: JSON.stringify(input),
     })
@@ -1651,55 +1781,62 @@ export class ApiClient {
     return this.fetch<import('@/lib/fleet-resources/types').FleetResourcesHubData>('/fleet-resources/hub')
   }
 
-  /** Attendance hub — live Command API (duties + leave). Mock only if the gateway is unavailable. */
+  /** Attendance hub — live Command API; fail-closed empty hub when unavailable. */
   async getAttendanceHub() {
-    const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
+    const { emptyAttendanceHub, emptyAttendanceTrends } = await import('@/lib/attendance/empty-hub')
     try {
       const data = await this.fetch<import('@/lib/attendance/types').AttendanceHubData>(
         '/attendance/hub',
       )
-      // Reject generic commandPage shells / incomplete payloads.
       if (
         !data?.summary ||
         typeof data.summary.operationalDate !== 'string' ||
         !Array.isArray(data.board) ||
         !Array.isArray(data.leaveRequests)
       ) {
-        return mockAttendanceApi.getHub()
+        const empty = emptyAttendanceHub()
+        return {
+          ...empty,
+          trends: {
+            ...empty.trends,
+            mondayFridayPatternNote:
+              'Attendance response was incomplete — showing an empty board until Command returns a full hub.',
+          },
+        }
       }
       return {
         ...data,
-        trends: data.trends ?? mockAttendanceApi.getHub().trends,
+        trends: data.trends ?? emptyAttendanceTrends(),
       }
-    } catch {
-      return mockAttendanceApi.getHub()
+    } catch (error) {
+      const empty = emptyAttendanceHub()
+      const detail = error instanceof Error ? error.message : 'Command attendance hub unavailable'
+      return {
+        ...empty,
+        trends: {
+          ...empty.trends,
+          mondayFridayPatternNote: `Could not load live attendance (${detail}).`,
+        },
+      }
     }
   }
 
   async getLeaveRequests() {
-    const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
     try {
       const data = await this.fetch<import('@/lib/attendance/types').LeaveRequestRecord[]>(
         '/attendance/leave',
       )
-      // Empty array is a valid live response — do not replace with demo leave.
-      if (!Array.isArray(data)) return mockAttendanceApi.listLeave()
-      return data
+      return Array.isArray(data) ? data : []
     } catch {
-      return mockAttendanceApi.listLeave()
+      return []
     }
   }
 
   async updateLeaveRequest(row: import('@/lib/attendance/types').LeaveRequestRecord) {
-    try {
-      return await this.fetch<import('@/lib/attendance/types').LeaveRequestRecord>('/attendance/leave', {
-        method: 'PUT',
-        body: JSON.stringify(row),
-      })
-    } catch {
-      const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-      return mockAttendanceApi.updateLeave(row)
-    }
+    return this.fetch<import('@/lib/attendance/types').LeaveRequestRecord>('/attendance/leave', {
+      method: 'PUT',
+      body: JSON.stringify(row),
+    })
   }
 
   async getDriverHoliday(driverId: string) {
@@ -1751,30 +1888,24 @@ export class ApiClient {
   }
 
   async getAttendancePersonProfile(input: { personId?: string | null; personName?: string | null }) {
-    const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-    try {
-      const q = new URLSearchParams()
-      if (input.personId) q.set('personId', input.personId)
-      if (input.personName) q.set('personName', input.personName)
-      const data = await this.fetch<import('@/lib/attendance/types').AttendancePersonProfile | null>(
-        `/attendance/profile?${q}`,
-      )
-      // Gateway may return a generic page shell for unknown routes — require a real score payload.
-      if (!data || typeof data !== 'object' || !data.score || typeof data.score.score !== 'number') {
-        return mockAttendanceApi.getPersonProfile(input)
-      }
-      return {
-        ...data,
-        scoreContributors: Array.isArray(data.scoreContributors) ? data.scoreContributors : [],
-        upcomingLeave: Array.isArray(data.upcomingLeave) ? data.upcomingLeave : [],
-        recentEvents: Array.isArray(data.recentEvents) ? data.recentEvents : [],
-        returnToWork: Array.isArray(data.returnToWork) ? data.returnToWork : [],
-        managerNotes: Array.isArray(data.managerNotes) ? data.managerNotes : [],
-        adjustments: Array.isArray(data.adjustments) ? data.adjustments : [],
-        calendarMonth: data.calendarMonth ?? { year: new Date().getFullYear(), month: new Date().getMonth() + 1, days: [] },
-      }
-    } catch {
-      return mockAttendanceApi.getPersonProfile(input)
+    const q = new URLSearchParams()
+    if (input.personId) q.set('personId', input.personId)
+    if (input.personName) q.set('personName', input.personName)
+    const data = await this.fetch<import('@/lib/attendance/types').AttendancePersonProfile | null>(
+      `/attendance/profile?${q}`,
+    )
+    if (!data || typeof data !== 'object' || !data.score || typeof data.score.score !== 'number') {
+      return null
+    }
+    return {
+      ...data,
+      scoreContributors: Array.isArray(data.scoreContributors) ? data.scoreContributors : [],
+      upcomingLeave: Array.isArray(data.upcomingLeave) ? data.upcomingLeave : [],
+      recentEvents: Array.isArray(data.recentEvents) ? data.recentEvents : [],
+      returnToWork: Array.isArray(data.returnToWork) ? data.returnToWork : [],
+      managerNotes: Array.isArray(data.managerNotes) ? data.managerNotes : [],
+      adjustments: Array.isArray(data.adjustments) ? data.adjustments : [],
+      calendarMonth: data.calendarMonth ?? { year: new Date().getFullYear(), month: new Date().getMonth() + 1, days: [] },
     }
   }
 
@@ -1785,26 +1916,21 @@ export class ApiClient {
     note?: string
     actorName: string
   }) {
-    try {
-      return await this.fetch<import('@/lib/attendance/types').AttendanceBoardRow | null>(
-        '/attendance/classify',
-        { method: 'POST', body: JSON.stringify(input) },
-      )
-    } catch {
-      const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-      return mockAttendanceApi.classifyBoardRow(input)
-    }
+    return this.fetch<import('@/lib/attendance/types').AttendanceBoardRow | null>(
+      '/attendance/classify',
+      { method: 'POST', body: JSON.stringify(input) },
+    )
   }
 
   async getAttendanceCoverCandidates(dutyLabel?: string | null) {
+    const q = dutyLabel ? `?duty=${encodeURIComponent(dutyLabel)}` : ''
     try {
-      const q = dutyLabel ? `?duty=${encodeURIComponent(dutyLabel)}` : ''
-      return await this.fetch<import('@/lib/attendance/types').CoverCandidate[]>(
+      const data = await this.fetch<import('@/lib/attendance/types').CoverCandidate[]>(
         `/attendance/cover-candidates${q}`,
       )
+      return Array.isArray(data) ? data : []
     } catch {
-      const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-      return mockAttendanceApi.listCoverCandidates(dutyLabel)
+      return []
     }
   }
 
@@ -1816,15 +1942,10 @@ export class ApiClient {
     actorName: string
     overrideReason?: string
   }) {
-    try {
-      return await this.fetch<{ ok: true; message: string; actorName: string }>('/attendance/assign-cover', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      })
-    } catch {
-      const { mockAttendanceApi } = await import('@/lib/attendance/mock-hub')
-      return mockAttendanceApi.assignCover(input)
-    }
+    return this.fetch<{ ok: true; message: string; actorName: string }>('/attendance/assign-cover', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
   }
 
   recordResourceTransaction(input: {
@@ -1862,6 +1983,27 @@ export class ApiClient {
       {
         method: 'PATCH',
         body: JSON.stringify(patch),
+      },
+    )
+  }
+
+  createResourcePurchase(input: {
+    resourceName: string
+    quantity: number
+    unit?: string
+    estimatedCost: number
+    vehicleId?: string | null
+    depotId?: string | null
+    reason?: string
+    urgency?: string
+    neededBy?: string | null
+    actorName: string
+  }) {
+    return this.fetch<import('@/lib/fleet-resources/types').PurchaseRequestRow>(
+      '/fleet-resources/purchases',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
       },
     )
   }
@@ -1918,6 +2060,25 @@ export class ApiClient {
   }) {
     return this.fetch<import('@/lib/fleet-resources/types').EquipmentAsset>(
       '/fleet-resources/equipment/assign',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    )
+  }
+
+  createResourceEquipment(input: {
+    name: string
+    category?: string
+    vehicleId?: string | null
+    qrCode?: string | null
+    serialNumber?: string | null
+    expiryDate?: string | null
+    requiredForDuty?: boolean
+    actorName: string
+  }) {
+    return this.fetch<import('@/lib/fleet-resources/types').EquipmentAsset>(
+      '/fleet-resources/equipment',
       {
         method: 'POST',
         body: JSON.stringify(input),
@@ -2033,11 +2194,57 @@ export class ApiClient {
   }
 
   getIntegrations() {
-    return this.fetch<IntegrationRecord[]>('/integrations')
+    return this.fetch<IntegrationRecord[] | Record<string, unknown>>('/integrations')
+      .then((raw) => (Array.isArray(raw) ? raw : []))
+      .catch(() => [] as IntegrationRecord[])
+  }
+
+  getIntegrationApiKeys() {
+    return this.fetch<{ items?: IntegrationApiKeyRecord[] } | IntegrationApiKeyRecord[]>(
+      '/settings/integration-keys',
+    ).then((raw) => {
+      if (Array.isArray(raw)) return raw
+      return Array.isArray(raw?.items) ? raw.items : []
+    })
+  }
+
+  createIntegrationApiKey(input: { name: string; scopes?: string[]; expiresAt?: string | null }) {
+    return this.fetch<IntegrationApiKeyRecord>('/settings/integration-keys', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  }
+
+  revokeIntegrationApiKey(id: string) {
+    return this.fetch<IntegrationApiKeyRecord>(`/settings/integration-keys/${id}`, {
+      method: 'DELETE',
+    })
   }
 
   getAuditLogs() {
     return this.fetch<AuditLogRecord[]>('/audit')
+  }
+
+  getOverrideAuditEvents() {
+    return this.fetch<{ items?: Array<Record<string, unknown>> }>('/overrides').then((body) => {
+      const items = Array.isArray(body?.items) ? body.items : []
+      return items.map((row) => ({
+        id: String(row.id ?? ''),
+        ruleCode: row.ruleCode != null ? String(row.ruleCode) : undefined,
+        reason: row.reason != null ? String(row.reason) : undefined,
+        entityType: row.entityType != null ? String(row.entityType) : undefined,
+        entityId: row.entityId != null ? String(row.entityId) : undefined,
+        blockers: Array.isArray(row.blockers) ? row.blockers.map(String) : [],
+        occurredAt:
+          row.occurredAt != null
+            ? String(row.occurredAt)
+            : row.createdAt != null
+              ? String(row.createdAt)
+              : undefined,
+        createdAt: row.createdAt != null ? String(row.createdAt) : undefined,
+        actorUserId: row.actorUserId != null ? String(row.actorUserId) : null,
+      }))
+    })
   }
 
   getPricingRules() {
@@ -2428,7 +2635,7 @@ export class ApiClient {
 
   getBooking(id: string) {
     return this.fetch<BookingRecord>(`/bookings/${id}`).then((raw) =>
-      normalizeBookingRecord(raw as Record<string, unknown>),
+      normalizeBookingRecord(raw as unknown as Record<string, unknown>),
     )
   }
 
@@ -2576,10 +2783,67 @@ export class ApiClient {
     })
   }
 
-  getOperationalTrips(params?: { dutyId?: string; status?: string }) {
+  getPlaces() {
+    return this.fetch<import('@/lib/places/types').PlaceRecord[]>('/places')
+  }
+
+  createPlace(input: import('@/lib/places/types').CreatePlaceInput) {
+    return this.fetch<import('@/lib/places/types').PlaceRecord>('/places', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  }
+
+  getInterestSubmissions(params?: import('@/lib/interests/types').InterestListParams) {
+    const qs = new URLSearchParams()
+    if (params?.status) qs.set('status', params.status)
+    if (params?.source) qs.set('source', params.source)
+    if (params?.assignedTo) qs.set('assignedTo', params.assignedTo)
+    if (params?.service) qs.set('service', params.service)
+    if (params?.borough) qs.set('borough', params.borough)
+    if (params?.postcode) qs.set('postcode', params.postcode)
+    if (params?.accessibility) qs.set('accessibility', params.accessibility)
+    if (params?.marketing) qs.set('marketing', params.marketing)
+    if (params?.from) qs.set('from', params.from)
+    if (params?.to) qs.set('to', params.to)
+    if (params?.q) qs.set('q', params.q)
+    const q = qs.toString()
+    return this.fetch<import('@/lib/interests/types').InterestListResponse>(`/interests${q ? `?${q}` : ''}`)
+  }
+
+  getInterestSubmission(id: string) {
+    return this.fetch<import('@/lib/interests/types').InterestDetail>(`/interests/${id}`)
+  }
+
+  patchInterestSubmission(id: string, input: import('@/lib/interests/types').InterestPatchInput) {
+    return this.fetch<import('@/lib/interests/types').InterestDetail>(`/interests/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  }
+
+  acceptInterestSubmission(id: string) {
+    return this.fetch<import('@/lib/interests/types').InterestAcceptResult>(
+      `/interests/${encodeURIComponent(id)}/accept`,
+      { method: 'POST', body: '{}' },
+    )
+  }
+
+  rejectInterestSubmission(id: string, input?: { reason?: string; notifyCustomer?: boolean }) {
+    return this.fetch<import('@/lib/interests/types').InterestRejectResult>(
+      `/interests/${encodeURIComponent(id)}/reject`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input ?? {}),
+      },
+    )
+  }
+
+  getOperationalTrips(params?: { dutyId?: string; status?: string; serviceDate?: string }) {
     const qs = new URLSearchParams()
     if (params?.dutyId) qs.set('dutyId', params.dutyId)
     if (params?.status) qs.set('status', params.status)
+    if (params?.serviceDate) qs.set('serviceDate', params.serviceDate)
     const q = qs.toString()
     return this.fetch<import('@/lib/transfers/types').OperationalTrip[]>(
       `/operational-trips${q ? `?${q}` : ''}`,
@@ -2620,7 +2884,7 @@ export class ApiClient {
     return this.fetch<import('@/lib/transfers/types').OperationalTrip>(
       `/operational-trips/${tripId}/assign`,
       { method: 'POST', body: JSON.stringify(input) },
-    )
+    ).then((raw) => normalizeOperationalTrip(raw as import('@/lib/transfers/types').OperationalTrip))
   }
 
   movePlanningJob(jobId: string, targetTripId: string) {
@@ -2687,19 +2951,136 @@ export class ApiClient {
     })
   }
 
+  commitJourneySequenceReorder(input: {
+    tripId: string
+    orderedPickupJobIds: string[]
+    reason: string
+    reasonNotes?: string
+    linkedReturnDecision?: string
+    sendNotifications?: boolean
+    actorName?: string
+    dutyId?: string | null
+  }) {
+    return this.fetch<{
+      mode: 'run_trips' | 'passenger_ids'
+      entityId: string
+      originalOrder: string[]
+      newOrder: string[]
+      changed: boolean
+      auditId: string
+      trip: import('@/lib/transfers/types').OperationalTrip | null
+      acknowledgement: import('@/lib/journey-sequence/types').DriverAckRecord | null
+    }>(`/operational-trips/${encodeURIComponent(input.tripId)}/journey-sequence/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({
+        orderedPickupJobIds: input.orderedPickupJobIds,
+        reason: input.reason,
+        reasonNotes: input.reasonNotes,
+        linkedReturnDecision: input.linkedReturnDecision ?? 'keep_unchanged',
+        sendNotifications: Boolean(input.sendNotifications),
+        actorName: input.actorName,
+        dutyId: input.dutyId ?? null,
+      }),
+    }).then((result) => ({
+      ...result,
+      trip: result.trip ? normalizeOperationalTrip(result.trip) : null,
+      acknowledgement: result.acknowledgement ?? null,
+    }))
+  }
+
+  listJourneySequenceDestinations(tripId: string, dutyId?: string | null) {
+    const q = dutyId ? `?dutyId=${encodeURIComponent(dutyId)}` : ''
+    return this.fetch<
+      Array<{
+        tripId: string
+        tripReference: string
+        runReference: string | null
+        routeName: string | null
+        driverName: string | null
+        vehicleRegistration: string | null
+        tripStatus: string
+        jobCount: number
+        wheelchairSpacesHint: number
+      }>
+    >(`/operational-trips/${encodeURIComponent(tripId)}/journey-sequence/destinations${q}`)
+  }
+
+  commitJourneySequenceMove(input: {
+    tripId: string
+    jobIds: string[]
+    action: string
+    destinationTripId?: string | null
+    reason?: string
+    actorName?: string
+    dutyId?: string | null
+  }) {
+    return this.fetch<{
+      action: string
+      movedTripIds: string[]
+      sourceRunId: string | null
+      destinationRunId: string | null
+      message: string
+      auditId: string
+      trip: import('@/lib/transfers/types').OperationalTrip | null
+      acknowledgement: import('@/lib/journey-sequence/types').DriverAckRecord | null
+    }>(`/operational-trips/${encodeURIComponent(input.tripId)}/journey-sequence/move`, {
+      method: 'POST',
+      body: JSON.stringify({
+        jobIds: input.jobIds,
+        action: input.action,
+        destinationTripId: input.destinationTripId ?? null,
+        reason: input.reason,
+        actorName: input.actorName,
+        dutyId: input.dutyId ?? null,
+      }),
+    }).then((result) => ({
+      ...result,
+      trip: result.trip ? normalizeOperationalTrip(result.trip) : null,
+      acknowledgement: result.acknowledgement ?? null,
+    }))
+  }
+
+  getJourneySequenceAcknowledgement(tripId: string) {
+    return this.fetch<{
+      acknowledgement: import('@/lib/journey-sequence/types').DriverAckRecord | null
+    }>(`/operational-trips/${encodeURIComponent(tripId)}/journey-sequence/acknowledgement`)
+  }
+
+  advanceJourneySequenceAcknowledgement(input: {
+    tripId: string
+    status: 'viewed' | 'acknowledged' | 'declined' | 'delivered'
+    declineReason?: string
+  }) {
+    return this.fetch<{
+      acknowledgement: import('@/lib/journey-sequence/types').DriverAckRecord
+    }>(`/operational-trips/${encodeURIComponent(input.tripId)}/journey-sequence/acknowledgement`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: input.status,
+        declineReason: input.declineReason,
+      }),
+    })
+  }
+
   getTransferHistory(tripId?: string) {
     const q = tripId ? `?tripId=${tripId}` : ''
     return this.fetch<import('@/lib/transfers/types').TransferRecord[]>(`/transfers${q}`)
   }
 
   getAssignmentHistory(tripId: string) {
-    return this.fetch<import('@/lib/transfers/types').AssignmentHistoryEntry[]>(`/operational-trips/${tripId}/assignment-history`)
+    return this.fetch<import('@/lib/transfers/types').AssignmentHistoryEntry[]>(
+      `/operational-trips/${tripId}/assignment-history`,
+    ).then((raw) => (Array.isArray(raw) ? raw : []))
   }
 
   getOperationalTripsByBooking(bookingId: string) {
-    return this.fetch<import('@/lib/transfers/types').OperationalTrip[]>(
-      `/bookings/${bookingId}/operational-trips`,
-    ).then((trips) => trips.map(normalizeOperationalTrip))
+    return this.fetch<unknown>(`/bookings/${bookingId}/operational-trips`).then((raw) => {
+      if (!Array.isArray(raw)) return []
+      return raw
+        .filter(isOperationalTripLike)
+        .map(normalizeOperationalTrip)
+        .filter((trip) => !trip.bookingId || trip.bookingId === bookingId)
+    })
   }
 
   getJourneysByBooking(bookingId: string) {
@@ -2714,13 +3095,35 @@ export class ApiClient {
   }
 
   getTransferReport(periodFrom: string, periodTo: string) {
-    return this.fetch<import('@/lib/transfers/types').TransferReportSummary>(
+    return this.fetch<import('@/lib/transfers/types').TransferReportSummary | Record<string, unknown>>(
       `/transfers/report?from=${periodFrom}&to=${periodTo}`,
-    )
+    ).then((raw) => {
+      const data = (raw ?? {}) as Partial<import('@/lib/transfers/types').TransferReportSummary>
+      // command-api may still return a generic page shell for unimplemented transfer report.
+      if (!Array.isArray(data.byReason) || !Array.isArray(data.recentTransfers)) {
+        return {
+          periodFrom,
+          periodTo,
+          totalTransfers: Number(data.totalTransfers ?? 0),
+          byReason: Array.isArray(data.byReason) ? data.byReason : [],
+          byDepot: Array.isArray(data.byDepot) ? data.byDepot : [],
+          driverCaused: Number(data.driverCaused ?? 0),
+          vehicleCaused: Number(data.vehicleCaused ?? 0),
+          lateRecovery: Number(data.lateRecovery ?? 0),
+          managerOverrides: Number(data.managerOverrides ?? 0),
+          avgRecoveryMinutes: Number(data.avgRecoveryMinutes ?? 0),
+          passengersAffected: Number(data.passengersAffected ?? 0),
+          recentTransfers: Array.isArray(data.recentTransfers) ? data.recentTransfers : [],
+        } satisfies import('@/lib/transfers/types').TransferReportSummary
+      }
+      return data as import('@/lib/transfers/types').TransferReportSummary
+    })
   }
 
   getDialARideMembers() {
-    return this.fetch<import('@/lib/dial-a-ride/types').DialARideMember[]>('/dial-a-ride/members')
+    return this.fetch<unknown>('/dial-a-ride/members').then((raw) =>
+      asRecordList<import('@/lib/dial-a-ride/types').DialARideMember>(raw),
+    )
   }
 
   getDialARideMember(id: string) {
@@ -2729,7 +3132,9 @@ export class ApiClient {
 
   getDialARideRequests(params?: { view?: string }) {
     const q = params?.view ? `?view=${params.view}` : ''
-    return this.fetch<import('@/lib/dial-a-ride/types').DialARideRequestListItem[]>(`/dial-a-ride/requests${q}`)
+    return this.fetch<unknown>(`/dial-a-ride/requests${q}`).then((raw) =>
+      asRecordList<import('@/lib/dial-a-ride/types').DialARideRequestListItem>(raw),
+    )
   }
 
   getDialARideRequest(id: string) {
@@ -2737,12 +3142,18 @@ export class ApiClient {
   }
 
   getDialARideSummary() {
-    return this.fetch<{
-      requestsToday: number
-      awaitingDecision: number
-      unscheduled: number
-      membersTravelling: number
-    }>('/dial-a-ride/summary')
+    return this.fetch<unknown>('/dial-a-ride/summary').then((raw) => {
+      if (isCommandPageHub(raw) || !raw || typeof raw !== 'object') {
+        return { requestsToday: 0, awaitingDecision: 0, unscheduled: 0, membersTravelling: 0 }
+      }
+      const row = raw as Record<string, unknown>
+      return {
+        requestsToday: Number(row.requestsToday ?? 0),
+        awaitingDecision: Number(row.awaitingDecision ?? 0),
+        unscheduled: Number(row.unscheduled ?? 0),
+        membersTravelling: Number(row.membersTravelling ?? 0),
+      }
+    })
   }
 
   createDialARideRequestDraft(memberId?: string) {
@@ -2789,7 +3200,9 @@ export class ApiClient {
 
   getSchoolRoutes(params?: { view?: string }) {
     const q = params?.view ? `?view=${params.view}` : ''
-    return this.fetch<import('@/lib/school-routes/types').SchoolRouteListItem[]>(`/school-routes${q}`)
+    return this.fetch<unknown>(`/school-routes${q}`).then((raw) =>
+      asRecordList<import('@/lib/school-routes/types').SchoolRouteListItem>(raw),
+    )
   }
 
   getSchoolRoute(id: string) {
@@ -2797,12 +3210,18 @@ export class ApiClient {
   }
 
   getSchoolRoutesSummary() {
-    return this.fetch<{
-      activeRoutes: number
-      pupilsToday: number
-      unscheduledJobs: number
-      exceptions: number
-    }>('/school-routes/summary')
+    return this.fetch<unknown>('/school-routes/summary').then((raw) => {
+      if (isCommandPageHub(raw) || !raw || typeof raw !== 'object') {
+        return { activeRoutes: 0, pupilsToday: 0, unscheduledJobs: 0, exceptions: 0 }
+      }
+      const row = raw as Record<string, unknown>
+      return {
+        activeRoutes: Number(row.activeRoutes ?? 0),
+        pupilsToday: Number(row.pupilsToday ?? 0),
+        unscheduledJobs: Number(row.unscheduledJobs ?? 0),
+        exceptions: Number(row.exceptions ?? 0),
+      }
+    })
   }
 
   createSchoolRouteDraft() {
@@ -2827,8 +3246,33 @@ export class ApiClient {
   }
 
   getSchoolRouteAttendance(routeId: string) {
-    return this.fetch<import('@/lib/school-routes/types').SchoolRouteAttendanceRow[]>(
-      `/school-routes/${routeId}/attendance`,
+    return this.fetch<unknown>(`/school-routes/${routeId}/attendance`).then((raw) =>
+      asRecordList<import('@/lib/school-routes/types').SchoolRouteAttendanceRow>(raw),
+    )
+  }
+
+  listVehicleSwapRequests(status = 'pending') {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : ''
+    return this.fetch<VehicleSwapRequestRecord[]>(`/vehicle-swap-requests${qs}`)
+  }
+
+  approveVehicleSwapRequest(requestId: string, notes?: string) {
+    return this.fetch<VehicleSwapRequestRecord>(`/vehicle-swap-requests/${encodeURIComponent(requestId)}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ notes: notes ?? null }),
+    })
+  }
+
+  rejectVehicleSwapRequest(requestId: string, notes?: string) {
+    return this.fetch<VehicleSwapRequestRecord>(`/vehicle-swap-requests/${encodeURIComponent(requestId)}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ notes: notes ?? null }),
+    })
+  }
+
+  getJobExecution(jobId: string) {
+    return this.fetch<import('@/lib/operations/job-execution').JobExecutionSnapshot>(
+      `/jobs/${encodeURIComponent(jobId)}/execution`,
     )
   }
 

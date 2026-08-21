@@ -1,5 +1,15 @@
 /**
- * Driver marker that eases between GPS updates instead of jumping.
+ * Driver marker. By default eases between updates instead of jumping — for
+ * a coarse, infrequently-published position (e.g. useDriverMapPosition's
+ * ~1.5s EMA-smoothed updates) that's genuinely needed.
+ *
+ * Pass `smooth={false}` when the position is already smoothed upstream at a
+ * fast cadence — the turn-by-turn location engine's `displayLocation` is
+ * dead-reckoned and eased at ~8Hz specifically so the marker/camera can
+ * consume it directly (see useNavigationLocationEngine.js and the matching
+ * comment in NavigationMapCamera.jsx). Easing an already-eased, frequently-
+ * updating value here just cascades two low-pass filters and adds visible
+ * lag on top of the source-switching jump this was originally mistaken for.
  */
 import { useEffect, useRef } from "react";
 import { Marker } from "react-leaflet";
@@ -7,7 +17,7 @@ import { Marker } from "react-leaflet";
 const SNAP_THRESHOLD = 0.000006;
 const EASE = 0.14;
 
-export default function SmoothDriverMarker({ lat, lng, icon, zIndexOffset = 800 }) {
+export default function SmoothDriverMarker({ lat, lng, icon, zIndexOffset = 800, smooth = true }) {
   const markerRef = useRef(null);
   const displayRef = useRef({ lat, lng });
   const targetRef = useRef({ lat, lng });
@@ -21,6 +31,13 @@ export default function SmoothDriverMarker({ lat, lng, icon, zIndexOffset = 800 
 
   useEffect(() => {
     if (!hasCoords) return undefined;
+
+    if (!smooth) {
+      displayRef.current = { lat, lng };
+      markerRef.current?.setLatLng([lat, lng]);
+      return undefined;
+    }
+
     targetRef.current = { lat, lng };
 
     const tick = () => {
@@ -57,7 +74,7 @@ export default function SmoothDriverMarker({ lat, lng, icon, zIndexOffset = 800 
         rafRef.current = null;
       }
     };
-  }, [lat, lng, hasCoords]);
+  }, [lat, lng, hasCoords, smooth]);
 
   if (!hasCoords) return null;
 

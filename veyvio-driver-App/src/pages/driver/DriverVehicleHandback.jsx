@@ -9,12 +9,13 @@ import {
 } from "./DriverOperationalPageParts";
 import { useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { op } from "@/lib/driver-operational-theme";
-import { refreshCommandBootstrap } from "@/services/command-driver-ops.service";
+import { loadDriverBootstrap } from "@/services/driver-bootstrap.service";
 import {
   BCT_BAY_OPTIONS,
   SPECIAL_LOCATIONS,
 } from "@/services/yard-parking.service";
 import {
+  loadCommandHandbackStatus,
   persistHandbackDraft,
   submitVehicleHandback,
 } from "@/services/vehicle-handback.service";
@@ -23,13 +24,12 @@ import {
   loadHandbackDraft,
 } from "@/lib/vehicle-handback-draft.storage";
 import { resolveDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import {
+  VEHICLE_HAND_BACK_CHECKS,
+  emptyHandbackChecks,
+} from "@/lib/vehicle-handback-checks";
 
-const RETURN_CHECKS = [
-  { id: "interior", label: "Interior left clean and clear" },
-  { id: "bodywork", label: "No new body damage" },
-  { id: "equipment", label: "All equipment returned" },
-  { id: "lost_property", label: "No lost property remains" },
-];
+const RETURN_CHECKS = VEHICLE_HAND_BACK_CHECKS;
 
 const FUEL_OPTIONS = ["Full", "75%", "50%", "25%", "Low / needs fuel"];
 const KEY_LOCATIONS = ["Key cabinet", "Office", "With yard staff", "Other"];
@@ -49,13 +49,96 @@ function emptyForm() {
     keysReturned: true,
     keyLocation: "Key cabinet",
     fullyInsideBay: true,
-    checks: Object.fromEntries(RETURN_CHECKS.map((c) => [c.id, false])),
+    checks: emptyHandbackChecks(),
     submittedAt: null,
   };
 }
 
+function dutyVehicleFromBootstrap(bootstrap) {
+  if (!bootstrap) return null;
+  const duties = Array.isArray(bootstrap.duties) ? bootstrap.duties : [];
+  const duty =
+    duties.find((row) => row?.actualSignOnAt && !row?.actualSignOffAt) ??
+    duties.find((row) => String(row?.lifecycleStatus ?? "") === "in_progress") ??
+    duties[0] ??
+    null;
+  if (!duty) return null;
+
+  const vehicle = duty.vehicle;
+  const summaryVehicle = bootstrap.legacy?.homeSummary?.vehicleAssignment;
+  const reg =
+    vehicle?.registrationNumber ||
+    vehicle?.registration ||
+    summaryVehicle?.registration ||
+    "";
+  const vehicleId = vehicle?.id || vehicle?.vehicleId || summaryVehicle?.vehicleId || "";
+
+  return {
+    reg,
+    vehicleId,
+    depotId: duty.depotId || null,
+    dutyId: duty.id || duty.dutyId || null,
+    depotName: duty.reportingLocation || bootstrap.operator?.depotName || "",
+  };
+}
+
+function applyDutyVehicle(setters, bootstrap, driver) {
+  const fromBootstrap = dutyVehicleFromBootstrap(bootstrap);
+  if (fromBootstrap?.reg) {
+    setters.setReg(fromBootstrap.reg);
+    setters.setVehicleId(fromBootstrap.vehicleId);
+    setters.setDepotId(fromBootstrap.depotId || "");
+    setters.setDutyId(fromBootstrap.dutyId || "");
+    setters.setDepotName(fromBootstrap.depotName);
+    return fromBootstrap;
+  }
+
+  const fallbackReg = driver?.assignedVehicleRegistration || "";
+  if (fallbackReg) setters.setReg(fallbackReg);
+  return fromBootstrap;
+}
+
+function ReturnChecksSummary({ checks, readOnly = false, onToggle }) {
+  return (
+    <div className={op.listCard}>
+      {RETURN_CHECKS.map((item) => {
+        const checked = Boolean(checks?.[item.id]);
+        if (readOnly) {
+          return (
+            <div
+              key={item.id}
+              className="flex min-h-[56px] items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
+            >
+              <CheckCircle2
+                className={`h-5 w-5 shrink-0 ${checked ? "text-emerald-600" : "text-muted-foreground/40"}`}
+              />
+              <span className={`text-[15px] ${checked ? "text-foreground" : "text-muted-foreground"}`}>
+                {item.label}
+              </span>
+            </div>
+          );
+        }
+        return (
+          <label
+            key={item.id}
+            className="flex min-h-[56px] items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
+          >
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={() => onToggle?.(item.id)}
+              className="h-5 w-5 accent-[var(--ridova-teal)]"
+            />
+            <span className="text-[15px] text-foreground">{item.label}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DriverVehicleHandback({ driver }) {
-  const { session } = useDriverSupabaseAuth();
+  const { session, bootstrap: sessionBootstrap } = useDriverSupabaseAuth();
   const workspace = resolveDriverWorkspaceScope(driver, session);
   const [reg, setReg] = useState("");
   const [vehicleId, setVehicleId] = useState("");
@@ -64,27 +147,70 @@ export default function DriverVehicleHandback({ driver }) {
   const [depotName, setDepotName] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(true);
   const [savedMsg, setSavedMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
-    void (async () => {
-      const activeDepotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
-      const boot = await refreshCommandBootstrap(activeDepotId).catch(() => null);
-      const duty = boot?.ok ? boot.bootstrap?.duties?.[0] : null;
-      const vehicle = duty?.vehicle;
-      const nextReg =
-        vehicle?.registrationNumber ||
-        vehicle?.registration ||
-        driver?.assignedVehicleRegistration ||
-        "";
-      setReg(nextReg);
-      setVehicleId(vehicle?.vehicleId || vehicle?.id || "");
-      setDepotId(activeDepotId || duty?.depotId || "");
-      setDutyId(duty?.dutyId || duty?.id || "");
-      setDepotName(duty?.reportingLocation || boot?.bootstrap?.operator?.depotName || "");
+    if (!sessionBootstrap) return;
+    applyDutyVehicle(
+      { setReg, setVehicleId, setDepotId, setDutyId, setDepotName },
+      sessionBootstrap,
+      driver,
+    );
+  }, [sessionBootstrap, driver]);
 
-      const nextVehicleId = vehicle?.vehicleId || vehicle?.id || "";
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setLoadingStatus(true);
+      const activeDepotId = session?.activeDepotId ?? session?.depots?.[0]?.id ?? null;
+      const boot = await loadDriverBootstrap({ depotId: activeDepotId, force: false }).catch(() => null);
+      const bootstrap = boot?.ok ? boot.bootstrap : sessionBootstrap;
+      const resolved = applyDutyVehicle(
+        { setReg, setVehicleId, setDepotId, setDutyId, setDepotName },
+        bootstrap,
+        driver,
+      );
+      const nextVehicleId = resolved?.vehicleId || "";
+      const nextReg = resolved?.reg || driver?.assignedVehicleRegistration || "";
+
+      const commandHandback = nextVehicleId
+        ? await loadCommandHandbackStatus({
+            bootstrap,
+            vehicle: { id: nextVehicleId, vehicleId: nextVehicleId, registrationNumber: nextReg },
+          }).catch(() => ({ ok: false, recorded: false }))
+        : { ok: false, recorded: false };
+
+      if (cancelled) return;
+
+      if (commandHandback.recorded) {
+        if (workspace.companyId && workspace.membershipId && nextVehicleId) {
+          clearHandbackDraft(workspace.companyId, workspace.membershipId, nextVehicleId);
+        }
+        try {
+          localStorage.removeItem(storageKey(driver?.id, nextReg));
+        } catch {
+          /* ignore */
+        }
+        const parkingLabel = commandHandback.parkingLabel || "your selected bay";
+        const refLabel = commandHandback.handbackReference
+          ? ` Ref ${commandHandback.handbackReference}.`
+          : "";
+        setForm({
+          ...emptyForm(),
+          submittedAt: commandHandback.submittedAt ?? new Date().toISOString(),
+          handbackReference: commandHandback.handbackReference,
+          parkingLabel,
+          checks: commandHandback.handbackChecks ?? emptyHandbackChecks(),
+        });
+        setSavedMsg(
+          `Handback already recorded in Command for ${nextReg || "this vehicle"} at ${parkingLabel}.${refLabel}`,
+        );
+        setLoadingStatus(false);
+        return;
+      }
+
       let restored = null;
       if (workspace.companyId && workspace.membershipId && nextVehicleId) {
         restored = loadHandbackDraft(workspace.companyId, workspace.membershipId, nextVehicleId);
@@ -97,11 +223,20 @@ export default function DriverVehicleHandback({ driver }) {
           /* ignore legacy */
         }
       }
-      if (restored) {
-        setForm({ ...emptyForm(), ...restored, checks: { ...emptyForm().checks, ...restored.checks } });
+      if (restored && !restored.submittedAt) {
+        setForm({
+          ...emptyForm(),
+          ...restored,
+          keysReturned: restored.keysReturned !== false,
+          checks: { ...emptyForm().checks, ...restored.checks },
+        });
       }
+      setLoadingStatus(false);
     })();
-  }, [driver?.id, driver?.assignedVehicleRegistration, session?.activeDepotId, session?.depots, workspace.companyId, workspace.membershipId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [driver?.id, driver?.assignedVehicleRegistration, session?.activeDepotId, session?.depots, sessionBootstrap, workspace.companyId, workspace.membershipId]);
 
   useEffect(() => {
     if (!vehicleId || form.submittedAt || !workspace.companyId || !workspace.membershipId) return;
@@ -158,10 +293,17 @@ export default function DriverVehicleHandback({ driver }) {
       handbackChecks: form.checks,
       companyId: workspace.companyId,
       membershipId: workspace.membershipId,
+      driverId: driver?.id,
     });
 
     if (!parkingResult.ok) {
       setErrorMsg(parkingResult.message || "Handback could not be recorded in Command.");
+      setSaving(false);
+      return;
+    }
+
+    if (parkingResult.queued) {
+      setSavedMsg(parkingResult.message);
       setSaving(false);
       return;
     }
@@ -186,8 +328,8 @@ export default function DriverVehicleHandback({ driver }) {
   return (
     <OperationalPage
       title="Vehicle handback"
-      subtitle="Confirm where you parked, then complete return checks."
-      backTo="/vehicle"
+      subtitle="End of duty — confirm the vehicle is still in good condition, then park and return keys."
+      backTo="/duty"
     >
       <div className={`mb-4 p-4 ${op.card}`}>
         <div className="flex items-start justify-between gap-3">
@@ -208,6 +350,12 @@ export default function DriverVehicleHandback({ driver }) {
         </div>
       </div>
 
+      {loadingStatus ? (
+        <div className={`p-4 ${op.card}`}>
+          <p className="text-sm text-muted-foreground">Checking Command for an existing handback…</p>
+        </div>
+      ) : null}
+
       {!reg ? (
         <div className={`p-4 ${op.card}`}>
           <p className="font-semibold">No vehicle to hand back</p>
@@ -218,8 +366,53 @@ export default function DriverVehicleHandback({ driver }) {
             <Link to="/vehicle">Back to vehicle</Link>
           </Button>
         </div>
+      ) : form.submittedAt ? (
+        <>
+          <div className={`p-4 ${op.card}`}>
+            <p className="font-semibold text-foreground">Handback complete</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {savedMsg ||
+                `Vehicle condition confirmed and handback recorded in Command for ${reg}.`}
+            </p>
+            {form.parkingLabel ? (
+              <p className="mt-2 text-sm font-medium text-foreground">Parked at {form.parkingLabel}</p>
+            ) : null}
+            {form.handbackReference ? (
+              <p className="mt-1 text-sm text-muted-foreground">Reference {form.handbackReference}</p>
+            ) : null}
+          </div>
+
+          <DriverSectionTitle>Condition you confirmed</DriverSectionTitle>
+          <ReturnChecksSummary checks={form.checks} readOnly />
+
+          <div className="mt-4 grid gap-3">
+            <Button asChild className={`h-11 w-full ${op.primaryBtn}`}>
+              <Link to="/duty">Return to My duty</Link>
+            </Button>
+            <Button asChild variant="outline" className="h-11 w-full">
+              <Link to="/">Back to home</Link>
+            </Button>
+            <Button asChild variant="outline" className="h-11 w-full">
+              <Link to="/vehicle/timeline">View vehicle timeline</Link>
+            </Button>
+          </div>
+        </>
       ) : (
         <>
+          <div className={`mb-4 p-4 ${op.card} border-[var(--ridova-teal)]/20 bg-[var(--ridova-teal)]/5`}>
+            <p className="text-sm font-semibold text-foreground">Before you sign off duty</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Walk around {reg} and confirm it is clean, undamaged, and ready for Yard. Tick each
+              item below — if you found new damage, report it before you hand back.
+            </p>
+            <Button asChild variant="outline" className="mt-3 h-10 w-full">
+              <Link to="/defects">Report new damage</Link>
+            </Button>
+          </div>
+
+          <DriverSectionTitle>Vehicle condition</DriverSectionTitle>
+          <ReturnChecksSummary checks={form.checks} onToggle={toggleCheck} />
+
           <DriverSectionTitle>Where have you parked the vehicle?</DriverSectionTitle>
           <div className={`p-4 ${op.card}`}>
             <p className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
@@ -288,7 +481,36 @@ export default function DriverVehicleHandback({ driver }) {
             </label>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <DriverSectionTitle>Keys and mileage</DriverSectionTitle>
+          <div className={`mb-3 grid grid-cols-2 gap-3`}>
+            <label className={`block p-4 ${op.card}`}>
+              <span className="text-sm font-medium text-foreground">Keys returned?</span>
+              <select
+                value={form.keysReturned ? "yes" : "no"}
+                onChange={(e) => setForm((p) => ({ ...p, keysReturned: e.target.value === "yes" }))}
+                className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-base"
+              >
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+            <label className={`block p-4 ${op.card}`}>
+              <span className="text-sm font-medium text-foreground">Key location</span>
+              <select
+                value={form.keyLocation}
+                onChange={(e) => setForm((p) => ({ ...p, keyLocation: e.target.value }))}
+                className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-base"
+              >
+                {KEY_LOCATIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <label className={`block p-4 ${op.card}`}>
               <span className="text-sm font-medium text-foreground">End mileage</span>
               <input
@@ -315,55 +537,6 @@ export default function DriverVehicleHandback({ driver }) {
                 ))}
               </select>
             </label>
-          </div>
-
-          <DriverSectionTitle>Keys and return checks</DriverSectionTitle>
-          <div className={`mb-3 grid grid-cols-2 gap-3`}>
-            <label className={`block p-4 ${op.card}`}>
-              <span className="text-sm font-medium text-foreground">Keys returned?</span>
-              <select
-                disabled={Boolean(form.submittedAt)}
-                value={form.keysReturned ? "yes" : "no"}
-                onChange={(e) => setForm((p) => ({ ...p, keysReturned: e.target.value === "yes" }))}
-                className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-base"
-              >
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </label>
-            <label className={`block p-4 ${op.card}`}>
-              <span className="text-sm font-medium text-foreground">Key location</span>
-              <select
-                disabled={Boolean(form.submittedAt)}
-                value={form.keyLocation}
-                onChange={(e) => setForm((p) => ({ ...p, keyLocation: e.target.value }))}
-                className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-base"
-              >
-                {KEY_LOCATIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className={op.listCard}>
-            {RETURN_CHECKS.map((item) => (
-              <label
-                key={item.id}
-                className="flex min-h-[56px] items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
-              >
-                <input
-                  type="checkbox"
-                  disabled={Boolean(form.submittedAt)}
-                  checked={Boolean(form.checks[item.id])}
-                  onChange={() => toggleCheck(item.id)}
-                  className="h-5 w-5 accent-[var(--ridova-teal)]"
-                />
-                <span className="text-[15px] text-foreground">{item.label}</span>
-              </label>
-            ))}
           </div>
 
           <button
@@ -399,29 +572,22 @@ export default function DriverVehicleHandback({ driver }) {
             </p>
           ) : null}
 
-          {!form.submittedAt && (!allChecksDone || !hasParking) ? (
+          {!form.submittedAt && (!allChecksDone || !hasParking || !form.endMileage.trim()) ? (
             <p className="mt-3 text-xs text-muted-foreground">
-              Select parking location, complete return checks, and enter end mileage before submitting.
+              Confirm vehicle condition, select parking, and enter end mileage before submitting.
             </p>
           ) : null}
 
           <Button
             type="button"
-            disabled={!canSubmit || saving}
+            disabled={!canSubmit || saving || loadingStatus}
             onClick={() => void submit()}
             className={`mt-4 h-12 w-full ${op.primaryBtn}`}
           >
-            {form.submittedAt ? (
-              <span className="flex items-center justify-center gap-2">
-                <CheckCircle2 className="h-5 w-5" />
-                Handback complete
-              </span>
-            ) : (
-              <span className="flex items-center justify-center gap-2">
-                <KeyRound className="h-5 w-5" />
-                {saving ? "Recording…" : "Confirm parking and hand back"}
-              </span>
-            )}
+            <span className="flex items-center justify-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              {saving ? "Recording…" : "Confirm condition and hand back"}
+            </span>
           </Button>
         </>
       )}

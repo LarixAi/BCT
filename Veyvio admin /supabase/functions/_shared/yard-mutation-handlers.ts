@@ -1,12 +1,39 @@
 /**
  * Command handlers for yard outbox mutations (Blueprint TD-009 / P0-02).
  * Persists to shared tables or append-only audit_events — idempotent by client correlation id.
+ *
+ * Wave 3F UserScopedDb/RLS cutovers 29–31: membership JWT reads/writes `defects`
+ * (SELECT/INSERT/UPDATE), inserts `yard_movements` (SELECT/INSERT), and updates
+ * `vor_cases` (SELECT/UPDATE) through RLS. Support-grant sessions stay on
+ * company-scoped service-role. Vehicles and audit_events stay service-role.
+ * maybeCreateExceptionForDefect / equipment / stock / AdBlue callees stay as
+ * previously wrapped. company_mismatch remains the command-api yard mutation gate.
  */
 import { recordAdBlueRefill } from './adblue-records.ts'
+import { maybeCreateExceptionForDefect } from './defect-automation.ts'
+import { applyYardEquipmentMutation } from './equipment-assets.ts'
+import { applyYardConsumableRestock } from './depot-stock.ts'
 import { apiError, json } from './http.ts'
-import { admin, type RequestContext } from './supabase.ts'
+import { type RequestContext } from './supabase.ts'
+import { companyScopedServiceDb, resolveTenantDb, userScopedDb } from './db-authority.ts'
 
 type Row = Record<string, unknown>
+type YardTenantTable = 'defects' | 'yard_movements' | 'vor_cases'
+
+function yardTenantDb(context: RequestContext, table: YardTenantTable) {
+  if (context.workspaceAuthority === 'support') {
+    return companyScopedServiceDb(context, 'yard_mutation_handlers_support_grant')
+  }
+  return userScopedDb(context, table)
+}
+
+function yardSideEffectsDb(context: RequestContext) {
+  return companyScopedServiceDb(context, 'yard_mutation_handlers_side_effects')
+}
+
+function yardSideEffectsDbForCompany(companyId: string) {
+  return resolveTenantDb(companyId, 'yard_mutation_handlers_side_effects')
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -26,7 +53,7 @@ async function findAuditServerId(
   action: string,
   correlationId: string,
 ): Promise<string | null> {
-  const { data } = await admin
+  const { data } = await yardSideEffectsDbForCompany(companyId)
     .from('audit_events')
     .select('id')
     .eq('company_id', companyId)
@@ -50,7 +77,7 @@ async function writeYardAuditEvent(input: {
   const existing = await findAuditServerId(input.context.companyId, input.action, input.correlationId)
   if (existing) return existing
 
-  const { data, error } = await admin
+  const { data, error } = await yardSideEffectsDb(input.context)
     .from('audit_events')
     .insert({
       company_id: input.context.companyId,
@@ -107,7 +134,7 @@ async function yardDefectCreateMutation(
   if (!vehicleId || !clientId) return apiError(400, 'vehicleId and defectId are required')
   if (!isUuid(vehicleId)) return apiError(400, 'vehicleId must be a server vehicle id')
 
-  const { data: existing } = await admin
+  const { data: existing } = await yardTenantDb(context, 'defects')
     .from('defects')
     .select('id')
     .eq('company_id', context.companyId)
@@ -119,7 +146,7 @@ async function yardDefectCreateMutation(
   const now = new Date().toISOString()
   const defectReference = `DEF-YRD-${Date.now().toString(36).toUpperCase()}`
 
-  const { data, error } = await admin
+  const { data, error } = await yardTenantDb(context, 'defects')
     .from('defects')
     .insert({
       company_id: context.companyId,
@@ -143,7 +170,7 @@ async function yardDefectCreateMutation(
 
   if (error) {
     if (String(error.code) === '23505') {
-      const { data: dup } = await admin
+      const { data: dup } = await yardTenantDb(context, 'defects')
         .from('defects')
         .select('id')
         .eq('company_id', context.companyId)
@@ -152,6 +179,22 @@ async function yardDefectCreateMutation(
       if (dup?.id) return json({ ok: true, serverId: String(dup.id) })
     }
     return apiError(500, error.message, 'database_error')
+  }
+
+  const severity = mapYardDefectSeverity(payload.severity)
+  try {
+    await maybeCreateExceptionForDefect({
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName,
+      defectId: String(data.id),
+      vehicleId,
+      severity,
+      category: String(payload.category ?? 'yard_reported'),
+      description: description || 'Yard defect report',
+    })
+  } catch (automationError) {
+    console.error('yard defect exception automation failed', automationError)
   }
 
   return json({ ok: true, serverId: String(data.id) })
@@ -165,7 +208,7 @@ async function yardDefectResolveMutation(
   const clientId = String(payload.defectId ?? '')
   if (!clientId) return apiError(400, 'defectId is required')
 
-  const { data: defect } = await admin
+  const { data: defect } = await yardTenantDb(context, 'defects')
     .from('defects')
     .select('id, status')
     .eq('company_id', context.companyId)
@@ -173,7 +216,7 @@ async function yardDefectResolveMutation(
     .maybeSingle()
 
   if (!defect?.id && isUuid(clientId)) {
-    const { data: byId } = await admin
+    const { data: byId } = await yardTenantDb(context, 'defects')
       .from('defects')
       .select('id, status')
       .eq('company_id', context.companyId)
@@ -201,7 +244,7 @@ async function resolveDefectRow(
   }
 
   const now = new Date().toISOString()
-  const { error } = await admin
+  const { error } = await yardTenantDb(context, 'defects')
     .from('defects')
     .update({
       status: 'closed',
@@ -260,20 +303,61 @@ async function yardEquipmentMutation(
   actorName: string,
   localOperationId: string,
 ): Promise<Response> {
-  const vehicleId = String(payload.vehicleId ?? '')
-  if (!vehicleId) return apiError(400, 'vehicleId is required')
+  const vehicleId = String(payload.vehicleId ?? payload.fromVehicleId ?? payload.toVehicleId ?? '')
+  if (!vehicleId && type !== 'equipment.restock') {
+    return apiError(400, 'vehicleId is required')
+  }
 
-  const correlationId = localOperationId || `yard_${type}_${vehicleId}_${payload.itemId ?? Date.now()}`
-  const serverId = await writeYardAuditEvent({
-    context,
-    action: `yard.${type}`,
-    entityType: 'vehicle_equipment',
-    entityId: vehicleId,
-    correlationId,
-    actorName,
-    afterSnapshot: payload,
-  })
-  return json({ ok: true, serverId })
+  const correlationId = localOperationId || `yard_${type}_${vehicleId}_${payload.itemId ?? payload.defId ?? Date.now()}`
+  try {
+    if (type === 'equipment.restock') {
+      const result = await applyYardConsumableRestock({
+        companyId: context.companyId,
+        actorUserId: context.user.id,
+        actorName,
+        vehicleId: String(payload.vehicleId ?? ''),
+        defId: String(payload.defId ?? payload.itemId ?? ''),
+        addQty: Number(payload.addQty ?? payload.quantity ?? 0),
+        label: payload.label ? String(payload.label) : undefined,
+        unit: payload.unit ? String(payload.unit) : undefined,
+        depotId: payload.depotId ? String(payload.depotId) : null,
+      })
+      const serverId = await writeYardAuditEvent({
+        context,
+        action: `yard.${type}`,
+        entityType: 'vehicle_equipment',
+        entityId: result.stockItemId,
+        correlationId,
+        actorName,
+        afterSnapshot: { ...payload, ...result },
+      })
+      return json({ ok: true, serverId, ...result })
+    }
+
+    const result = await applyYardEquipmentMutation({
+      type,
+      companyId: context.companyId,
+      actorUserId: context.user.id,
+      actorName,
+      payload,
+    })
+    const serverId = await writeYardAuditEvent({
+      context,
+      action: `yard.${type}`,
+      entityType: 'vehicle_equipment',
+      entityId: result.equipmentId,
+      correlationId,
+      actorName,
+      afterSnapshot: { ...payload, equipmentId: result.equipmentId },
+    })
+    return json({ ok: true, serverId, equipmentId: result.equipmentId })
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      const httpErr = error as Error & { status: number }
+      return apiError(httpErr.status || 400, httpErr.message)
+    }
+    return apiError(500, error instanceof Error ? error.message : 'Equipment mutation failed')
+  }
 }
 
 async function yardDepartureReleaseMutation(
@@ -312,7 +396,7 @@ async function yardDepartureCompleteMutation(
 
   if (isUuid(vehicleId)) {
     const now = new Date().toISOString()
-    const { data: vehicle } = await admin
+    const { data: vehicle } = await yardSideEffectsDb(context)
       .from('vehicles')
       .select('id, registration, primary_depot_id')
       .eq('company_id', context.companyId)
@@ -320,7 +404,7 @@ async function yardDepartureCompleteMutation(
       .maybeSingle()
 
     if (vehicle) {
-      await admin.from('yard_movements').insert({
+      await yardTenantDb(context, 'yard_movements').from('yard_movements').insert({
         company_id: context.companyId,
         depot_id: vehicle.primary_depot_id ?? null,
         vehicle_id: vehicleId,
@@ -338,7 +422,7 @@ async function yardDepartureCompleteMutation(
         created_at: now,
       }).catch(() => undefined)
 
-      await admin
+      await yardSideEffectsDb(context)
         .from('vehicles')
         .update({ operational_status: 'in_service', updated_at: now })
         .eq('company_id', context.companyId)
@@ -373,7 +457,7 @@ async function yardReleaseVorMutation(
   const now = new Date().toISOString()
   const note = payload.note ? String(payload.note) : null
 
-  await admin
+  await yardSideEffectsDb(context)
     .from('vehicles')
     .update({ operational_status: 'available', updated_at: now })
     .eq('company_id', context.companyId)
@@ -381,7 +465,7 @@ async function yardReleaseVorMutation(
 
   const caseId = payload.caseId ? String(payload.caseId) : ''
   if (caseId && isUuid(caseId)) {
-    await admin
+    await yardTenantDb(context, 'vor_cases')
       .from('vor_cases')
       .update({
         status: 'released',
@@ -391,7 +475,7 @@ async function yardReleaseVorMutation(
       .eq('company_id', context.companyId)
       .eq('id', caseId)
   } else {
-    await admin
+    await yardTenantDb(context, 'vor_cases')
       .from('vor_cases')
       .update({
         status: 'released',
@@ -433,7 +517,7 @@ async function yardAdBlueRefillMutation(
     if (existingAudit) return json({ ok: true, serverId: existingAudit })
   }
 
-  const { data: vehicle } = await admin
+  const { data: vehicle } = await yardSideEffectsDb(context)
     .from('vehicles')
     .select('id, registration, primary_depot_id, fuel_type')
     .eq('company_id', context.companyId)
@@ -442,7 +526,7 @@ async function yardAdBlueRefillMutation(
   if (!vehicle) return apiError(404, 'Vehicle not found')
 
   const record = await recordAdBlueRefill({
-    companyId: context.companyId,
+    context,
     depotId: vehicle.primary_depot_id ? String(vehicle.primary_depot_id) : null,
     vehicleId,
     registration: String(vehicle.registration ?? ''),

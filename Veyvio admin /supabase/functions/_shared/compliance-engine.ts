@@ -1,13 +1,33 @@
 /**
  * F-05 — company-configurable compliance rules (Gate 2 §4.3).
+ *
+ * Wave 3F UserScopedDb/RLS cutover 22: membership JWT reads/writes
+ * `company_compliance_settings` through RLS (SELECT/INSERT/UPDATE). Support-grant
+ * sessions stay on company-scoped service-role. evaluateComplianceRules and other
+ * callers without a membership JWT stay on companyScopedServiceDbForCompany.
  */
-import { admin } from './supabase.ts'
+import { resolveTenantDb } from './db-authority.ts'
 import {
   appendDriverProfileGates,
   appendVehicleReadinessGates,
   finalizeEligibilityResult,
   type EligibilityResult,
 } from './dispatch-assignment-gates.ts'
+import type { RequestContext } from './supabase.ts'
+
+type ComplianceScope = {
+  companyId: string
+  context?: RequestContext
+}
+
+function complianceTenantDb(scope: ComplianceScope) {
+  const companyId = scope.context?.companyId ?? scope.companyId
+  return resolveTenantDb(companyId, 'compliance_engine', scope.context)
+}
+
+function scopeFrom(input: { context?: RequestContext; companyId: string }): ComplianceScope {
+  return { companyId: input.context?.companyId ?? input.companyId, context: input.context }
+}
 
 export type ComplianceAutomationSettings = {
   blockExpiredLicence: boolean
@@ -17,6 +37,9 @@ export type ComplianceAutomationSettings = {
   blockExpiredMot: boolean
   blockExpiredInsurance: boolean
   blockExpiredTax: boolean
+  blockExpiredPmi: boolean
+  blockOverdueService: boolean
+  blockOverdueTyreRetorque: boolean
   blockCriticalDefects: boolean
   blockVorVehicles: boolean
   requireTodaysCheckOnSignOn: boolean
@@ -31,17 +54,24 @@ export const DEFAULT_COMPLIANCE_SETTINGS: ComplianceAutomationSettings = {
   blockExpiredMot: true,
   blockExpiredInsurance: true,
   blockExpiredTax: true,
+  blockExpiredPmi: true,
+  blockOverdueService: true,
+  blockOverdueTyreRetorque: true,
   blockCriticalDefects: true,
   blockVorVehicles: true,
   requireTodaysCheckOnSignOn: true,
   defectAutomationEnabled: true,
 }
 
-export async function getComplianceSettings(companyId: string): Promise<ComplianceAutomationSettings> {
-  const { data } = await admin
+export async function getComplianceSettings(
+  companyId: string,
+  context?: RequestContext,
+): Promise<ComplianceAutomationSettings> {
+  const scope = scopeFrom({ companyId, context })
+  const { data } = await complianceTenantDb(scope)
     .from('company_compliance_settings')
     .select('settings')
-    .eq('company_id', companyId)
+    .eq('company_id', scope.companyId)
     .maybeSingle()
 
   const raw = (data?.settings ?? {}) as Partial<ComplianceAutomationSettings>
@@ -52,11 +82,13 @@ export async function upsertComplianceSettings(
   companyId: string,
   patch: Partial<ComplianceAutomationSettings>,
   actorUserId: string | null,
+  context?: RequestContext,
 ): Promise<ComplianceAutomationSettings> {
-  const current = await getComplianceSettings(companyId)
+  const scope = scopeFrom({ companyId, context })
+  const current = await getComplianceSettings(scope.companyId, context)
   const next = { ...current, ...patch }
-  const { error } = await admin.from('company_compliance_settings').upsert({
-    company_id: companyId,
+  const { error } = await complianceTenantDb(scope).from('company_compliance_settings').upsert({
+    company_id: scope.companyId,
     settings: next,
     updated_at: new Date().toISOString(),
     updated_by: actorUserId,
@@ -136,6 +168,21 @@ export async function evaluateComplianceRules(input: {
         continue
       }
       if (lower.includes('tax') && !settings.blockExpiredTax) {
+        warnings.push(b)
+        continue
+      }
+      if (lower.includes('pmi') && !settings.blockExpiredPmi) {
+        warnings.push(b)
+        continue
+      }
+      if (lower.includes('service') && !settings.blockOverdueService) {
+        warnings.push(b)
+        continue
+      }
+      if (
+        (lower.includes('tyre') || lower.includes('re-torque') || lower.includes('retorque')) &&
+        !settings.blockOverdueTyreRetorque
+      ) {
         warnings.push(b)
         continue
       }

@@ -1,8 +1,14 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import type { BootstrapDataSource, BootstrapPayload } from "@/data/mocks/bootstrap";
+import {
+  COMMAND_HUB_BOOTSTRAP_SOURCE,
+  type BootstrapDataSource,
+  type BootstrapPayload,
+} from "@/platform/yard/bootstrap-payload";
 import { createEmptyYardCoreState } from "@/platform/yard/empty-yard-state";
-import { buildEquipmentForVehicle, mergeEquipmentForVehicles, isValidVehicleEquipment, type StockLine } from "@/data/equipment-fixtures";
+import { isValidVehicleEquipment } from "@/domain/equipment/equipment-shape";
+import type { StockLine } from "@/types/equipment";
+import { buildEquipmentForVehicle, mergeEquipmentForVehicles } from "@/data/equipment-fixtures";
 import type { CompleteYardCheckInput, YardCheckResult } from "@/types/yard-check";
 import { computeOverallPassed, computeSafetyOutcome, severityForSection } from "@/domain/yard/check-outcome";
 import { getSectionDef, isManagerAuditCheck } from "@/domain/yard/check-templates";
@@ -375,10 +381,13 @@ export const useYard = create<State>((set, get) => ({
     const { tasks: withPrep, added: prepAdded } = mergeAutomatedTasks(payload.tasks ?? [], prepTasks);
     enqueueCreatedTasks(prepAdded);
 
-    const equipment = mergeEquipmentForVehicles(payload.vehicles, {
-      ...get().equipment,
-      ...payload.equipment,
-    });
+    const equipment =
+      (payload.dataSource ?? "mock") === COMMAND_HUB_BOOTSTRAP_SOURCE
+        ? { ...(payload.equipment ?? {}) }
+        : mergeEquipmentForVehicles(payload.vehicles, {
+            ...get().equipment,
+            ...payload.equipment,
+          });
 
     set({
       bays: payload.bays,
@@ -810,6 +819,8 @@ export const useYard = create<State>((set, get) => ({
 
   ensureVehicleEquipment: (vehicleId) => {
     const st = get();
+    // Live Command hydrate must not invent kit (F-03). Mock/demo may still seed.
+    if (st.dataSource === "command-hub" || st.dataSource === COMMAND_HUB_BOOTSTRAP_SOURCE) return;
     if (isValidVehicleEquipment(st.equipment[vehicleId])) return;
     const v = st.vehicles.find(x => x.id === vehicleId);
     if (!v) return;

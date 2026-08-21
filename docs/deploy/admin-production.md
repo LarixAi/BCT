@@ -1,6 +1,8 @@
 # Veyvio Admin — production deploy
 
-Command Admin is a **Vite static SPA** in `Veyvio admin /`. It talks to the hosted **Supabase `command-api`** Edge Function — there is no separate Admin backend.
+Command Admin is a **Vite SPA** plus **Cloudflare Pages Functions session BFF** in `Veyvio admin /`.
+
+**Wave 3E-1:** reusable access/refresh credentials are **HttpOnly cookies** set by Pages Functions on `command.veyvio.co.uk`. The SPA must not store Bearer tokens. Topology: [`docs/plan/wave-3e1-command-session-custody-topology.md`](../plan/wave-3e1-command-session-custody-topology.md).
 
 ## Platform
 
@@ -8,9 +10,10 @@ Command Admin is a **Vite static SPA** in `Veyvio admin /`. It talks to the host
 |------|--------|
 | Supabase project | `qeckgqjrfbdyxchuncdt` |
 | Supabase URL | `https://qeckgqjrfbdyxchuncdt.supabase.co` |
-| Command API | `https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api` |
+| Command API (server-side only) | `https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api` |
+| Canonical Command host | `https://command.veyvio.co.uk` |
 
-Deploy **migrations + command-api** before the frontend:
+Deploy **migrations + command-api** before relying on live auth:
 
 ```bash
 cd "Veyvio admin "
@@ -19,57 +22,66 @@ npm run backend:deploy
 
 ## Build-time environment variables
 
-Set these in your CI/host **before** `npm run build:ci` (Vite inlines `VITE_*` at build time):
+Set these **before** `npm run build:ci` (Vite inlines `VITE_*`):
 
 | Variable | Production value |
 |----------|------------------|
 | `VITE_MOCK_API` | `false` or unset |
 | `VITE_OPERATIONS_MOCK` | `false` or unset |
-| `VITE_API_URL` | `https://qeckgqjrfbdyxchuncdt.supabase.co/functions/v1/command-api` |
-| `VITE_SUPABASE_ANON_KEY` | Supabase project anon key |
-| `VITE_SUPABASE_URL` | `https://qeckgqjrfbdyxchuncdt.supabase.co` |
+| `VITE_API_URL` | `/api/command` (same-origin BFF — **required**) |
 
-**Never set in production:** `VITE_DEV_BYPASS_AUTH`, `ALLOW_PLATFORM_BOOTSTRAP`, `MFA_DEV_MODE`.
+**Never set in production:** `VITE_DEV_BYPASS_AUTH`, `ALLOW_PLATFORM_BOOTSTRAP`, `MFA_DEV_MODE`, or a direct `https://*.supabase.co/functions/v1/command-api` `VITE_API_URL`.
 
-Local template: `Veyvio admin /.env.example` → copy to `.env`.
+## Pages Functions secrets / vars
 
-## Build
+Configure on Cloudflare Pages project `veyvio-admin`:
+
+| Name | Purpose |
+|------|---------|
+| `COMMAND_API_URL` | Upstream `…/functions/v1/command-api` |
+| `SUPABASE_URL` | Project URL for Auth refresh/logout |
+| `SUPABASE_ANON_KEY` | Anon key for Auth + Edge gateway |
+| `VEYVIO_COMMAND_CANONICAL_HOST` | `command.veyvio.co.uk` (also in `wrangler.toml`) |
+| `VEYVIO_COMMAND_ENFORCE_CANONICAL_HOST` | `1` |
+
+## Build + deploy
 
 ```bash
 cd "Veyvio admin "
 npm ci
-VALIDATE_PRODUCTION_ENV=true npm run validate:production-env
-npm run build:ci
+npm run deploy:pages
 ```
 
-Output: `Veyvio admin /dist/` — serve as static files (SPA fallback to `index.html`).
+This builds with `VITE_API_URL=/api/command` and runs:
 
-## Hosting options
+`npx wrangler pages deploy dist --project-name=veyvio-admin`
 
-Any static host works. Typical pattern:
+Wrangler deploys `dist/` **and** the sibling `functions/` directory (session BFF).
 
-1. Connect repo (or upload `dist/`) to **Cloudflare Pages**, **Netlify**, **Vercel**, or **S3 + CloudFront**
-2. Set build command: `cd "Veyvio admin " && npm ci && npm run build:ci`
-3. Set output directory: `Veyvio admin /dist`
-4. Configure the `VITE_*` variables above in the host's environment UI
-5. Enable SPA routing: all paths → `index.html`
+## Custom domain — `command.veyvio.co.uk`
 
-## CI (GitHub Actions)
+Canonical Command URL: `https://command.veyvio.co.uk/login`.
 
-`.github/workflows/ci.yml` already lint/tests/builds Admin on every PR and push to `main`.
+| Step | Action |
+|------|--------|
+| 1 | Pages → `veyvio-admin` → Custom domains → `command.veyvio.co.uk` |
+| 2 | DNS CNAME `command` → `veyvio-admin.pages.dev` |
+| 3 | Redirect `veyvio-admin.pages.dev` → `command.veyvio.co.uk` (Cloudflare Redirect Rule) |
+| 4 | Smoke: sign in → confirm `localStorage`/`sessionStorage` have **no** `access_token` / `refresh_token` |
 
-Tenant isolation smoke (release gate):
+`veyvio-admin.pages.dev` is **not** a production login host for Wave 3E-1 (`__Host-` cookies are host-bound).
 
-```bash
-cd "Veyvio admin "
-node scripts/set-github-ci-secrets.mjs --repo LarixAi/BCT
-```
+## CI
 
-Requires repo secrets: `VEYVIO_ANON_KEY`, `VEYVIO_API_URL`, `VEYVIO_SUPABASE_URL`, `VEYVIO_PLATFORM_EMAIL`, `VEYVIO_PLATFORM_PASSWORD`, `VEYVIO_ISOLATION_PASSWORD`.
+`.github/workflows/ci.yml` lint/tests/builds Admin on PR/push.
 
-## Post-deploy smoke
+Tenant isolation smoke (release gate) still hits `command-api` directly with platform credentials — that path is server/tooling, not SPA custody.
 
-1. Sign in → select BCT company → sidebar data loads.
-2. Switch company → lists refresh (no cross-tenant cache bleed).
-3. Dial-a-Ride request → accept / decline.
-4. Live ops / yard → depot-scoped data only.
+## Post-deploy smoke (3E-1)
+
+1. Open `https://command.veyvio.co.uk/login` (not pages.dev).
+2. Sign in → MFA if required → select company.
+3. DevTools → Application → Storage: no `access_token` / `refresh_token`.
+4. Network: API calls to `/api/command/...` and `/api/session/...` same-origin; no browser refresh to Supabase `/auth/v1/token`.
+5. Logout → cookies cleared → authenticated routes 401.
+6. Sidebar data loads for active company (3A–3D still enforced on `command-api`).

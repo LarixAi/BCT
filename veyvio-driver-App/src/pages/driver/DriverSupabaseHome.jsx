@@ -8,6 +8,7 @@ import {
   Clock,
   FileText,
   GraduationCap,
+  KeyRound,
   MessageSquare,
   Package,
   Send,
@@ -36,14 +37,11 @@ import { getPrimaryComplianceFix, loadDriverComplianceReadiness } from "@/servic
 import { loadDriverTrainingCentre, formatTrainingDue, eligibilityRestrictionCopy } from "@/services/training.service";
 import { getDriverWorkingTimeSummary } from "@/services/working-time.service";
 import { getTachographReminders } from "@/services/tachograph-reminders.service";
-import { countUnread } from "@/services/notifications.service";
+import { useDriverUnreadNotificationCount } from "@/hooks/useDriverUnreadNotificationCount";
 import { getPendingJobOffers } from "@/services/job-offers.service";
-import { flushOpsOutbox } from "@/services/driver-ops-outbox.service";
-import {
-  flushPendingWalkaroundSubmissions,
-  getPendingSyncCount,
-  getWalkaroundSafetyStatus,
-} from "@/services/vehicle-check.service";
+import { flushDriverOfflineQueues } from "@/services/driver-offline-flush";
+import { describeOfflineQueue } from "@/services/driver-sync-status.service";
+import { getWalkaroundSafetyStatus } from "@/services/vehicle-check.service";
 import { getDriverDutyState } from "@/services/duty-timeline.service";
 import { getNextApprovedLeave } from "@/services/time-off.service";
 import { getRecentRemovedTransfers } from "@/services/jobs.service";
@@ -66,7 +64,10 @@ export default function DriverSupabaseHome({ driver }) {
   const [sosOpen, setSosOpen] = useState(false);
   const [complianceFix, setComplianceFix] = useState(null);
   const [tachoReminders, setTachoReminders] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const unreadNotificationCount = useDriverUnreadNotificationCount(session?.userId);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(
+    () => sessionBootstrap?.messages?.unreadTotal ?? 0,
+  );
   const [walkaroundSafety, setWalkaroundSafety] = useState(() =>
     walkaroundSafetyFromHomeSummary(sessionHomeSummary),
   );
@@ -74,6 +75,7 @@ export default function DriverSupabaseHome({ driver }) {
     () => !walkaroundSafetyFromHomeSummary(sessionHomeSummary),
   );
   const [pendingSync, setPendingSync] = useState(0);
+  const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
   const [pendingOffer, setPendingOffer] = useState(null);
   const [workingTime, setWorkingTime] = useState(null);
   // Paint Command sign-on immediately — do not wait for slow Ridova lookups.
@@ -94,6 +96,7 @@ export default function DriverSupabaseHome({ driver }) {
   );
   useFleetTracking({
     driver,
+    authSession: session,
     active: trackingActive,
     dutyId: dutyState?.dutyId ?? null,
   });
@@ -118,7 +121,11 @@ export default function DriverSupabaseHome({ driver }) {
       Boolean(fallbackBootstrap) || Boolean(walkaroundSafetyFromHomeSummary(fallbackSummary));
     if (!hadCommandPaint) setSafetyLoading(true);
     setBootstrapError("");
-    setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
+    void describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId).then((summary) => {
+      if (summary.status === "CONTEXT_UNAVAILABLE") return;
+      setPendingSync(summary.total);
+      setNeedsAttentionCount(summary.needsAttention ?? 0);
+    });
 
     const depotId = currentSession?.activeDepotId ?? currentSession?.depots?.[0]?.id ?? null;
     const boot = await loadDriverBootstrap({ depotId, force }).catch(() => null);
@@ -147,7 +154,7 @@ export default function DriverSupabaseHome({ driver }) {
 
     const unreadFromBootstrap = activeBootstrap?.messages?.unreadTotal;
     if (typeof unreadFromBootstrap === "number") {
-      setUnreadCount(unreadFromBootstrap);
+      setUnreadMessageCount(unreadFromBootstrap);
     }
 
     // Soft enrichment — missing Ridova tables must never block tab paint.
@@ -179,9 +186,20 @@ export default function DriverSupabaseHome({ driver }) {
     setDutyState(mergeDutyState(fromBootstrapDuty, duty));
     setNextLeave(leave);
     setRemovedTransfers(Array.isArray(removed) ? removed : []);
-    setPendingSync(getPendingSyncCount(driver.id, workspace.companyId, workspace.membershipId));
+    void describeOfflineQueue(driver.id, workspace.companyId, workspace.membershipId).then((summary) => {
+      if (summary.status === "CONTEXT_UNAVAILABLE") return;
+      setPendingSync(summary.total);
+      setNeedsAttentionCount(summary.needsAttention ?? 0);
+    });
     setTrainingHome(training?.ok ? training : null);
   }, [driver, workspace.companyId, workspace.membershipId]);
+
+  useEffect(() => {
+    const fromBootstrap = sessionBootstrap?.messages?.unreadTotal;
+    if (typeof fromBootstrap === "number") {
+      setUnreadMessageCount(fromBootstrap);
+    }
+  }, [sessionBootstrap?.messages?.unreadTotal]);
 
   useEffect(() => {
     setHomeSummary(sessionHomeSummary);
@@ -198,10 +216,9 @@ export default function DriverSupabaseHome({ driver }) {
   }, [sessionHomeSummary, sessionBootstrap]);
 
   useEffect(() => {
-    void Promise.all([flushPendingWalkaroundSubmissions(driver), flushOpsOutbox(driver, session)])
-      .then((results) => {
-        const synced = results.reduce((sum, row) => sum + (row?.synced ?? 0), 0);
-        if (synced > 0) void reloadHomeData({ force: true });
+    void flushDriverOfflineQueues(driver, session)
+      .then((result) => {
+        if ((result?.synced ?? 0) > 0) void reloadHomeData({ force: true });
       })
       .catch(() => {});
     void reloadHomeData({ force: false });
@@ -211,22 +228,6 @@ export default function DriverSupabaseHome({ driver }) {
     };
     document.addEventListener("visibilitychange", refreshOnReturn);
     window.addEventListener("pageshow", refreshOnReturn);
-
-    void (async () => {
-      try {
-        const { getSupabaseClient } = await import("@/lib/supabase/client");
-        const supabase = getSupabaseClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          const n = await countUnread(user.id).catch(() => 0);
-          setUnreadCount(n);
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
 
     return () => {
       document.removeEventListener("visibilitychange", refreshOnReturn);
@@ -331,6 +332,25 @@ export default function DriverSupabaseHome({ driver }) {
           vehicleRegistration={walkaroundSafety?.registration}
         />
 
+        {dutyState?.isSignedOn && !dutyState?.isShiftEnded ? (
+          <div className={`p-4 ${op.card}`}>
+            <p className="text-sm font-semibold text-foreground">Finishing your duty?</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Confirm {walkaroundSafety?.registration || "the vehicle"} is in good condition, park it,
+              and return keys before you sign off.
+            </p>
+            <Button asChild className={`mt-3 h-11 min-h-[44px] w-full ${op.primaryBtn}`}>
+              <Link to="/vehicle/handback">
+                <KeyRound className="mr-2 h-4 w-4" />
+                Hand back vehicle
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="mt-2 h-10 w-full">
+              <Link to="/duty">Open My duty</Link>
+            </Button>
+          </div>
+        ) : null}
+
         {nextDutyCard ? (
           <div className={`p-4 ${op.card}`}>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next duty</p>
@@ -363,7 +383,7 @@ export default function DriverSupabaseHome({ driver }) {
           </DriverStatusBanner>
         ) : null}
 
-        <DriverSyncBanner pendingCount={pendingSync} />
+        <DriverSyncBanner pendingCount={pendingSync} needsAttentionCount={needsAttentionCount} />
 
         <RemovedJobNotice transfers={removedTransfers} />
 
@@ -495,12 +515,28 @@ export default function DriverSupabaseHome({ driver }) {
           to="/notifications"
           icon={Bell}
           title="Notifications"
-          subtitle={unreadCount > 0 ? `${unreadCount} unread from Command` : "Training and compliance alerts"}
-          badge={unreadCount > 0 ? unreadCount : null}
+          subtitle={
+            unreadNotificationCount > 0
+              ? `${unreadNotificationCount} unread from Command`
+              : "Training and compliance alerts"
+          }
+          badge={unreadNotificationCount > 0 ? unreadNotificationCount : null}
           compact
           inList
         />
-        <DriverActionCard to="/messages" icon={MessageSquare} title="Messages" subtitle="Dispatch and yard conversations" compact inList />
+        <DriverActionCard
+          to="/messages"
+          icon={MessageSquare}
+          title="Messages"
+          subtitle={
+            unreadMessageCount > 0
+              ? `${unreadMessageCount} unread from Command`
+              : "Dispatch and yard conversations"
+          }
+          badge={unreadMessageCount > 0 ? unreadMessageCount : null}
+          compact
+          inList
+        />
         <DriverActionCard to="/contact" icon={Send} title="Contact admin" subtitle="Reach dispatch or compliance" compact inList />
       </div>
 

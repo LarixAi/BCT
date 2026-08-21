@@ -115,7 +115,7 @@ public class DriverFloatingBubbleService extends Service {
             "Navigation return button",
             NotificationManager.IMPORTANCE_LOW
         );
-        channel.setDescription("Shows while Ridova floating return button is active");
+        channel.setDescription("Shows while Veyvio floating return button is active");
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) {
             manager.createNotificationChannel(channel);

@@ -11,7 +11,7 @@ import { PriorityAlertPanel } from './components/PriorityAlertPanel'
 import { ReportDefectPanel } from './components/ReportDefectPanel'
 import { api } from '@/lib/api/client'
 import { safeDefectsHub } from '@/lib/api/safe-hubs'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

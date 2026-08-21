@@ -11,7 +11,8 @@ test.describe('Tenant isolation — workspace boundaries', () => {
           { tenantId: 'co_bravo', tenantName: 'Bravo Buses', role: 'member' },
         ]),
       )
-      localStorage.setItem('access_token', 'mock-demo-token')
+      sessionStorage.setItem('mock_access_token', 'mock-demo-token')
+      sessionStorage.setItem('has_tenant', '1')
     })
 
     await page.goto('/select-company')
@@ -27,7 +28,8 @@ test.describe('Tenant isolation — workspace boundaries', () => {
         'pending_memberships',
         JSON.stringify([{ tenantId: 'co_demo', tenantName: 'Demo Operator', role: 'member' }]),
       )
-      localStorage.setItem('access_token', 'mock-demo-token')
+      sessionStorage.setItem('mock_access_token', 'mock-demo-token')
+      sessionStorage.setItem('has_tenant', '1')
     })
 
     await page.goto('/select-company')

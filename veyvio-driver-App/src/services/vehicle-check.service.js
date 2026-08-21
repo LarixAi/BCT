@@ -1,5 +1,5 @@
-import { countPendingOfflineCommands } from "@/services/driver-sync-status.service";
-import { getCommandApiBaseUrl } from "@/lib/command-api";
+import { requireDriverWorkspaceScope } from "@/lib/driver-workspace-storage";
+import { commandCreateSignedUrl, getCommandApiBaseUrl } from "@/lib/command-api";
 import {
   externalizeWalkaroundPayloadMedia,
   hydrateWalkaroundPayloadMedia,
@@ -10,11 +10,18 @@ import { unwrapRelation } from "@/lib/supabase/relations";
 import { localToday } from "@/lib/local-date";
 import { formatUkDateTime } from "@/lib/uk-locale";
 import { clearWalkaroundDraft, loadWalkaroundDraft, saveWalkaroundDraft } from "@/lib/walkaround-draft.storage";
+import {
+  clearWalkaroundDraftEvidence,
+  loadWalkaroundDraftEvidence,
+  saveWalkaroundDraftEvidence,
+} from "@/lib/walkaround-draft-evidence.storage";
 import { isChecklistFullyAnswered, normalizeChecklistProgress } from "@/lib/walkaround-progress";
 import {
   dequeueWalkaroundSubmission,
   enqueueWalkaroundSubmission,
+  isWalkaroundAutoReplayEligible,
   loadSyncQueue,
+  markWalkaroundReconciliation,
 } from "@/lib/walkaround-sync.storage";
 import { getSelectedVehicleId, setSelectedVehicleId } from "@/lib/walkaround-vehicle.storage";
 import {
@@ -35,6 +42,9 @@ import {
   loadDriverBootstrap,
   walkaroundSafetyFromHomeSummary,
 } from "@/services/driver-bootstrap.service";
+import { isPermanentOpsFailure } from "@/services/driver-ops-outbox.service";
+import { countPendingOfflineCommands } from "@/services/driver-sync-status.service";
+import { validateVehicleSelection } from "@/lib/vehicle-swap-gate";
 
 export {
   CHECK_TYPES,
@@ -75,6 +85,22 @@ export function declarationForCheckType(checkType) {
   return DRIVER_CHECK_DECLARATION;
 }
 export { getSelectedVehicleId, setSelectedVehicleId };
+
+export function createWalkaroundClientCheckId({ driverId, vehicleId } = {}) {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `chk_${driverId ?? "driver"}_${vehicleId ?? "vehicle"}_${Date.now()}`;
+}
+
+export function resolveWalkaroundClientCheckId(payload) {
+  const existing = String(payload?.clientCheckId ?? payload?.clientId ?? "").trim();
+  if (existing) return existing;
+  return createWalkaroundClientCheckId({
+    driverId: payload?.driver?.id,
+    vehicleId: payload?.vehicle?.id,
+  });
+}
 
 const VEHICLE_SELECT = `
   id, registration, make, model, vehicle_type, seats, wheelchair_accessible,
@@ -473,8 +499,26 @@ function finalizeWalkaroundSession({
 
   if (safety.checkComplete && safety.result !== "failed") {
     if (draft) {
-      clearWalkaroundDraft(driver.id, vehicle.id);
-      draft = null;
+      // A completed daily/pre-use check supersedes only a daily/pre-use draft.
+      // Follow-on checks (in-service, changeover, end-of-duty) must keep their
+      // in-progress draft + pre-Submit evidence across session reloads / process death.
+      const draftType = String(draft.checkType ?? CHECK_TYPES.daily.id);
+      const isDailyDraft =
+        draftType === CHECK_TYPES.daily.id || draftType === "driver_pre_use";
+      if (isDailyDraft) {
+        // Only drop the draft from session state after clear verifies — never pretend it is gone.
+        const cleared = clearWalkaroundDraft(driver.id, vehicle.id);
+        if (cleared.ok) {
+          draft = null;
+          // Obsolete pre-Submit evidence cleanup is best-effort (not a "saved" claim).
+          void clearWalkaroundDraftEvidence({
+            companyId: driver?.organisation_id ?? driver?.organisationId,
+            membershipId: driver?.membership_id ?? driver?.membershipId,
+            driverId: driver.id,
+            vehicleId: vehicle.id,
+          }).catch(() => null);
+        }
+      }
     }
   } else if (draft?.answers && checklist.items.length > 0) {
     const normalized = normalizeChecklistProgress(checklist.items, draft.answers, draft.currentIndex ?? 0);
@@ -576,6 +620,11 @@ export async function selectVehicleForCheck(driver, vehicleId) {
   const options = await listAssignableVehicles(driver);
   const match = options.find((o) => o.vehicleId === vehicleId);
   if (!match) return { ok: false, message: "That vehicle is not assigned to you today." };
+
+  const boot = await loadDriverBootstrap().catch(() => null);
+  const swapGate = validateVehicleSelection(boot?.ok ? boot.bootstrap : null, vehicleId);
+  if (!swapGate.ok) return swapGate;
+
   setSelectedVehicleId(driver.id, vehicleId);
   return { ok: true, vehicle: match.vehicle, job: match.job };
 }
@@ -823,7 +872,51 @@ export function persistWalkaroundDraft(driver, vehicleId, draft) {
 }
 
 export function discardWalkaroundDraft(driver, vehicleId) {
-  clearWalkaroundDraft(driver.id, vehicleId);
+  return clearWalkaroundDraft(driver.id, vehicleId);
+}
+
+/** Pre-Submit odometer/signature evidence — separate from submission media-outbox. */
+export async function persistWalkaroundDraftEvidence(driver, vehicleId, patch, session) {
+  const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+  return saveWalkaroundDraftEvidence({
+    companyId,
+    membershipId,
+    driverId: driver.id,
+    vehicleId,
+    ...patch,
+  });
+}
+
+export async function loadPersistedWalkaroundDraftEvidence(driver, vehicleId, session) {
+  try {
+    const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+    return loadWalkaroundDraftEvidence({
+      companyId,
+      membershipId,
+      driverId: driver.id,
+      vehicleId,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function discardWalkaroundDraftEvidence(driver, vehicleId, session) {
+  try {
+    const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+    return clearWalkaroundDraftEvidence({
+      companyId,
+      membershipId,
+      driverId: driver.id,
+      vehicleId,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      code: error?.code ?? "OFFLINE_CONTEXT_NOT_READY",
+      message: error?.message ?? "Check evidence could not be discarded on this device.",
+    };
+  }
 }
 
 function buildResponses({ items, answers }) {
@@ -866,6 +959,18 @@ function buildResponses({ items, answers }) {
       isAdvisory: responseStatus === "advisory",
     };
   });
+}
+
+export function hasRequiredFailPhotoEvidence(response, answer) {
+  if (response?.photoPath) return true;
+  if (String(response?.photoDataUrl ?? "").startsWith("data:")) return true;
+  if (String(answer?.photoDataUrl ?? "").startsWith("data:")) return true;
+  if (answer?.photoMediaRef) return true;
+  return false;
+}
+
+export function shouldUploadWalkaroundPhotoNow() {
+  return typeof navigator === "undefined" || navigator.onLine !== false;
 }
 
 export async function uploadWalkaroundPhoto({ driver, vehicleId, itemId, file }) {
@@ -931,6 +1036,8 @@ export async function submitWalkaroundCheck({
   startedAt,
   driverSignatureDataUrl,
   offlineSubmit = false,
+  session = null,
+  clientCheckId: providedClientCheckId = null,
 }) {
   if (!vehicle?.id) return { ok: false, message: "No vehicle selected." };
   if (!vehicleConfirmed) return { ok: false, message: "Confirm this is your vehicle before submitting." };
@@ -955,7 +1062,7 @@ export async function submitWalkaroundCheck({
       return { ok: false, message: `Add a note for failed item: ${r.questionTitle}` };
     }
     const item = items.find((i) => i.id === r.itemId);
-    if (item?.requiresPhotoOnFail && !r.photoPath) {
+    if (item?.requiresPhotoOnFail && !hasRequiredFailPhotoEvidence(r, answers?.[r.itemId])) {
       return { ok: false, message: `Photo required for: ${r.questionTitle}` };
     }
   }
@@ -977,13 +1084,27 @@ export async function submitWalkaroundCheck({
     gps,
     startedAt,
     driverSignatureDataUrl,
+    session,
+    clientCheckId: resolveWalkaroundClientCheckId({
+      clientCheckId: providedClientCheckId,
+      driver,
+      vehicle,
+    }),
   };
 
   if (offlineSubmit || !navigator.onLine) {
-    const companyId = driver.organisation_id ?? driver.organisationId;
-    const membershipId = driver.user_id ?? driver.id;
-    const externalized = await externalizeWalkaroundPayloadMedia(payload, { companyId, membershipId });
-    enqueueWalkaroundSubmission(driver.id, externalized, companyId, membershipId);
+    try {
+      const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+      const externalized = await externalizeWalkaroundPayloadMedia(payload, { companyId, membershipId });
+      await enqueueWalkaroundSubmission(driver.id, externalized, companyId, membershipId);
+    } catch (error) {
+      return {
+        ok: false,
+        queued: false,
+        message: error.message ?? "Could not save this vehicle check on the device.",
+        code: error.code,
+      };
+    }
     discardWalkaroundDraft(driver, vehicle.id);
     const derived = deriveWalkaroundResult(responses);
     const bodyworkDamageCount = responses.filter(
@@ -1004,7 +1125,12 @@ export async function submitWalkaroundCheck({
   const commandResult = await insertWalkaroundCheckViaCommand(payload);
   if (commandResult.ok) return commandResult;
   if (getCommandApiBaseUrl() || commandResult.skipLegacy) {
-    return { ok: false, message: commandResult.message ?? "Vehicle check could not be submitted." };
+    return {
+      ok: false,
+      message: commandResult.message ?? "Vehicle check could not be submitted.",
+      status: commandResult.status,
+      code: commandResult.code,
+    };
   }
 
   return insertWalkaroundCheck(payload);
@@ -1114,10 +1240,7 @@ async function insertWalkaroundCheckViaCommand(payload) {
     });
   }
 
-  const clientCheckId =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `chk_${driver.id}_${vehicle.id}_${Date.now()}`;
+  const clientCheckId = resolveWalkaroundClientCheckId(payload);
 
   const submitted = await submitVehicleCheckViaCommand({
     vehicleId: vehicle.id,
@@ -1164,12 +1287,21 @@ async function insertWalkaroundCheckViaCommand(payload) {
   });
 
   if (!submitted.ok) {
-    // Prefer Command when the driver is on published duties — do not silently write to Ridova.
+    const failure = {
+      ok: false,
+      message: submitted.message,
+      status: submitted.status,
+      code: submitted.code,
+    };
+    // Prefer Command when it is configured — do not silently write to Ridova.
+    if (getCommandApiBaseUrl()) {
+      return { ...failure, skipLegacy: true };
+    }
     const commandVehicles = await listAssignableVehiclesFromCommand();
     if (commandVehicles.length > 0) {
-      return { ok: false, skipLegacy: true, message: submitted.message };
+      return { ...failure, skipLegacy: true };
     }
-    return { ok: false, skipLegacy: false, message: submitted.message };
+    return { ...failure, skipLegacy: false };
   }
 
   discardWalkaroundDraft(driver, vehicle.id);
@@ -1232,6 +1364,7 @@ async function insertWalkaroundCheck(payload) {
     gps,
     startedAt,
     driverSignatureDataUrl,
+    session,
   } = payload;
 
   const items = checklist.items;
@@ -1318,12 +1451,12 @@ async function insertWalkaroundCheck(payload) {
 
   if (checkError || !checkRow) {
     if (!navigator.onLine) {
-      enqueueWalkaroundSubmission(
-        driver.id,
-        payload,
-        driver.organisation_id ?? driver.organisationId,
-        driver.user_id ?? driver.id,
-      );
+      try {
+        const { companyId, membershipId } = requireDriverWorkspaceScope(driver, session);
+        await enqueueWalkaroundSubmission(driver.id, payload, companyId, membershipId);
+      } catch (error) {
+        return { ok: false, queued: false, message: error.message, code: error.code };
+      }
       discardWalkaroundDraft(driver, vehicle.id);
       return {
         ok: true,
@@ -1351,37 +1484,51 @@ async function insertWalkaroundCheck(payload) {
   };
 }
 
-export async function flushPendingWalkaroundSubmissions(driver) {
-  const companyId = driver.organisation_id ?? driver.organisationId;
-  const membershipId = driver.user_id ?? driver.id;
-  const queue = loadSyncQueue(driver.id, companyId, membershipId);
+export async function flushPendingWalkaroundSubmissions(driver, session = null) {
+  let companyId;
+  let membershipId;
+  try {
+    ({ companyId, membershipId } = requireDriverWorkspaceScope(driver, session));
+  } catch {
+    return { synced: 0, remaining: null, status: "CONTEXT_UNAVAILABLE", code: "OFFLINE_CONTEXT_NOT_READY" };
+  }
+  const queue = await loadSyncQueue(driver.id, companyId, membershipId);
   if (!queue.length || !navigator.onLine) {
     return { synced: 0, remaining: queue.length };
   }
 
   let synced = 0;
   for (const item of queue) {
+    if (!isWalkaroundAutoReplayEligible(item)) continue;
     if (item.companyId && companyId && item.companyId !== companyId) {
       continue;
     }
-    const hydrated = await hydrateWalkaroundPayloadMedia(item.payload);
+    const hydrated = await hydrateWalkaroundPayloadMedia(item.payload, { companyId, membershipId });
     let result = await insertWalkaroundCheckViaCommand(hydrated);
     if (!result.ok && !getCommandApiBaseUrl() && !result.skipLegacy) {
       result = await insertWalkaroundCheck(hydrated);
     }
     if (result.ok && !result.queued) {
-      dequeueWalkaroundSubmission(driver.id, item.id, companyId, membershipId);
+      await dequeueWalkaroundSubmission(driver.id, item.id, companyId, membershipId);
       await releaseWalkaroundPayloadMedia(item.payload).catch(() => {});
       synced += 1;
     } else if (!result.ok) {
+      if (isPermanentOpsFailure(result)) {
+        await markWalkaroundReconciliation(driver.id, item.id, companyId, membershipId, {
+          status: result.status,
+          code: result.code ?? null,
+          message: result.message ?? "Command rejected this vehicle check.",
+        });
+        continue;
+      }
       break;
     }
   }
 
-  return { synced, remaining: loadSyncQueue(driver.id, companyId, membershipId).length };
+  return { synced, remaining: (await loadSyncQueue(driver.id, companyId, membershipId)).length };
 }
 
-export function getPendingSyncCount(driverId, companyId, membershipId) {
+export async function getPendingSyncCount(driverId, companyId, membershipId) {
   return countPendingOfflineCommands(driverId, companyId, membershipId);
 }
 
@@ -1398,6 +1545,21 @@ function formatCheckResultLabel(result) {
 
 async function signDriverPhotoPath(supabase, path) {
   if (!path) return null;
+  // F-13 — prefer Command tenant-scoped signed URL; fall back to Supabase only if Command unavailable.
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (token && getCommandApiBaseUrl()) {
+      const signed = await commandCreateSignedUrl(token, {
+        bucket: "defect-photos",
+        storageKey: path,
+        expiresInSeconds: 3600,
+      });
+      if (signed.ok && signed.url) return signed.url;
+    }
+  } catch {
+    // fall through
+  }
   const { data, error } = await supabase.storage.from("defect-photos").createSignedUrl(path, 3600);
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;

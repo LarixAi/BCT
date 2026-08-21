@@ -15,8 +15,6 @@ interface AuthContextValue {
     mfaChallengeId?: string
     devMfaCode?: string
     pendingCompanyId?: string | null
-    accessToken?: string
-    refreshToken?: string
     memberships: TenantMembershipOption[]
     tenantStatus?: string | null
   }>
@@ -38,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [switching, setSwitching] = useState(false)
 
   const refreshUser = useCallback(async () => {
-    if (!api.getToken() || !api.hasTenant()) {
+    if (!api.hasAuthSession() || !api.hasTenant()) {
       setUser(null)
       return
     }
@@ -51,21 +49,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.activeTenantId])
 
   useEffect(() => {
-    if (!api.getToken()) {
-      setLoading(false)
-      return
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (typeof api.getSessionStatus === 'function') {
+          const status = await api.getSessionStatus()
+          if (cancelled) return
+          if (!status.authenticated) {
+            setUser(null)
+            return
+          }
+          if (!status.hasTenant) {
+            setUser(null)
+            return
+          }
+          await refreshUser()
+        } else if (api.hasAuthSession() && api.hasTenant()) {
+          await refreshUser()
+        } else {
+          setUser(null)
+        }
+      } catch {
+        if (!cancelled) {
+          api.clearToken()
+          setUser(null)
+          clearWorkspaceClientState(queryClient, { reason: 'session-expired' })
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-    if (!api.hasTenant()) {
-      setLoading(false)
-      return
-    }
-    refreshUser()
-      .catch(() => {
-        api.clearToken()
-        setUser(null)
-        clearWorkspaceClientState(queryClient, { reason: 'session-expired' })
-      })
-      .finally(() => setLoading(false))
   }, [refreshUser])
 
   const login = useCallback(async (email: string, password: string, rememberMe = false) => {
@@ -83,7 +99,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     if (result.requiresTenantSelection) {
-      if (result.accessToken) api.setToken(result.accessToken, false)
       if (result.memberships?.length) api.setPendingMemberships(result.memberships)
       clearWorkspaceClientState(queryClient, { reason: 'login' })
       return {
@@ -91,14 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         memberships: result.memberships ?? [],
       }
     }
-    if (result.accessToken) {
-      clearWorkspaceClientState(queryClient, { reason: 'login' })
-      api.setToken(result.accessToken, true)
-      if (result.user) {
-        setUser(result.user)
-      } else {
-        await refreshUser()
-      }
+    clearWorkspaceClientState(queryClient, { reason: 'login' })
+    if (result.user) {
+      setUser(result.user)
+    } else {
+      await refreshUser()
     }
     return {
       requiresTenantSelection: false,
@@ -119,17 +131,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     if (result.requiresTenantSelection) {
       const memberships = 'memberships' in result ? result.memberships : undefined
-      if (result.accessToken) api.setToken(result.accessToken, false)
       if (Array.isArray(memberships) && memberships.length) api.setPendingMemberships(memberships)
       clearWorkspaceClientState(queryClient, { reason: 'login' })
       throw Object.assign(new Error('Select a company'), { requiresTenantSelection: true })
     }
-    if (result.accessToken) {
-      clearWorkspaceClientState(queryClient, { reason: 'login' })
-      api.setToken(result.accessToken, true)
-      if (result.user) setUser(result.user)
-      else await refreshUser()
-    }
+    clearWorkspaceClientState(queryClient, { reason: 'login' })
+    if (result.user) setUser(result.user)
+    else await refreshUser()
   }, [refreshUser])
 
   const selectTenant = useCallback(async (tenantId: string) => {
@@ -142,17 +150,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         reason: fromCompanyId ? 'company-switch' : 'company-select',
       })
       const result = await api.selectTenant(tenantId)
-      api.setToken(result.accessToken, true)
-      setUser(result.user)
+      if (result.user) setUser(result.user)
+      else await refreshUser()
     } finally {
       setSwitching(false)
     }
-  }, [user?.activeTenantId])
+  }, [user?.activeTenantId, refreshUser])
 
   const logout = useCallback(() => {
     const fromCompanyId = user?.activeTenantId ?? null
     clearWorkspaceClientState(queryClient, { fromCompanyId, reason: 'logout' })
-    api.clearToken()
+    void (typeof api.logoutRemote === 'function' ? api.logoutRemote() : Promise.resolve(api.clearToken()))
     setUser(null)
   }, [user?.activeTenantId])
 

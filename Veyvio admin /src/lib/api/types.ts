@@ -1,3 +1,5 @@
+import type { OperationalException } from '@/lib/types'
+
 export interface AuthUser {
   id: string
   email: string
@@ -153,8 +155,9 @@ export interface LoginResponse {
 }
 
 export interface AuthTokensResponse {
-  accessToken: string
-  refreshToken: string
+  /** Wave 3E-1: omitted when cookies hold the session. */
+  accessToken?: string
+  refreshToken?: string
   user: AuthUser
 }
 
@@ -270,6 +273,19 @@ export interface IncidentRecord {
   notes?: string | null
 }
 
+export interface VehicleSwapRequestRecord {
+  id: string
+  dutyId: string
+  driverId: string
+  currentVehicleId: string
+  requestedVehicleId: string
+  reason: string
+  status: string
+  requestedAt: string
+  resolvedAt?: string | null
+  resolutionNotes?: string | null
+}
+
 export interface VehicleCheckRecord {
   id: string
   checkDate: string
@@ -293,10 +309,25 @@ export interface ComplianceItemRecord {
 }
 
 export interface ComplianceAutomationSettings {
-  warnDaysBeforeExpiry: number
-  blockAssignmentOnExpired: boolean
-  autoUnassignOnExpired: boolean
-  notifyRoles: string[]
+  warnDaysBeforeExpiry?: number
+  blockAssignmentOnExpired?: boolean
+  autoUnassignOnExpired?: boolean
+  notifyRoles?: string[]
+  blockExpiredLicence?: boolean
+  blockExpiredCpc?: boolean
+  blockExpiredDbs?: boolean
+  blockExpiredMedical?: boolean
+  blockExpiredMot?: boolean
+  blockExpiredInsurance?: boolean
+  blockExpiredTax?: boolean
+  blockExpiredPmi?: boolean
+  blockOverdueService?: boolean
+  blockOverdueTyreRetorque?: boolean
+  blockCriticalDefects?: boolean
+  blockVorVehicles?: boolean
+  requireTodaysCheckOnSignOn?: boolean
+  defectAutomationEnabled?: boolean
+  defectAutomationRules?: unknown[]
 }
 
 export interface MessageRecord {
@@ -450,6 +481,21 @@ export interface IntegrationRecord {
   provider: string
   status: string
   lastSyncAt?: string | null
+}
+
+export interface IntegrationApiKeyRecord {
+  id: string
+  companyId?: string
+  name: string
+  keyPrefix: string
+  scopes: string[]
+  status: string
+  expiresAt?: string | null
+  lastUsedAt?: string | null
+  createdAt?: string | null
+  revokedAt?: string | null
+  /** Present only once, immediately after create. */
+  secret?: string
 }
 
 export interface AuditLogRecord {
@@ -609,4 +655,35 @@ export interface DutyTrackResponse {
     stopOrder: number
     arrivedAt: string | null
   }>
+}
+
+export type RaiseExceptionInput = {
+  title: string
+  description?: string
+  severity?: string
+  category?: string
+  typeCode?: string
+  relatedRecord?: string
+  relatedHref?: string
+  depotId?: string | null
+  actorName?: string
+}
+
+/** Shared Command exceptions contract — real and mock adapters must both implement this. */
+export interface ExceptionsPort {
+  getExceptions(params?: { status?: string; openOnly?: boolean }): Promise<OperationalException[]>
+  getException(id: string): Promise<OperationalException>
+  raiseException(input: RaiseExceptionInput): Promise<OperationalException>
+  acknowledgeException(id: string, input?: { notes?: string; actorName?: string }): Promise<OperationalException>
+  assignException(
+    id: string,
+    input?: { assigneeUserId?: string; assigneeName?: string; actorName?: string },
+  ): Promise<OperationalException>
+  investigateException(id: string, input?: { actorName?: string }): Promise<OperationalException>
+  escalateException(id: string, input?: { reason?: string; actorName?: string }): Promise<OperationalException>
+  closeException(
+    id: string,
+    input?: { resolution?: string; dismiss?: boolean; actorName?: string },
+  ): Promise<OperationalException>
+  addExceptionNote(id: string, input: { body: string; actorName?: string }): Promise<OperationalException>
 }

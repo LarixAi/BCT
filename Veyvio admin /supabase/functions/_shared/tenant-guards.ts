@@ -126,6 +126,7 @@ export function moduleForApiPath(path: string): string | null {
     p.startsWith('duties') ||
     p.startsWith('exceptions') ||
     p.startsWith('live-operations') ||
+    p.startsWith('interests') ||
     p === 'dashboard' ||
     p === '' ||
     p === 'overview'

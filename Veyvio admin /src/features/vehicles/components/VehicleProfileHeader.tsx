@@ -9,6 +9,7 @@ import {
 import type { VehicleProfile } from '@/lib/vehicles/types'
 import { VehicleReadinessCard } from './VehicleReadinessCard'
 import { VehicleStatusStrip } from './VehicleStatusStrip'
+import { VehicleThumb } from './VehicleThumb'
 
 export function VehicleProfileHeader({
   vehicle,
@@ -28,9 +29,14 @@ export function VehicleProfileHeader({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-lg font-semibold text-ink-soft">
-            {vehicle.registrationNumber.slice(0, 2)}
-          </div>
+          <VehicleThumb
+            registrationNumber={vehicle.registrationNumber}
+            vehicleCategory={vehicle.vehicleCategory}
+            make={vehicle.make}
+            model={vehicle.model}
+            modelYear={vehicle.modelYear}
+            size="lg"
+          />
           <div>
             <p className="text-sm font-medium text-command-600">{vehicle.reference}</p>
             <h1 className="text-2xl font-semibold text-ink">{vehicle.registrationNumber}</h1>

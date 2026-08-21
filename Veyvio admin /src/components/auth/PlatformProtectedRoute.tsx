@@ -15,7 +15,7 @@ export function PlatformProtectedRoute() {
     )
   }
 
-  if (!api.getToken()) {
+  if (!api.hasAuthSession()) {
     return <Navigate to="/login" replace />
   }
 

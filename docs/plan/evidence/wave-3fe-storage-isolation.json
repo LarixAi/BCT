@@ -1,0 +1,420 @@
+{
+  "generated_at": "2026-08-21T06:37:27.018Z",
+  "fix": "Wave-3F-E-storage-isolation",
+  "api": "http://127.0.0.1:54321",
+  "buckets": {
+    "tenant": [
+      "driver-documents",
+      "defect-photos",
+      "incident-evidence",
+      "lost-property-photos",
+      "vehicle-documents"
+    ],
+    "service_only": [
+      "executive-documents"
+    ]
+  },
+  "summary": {
+    "total": 66,
+    "pass": 66,
+    "fail": 0
+  },
+  "results": [
+    {
+      "phase": "meta",
+      "name": "authority_note",
+      "ok": true,
+      "detail": "JWT probes for tenant isolation; service_role for fixture upload + structural signed-URL creation only"
+    },
+    {
+      "phase": "setup",
+      "name": "seed_orgs",
+      "ok": true,
+      "detail": "A=ef76fbf5-4db2-4c26-b3d0-9af5601fe16d B=dc0e9767-f14f-4966-8604-481d912b9d5c"
+    },
+    {
+      "phase": "auth",
+      "name": "login_A",
+      "ok": true,
+      "detail": "jwt issued"
+    },
+    {
+      "phase": "auth",
+      "name": "login_B",
+      "ok": true,
+      "detail": "jwt issued"
+    },
+    {
+      "phase": "setup",
+      "name": "driver-documents_service_upload_A",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "setup",
+      "name": "driver-documents_service_upload_B",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "driver-documents_A_select_own_object",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "driver-documents_A_cannot_select_B_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "driver-documents_B_cannot_select_A_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "driver-documents_A_list_own_prefix",
+      "ok": true,
+      "detail": "status=200 names=[\"wave3f-storage-probe.txt\"]"
+    },
+    {
+      "phase": "select",
+      "name": "driver-documents_A_cannot_list_B_prefix",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "driver-documents_A_cannot_upload",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "delete",
+      "name": "driver-documents_A_cannot_delete",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "driver-documents_A_cannot_sign_B_path",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "driver-documents_A_sign_own_path_rls_gated",
+      "ok": true,
+      "detail": "sign=200 fetch=200 (cross-tenant sign is stop-ship)"
+    },
+    {
+      "phase": "setup",
+      "name": "defect-photos_service_upload_A",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "setup",
+      "name": "defect-photos_service_upload_B",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "defect-photos_A_select_own_object",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "defect-photos_A_cannot_select_B_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "defect-photos_B_cannot_select_A_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "defect-photos_A_list_own_prefix",
+      "ok": true,
+      "detail": "status=200 names=[\"wave3f-storage-probe.txt\"]"
+    },
+    {
+      "phase": "select",
+      "name": "defect-photos_A_cannot_list_B_prefix",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "defect-photos_A_cannot_upload",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "delete",
+      "name": "defect-photos_A_cannot_delete",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "defect-photos_A_cannot_sign_B_path",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "defect-photos_A_sign_own_path_rls_gated",
+      "ok": true,
+      "detail": "sign=200 fetch=200 (cross-tenant sign is stop-ship)"
+    },
+    {
+      "phase": "setup",
+      "name": "incident-evidence_service_upload_A",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "setup",
+      "name": "incident-evidence_service_upload_B",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "incident-evidence_A_select_own_object",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "incident-evidence_A_cannot_select_B_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "incident-evidence_B_cannot_select_A_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "incident-evidence_A_list_own_prefix",
+      "ok": true,
+      "detail": "status=200 names=[\"wave3f-storage-probe.txt\"]"
+    },
+    {
+      "phase": "select",
+      "name": "incident-evidence_A_cannot_list_B_prefix",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "incident-evidence_A_cannot_upload",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "delete",
+      "name": "incident-evidence_A_cannot_delete",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "incident-evidence_A_cannot_sign_B_path",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "incident-evidence_A_sign_own_path_rls_gated",
+      "ok": true,
+      "detail": "sign=200 fetch=200 (cross-tenant sign is stop-ship)"
+    },
+    {
+      "phase": "setup",
+      "name": "lost-property-photos_service_upload_A",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "setup",
+      "name": "lost-property-photos_service_upload_B",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "lost-property-photos_A_select_own_object",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "lost-property-photos_A_cannot_select_B_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "lost-property-photos_B_cannot_select_A_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "lost-property-photos_A_list_own_prefix",
+      "ok": true,
+      "detail": "status=200 names=[\"wave3f-storage-probe.txt\"]"
+    },
+    {
+      "phase": "select",
+      "name": "lost-property-photos_A_cannot_list_B_prefix",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "lost-property-photos_A_cannot_upload",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "delete",
+      "name": "lost-property-photos_A_cannot_delete",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "lost-property-photos_A_cannot_sign_B_path",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "lost-property-photos_A_sign_own_path_rls_gated",
+      "ok": true,
+      "detail": "sign=200 fetch=200 (cross-tenant sign is stop-ship)"
+    },
+    {
+      "phase": "setup",
+      "name": "vehicle-documents_service_upload_A",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "setup",
+      "name": "vehicle-documents_service_upload_B",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "vehicle-documents_A_select_own_object",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "vehicle-documents_A_cannot_select_B_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "vehicle-documents_B_cannot_select_A_object",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "select",
+      "name": "vehicle-documents_A_list_own_prefix",
+      "ok": true,
+      "detail": "status=200 names=[\"wave3f-storage-probe.txt\"]"
+    },
+    {
+      "phase": "select",
+      "name": "vehicle-documents_A_cannot_list_B_prefix",
+      "ok": true,
+      "detail": "status=200 count=0"
+    },
+    {
+      "phase": "insert",
+      "name": "vehicle-documents_A_cannot_upload",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "delete",
+      "name": "vehicle-documents_A_cannot_delete",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "vehicle-documents_A_cannot_sign_B_path",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "sign",
+      "name": "vehicle-documents_A_sign_own_path_rls_gated",
+      "ok": true,
+      "detail": "sign=200 fetch=200 (cross-tenant sign is stop-ship)"
+    },
+    {
+      "phase": "path",
+      "name": "org_prefix_service_upload_A",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "path",
+      "name": "org_prefix_A_select_own",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "path",
+      "name": "org_prefix_A_cannot_select_B",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "phase": "structural",
+      "name": "service_signed_url_fetch_without_jwt",
+      "ok": true,
+      "detail": "sign=200 fetch=200"
+    },
+    {
+      "phase": "setup",
+      "name": "executive-documents_service_upload_A",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "phase": "select",
+      "name": "executive-documents_A_cannot_select_via_jwt",
+      "ok": true,
+      "detail": "status=400 (service/BFF boundary)"
+    },
+    {
+      "phase": "select",
+      "name": "executive-documents_A_cannot_list_via_jwt",
+      "ok": true,
+      "detail": "status=200"
+    }
+  ]
+}

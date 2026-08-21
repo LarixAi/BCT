@@ -402,6 +402,8 @@ export interface UpdateVehicleInput {
   motExpiry?: string | null
   insuranceExpiry?: string | null
   taxExpiry?: string | null
+  tachographCalibrationExpiry?: string | null
+  nextServiceDueAt?: string | null
   /** Telematics / technology notes (Phase 1) */
   telematicsProvider?: string | null
   telematicsDeviceId?: string | null

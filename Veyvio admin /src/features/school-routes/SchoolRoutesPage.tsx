@@ -1,7 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
-import { StatusPill } from '@/components/ui/status'
+import { StatusPill, formatDate } from '@/components/ui/status'
 import { SCHOOL_ROUTE_TABS } from '@/lib/school-routes/constants'
 import { api } from '@/lib/api/client'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
@@ -18,7 +18,10 @@ export function SchoolRoutesPage() {
 
   const { data: routes = [], isLoading } = useQuery({
     queryKey: tKey(['school-routes', tab]),
-    queryFn: () => api.getSchoolRoutes({ view: tab === 'routes' ? undefined : tab }),
+    queryFn: async () => {
+      const rows = await api.getSchoolRoutes({ view: tab === 'routes' ? undefined : tab })
+      return Array.isArray(rows) ? rows : []
+    },
     enabled: tab !== 'attendance',
   })
 
@@ -99,7 +102,7 @@ export function SchoolRoutesPage() {
                     <td className="px-3 py-2">{r.directionLabel}</td>
                     <td className="px-3 py-2">{r.pupilCount}</td>
                     <td className="px-3 py-2">{r.daysLabel}</td>
-                    <td className="px-3 py-2">{r.nextService ?? '—'}</td>
+                    <td className="px-3 py-2">{formatDate(r.nextService)}</td>
                     <td className="px-3 py-2"><StatusPill status={r.status} /></td>
                   </tr>
                 ))}

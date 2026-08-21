@@ -5,7 +5,7 @@ import type {
   VehicleEquipment,
 } from "@/types/equipment";
 import type { Vehicle } from "@/types/yard";
-import { REQUIREMENTS_BY_TYPE } from "@/data/equipment-fixtures";
+import { REQUIREMENTS_BY_TYPE } from "@/domain/equipment/requirements-catalog";
 
 function ok(status: string) {
   return status === "present" || status === "complete";

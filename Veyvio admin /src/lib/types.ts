@@ -92,6 +92,8 @@ export interface OperationalException {
   audit?: ExceptionAuditEntry[]
   escalated?: boolean
   assignedToUserId?: string | null
+  /** True when this row is an operational_exceptions case (F-18 writable). */
+  durableCase?: boolean
 }
 
 export type NotificationPriority = 'urgent' | 'high' | 'normal' | 'low'

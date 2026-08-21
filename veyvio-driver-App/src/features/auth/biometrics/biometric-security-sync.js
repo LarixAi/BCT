@@ -78,8 +78,11 @@ export async function enforceRemoteDeviceSecurity(driverId) {
 
   const deviceKey = getOrCreateDeviceKey();
   const status = await commandGetDriverDeviceStatus(token, deviceKey);
-  console.log("[BIOMETRIC_DEBUG] deviceKey=" + deviceKey + " status=" + JSON.stringify(status));
-  if (!status.ok) return { revoked: false, requirePassword: false };
+  if (!status.ok) {
+    // Fail closed: drop biometric trust until Command can confirm the device.
+    await invalidateBiometricAccess(driverId).catch(() => undefined);
+    return { revoked: false, requirePassword: true };
+  }
 
   if (status.securityStatus === "revoked") {
     await invalidateBiometricAccess(driverId);

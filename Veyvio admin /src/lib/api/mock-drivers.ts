@@ -23,6 +23,7 @@ import type {
   UnlockDriverInput,
   UpdateDriverInput,
   UploadDriverDocumentInput,
+  UploadDriverPhotoInput,
 } from '@/lib/drivers/types'
 
 const now = () => new Date().toISOString()
@@ -53,6 +54,7 @@ function baseDocs(
       verifiedAt: '2025-06-01T10:00:00Z',
       rejectionReason: null,
       notes: null,
+      fileObjectId: null,
       fileName: 'driving_licence.pdf',
     },
     {
@@ -68,6 +70,7 @@ function baseDocs(
       verifiedAt: '2025-06-01T10:00:00Z',
       rejectionReason: null,
       notes: null,
+      fileObjectId: null,
       fileName: 'cpc.pdf',
     },
     {
@@ -83,6 +86,7 @@ function baseDocs(
       verifiedAt: '2025-06-01T10:00:00Z',
       rejectionReason: null,
       notes: null,
+      fileObjectId: null,
       fileName: 'dbs.pdf',
     },
     ...(medicalExpiry
@@ -100,7 +104,8 @@ function baseDocs(
             verifiedAt: '2025-06-01T10:00:00Z',
             rejectionReason: null,
             notes: null,
-            fileName: 'medical.pdf',
+            fileObjectId: null,
+      fileName: 'medical.pdf',
           },
         ]
       : []),
@@ -169,6 +174,7 @@ function buildProfile(
     | 'documentVersions'
     | 'eligibilityOverrides'
     | 'dateOfBirth'
+    | 'photoUrl'
     | 'operationalStatus'
     | 'licenceCountry'
     | 'licenceCategories'
@@ -183,6 +189,7 @@ function buildProfile(
       Pick<
         DriverProfile,
         | 'dateOfBirth'
+        | 'photoUrl'
         | 'operationalStatus'
         | 'licenceCountry'
         | 'licenceCategories'
@@ -202,6 +209,7 @@ function buildProfile(
   const nearest = nearestExpiry(partial)
   const withDefaults = {
     dateOfBirth: partial.dateOfBirth ?? null,
+    photoUrl: partial.photoUrl ?? null,
     operationalStatus: partial.operationalStatus ?? 'eligible',
     licenceCountry: partial.licenceCountry ?? 'GB',
     licenceCategories: partial.licenceCategories ?? null,
@@ -1441,6 +1449,7 @@ export const mockDriversApi = {
       verifiedAt: null,
       rejectionReason: null,
       notes: input.notes ?? null,
+      fileObjectId: null,
       fileName: input.fileName,
     }
 
@@ -1480,6 +1489,34 @@ export const mockDriversApi = {
       reason: input.fileName,
     })
 
+    profiles[idx] = updated
+    return updated
+  },
+
+  uploadPhoto(id: string, input: UploadDriverPhotoInput, actorName: string): DriverProfile {
+    const idx = profiles.findIndex((d) => d.id === id)
+    if (idx < 0) throw new Error('Driver not found')
+    const current = profiles[idx]!
+    const ts = now()
+    const raw = String(input.fileBase64 ?? '').trim()
+    const photoUrl = raw.startsWith('data:')
+      ? raw
+      : `data:${input.mimeType || 'image/jpeg'};base64,${raw}`
+
+    const updated = syncProfileEligibility({
+      ...current,
+      photoUrl,
+      updatedAt: ts,
+    })
+    appendAudit(updated, {
+      action: 'Profile photo updated',
+      actor: actorName,
+      actorRole: 'Transport manager',
+      createdAt: ts,
+      previousValue: current.photoUrl ? 'photo on file' : null,
+      newValue: input.fileName,
+      reason: null,
+    })
     profiles[idx] = updated
     return updated
   },
@@ -1630,7 +1667,8 @@ export const mockDriversApi = {
         verifiedAt: ts,
         rejectionReason: null,
         notes: input.notes ?? null,
-        fileName: `${requirementType}-certificate.pdf`,
+        fileObjectId: null,
+      fileName: `${requirementType}-certificate.pdf`,
       }
       documents = existing
         ? documents.map((d) => (d.id === existing.id ? newDoc : d))

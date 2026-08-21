@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
@@ -28,9 +28,8 @@ import type { AttendanceBoardRow, CoverCandidate, LeaveRequestRecord } from '@/l
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
 import type { DutyRecord } from '@/lib/api/types'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
-import { isOperationsDemoLayerActive, OPERATIONS_DEMO_BANNER } from '@/lib/operations/operations-data-source'
 import {
   detectScheduleConflicts,
   normalizeDutyDate,
@@ -64,11 +63,17 @@ export function SchedulePage() {
   const { operationalDateIso } = useOperationalContext()
   const [searchParams, setSearchParams] = useSearchParams()
   const workspaceMode = (searchParams.get('mode') as ScheduleWorkspaceMode) || 'planning'
+  const serviceDateFromUrl = searchParams.get('serviceDate')
   const { user } = useAuth()
   const actorName =
     [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || user?.email || 'Operations'
   const queryClient = useQueryClient()
-  const [anchor, setAnchor] = useState(operationalDateIso)
+  const [anchor, setAnchor] = useState(serviceDateFromUrl || operationalDateIso)
+
+  useEffect(() => {
+    if (serviceDateFromUrl) setAnchor(serviceDateFromUrl)
+  }, [serviceDateFromUrl])
+
   const [view, setView] = useState<ScheduleView>('day')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [attFilter, setAttFilter] = useState<ScheduleAttendanceFilter>('all')
@@ -306,13 +311,6 @@ export function SchedulePage() {
       {coverMessage && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-950">
           {coverMessage}
-        </div>
-      )}
-
-      {isOperationsDemoLayerActive() && (
-        <div className="rounded-xl border border-command-200 bg-command-50 px-4 py-3 text-sm text-command-950">
-          <p className="font-semibold">{OPERATIONS_DEMO_BANNER.title}</p>
-          <p className="mt-1 text-command-900">{OPERATIONS_DEMO_BANNER.body}</p>
         </div>
       )}
 

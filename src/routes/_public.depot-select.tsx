@@ -4,7 +4,6 @@ import { useTenancyStore } from "@/platform/tenancy/context-store";
 import { useSessionStore } from "@/platform/auth/session-store";
 import { isMockAuth } from "@/platform/auth/auth-config";
 import { commandListDepots } from "@/platform/auth/command-auth-api";
-import { depotsForCompany } from "@/data/mocks/tenancy";
 import { YardAuthOptionButton, YardMobileAuthLayout } from "@/components/auth/YardMobileAuthLayout";
 import { yardCopy } from "@/copy/yard-messages";
 import type { Depot } from "@/types/tenancy";
@@ -37,6 +36,8 @@ function DepotSelectPage() {
       setError(null);
       try {
         if (isMockAuth() || !accessToken || accessToken.startsWith("mock_")) {
+          // Dynamic import keeps mock tenancy out of the live production graph (F-03).
+          const { depotsForCompany } = await import("@/data/mocks/tenancy");
           const list = companyId ? depotsForCompany(companyId) : [];
           if (!cancelled) setDepots(list);
           return;

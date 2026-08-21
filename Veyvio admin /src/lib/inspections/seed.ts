@@ -3,7 +3,7 @@ import {
   instantiatePmiChecklist,
   type PmiChecklistInstance,
 } from '@/lib/maintenance/pmi-checklist'
-import type { InspectionProviderRow, InspectionRecord } from './types'
+import type { InspectionRecord } from './types'
 
 const daysFromNow = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString()
@@ -447,32 +447,4 @@ export function createInspectionSeed(): InspectionRecord[] {
   ]
 }
 
-export const INSPECTION_PROVIDERS: InspectionProviderRow[] = [
-  {
-    id: 'prov-internal',
-    name: 'Fleet Workshop (internal)',
-    type: 'internal',
-    approved: true,
-    services: ['Safety Inspection (PMI)', 'Post-repair', 'Return-to-service'],
-    slaHours: 48,
-    contactEmail: 'workshop@metrotransport.co.uk',
-  },
-  {
-    id: 'prov-dvsa',
-    name: 'DVSA approved test station',
-    type: 'external',
-    approved: true,
-    services: ['Annual-test preparation', 'MOT'],
-    slaHours: 72,
-    contactEmail: 'bookings@teststation.example',
-  },
-  {
-    id: 'prov-franchise',
-    name: 'Mercedes Commercial',
-    type: 'franchise',
-    approved: true,
-    services: ['Manufacturer inspection', 'Specialist equipment'],
-    slaHours: 96,
-    contactEmail: 'service@mercedes-commercial.example',
-  },
-]
+export { INSPECTION_PROVIDERS } from './providers'

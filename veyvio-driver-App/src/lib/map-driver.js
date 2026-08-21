@@ -17,10 +17,12 @@ export function mapDriverRowToRecord(row, opts = {}) {
   return {
     id: row.id,
     userId: row.user_id,
+    membershipId: row.membership_id ?? row.membershipId ?? null,
     organisationId: row.organisation_id,
     fullName: row.full_name,
     email: row.email ?? "",
     phone: row.phone ?? "",
+    profilePhotoUrl: row.profile_photo_url ?? row.profilePhotoUrl ?? null,
     licenceExpiryDate: dateField(row, "licence_expiry_date", "license_expiry", "licence_expiry"),
     dqcExpiryDate: dateField(row, "cpc_expiry_date", "cpc_expiry", "dqc_expiry"),
     dbsRequired: Boolean(row.can_do_school_runs) || workKeys.includes("school"),

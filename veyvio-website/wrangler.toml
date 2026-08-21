@@ -1,0 +1,43 @@
+name = "veyvio-website"
+main = "worker/index.ts"
+compatibility_date = "2024-08-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Non-secret defaults — override per environment in Cloudflare dashboard
+[vars]
+CRM_PROVIDER = "hubspot"
+EMAIL_PROVIDER = "resend"
+SALES_EMAIL = "info@veyvio.co.uk"
+
+# Secrets (set via `wrangler secret put`):
+# HUBSPOT_ACCESS_TOKEN
+# RESEND_API_KEY
+# DEMO_FROM_EMAIL
+# DEMO_NOTIFY_EMAIL
+# CALENDAR_BOOKING_URL
+
+# Waiting-list / demo enquiry persistence (F-03 TD-025)
+[[kv_namespaces]]
+binding = "DEMO_LEADS"
+id = "6b16dc76631a40168b65bf75d59e8b51"
+preview_id = "8b0ee28f3dd4487da2a399a21e525609"
+
+[observability]
+enabled = true
+
+[env.staging]
+name = "veyvio-website-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+CRM_PROVIDER = "hubspot"
+EMAIL_PROVIDER = "resend"
+SALES_EMAIL = "info@veyvio.co.uk"
+
+[[env.staging.kv_namespaces]]
+binding = "DEMO_LEADS"
+id = "cdac66be3ab4403784e6690c8f285c23"

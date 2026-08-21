@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClientInstance } from "@/lib/query-client";
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import DriverApp from "@/pages/driver/DriverApp";
+import NavigationConfirmDialog from "@/components/driver/NavigationConfirmDialog";
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         </Routes>
         <Toaster />
         <HotToaster position="top-center" toastOptions={{ duration: 5000 }} />
+        <NavigationConfirmDialog />
       </Router>
     </QueryClientProvider>
   );

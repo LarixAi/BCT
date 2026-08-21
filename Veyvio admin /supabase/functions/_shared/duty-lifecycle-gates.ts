@@ -47,7 +47,10 @@ export function evaluateDutyLifecycleTransition(
       }
     }
     if (signedOn) return { ok: true }
-    if (acknowledgementRequired && !isTruthy(options.acknowledged)) {
+    // Lifecycle already past acknowledgement counts even when the ack row's
+    // revision lags duties.version (global version bump on the ack UPDATE).
+    const lifecycleAcknowledged = lifecycle === 'acknowledged' || lifecycle === 'in_progress'
+    if (acknowledgementRequired && !isTruthy(options.acknowledged) && !lifecycleAcknowledged) {
       return {
         ok: false,
         code: 'acknowledgement_required',

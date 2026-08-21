@@ -47,7 +47,7 @@ export function evaluateMoveChecks(input: {
     checks.push({
       level: 'info',
       code: 'new_run',
-      message: 'A new run will be created for the selected journeys (demo).',
+      message: 'A new run will be created for the selected journeys.',
     })
   }
 

@@ -5,7 +5,7 @@ import { AuthLayout, authInputClass, authLinkClass, authPrimaryButtonClass } fro
 import { SectionCard } from '@/components/ui'
 import { AuthenticatorQr } from '@/features/auth/AuthenticatorQr'
 import { api, isMockApi } from '@/lib/api'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 
@@ -225,7 +225,6 @@ export function InviteUsersPage() {
 }
 
 export function AcceptInvitationPage() {
-  const navigate = useNavigate()
   const [params] = useSearchParams()
   const token = params.get('token') ?? ''
   const [firstName, setFirstName] = useState('')
@@ -241,9 +240,21 @@ export function AcceptInvitationPage() {
     enabled: Boolean(token),
     retry: false,
   })
-
-  const isDriverInvite = preview.data?.appType === 'DRIVER'
-  const isYardInvite = preview.data?.appType === 'YARD'
+  const appType = preview.data?.appType ?? done?.appType
+  const appLabel =
+    appType === 'DRIVER'
+      ? 'Driver'
+      : appType === 'YARD'
+        ? 'Yard'
+        : appType === 'FINANCE'
+          ? 'Finance'
+          : appType === 'HR'
+            ? 'HR'
+            : appType === 'EXECUTIVE'
+              ? 'Executive'
+              : appType === 'COMMAND'
+                ? 'Command'
+                : 'Command'
 
   useEffect(() => {
     if (!preview.data) return
@@ -258,9 +269,7 @@ export function AcceptInvitationPage() {
     try {
       const result = await api.acceptInvitation({ token, firstName, lastName, password })
       setDone({ email: result.email, appType: result.appType })
-      if (result.appType !== 'DRIVER' && result.appType !== 'YARD') {
-        navigate('/login')
-      }
+      // Stay on the success panel so the invitee sees where to sign in next.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invitation could not be accepted')
     } finally {
@@ -268,18 +277,11 @@ export function AcceptInvitationPage() {
     }
   }
 
-  const acceptTitle = isDriverInvite
-    ? 'Set up Veyvio Driver access'
-    : isYardInvite
-      ? 'Set up Veyvio Yard access'
-      : 'Accept invitation'
+  const acceptTitle =
+    appType && appType !== 'COMMAND' ? `Set up Veyvio ${appLabel} access` : 'Accept invitation'
 
   const acceptSubtitle = preview.data
-    ? isDriverInvite
-      ? `Create your Driver login for ${preview.data.companyName}`
-      : isYardInvite
-        ? `Create your Yard login for ${preview.data.companyName}`
-        : `Join ${preview.data.companyName}`
+    ? `Create your ${appLabel} login for ${preview.data.companyName}`
     : 'Create your account from a secure invitation.'
 
   return (
@@ -292,8 +294,9 @@ export function AcceptInvitationPage() {
             Login created for <strong>{done.email}</strong>. Your Driver app account is now linked.
           </p>
           <p>
-            You can sign in with this email and password once the Driver app is available to you.
-            An administrator may still need to activate the account before you can start duty.
+            We have sent a confirmation email to <strong>{done.email}</strong>. Sign in on Veyvio Driver with that
+            email and the password you just chose. An administrator may still need to activate the account before
+            you can start duty.
           </p>
           <Link to="/login" className="inline-flex rounded-lg bg-command-600 px-4 py-2.5 text-sm font-semibold text-white">
             Continue to Command sign-in
@@ -310,29 +313,39 @@ export function AcceptInvitationPage() {
           </p>
         </div>
       ) : null}
+      {done && done.appType !== 'DRIVER' && done.appType !== 'YARD' ? (
+        <div className="space-y-3 text-sm text-ink-soft">
+          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">
+            Login created for <strong>{done.email}</strong>.
+          </p>
+          <p>
+            {done.appType === 'FINANCE'
+              ? 'Sign in on Veyvio Finance / Cost Control with this email and password.'
+              : done.appType === 'EXECUTIVE'
+                ? 'Sign in on Veyvio Executive with this email and password (MFA will be required).'
+                : done.appType === 'HR'
+                  ? 'Your HR application grant is active. Sign in on Command for now — the HR app is not live yet.'
+                  : 'Sign in on Veyvio Command with this email and password. Privileged roles may be asked to set up MFA.'}
+          </p>
+          <Link to="/login" className="inline-flex rounded-lg bg-command-600 px-4 py-2.5 text-sm font-semibold text-white">
+            Continue to sign-in
+          </Link>
+        </div>
+      ) : null}
       {preview.data && !done && (
         <form onSubmit={handleSubmit} className="space-y-3">
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
           <p className="text-sm text-ink-soft">
-            Invited as <strong>{preview.data.email}</strong>
-            {isDriverInvite ? ' · Driver app' : isYardInvite ? ' · Yard app' : ' · Command'}
+            Invited as <strong>{preview.data.email}</strong> · Veyvio {appLabel}
           </p>
-          {(isDriverInvite || isYardInvite) ? (
-            <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-soft">
-              Choose your own password. Administrators cannot see or set it. This link is single-use and expires soon.
-            </p>
-          ) : null}
+          <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-soft">
+            Choose your own password. Administrators cannot see or set it. This link is single-use and expires soon.
+          </p>
           <Field label="First name" value={firstName} onChange={setFirstName} required />
           <Field label="Last name" value={lastName} onChange={setLastName} required />
           <Field label="Password (min 12 characters)" value={password} onChange={setPassword} type="password" required />
           <button type="submit" disabled={loading} className={authPrimaryButtonClass}>
-            {loading
-              ? 'Creating account…'
-              : isDriverInvite
-                ? 'Create Driver login'
-                : isYardInvite
-                  ? 'Create Yard login'
-                  : 'Create account'}
+            {loading ? 'Creating account…' : `Create ${appLabel} login`}
           </button>
         </form>
       )}

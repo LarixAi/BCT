@@ -19,6 +19,7 @@ import {
   type DispatchControlAction,
 } from '@/features/dispatch/DispatchControlsPanel'
 import { DispatchSidePanels } from '@/features/dispatch/DispatchSidePanels'
+import { VehicleSwapApprovalPanel } from '@/features/dispatch/VehicleSwapApprovalPanel'
 import {
   listActiveRuns,
   listDispatchExceptions,
@@ -111,12 +112,102 @@ export function DispatchPage() {
     enabled: !!companyId,
   })
 
+  const {
+    data: dashboard,
+    isError: dashboardError,
+    isFetching: dashboardFetching,
+  } = useQuery({
+    queryKey: tKey(['dashboard']),
+    queryFn: () => api.getDashboard(),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: defects = [],
+    isError: defectsError,
+    isFetching: defectsFetching,
+  } = useQuery({
+    queryKey: tKey(['defects', 'open']),
+    queryFn: () => api.getDefects({ status: 'open' }),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: incidents = [],
+    isError: incidentsError,
+    isFetching: incidentsFetching,
+  } = useQuery({
+    queryKey: tKey(['incidents', 'open']),
+    queryFn: () => api.getIncidents({ status: 'open' }),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: durableExceptions = [],
+    isError: exceptionsError,
+    isFetching: exceptionsFetching,
+  } = useQuery({
+    queryKey: tKey(['exceptions', 'open']),
+    queryFn: () => api.getExceptions(),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: driverEligibilityExceptions = [],
+    isError: driverExceptionsError,
+  } = useQuery({
+    queryKey: tKey(['driver-eligibility-exceptions']),
+    queryFn: () => api.getDriverEligibilityExceptions(),
+    enabled: !!companyId,
+  })
+
+  const {
+    data: vehicleReleaseExceptions = [],
+    isError: vehicleExceptionsError,
+  } = useQuery({
+    queryKey: tKey(['vehicle-release-exceptions']),
+    queryFn: () => api.getVehicleReleaseExceptions(),
+    enabled: !!companyId,
+  })
+
+  const exceptionsUnavailable =
+    dashboardError ||
+    defectsError ||
+    incidentsError ||
+    exceptionsError ||
+    driverExceptionsError ||
+    vehicleExceptionsError
+
+  const exceptionsLoading =
+    dashboardFetching || defectsFetching || incidentsFetching || exceptionsFetching
+
   const activeRuns = useMemo(() => listActiveRuns(duties), [duties])
   const lateJobs = useMemo(() => listLateJobs(opsTrips), [opsTrips])
   const urgentJobs = useMemo(() => listUrgentUnassignedJobs(opsTrips), [opsTrips])
   const dispatchExceptions = useMemo(
-    () => listDispatchExceptions(buildExceptionsInbox({ includeCatalog: true })),
-    [],
+    () =>
+      exceptionsUnavailable
+        ? []
+        : listDispatchExceptions(
+            buildExceptionsInbox({
+              alerts: dashboard?.alerts,
+              defects,
+              incidents,
+              driverExceptions: driverEligibilityExceptions,
+              vehicleExceptions: vehicleReleaseExceptions,
+              apiExceptions: durableExceptions,
+              includeCatalog: false,
+            }),
+          ),
+    [
+      exceptionsUnavailable,
+      dashboard,
+      defects,
+      incidents,
+      driverEligibilityExceptions,
+      vehicleReleaseExceptions,
+      durableExceptions,
+    ],
   )
 
   const selectedDuty = duties.find((d) => d.id === selectedDutyId) ?? null
@@ -297,6 +388,16 @@ export function DispatchPage() {
 
   const liveVehicles = liveData?.vehicles ?? []
   const unassignedCount = dutiesForColumn(duties, 'unassigned').length
+  const blockedDutyCount = useMemo(() => {
+    return duties.filter((duty) => {
+      const { blocks } = complianceForDuty(duty)
+      return blocks.length > 0
+    }).length
+  }, [duties, drivers, vehicles])
+  const safeguardingJobCount = useMemo(
+    () => urgentJobs.filter((job) => job.reason.toLowerCase().includes('safeguarding')).length,
+    [urgentJobs],
+  )
 
   return (
     <div className="space-y-6">
@@ -341,11 +442,38 @@ export function DispatchPage() {
         ))}
       </div>
 
-      {unassignedCount > 0 && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-          {unassignedCount} {unassignedCount === 1 ? 'duty' : 'duties'} still unassigned for this date.
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-amber-900">Unassigned duties</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-amber-950">{unassignedCount}</p>
+        </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-red-900">Blocked assignments</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-red-950">{blockedDutyCount}</p>
+        </div>
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-violet-900">Safeguarding jobs</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-violet-950">{safeguardingJobCount}</p>
+        </div>
+        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-orange-900">Late jobs</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-orange-950">{lateJobs.length}</p>
+        </div>
+      </div>
+
+      <VehicleSwapApprovalPanel duties={duties} drivers={drivers} vehicles={vehicles} />
+
+      {exceptionsUnavailable ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
+          Dispatch exception data is currently unavailable.
+          {exceptionsLoading ? ' Retrying…' : ''}
         </p>
-      )}
+      ) : dispatchExceptions.length > 0 ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-900">
+          {dispatchExceptions.length} critical dispatch{' '}
+          {dispatchExceptions.length === 1 ? 'exception' : 'exceptions'} need attention.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="space-y-4">
@@ -521,6 +649,7 @@ export function DispatchPage() {
             activeRuns={activeRuns}
             lateJobs={lateJobs}
             exceptions={dispatchExceptions}
+            exceptionsUnavailable={exceptionsUnavailable}
             messages={messages}
             urgentJobs={urgentJobs}
             selectedDutyId={selectedDutyId}

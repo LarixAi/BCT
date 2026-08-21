@@ -43,6 +43,24 @@ if (env.VITE_MOCK_API === undefined && env.VITE_USE_MOCK_API === undefined) {
   // live-by-default — OK
 }
 
+// Wave 3E-1: production SPA must use same-origin BFF, not direct Supabase token custody.
+const apiUrl = String(env.VITE_API_URL ?? '').trim()
+if (apiUrl && !apiUrl.startsWith('/api/command') && /supabase\.co/i.test(apiUrl)) {
+  errors.push(
+    'VITE_API_URL must be /api/command (same-origin Pages Functions BFF) in production — not a direct Supabase command-api URL',
+  )
+}
+if (!apiUrl || apiUrl === '/api/command') {
+  // OK — relative BFF
+} else if (apiUrl.startsWith('/api/command')) {
+  // OK
+} else if (!/supabase\.co/i.test(apiUrl)) {
+  // Non-supabase absolute URLs still rejected for Command production custody.
+  if (apiUrl.startsWith('http')) {
+    errors.push('VITE_API_URL must be the same-origin path /api/command for production Command builds')
+  }
+}
+
 const testAdmin = (env.VEYVIO_PLATFORM_BOOTSTRAP_EMAIL ?? '').toLowerCase()
 if (testAdmin === 'admin@veyvio.test') {
   errors.push('VEYVIO_PLATFORM_BOOTSTRAP_EMAIL must not be admin@veyvio.test in production')

@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn'
+import { formatUkDate } from '@/lib/uk-locale'
 
 const STATUS_STYLES: Record<string, string> = {
   on_duty: 'bg-ready/15 text-ready',
@@ -130,10 +131,5 @@ export function expiryTone(date: string | null | undefined): 'ok' | 'warning' | 
 }
 
 export function formatDate(date: string | null | undefined) {
-  if (!date) return '—'
-  return new Date(date).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
+  return formatUkDate(date)
 }

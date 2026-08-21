@@ -12,7 +12,7 @@ import { StaffTrainingTab } from './StaffTrainingTab'
 import { StaffAvailabilityTab } from './StaffAvailabilityTab'
 import { StaffFormerTab } from './StaffFormerTab'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 

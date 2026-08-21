@@ -32,7 +32,7 @@ export function isDriverAuthCallbackUrl(urlString) {
       return true;
     }
 
-    // Custom scheme: com.coresupport.fleet.driver://verify or …://auth/verify
+    // Custom scheme: uk.veyvio.driver://verify or …://auth/verify
     const isNativeScheme =
       url.protocol === `${DRIVER_NATIVE_AUTH_SCHEME}:` ||
       urlString.startsWith(`${DRIVER_NATIVE_AUTH_SCHEME}:`);
@@ -171,14 +171,71 @@ export async function driverHandleAuthDeepLink(urlString) {
   return route;
 }
 
+/**
+ * Map custom-scheme / https deep links to in-app routes (sync, duty, handback, …).
+ * Auth callbacks are handled separately and take priority.
+ */
+export function driverAppRouteFromUrl(urlString) {
+  if (!urlString || isDriverAuthCallbackUrl(urlString)) return null;
+
+  try {
+    const url = new URL(urlString);
+    const isNativeScheme =
+      url.protocol === `${DRIVER_NATIVE_AUTH_SCHEME}:` ||
+      urlString.startsWith(`${DRIVER_NATIVE_AUTH_SCHEME}:`);
+
+    if (isNativeScheme) {
+      const host = (url.hostname || "").toLowerCase()
+      const pathPart = (url.pathname || "").replace(/\/+$/, "")
+      // uk.veyvio.driver://sync  → host=sync
+      // uk.veyvio.driver:///sync → pathname=/sync
+      const combined = (host ? `/${host}${pathPart}` : pathPart || "/")
+        .replace(/\/+/g, "/")
+        .replace(/\/$/, "") || "/"
+      if (combined === "/" || combined === "/auth") return null
+      // Allowlist operational routes used by Gate 1 handset + notifications
+      const allowed =
+        combined === "/sync" ||
+        combined === "/duty" ||
+        combined === "/check" ||
+        combined === "/defects" ||
+        combined === "/contact" ||
+        combined === "/notifications" ||
+        combined === "/messages" ||
+        combined === "/more" ||
+        combined === "/vehicle" ||
+        combined.startsWith("/vehicle/") ||
+        combined.startsWith("/job/") ||
+        combined.startsWith("/jobs")
+      if (allowed) return combined
+      return null
+    }
+
+    // Capacitor WebView uses https://localhost — that is the SPA itself, not a
+    // launch intent. Never treat restored paths like /documents as deep links.
+    // Auth callbacks on localhost still go through driverHandleAuthDeepLink.
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+      return null;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export function installDriverAuthDeepLink(onNavigate) {
   if (!isDriverNativeApp()) return () => {};
 
   let disposed = false;
 
   async function handle(urlString) {
-    const route = await driverHandleAuthDeepLink(urlString);
-    if (route && !disposed) onNavigate(route);
+    const authRoute = await driverHandleAuthDeepLink(urlString);
+    if (authRoute && !disposed) {
+      onNavigate(authRoute);
+      return;
+    }
+    const appRoute = driverAppRouteFromUrl(urlString);
+    if (appRoute && !disposed) onNavigate(appRoute);
   }
 
   void App.getLaunchUrl().then((result) => {

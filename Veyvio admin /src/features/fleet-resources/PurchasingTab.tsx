@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { FleetResourcesHubData } from '@/lib/fleet-resources/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 
@@ -43,7 +43,7 @@ export function PurchasingTab({ hub }: { hub: FleetResourcesHubData }) {
             {hub.purchaseRequests.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-muted">
-                  No purchase requests.
+                  No purchase requests from Command. Purchasing is not filled with demo spend.
                 </td>
               </tr>
             ) : (

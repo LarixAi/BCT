@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
 import { StatusPill } from '@/components/ui/status'
+import { VehicleThumb } from '@/features/vehicles/components/VehicleThumb'
 import { RELEASE_STATUS_LABELS } from '@/lib/checks/constants'
 import type { ChecksOperationalRow } from '@/lib/checks/types'
+import { formatUkTime } from '@/lib/uk-locale'
 
 export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperationalRow[]; showActions?: boolean }) {
   if (rows.length === 0) {
@@ -22,46 +24,57 @@ export function ChecksTable({ rows, showActions = true }: { rows: ChecksOperatio
             urgencyScore >= 80 ? 'border-red-300 bg-red-50/60' : urgencyScore >= 40 ? 'border-amber-200 bg-amber-50/40' : 'border-border bg-surface'
           }`}
         >
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-wrap items-start gap-4">
+            <VehicleThumb
+              registrationNumber={row.registrationNumber}
+              vehicleCategory={row.vehicleCategory}
+              makeModel={row.makeModel}
+              modelYear={row.modelYear}
+              size="md"
+            />
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <Link to={`/vehicle-checks/${row.checkId}`} className="text-base font-semibold text-command-700 hover:underline">
-                  {row.registrationNumber}
-                </Link>
-                <StatusPill status={row.operationalStatus} />
-                {row.result && <StatusPill status={row.result} />}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link to={`/vehicle-checks/${row.checkId}`} className="text-base font-semibold text-command-700 hover:underline">
+                      {row.registrationNumber}
+                    </Link>
+                    <StatusPill status={row.operationalStatus} />
+                    {row.result && <StatusPill status={row.result} />}
+                  </div>
+                  <p className="text-sm text-ink-soft">
+                    {row.makeModel ?? '—'} · {row.fleetNumber ?? '—'} · {row.checkTypeLabel ?? 'Vehicle check'}
+                  </p>
+                  {exceptionLabels.length > 0 && (
+                    <p className="mt-1 text-sm font-medium text-amber-900">{exceptionLabels.join(' · ')}</p>
+                  )}
+                  {suspiciousFlagCount > 0 && (
+                    <p className="text-xs text-purple-800">{suspiciousFlagCount} review flag(s)</p>
+                  )}
+                  <p className="mt-1 text-xs text-muted">
+                    {row.completedBy ? `Completed by ${row.completedBy}` : 'Not completed'}
+                    {row.submittedAt ? ` · ${formatUkTime(row.submittedAt)}` : ''}
+                    {row.depotName ? ` · ${row.depotName}` : ''}
+                  </p>
+                </div>
+                <div className="text-right text-xs text-muted">
+                  <p>{RELEASE_STATUS_LABELS[row.operationalStatus] ?? row.operationalStatus}</p>
+                  {row.validUntil && <p>Valid until {formatUkTime(row.validUntil)}</p>}
+                  {defectCount > 0 && <p className="font-medium text-red-800">{defectCount} defect(s)</p>}
+                </div>
               </div>
-              <p className="text-sm text-ink-soft">
-                {row.makeModel ?? '—'} · {row.fleetNumber ?? '—'} · {row.checkTypeLabel ?? 'Vehicle check'}
-              </p>
-              {exceptionLabels.length > 0 && (
-                <p className="mt-1 text-sm font-medium text-amber-900">{exceptionLabels.join(' · ')}</p>
+              {showActions && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link to={`/vehicle-checks/${row.checkId}`} className="rounded-lg border border-border px-3 py-1 text-xs font-medium hover:bg-surface-muted">
+                    Review check
+                  </Link>
+                  <Link to={`/vehicles/${row.vehicleId}`} className="rounded-lg border border-border px-3 py-1 text-xs font-medium hover:bg-surface-muted">
+                    Open vehicle
+                  </Link>
+                </div>
               )}
-              {suspiciousFlagCount > 0 && (
-                <p className="text-xs text-purple-800">{suspiciousFlagCount} review flag(s)</p>
-              )}
-              <p className="mt-1 text-xs text-muted">
-                {row.completedBy ? `Completed by ${row.completedBy}` : 'Not completed'}
-                {row.submittedAt ? ` · ${new Date(row.submittedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}
-                {row.depotName ? ` · ${row.depotName}` : ''}
-              </p>
-            </div>
-            <div className="text-right text-xs text-muted">
-              <p>{RELEASE_STATUS_LABELS[row.operationalStatus] ?? row.operationalStatus}</p>
-              {row.validUntil && <p>Valid until {new Date(row.validUntil).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>}
-              {defectCount > 0 && <p className="font-medium text-red-800">{defectCount} defect(s)</p>}
             </div>
           </div>
-          {showActions && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link to={`/vehicle-checks/${row.checkId}`} className="rounded-lg border border-border px-3 py-1 text-xs font-medium hover:bg-surface-muted">
-                Review check
-              </Link>
-              <Link to={`/vehicles/${row.vehicleId}`} className="rounded-lg border border-border px-3 py-1 text-xs font-medium hover:bg-surface-muted">
-                Open vehicle
-              </Link>
-            </div>
-          )}
         </div>
         )
       })}

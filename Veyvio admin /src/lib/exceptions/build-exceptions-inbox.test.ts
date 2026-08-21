@@ -45,10 +45,27 @@ describe('buildExceptionsInbox', () => {
     expect(inbox.map((e) => e.id)).toEqual(['c', 'b', 'a'])
   })
 
-  it('includes catalog by default', () => {
+  it('includes catalog when explicitly requested', () => {
     const inbox = buildExceptionsInbox({ includeCatalog: true })
     expect(inbox.some((e) => e.id === 'CAT-JNY-NOT-COLLECTED')).toBe(true)
     expect(inbox.some((e) => e.category === 'yard')).toBe(true)
+  })
+
+  it('excludes catalog by default (F-03)', () => {
+    const inbox = buildExceptionsInbox({})
+    expect(inbox.some((e) => String(e.id).startsWith('CAT-'))).toBe(false)
+  })
+
+  it('never invents CAT rows from empty live sources', () => {
+    const inbox = buildExceptionsInbox({
+      alerts: [],
+      defects: [],
+      incidents: [],
+      driverExceptions: [],
+      vehicleExceptions: [],
+      yardExceptions: [],
+    })
+    expect(inbox).toEqual([])
   })
 })
 

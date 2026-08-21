@@ -29,29 +29,29 @@ describe("gate1 pilot exit automated checks", () => {
     expect(process.env.VITE_MOCK_API).not.toBe("true");
   });
 
-  it("aggregates offline queue counts for sync centre honesty", () => {
-    enqueueOpsCommand("drv-pilot", { type: "defect", payload: {} }, "co-bct", "mem-1");
-    const summary = describeOfflineQueue("drv-pilot", "co-bct", "mem-1");
+  it("aggregates offline queue counts for sync centre honesty", async () => {
+    await enqueueOpsCommand("drv-pilot", { type: "defect", payload: {} }, "co-bct", "mem-1");
+    const summary = await describeOfflineQueue("drv-pilot", "co-bct", "mem-1");
     expect(summary.opsCommands).toBeGreaterThan(0);
   });
 
   it("assigns stable client ids to queued defect reports", async () => {
     const { enqueueOpsCommand, loadOpsOutbox } = await import("@/lib/driver-ops-outbox.storage");
-    enqueueOpsCommand(
+    await enqueueOpsCommand(
       "drv-pilot",
       { type: "defect", payload: { description: "Wiper fault" } },
       "co-bct",
       "mem-1",
     );
-    const queue = loadOpsOutbox("drv-pilot", "co-bct", "mem-1");
+    const queue = await loadOpsOutbox("drv-pilot", "co-bct", "mem-1");
     expect(queue[0].payload.clientId).toBe(queue[0].id);
   });
 
   it("queues duty sign-on offline for sync centre counts", async () => {
     const { enqueueDutyOpsCommand } = await import("@/lib/driver-ops-outbox.storage");
     const { describeOfflineQueue } = await import("@/services/driver-sync-status.service");
-    enqueueDutyOpsCommand("drv-pilot", "duty_sign_on", "duty-1", "co-bct", "mem-1");
-    const summary = describeOfflineQueue("drv-pilot", "co-bct", "mem-1");
+    await enqueueDutyOpsCommand("drv-pilot", "duty_sign_on", "duty-1", "co-bct", "mem-1");
+    const summary = await describeOfflineQueue("drv-pilot", "co-bct", "mem-1");
     expect(summary.dutyOps).toBe(1);
     expect(summary.opsCommands).toBeGreaterThan(0);
   });

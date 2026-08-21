@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, ChevronRight, GripVertical, Plus, XCircle } from 'lucide-react'
 import { SectionCard } from '@/components/ui'
@@ -8,11 +8,17 @@ import { cn } from '@/lib/cn'
 import { api } from '@/lib/api/client'
 import type { DutyRecord } from '@/lib/api/types'
 import type { PlanningAssignmentValidation, PlanningJob } from '@/lib/schedule/planning-types'
+import { validatePlanningAssignment } from '@/lib/schedule/assignment-validation'
 import { listUnscheduledPlanningJobs } from '@/lib/schedule/unscheduled-jobs'
 import { buildScheduleOptimisations } from '@/lib/schedule/schedule-optimisation'
 import { ScheduleOptimisationPanel } from '@/features/schedule/ScheduleOptimisationPanel'
 import { scheduleServiceColour } from '@/lib/ops/runs-trips-schedule'
+import {
+  driverAcknowledgementLabel,
+  driverAcknowledgementState,
+} from '@/lib/operations/live-operations-context'
 import type { OperationalTrip } from '@/lib/transfers/types'
+import { formatUkDate } from '@/lib/uk-locale'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
 
@@ -124,6 +130,16 @@ function DutyTimelineCard({
   onSelectDuty: () => void
   selected: boolean
 }) {
+  const ackState = driverAcknowledgementState(trips[0] ?? null, duty)
+  const publishLabel =
+    duty.publicationStatus === 'published'
+      ? 'Published'
+      : duty.publicationStatus === 'ready_to_publish'
+        ? 'Ready to publish'
+        : duty.publicationStatus === 'draft'
+          ? 'Draft'
+          : String(duty.publicationStatus ?? 'Draft')
+
   return (
     <div
       className={cn(
@@ -139,38 +155,70 @@ function DutyTimelineCard({
               {duty.startTime ?? '—'} · {duty.route?.name ?? 'Unnamed run'}
             </p>
           </div>
-          <StatusPill status={duty.status === 'unassigned' ? 'unassigned' : 'assigned'} />
+          <div className="flex flex-col items-end gap-1">
+            <StatusPill status={duty.status === 'unassigned' ? 'unassigned' : 'assigned'} />
+            <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-ink-soft">
+              {publishLabel}
+            </span>
+          </div>
         </div>
         <p className="mt-2 text-sm text-ink-soft">
           {duty.driver ? `${duty.driver.firstName} ${duty.driver.lastName}` : 'No driver'} ·{' '}
           {duty.vehicle?.registrationNumber ?? 'No vehicle'}
+        </p>
+        <p
+          className={cn(
+            'mt-1 text-xs font-medium',
+            ackState === 'acknowledged'
+              ? 'text-emerald-800'
+              : ackState === 'pending'
+                ? 'text-amber-800'
+                : 'text-ink-soft',
+          )}
+        >
+          {driverAcknowledgementLabel(ackState)}
         </p>
       </button>
       <div className="mt-3 space-y-2">
         {trips.length === 0 ? (
           <p className="text-xs text-ink-soft">No trips on this run yet.</p>
         ) : (
-          trips.map((trip) => (
-            <button
-              key={trip.id}
-              type="button"
-              onClick={() => onSelectTrip(trip.id)}
-              className={cn(
-                'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm',
-                selectedTripId === trip.id
-                  ? 'border-command-300 bg-white'
-                  : 'border-border bg-surface-muted hover:bg-white',
-              )}
-            >
-              <span>
-                <span className="font-medium text-ink">{trip.reference}</span>
-                <span className="ml-2 text-ink-soft">{trip.jobs.length} jobs</span>
-              </span>
-              <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium ring-1', scheduleServiceColour(trip.routeName))}>
-                {trip.assignmentStatus}
-              </span>
-            </button>
-          ))
+          trips.map((trip) => {
+            const tripAck = driverAcknowledgementState(trip, duty)
+            return (
+              <button
+                key={trip.id}
+                type="button"
+                onClick={() => onSelectTrip(trip.id)}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm',
+                  selectedTripId === trip.id
+                    ? 'border-command-300 bg-white'
+                    : 'border-border bg-surface-muted hover:bg-white',
+                )}
+              >
+                <span>
+                  <span className="font-medium text-ink">{trip.reference}</span>
+                  <span className="ml-2 text-ink-soft">{trip.jobs.length} jobs</span>
+                </span>
+                <span className="flex flex-col items-end gap-1">
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-[11px] font-medium ring-1',
+                      scheduleServiceColour(trip.routeName),
+                    )}
+                  >
+                    {trip.assignmentStatus}
+                  </span>
+                  {tripAck === 'acknowledged' ? (
+                    <span className="text-[11px] font-medium text-emerald-800">Accepted</span>
+                  ) : tripAck === 'pending' ? (
+                    <span className="text-[11px] font-medium text-amber-800">Awaiting ack</span>
+                  ) : null}
+                </span>
+              </button>
+            )
+          })
         )}
       </div>
     </div>
@@ -179,24 +227,34 @@ function DutyTimelineCard({
 
 export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string }) {
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const tripIdFromUrl = searchParams.get('tripId')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [search, setSearch] = useState('')
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
-  const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(tripIdFromUrl)
   const [selectedDutyId, setSelectedDutyId] = useState<string | null>(null)
   const [checkedJobIds, setCheckedJobIds] = useState<string[]>([])
   const [draftDriverId, setDraftDriverId] = useState<string>('')
   const [draftVehicleId, setDraftVehicleId] = useState<string>('')
   const [actionMessage, setActionMessage] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (tripIdFromUrl) setSelectedTripId(tripIdFromUrl)
+  }, [tripIdFromUrl])
+
   const { data: trips = [], isLoading: tripsLoading } = useQuery({
-    queryKey: tKey(['operational-trips']),
-    queryFn: () => api.getOperationalTrips(),
+    queryKey: tKey(['operational-trips', serviceDate]),
+    queryFn: () => api.getOperationalTrips({ serviceDate }),
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
 
   const { data: duties = [], isLoading: dutiesLoading } = useQuery({
     queryKey: tKey(['duties-planning', serviceDate]),
     queryFn: () => api.getDuties({ date: serviceDate }),
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
 
   const { data: drivers = [] } = useQuery({
@@ -210,6 +268,24 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
   })
 
   const unscheduledJobs = useMemo(() => listUnscheduledPlanningJobs(trips), [trips])
+  const safeguardingJobCount = useMemo(
+    () => unscheduledJobs.filter((job) => job.requirements.includes('Safeguarding')).length,
+    [unscheduledJobs],
+  )
+  const unpublishedDutyCount = useMemo(
+    () =>
+      duties.filter(
+        (duty) =>
+          duty.publicationStatus !== 'published' &&
+          duty.publicationStatus !== 'cancelled' &&
+          Boolean(duty.driver),
+      ).length,
+    [duties],
+  )
+  const unassignedTripCount = useMemo(
+    () => trips.filter((trip) => trip.assignmentStatus === 'unassigned' || !trip.driverId || !trip.vehicleId).length,
+    [trips],
+  )
 
   const filteredJobs = useMemo(() => {
     let list = unscheduledJobs
@@ -241,6 +317,14 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
   const activeTripId = selectedTripId ?? selectedJob?.tripId ?? null
   const activeTrip = trips.find((t) => t.id === activeTripId) ?? null
   const activeDuty = duties.find((d) => d.id === (selectedDutyId ?? activeTrip?.dutyId)) ?? null
+  const unlinkedTrips = useMemo(() => trips.filter((trip) => !trip.dutyId), [trips])
+  const missingTripFromUrl = Boolean(tripIdFromUrl) && !trips.some((trip) => trip.id === tripIdFromUrl)
+
+  useEffect(() => {
+    if (!activeTrip) return
+    setDraftDriverId(activeTrip.driverId ?? '')
+    setDraftVehicleId(activeTrip.vehicleId ?? '')
+  }, [activeTrip?.id, activeTrip?.driverId, activeTrip?.vehicleId])
 
   const optimisationSuggestions = useMemo(
     () =>
@@ -256,17 +340,20 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
     [unscheduledJobs, checkedJobIds, activeTrip, duties, trips, drivers, vehicles],
   )
 
-  const { data: validation } = useQuery({
-    queryKey: tKey(['schedule-planning-validation', activeTripId, draftDriverId, draftVehicleId, serviceDate]),
-    queryFn: () =>
-      api.validateSchedulePlanningAssignment({
-        tripId: activeTripId!,
-        driverId: draftDriverId || null,
-        vehicleId: draftVehicleId || null,
-        dutyDate: serviceDate,
-      }),
-    enabled: Boolean(activeTripId),
-  })
+  // Client-side validation — live /schedule/planning/validate is not a Command route.
+  const validation = useMemo(() => {
+    if (!activeTrip) return null
+    const driver = draftDriverId ? drivers.find((d) => d.id === draftDriverId) ?? null : null
+    const vehicle = draftVehicleId ? vehicles.find((v) => v.id === draftVehicleId) ?? null : null
+    return validatePlanningAssignment({
+      trip: activeTrip,
+      jobs: activeTrip.jobs ?? [],
+      driver,
+      vehicle,
+      duties,
+      dutyDate: serviceDate,
+    })
+  }, [activeTrip, draftDriverId, draftVehicleId, drivers, vehicles, duties, serviceDate])
 
   const invalidatePlanning = () => {
     queryClient.invalidateQueries({ queryKey: tKey(['operational-trips']) })
@@ -335,10 +422,47 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
         </div>
       )}
 
+      {missingTripFromUrl ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Trip from Incoming Interests is not on {formatUkDate(serviceDate)}. Change the schedule date to the job’s travel
+          date (use <span className="font-medium">Open Schedule planning</span> on the interest), or the
+          assignment will not appear here.
+        </div>
+      ) : null}
+
+      {tripIdFromUrl && activeTrip ? (
+        <div className="rounded-xl border border-command-200 bg-command-50 px-4 py-3 text-sm text-command-950">
+          Opened trip <span className="font-semibold tabular-nums">{activeTrip.reference}</span> for{' '}
+          {formatUkDate(serviceDate)}
+          {activeTrip.driverName ? ` · Driver ${activeTrip.driverName}` : ' · Driver still unassigned'}
+          {activeTrip.vehicleRegistration ? ` · ${activeTrip.vehicleRegistration}` : ''}.
+          Assigned jobs leave the Unscheduled list and appear under Runs and trips.
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">Unscheduled jobs</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-ink">{unscheduledJobs.length}</p>
+        </div>
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-violet-900">Safeguarding</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-violet-950">{safeguardingJobCount}</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-amber-900">Unpublished runs</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-amber-950">{unpublishedDutyCount}</p>
+        </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-red-900">Unassigned trips</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-red-950">{unassignedTripCount}</p>
+        </div>
+      </div>
+
       <div className="grid min-h-[32rem] gap-4 lg:grid-cols-[minmax(240px,280px)_1fr_minmax(260px,300px)]">
         <SectionCard title="Unscheduled jobs" className="flex flex-col">
           <p className="mb-3 text-xs text-ink-soft">
-            {filteredJobs.length} jobs need a run or trip assignment for {serviceDate}.
+            {filteredJobs.length} jobs need a run or trip assignment for {formatUkDate(serviceDate)}.
           </p>
           <input
             value={search}
@@ -403,32 +527,66 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
 
         <SectionCard title="Runs and trips" className="flex flex-col">
           <p className="mb-3 text-xs text-ink-soft">
-            {duties.length} runs on {serviceDate}. Select a trip to assign crew and publish.
+            {duties.length} runs · {trips.length} trips on {formatUkDate(serviceDate)}. Select a trip to assign crew and
+            publish.
           </p>
           <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-            {dutiesLoading ? (
+            {dutiesLoading || tripsLoading ? (
               <p className="text-sm text-ink-soft">Loading runs…</p>
-            ) : duties.length === 0 ? (
-              <p className="text-sm text-ink-soft">No runs planned for this date.</p>
+            ) : duties.length === 0 && unlinkedTrips.length === 0 ? (
+              <p className="text-sm text-ink-soft">
+                No runs or trips on {formatUkDate(serviceDate)}. Interest jobs only appear on their travel date.
+              </p>
             ) : (
-              duties.map((duty) => (
-                <DutyTimelineCard
-                  key={duty.id}
-                  duty={duty}
-                  trips={tripsByDuty.get(duty.id) ?? []}
-                  selectedTripId={selectedTripId}
-                  selected={selectedDutyId === duty.id}
-                  onSelectDuty={() => {
-                    setSelectedDutyId(duty.id)
-                    const firstTrip = tripsByDuty.get(duty.id)?.[0]
-                    if (firstTrip) setSelectedTripId(firstTrip.id)
-                  }}
-                  onSelectTrip={(tripId) => {
-                    setSelectedTripId(tripId)
-                    setSelectedDutyId(duty.id)
-                  }}
-                />
-              ))
+              <>
+                {duties.map((duty) => (
+                  <DutyTimelineCard
+                    key={duty.id}
+                    duty={duty}
+                    trips={tripsByDuty.get(duty.id) ?? []}
+                    selectedTripId={selectedTripId}
+                    selected={selectedDutyId === duty.id}
+                    onSelectDuty={() => {
+                      setSelectedDutyId(duty.id)
+                      const firstTrip = tripsByDuty.get(duty.id)?.[0]
+                      if (firstTrip) setSelectedTripId(firstTrip.id)
+                    }}
+                    onSelectTrip={(tripId) => {
+                      setSelectedTripId(tripId)
+                      setSelectedDutyId(duty.id)
+                    }}
+                  />
+                ))}
+                {unlinkedTrips.map((trip) => (
+                  <button
+                    key={trip.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTripId(trip.id)
+                      setSelectedDutyId(null)
+                    }}
+                    className={cn(
+                      'w-full rounded-xl border p-3 text-left',
+                      selectedTripId === trip.id
+                        ? 'border-command-400 bg-command-50/40'
+                        : 'border-border bg-surface hover:bg-surface-muted',
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold tabular-nums text-ink">{trip.reference}</p>
+                        <p className="text-xs text-ink-soft">
+                          {trip.driverName ?? 'No driver'} · {trip.vehicleRegistration ?? 'No vehicle'}
+                        </p>
+                      </div>
+                      <StatusPill status={trip.assignmentStatus === 'assigned' ? 'assigned' : 'planned'} />
+                    </div>
+                    <p className="mt-2 text-xs text-ink-soft">
+                      {trip.jobs?.length ?? 0} jobs · assign crew to create the run board entry
+                    </p>
+                  </button>
+                ))}
+              </>
             )}
           </div>
         </SectionCard>
@@ -455,6 +613,21 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
                   <p className="mt-1 font-semibold text-ink">{activeTrip.reference}</p>
                   <p className="text-sm text-ink-soft">{activeTrip.routeName}</p>
                   <p className="mt-1 text-xs text-ink-soft">{activeTrip.jobs.length} jobs on trip</p>
+                  <p
+                    className={cn(
+                      'mt-2 text-xs font-medium',
+                      driverAcknowledgementState(activeTrip, activeDuty) === 'acknowledged'
+                        ? 'text-emerald-800'
+                        : driverAcknowledgementState(activeTrip, activeDuty) === 'pending'
+                          ? 'text-amber-800'
+                          : 'text-ink-soft',
+                    )}
+                  >
+                    {driverAcknowledgementLabel(driverAcknowledgementState(activeTrip, activeDuty))}
+                    {activeTrip.acknowledgedAt
+                      ? ` · ${new Date(activeTrip.acknowledgedAt).toLocaleString('en-GB')}`
+                      : ''}
+                  </p>
                 </div>
               )}
 
@@ -539,11 +712,22 @@ export function SchedulePlanningWorkspace({ serviceDate }: { serviceDate: string
                 <button
                   type="button"
                   onClick={() => assignMutation.mutate()}
-                  disabled={!activeTripId || !validation?.canAssign || assignMutation.isPending}
+                  disabled={
+                    !activeTripId ||
+                    !draftDriverId ||
+                    !draftVehicleId ||
+                    validation?.level === 'blocked' ||
+                    assignMutation.isPending
+                  }
                   className="w-full rounded-xl bg-command-600 px-3 py-2 text-sm font-semibold text-white hover:bg-command-700 disabled:opacity-50"
                 >
                   Assign driver and vehicle
                 </button>
+                {validation?.level === 'blocked' ? (
+                  <p className="text-xs text-critical">
+                    Fix blocked checks above before assigning on Schedule.
+                  </p>
+                ) : null}
                 {activeDuty && (
                   <button
                     type="button"

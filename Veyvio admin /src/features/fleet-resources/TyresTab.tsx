@@ -3,10 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { TYRE_STATUS_LABEL } from '@/lib/fleet-resources/constants'
 import type { FleetResourcesHubData, TyreAsset } from '@/lib/fleet-resources/types'
 import { api } from '@/lib/api/client'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
-import { useState } from 'react'
+import { useAuth } from '@/lib/auth-context'
+import { useMemo, useState } from 'react'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
-
 
 export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
   const { user } = useAuth()
@@ -16,6 +15,42 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: tKey(['fleet-resources-hub']) })
 
+  const fitTarget = useMemo(() => {
+    const fromCosts = hub.vehicleCosts[0]
+    if (fromCosts?.vehicleId) {
+      return {
+        vehicleId: fromCosts.vehicleId,
+        registration: fromCosts.registrationNumber,
+      }
+    }
+    const fitted = hub.tyres.find((t) => t.vehicleId && t.registrationNumber)
+    if (fitted?.vehicleId) {
+      return { vehicleId: fitted.vehicleId, registration: fitted.registrationNumber ?? 'vehicle' }
+    }
+    return null
+  }, [hub.tyres, hub.vehicleCosts])
+
+  const rotatePair = useMemo(() => {
+    const byVehicle = new Map<string, TyreAsset[]>()
+    for (const tyre of hub.tyres) {
+      if (!tyre.vehicleId || (tyre.status !== 'fitted' && tyre.status !== 'awaiting_retorque')) continue
+      const list = byVehicle.get(tyre.vehicleId) ?? []
+      list.push(tyre)
+      byVehicle.set(tyre.vehicleId, list)
+    }
+    for (const [vehicleId, list] of byVehicle) {
+      if (list.length >= 2) {
+        return {
+          vehicleId,
+          registration: list[0]?.registrationNumber ?? 'vehicle',
+          aTyreId: list[0].id,
+          bTyreId: list[1].id,
+        }
+      }
+    }
+    return null
+  }, [hub.tyres])
+
   const remove = useMutation({
     mutationFn: (tyreId: string) =>
       api.removeResourceTyre({ tyreId, actorName, quarantine: true }),
@@ -23,25 +58,26 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
   })
 
   const fitStock = useMutation({
-    mutationFn: (tyre: TyreAsset) =>
-      api.fitResourceTyre({
+    mutationFn: (tyre: TyreAsset) => {
+      if (!fitTarget) throw new Error('No live vehicle available to fit this tyre')
+      return api.fitResourceTyre({
         tyreId: tyre.id,
-        vehicleId: 'veh-4',
+        vehicleId: fitTarget.vehicleId,
         position: 'OSR',
         positionLabel: 'Offside rear',
         actorName,
-      }),
+      })
+    },
     onSuccess: invalidate,
   })
 
   const rotate = useMutation({
     mutationFn: () => {
-      const fitted = hub.tyres.filter((t) => t.vehicleId === 'veh-1' && t.status === 'fitted')
-      if (fitted.length < 2) throw new Error('Need two fitted tyres on AB12 CDE')
+      if (!rotatePair) throw new Error('Need two fitted tyres on the same vehicle')
       return api.rotateResourceTyres({
-        vehicleId: 'veh-1',
-        aTyreId: fitted[0].id,
-        bTyreId: fitted[1].id,
+        vehicleId: rotatePair.vehicleId,
+        aTyreId: rotatePair.aTyreId,
+        bTyreId: rotatePair.bTyreId,
         actorName,
       })
     },
@@ -77,14 +113,22 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
           <p className="text-sm text-ink-soft">
             Individual assets with fit / remove / rotate — re-torque links to the vehicle wheels tab.
           </p>
+          {hub.tyres.length === 0 && (
+            <p className="mt-2 text-sm text-ink-soft">No tyres recorded for this company yet.</p>
+          )}
         </div>
         <button
           type="button"
           onClick={() => rotate.mutate()}
-          disabled={rotate.isPending}
+          disabled={rotate.isPending || !rotatePair}
           className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted disabled:opacity-60"
+          title={
+            rotatePair
+              ? `Rotate two fitted tyres on ${rotatePair.registration}`
+              : 'Need two fitted tyres on the same vehicle'
+          }
         >
-          Rotate AB12 CDE fronts
+          {rotatePair ? `Rotate on ${rotatePair.registration}` : 'Rotate unavailable'}
         </button>
       </div>
 
@@ -217,10 +261,16 @@ export function TyresTab({ hub }: { hub: FleetResourcesHubData }) {
                   {t.status === 'in_stock' && (
                     <button
                       type="button"
-                      className="text-xs font-medium text-command-700 hover:underline"
+                      className="text-xs font-medium text-command-700 hover:underline disabled:opacity-50"
+                      disabled={!fitTarget || fitStock.isPending}
                       onClick={() => fitStock.mutate(t)}
+                      title={
+                        fitTarget
+                          ? `Fit to ${fitTarget.registration}`
+                          : 'No live vehicle available'
+                      }
                     >
-                      Fit to CD34 EFG
+                      {fitTarget ? `Fit to ${fitTarget.registration}` : 'Fit unavailable'}
                     </button>
                   )}
                   {(t.status === 'fitted' || t.status === 'awaiting_retorque') && (

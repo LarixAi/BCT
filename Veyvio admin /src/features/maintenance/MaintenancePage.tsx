@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { ChevronDown, Plus } from 'lucide-react'
 import { MAINTENANCE_TAB_ALIASES, MAINTENANCE_TABS } from '@/lib/maintenance/constants'
 import { canCreateWorkOrder } from '@/lib/maintenance/permissions'
 import type { MaintenanceTab } from '@/lib/maintenance/types'
@@ -19,10 +20,17 @@ import { MaintenanceTechnicianTab } from './MaintenanceTechnicianTab'
 import { CreateWorkOrderPanel, type CreateWorkOrderPrefill } from './CreateWorkOrderPanel'
 import { api } from '@/lib/api/client'
 import { safeMaintenanceHub } from '@/lib/api/safe-hubs'
-import { useAuth, useActiveCompanyId } from '@/lib/auth-context'
+import { useAuth } from '@/lib/auth-context'
 import { useOperationalContext } from '@/lib/context'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
+const PRIMARY_TAB_IDS: MaintenanceTab[] = [
+  'overview',
+  'work-orders',
+  'planner',
+  'compliance',
+  'costs',
+]
 
 function resolveTab(raw: string | null): MaintenanceTab {
   if (!raw) return 'overview'
@@ -81,6 +89,14 @@ export function MaintenancePage() {
 
   const canCreate = canCreateWorkOrder(user?.permissions ?? [])
 
+  const primaryTabs = PRIMARY_TAB_IDS.map((id) =>
+    MAINTENANCE_TABS.find((item) => item.id === id),
+  ).filter((item): item is (typeof MAINTENANCE_TABS)[number] => Boolean(item))
+  const moreTabs = MAINTENANCE_TABS.filter(
+    (item) => !PRIMARY_TAB_IDS.includes(item.id),
+  )
+  const moreIsActive = moreTabs.some((item) => item.id === tab)
+
   function setTab(next: MaintenanceTab) {
     const params = new URLSearchParams(searchParams)
     if (next === 'overview') params.delete('tab')
@@ -88,48 +104,67 @@ export function MaintenancePage() {
     setSearchParams(params, { replace: true })
   }
 
-  if (isLoading) return <p className="text-sm text-muted">Loading maintenance…</p>
+  if (isLoading) {
+    return (
+      <div className="space-y-5">
+        <div className="h-16 animate-pulse rounded-2xl bg-surface-muted" />
+        <div className="h-28 animate-pulse rounded-2xl bg-surface-muted" />
+        <div className="h-[420px] animate-pulse rounded-2xl bg-surface-muted" />
+      </div>
+    )
+  }
+
   if (isError || !hub) {
-    return <p className="text-sm text-red-800">{error instanceof Error ? error.message : 'Could not load maintenance'}</p>
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        {error instanceof Error ? error.message : 'Could not load maintenance'}
+      </div>
+    )
   }
 
   const safeHub = safeMaintenanceHub(hub)
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-ink">Maintenance</h1>
-          <p className="text-sm text-ink-soft">
+          <h1 className="text-3xl font-semibold tracking-tight text-ink">Maintenance</h1>
+          <p className="mt-1 text-sm text-ink-soft">
             Plan inspections, control repairs and keep every vehicle roadworthy.
           </p>
         </div>
+
         <div className="flex flex-wrap gap-2">
           {canCreate && (
             <button
               type="button"
               onClick={() => openCreateWorkOrder()}
-              className="rounded-lg bg-command-600 px-4 py-2 text-sm font-medium text-white hover:bg-command-700"
+              className="inline-flex items-center gap-2 rounded-xl bg-command-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-command-700"
             >
-              Create work order
+              <Plus className="h-4 w-4" />
+              New work order
             </button>
           )}
+
           <button
             type="button"
             onClick={() => setTab('planner')}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
+            className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-ink-soft shadow-sm hover:bg-surface-muted"
           >
             Schedule maintenance
           </button>
+
           <button
             type="button"
-            onClick={() => openCreateWorkOrder({ type: 'external', title: 'External workshop work' })}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-soft hover:bg-surface-muted"
+            onClick={() =>
+              openCreateWorkOrder({ type: 'external', title: 'External workshop work' })
+            }
+            className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-ink-soft shadow-sm hover:bg-surface-muted"
           >
             Record external work
           </button>
         </div>
-      </div>
+      </header>
 
       {showCreateWo && (
         <CreateWorkOrderPanel
@@ -142,20 +177,59 @@ export function MaintenancePage() {
         />
       )}
 
-      <div className="flex flex-wrap gap-2 border-b border-border pb-1">
-        {MAINTENANCE_TABS.map((t) => (
+      <nav className="flex flex-wrap items-end gap-1 border-b border-border">
+        {primaryTabs.map((item) => (
           <button
-            key={t.id}
+            key={item.id}
             type="button"
-            onClick={() => setTab(t.id)}
-            className={`rounded-t-lg px-3 py-2 text-sm font-medium ${
-              tab === t.id ? 'bg-surface text-command-700 ring-1 ring-border' : 'text-ink-soft hover:text-ink'
+            onClick={() => setTab(item.id)}
+            className={`relative px-4 py-3 text-sm font-semibold transition ${
+              tab === item.id
+                ? 'text-command-700'
+                : 'text-ink-soft hover:text-ink'
             }`}
           >
-            {t.label}
+            {item.label}
+            {tab === item.id && (
+              <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-command-600" />
+            )}
           </button>
         ))}
-      </div>
+
+        <details className="group relative">
+          <summary
+            className={`flex cursor-pointer list-none items-center gap-1 px-4 py-3 text-sm font-semibold ${
+              moreIsActive
+                ? 'text-command-700'
+                : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            More
+            <ChevronDown className="h-4 w-4 transition group-open:rotate-180" />
+          </summary>
+
+          <div className="absolute left-0 top-full z-40 mt-2 min-w-56 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-xl">
+            {moreTabs.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTab(item.id)}
+                className={`block w-full rounded-lg px-3 py-2 text-left text-sm font-medium ${
+                  tab === item.id
+                    ? 'bg-command-50 text-command-700'
+                    : 'text-ink-soft hover:bg-surface-muted hover:text-ink'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {moreIsActive && (
+            <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-command-600" />
+          )}
+        </details>
+      </nav>
 
       {tab === 'overview' && (
         <MaintenanceOverviewTab
@@ -164,9 +238,10 @@ export function MaintenancePage() {
           onFilter={setFilter}
           search={search}
           onSearch={setSearch}
-          onOpenTab={(t) => setTab(t as MaintenanceTab)}
+          onOpenTab={(next) => setTab(next as MaintenanceTab)}
         />
       )}
+
       {tab === 'planner' && (
         <MaintenancePlannerTab
           schedule={safeHub.schedule}
@@ -175,42 +250,61 @@ export function MaintenancePage() {
           onCreateWorkOrder={(prefill) => openCreateWorkOrder(prefill)}
         />
       )}
+
       {tab === 'work-orders' && (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setShowDefects((v) => !v)}
-              className="text-sm font-medium text-command-600 hover:underline"
-            >
-              {showDefects ? 'Hide defect register' : 'Show defect register'}
-            </button>
-          </div>
+        <div className="space-y-5">
           <MaintenanceWorkOrdersTab
             workOrders={safeHub.workOrders}
+            summary={safeHub.summary}
             vehicleFilter={vehicleFilter}
             highlightWorkOrderId={woHighlight}
+            defectsOpen={showDefects}
+            onToggleDefects={() => setShowDefects((value) => !value)}
           />
+
           {showDefects && <MaintenanceDefectsTab defects={safeHub.defects} />}
         </div>
       )}
+
       {tab === 'technician' && (
-        <MaintenanceTechnicianTab workOrders={safeHub.workOrders} vehicles={vehicles} />
+        <MaintenanceTechnicianTab
+          workOrders={safeHub.workOrders}
+          vehicles={vehicles}
+        />
       )}
+
       {tab === 'defects' && <MaintenanceDefectsTab defects={safeHub.defects} />}
+
       {tab === 'pmi' && (
-        <MaintenancePmiTab vehicles={vehicles} workOrders={safeHub.workOrders} schedule={safeHub.schedule} />
+        <MaintenancePmiTab
+          vehicles={vehicles}
+          workOrders={safeHub.workOrders}
+          schedule={safeHub.schedule}
+        />
       )}
-      {tab === 'service' && <MaintenanceServiceTab vehicles={vehicles} schedule={safeHub.schedule} />}
-      {tab === 'vor' && <MaintenanceVorTab vehicles={vehicles} workOrders={safeHub.workOrders} />}
-      {tab === 'parts' && <MaintenanceSuppliersTab suppliers={safeHub.suppliers} parts={safeHub.parts} />}
+
+      {tab === 'service' && (
+        <MaintenanceServiceTab vehicles={vehicles} schedule={safeHub.schedule} />
+      )}
+
+      {tab === 'vor' && (
+        <MaintenanceVorTab vehicles={vehicles} workOrders={safeHub.workOrders} />
+      )}
+
+      {tab === 'parts' && (
+        <MaintenanceSuppliersTab suppliers={safeHub.suppliers} parts={safeHub.parts} />
+      )}
+
       {tab === 'costs' && (
         <div className="space-y-6">
           <MaintenanceCostsTab intelligence={safeHub.intelligence} />
           <MaintenanceDowntimeTab downtime={safeHub.downtime} />
         </div>
       )}
-      {tab === 'compliance' && <MaintenanceComplianceTab hub={safeHub} vehicles={vehicles} />}
+
+      {tab === 'compliance' && (
+        <MaintenanceComplianceTab hub={safeHub} vehicles={vehicles} />
+      )}
     </div>
   )
 }
@@ -220,6 +314,8 @@ export function MaintenanceWorkOrdersRedirect() {
   const { workOrderId } = useParams()
   const [params] = useSearchParams()
   const wo = workOrderId ?? params.get('wo')
-  const to = wo ? `/maintenance?tab=work-orders&wo=${encodeURIComponent(wo)}` : '/maintenance?tab=work-orders'
+  const to = wo
+    ? `/maintenance?tab=work-orders&wo=${encodeURIComponent(wo)}`
+    : '/maintenance?tab=work-orders'
   return <Navigate to={to} replace />
 }

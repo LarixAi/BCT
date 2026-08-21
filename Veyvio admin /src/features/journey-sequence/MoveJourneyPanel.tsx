@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
-import { mockJourneySequenceApi } from '@/lib/journey-sequence/mock-hub'
+import { journeySequenceApi } from '@/lib/journey-sequence/api'
 import type { MoveJourneyAction } from '@/lib/journey-sequence/types'
 import { cn } from '@/lib/cn'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
@@ -19,11 +19,13 @@ export function MoveJourneyPanel({
   tripId,
   selectedJobIds,
   actorName,
+  dutyId,
   onDone,
 }: {
   tripId: string
   selectedJobIds: string[]
   actorName: string
+  dutyId?: string | null
   onDone: (message: string) => void
 }) {
   const queryClient = useQueryClient()
@@ -31,14 +33,14 @@ export function MoveJourneyPanel({
   const [destinationTripId, setDestinationTripId] = useState<string>('')
 
   const { data: destinations = [] } = useQuery({
-    queryKey: tKey(['journey-destinations', tripId]),
-    queryFn: () => mockJourneySequenceApi.listDestinationRuns(tripId),
+    queryKey: tKey(['journey-destinations', tripId, dutyId ?? null]),
+    queryFn: () => journeySequenceApi.listDestinationRuns(tripId, dutyId),
   })
 
   const preview = useMemo(
     () =>
       selectedJobIds.length
-        ? mockJourneySequenceApi.previewMove({
+        ? journeySequenceApi.previewMove({
             sourceTripId: tripId,
             jobIds: selectedJobIds,
             action,
@@ -50,13 +52,14 @@ export function MoveJourneyPanel({
 
   const commit = useMutation({
     mutationFn: async () =>
-      mockJourneySequenceApi.commitMove({
+      journeySequenceApi.commitMove({
         sourceTripId: tripId,
         jobIds: selectedJobIds,
         action,
         destinationTripId: action === 'move_to_run' ? destinationTripId || null : null,
         actorName,
         reason: 'Operational transfer',
+        dutyId: dutyId ?? null,
       }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: tKey(['journey-sequence']) })

@@ -1,5 +1,7 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
+import { App as CapApp } from "@capacitor/app";
 import { DriverSupabaseAuthProvider, useDriverSupabaseAuth } from "@/lib/DriverSupabaseAuthContext";
 import { DriverComplianceReadinessProvider } from "@/lib/driverComplianceReadinessContext";
 import DriverOperationalGuard from "@/components/driver/DriverOperationalGuard";
@@ -17,6 +19,7 @@ import { isPhvModuleEnabled } from "@/lib/phv-module-enabled";
 import ExternalNavReturnLayer from "@/components/driver/navigation/ExternalNavReturnLayer";
 import FloatingBubbleLayer from "@/components/driver/navigation/FloatingBubbleLayer";
 import BiometricLockLayer from "@/features/auth/biometrics/BiometricLockLayer";
+import { driverAppRouteFromUrl, isDriverAuthCallbackUrl } from "@/lib/driverAuthDeepLink";
 import { useDriverWebPresence } from "@/hooks/useDriverWebPresence";
 import { op } from "@/lib/driver-operational-theme";
 import DriverSupabaseHome from "./DriverSupabaseHome";
@@ -73,6 +76,7 @@ const DriverOnboardingRouter = lazy(() => import("./onboarding/DriverOnboardingR
 const DriverPendingApprovalScreen = lazy(() => import("./onboarding/DriverPendingApprovalScreen"));
 const DriverRestrictedScreen = lazy(() => import("./onboarding/DriverRestrictedScreen"));
 const DriverWalkaroundFlow = lazy(() => import("./DriverWalkaroundFlow"));
+const DriverOfflineRecoveryScreen = lazy(() => import("./DriverOfflineRecoveryScreen"));
 const DriverChangeVehicle = lazy(() => import("./DriverChangeVehicle"));
 const DriverCheckHistory = lazy(() => import("./DriverCheckHistory"));
 const DriverCheckDetail = lazy(() => import("./DriverCheckDetail"));
@@ -124,6 +128,7 @@ function DriverSupabaseRouter() {
   const { session, driver, screen, loading, login, loginWithBiometrics, logout, refresh, pendingCompanySelection } =
     useDriverSupabaseAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const pathname = location.pathname;
   // Only real verify/reset routes — never the login page at /auth.
   // (Capacitor uses https://localhost; treating /auth as a callback trapped signed-in users.)
@@ -134,10 +139,32 @@ function DriverSupabaseRouter() {
     driverId: driver?.id ?? null,
     userId: session?.userId ?? null,
     organisationId: session?.organisationId ?? null,
-    active: Boolean(session?.userId && driver?.id && screen !== "login"),
+    active: Boolean(
+      session?.userId && driver?.id && screen !== "login" && session?.routeTarget !== "offline_recovery",
+    ),
   });
 
   const lockActive = Boolean(driver?.id && screen !== "login" && !onAuthCallbackRoute);
+
+  /** After cold-start unlock, land on Home unless a real deep link opened the app. */
+  const handleBiometricUnlocked = useCallback(
+    async ({ coldStart }) => {
+      if (!coldStart || !Capacitor.isNativePlatform()) return;
+      try {
+        const launch = await CapApp.getLaunchUrl();
+        if (launch?.url) {
+          if (isDriverAuthCallbackUrl(launch.url)) return;
+          if (driverAppRouteFromUrl(launch.url)) return;
+        }
+      } catch {
+        /* launch URL optional */
+      }
+      if (pathname !== "/" && !pathname.startsWith("/auth")) {
+        navigate("/", { replace: true });
+      }
+    },
+    [navigate, pathname],
+  );
 
   if (loading && !onAuthCallbackRoute) {
     return (
@@ -145,6 +172,14 @@ function DriverSupabaseRouter() {
         onRetry={() => void refresh()}
         onSignOut={() => void logout()}
       />
+    );
+  }
+
+  if (session?.routeTarget === "offline_recovery") {
+    return (
+      <Suspense fallback={<DriverPageLoader />}>
+        <DriverOfflineRecoveryScreen session={session} onRetry={() => void refresh()} onSignOut={() => void logout()} />
+      </Suspense>
     );
   }
 
@@ -166,7 +201,12 @@ function DriverSupabaseRouter() {
   if (screen === "unlinked" || session?.routeTarget === "session_error") {
     return (
       <>
-        <BiometricLockLayer driverId={driver?.id} active={lockActive} onUsePassword={() => void logout()} />
+        <BiometricLockLayer
+          driverId={driver?.id}
+          active={lockActive}
+          onUsePassword={() => void logout()}
+          onUnlocked={handleBiometricUnlocked}
+        />
         <DriverMobileAuthLayout
           title={session?.routeTarget === "session_error" ? "Sign-in could not finish" : "Account not linked"}
           subtitle={
@@ -217,7 +257,12 @@ function DriverSupabaseRouter() {
     (screen === "onboarding" || session?.routeTarget === "onboarding");
 
   const lockLayer = (
-    <BiometricLockLayer driverId={driver?.id} active={lockActive} onUsePassword={() => void logout()} />
+    <BiometricLockLayer
+      driverId={driver?.id}
+      active={lockActive}
+      onUsePassword={() => void logout()}
+      onUnlocked={handleBiometricUnlocked}
+    />
   );
 
   if (showOnboarding) {
@@ -351,7 +396,7 @@ function DriverSupabaseRouter() {
             path="/check/vehicles"
             element={
               <DriverOperationalGuard driver={driver} section="check">
-                <DriverChangeVehicle driver={driver} />
+                <DriverChangeVehicle driver={driver} session={session} />
               </DriverOperationalGuard>
             }
           />

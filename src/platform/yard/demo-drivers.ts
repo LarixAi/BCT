@@ -1,5 +1,5 @@
 import { drivers } from "@/data/fixtures";
-import type { BootstrapDataSource } from "@/data/mocks/bootstrap";
+import type { BootstrapDataSource } from "@/platform/yard/bootstrap-payload";
 import { isDemoDataSource } from "@/platform/yard/data-source";
 
 /** Fixture driver names are only valid in demo/mock mode — never mix into live Command data. */

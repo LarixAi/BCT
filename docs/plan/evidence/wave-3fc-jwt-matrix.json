@@ -1,0 +1,9 @@
+{
+  "generated_at": "2026-08-21T06:43:15.020Z",
+  "summary": {
+    "total": 286,
+    "pass": 286,
+    "fail": 0
+  },
+  "note": "Fresh-DB gate re-run 21 Aug 2026 after runs INSERT assert aligned to cutover 55"
+}

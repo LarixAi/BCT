@@ -7,7 +7,7 @@ describe('projectInspectionsFromProfiles', () => {
     const hub = projectInspectionsFromProfiles([])
     expect(hub.register).toEqual([])
     expect(hub.summary.overdue).toBe(0)
-    expect(hub.providers.length).toBeGreaterThan(0)
+    expect(hub.providers).toEqual([])
   })
 
   it('projects PMI and annual prep from profile dates', () => {
@@ -31,5 +31,6 @@ describe('projectInspectionsFromProfiles', () => {
     expect(hub.register.some((r) => r.inspectionType === 'safety_pmi')).toBe(true)
     expect(hub.register.some((r) => r.inspectionType === 'annual_prep')).toBe(true)
     expect(hub.calendar.length).toBe(hub.register.length)
+    expect(hub.providers).toEqual([])
   })
 })

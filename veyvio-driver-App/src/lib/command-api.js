@@ -249,6 +249,67 @@ export async function commandCompleteJourney(accessToken, journeyId, input = {})
   return { ok: true, ...(await response.json()) };
 }
 
+export async function commandArriveJourneyStop(accessToken, journeyId, input = {}) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(
+    `${base}/driver/journeys/${encodeURIComponent(journeyId)}/stops/arrive`,
+    {
+      method: "POST",
+      credentials: "omit",
+      headers: bearerHeaders(accessToken),
+      body: JSON.stringify(input),
+    },
+  );
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Stop arrive could not be recorded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandCompleteJourneyStop(accessToken, journeyId, input = {}) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(
+    `${base}/driver/journeys/${encodeURIComponent(journeyId)}/stops/complete`,
+    {
+      method: "POST",
+      credentials: "omit",
+      headers: bearerHeaders(accessToken),
+      body: JSON.stringify(input),
+    },
+  );
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Stop complete could not be recorded.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+/** F-13 — tenant-scoped signed URL via Command (preferred over direct Supabase storage). */
+export async function commandCreateSignedUrl(accessToken, { bucket, storageKey, expiresInSeconds = 3600 }) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/storage/signed-url`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify({ bucket, storageKey, expiresInSeconds }),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Signed URL could not be created.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
 export async function commandPostDriverVehicleEquipment(accessToken, input) {
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };
@@ -324,6 +385,59 @@ export async function commandAcknowledgeDuty(accessToken, dutyId) {
 
   if (!response.ok) {
     return { ok: false, message: await readError(response, "Duty could not be acknowledged.") };
+  }
+
+  return { ok: true, ...(await response.json()) };
+}
+
+export async function commandListJourneySequenceAcknowledgements(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured.", acknowledgements: [] };
+
+  const response = await fetch(`${base}/driver/journey-sequence-acknowledgements`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: await readError(response, "Journey sequence acknowledgements could not be loaded."),
+      acknowledgements: [],
+    };
+  }
+
+  const payload = await response.json();
+  return { ok: true, acknowledgements: Array.isArray(payload?.acknowledgements) ? payload.acknowledgements : [] };
+}
+
+export async function commandAdvanceJourneySequenceAcknowledgement(
+  accessToken,
+  tripKey,
+  { status, declineReason } = {},
+) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(
+    `${base}/driver/journey-sequence-acknowledgements/${encodeURIComponent(tripKey)}/advance`,
+    {
+      method: "POST",
+      credentials: "omit",
+      headers: bearerHeaders(accessToken),
+      body: JSON.stringify({
+        status,
+        ...(declineReason ? { declineReason } : {}),
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: await readError(response, "Journey sequence acknowledgement could not be updated."),
+    };
   }
 
   return { ok: true, ...(await response.json()) };
@@ -566,7 +680,8 @@ export async function commandSubmitVehicleCheck(accessToken, input) {
   });
 
   if (!response.ok) {
-    return { ok: false, message: await readError(response, "Vehicle check could not be submitted.") };
+    const failure = await readApiFailure(response, "Vehicle check could not be submitted.");
+    return { ok: false, ...failure };
   }
 
   return { ok: true, check: await response.json() };
@@ -942,8 +1057,9 @@ export async function commandListNotifications(accessToken, { unreadOnly = false
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };
 
-  const qs = unreadOnly ? "?unread_only=true" : "";
-  const response = await fetch(`${base}/notifications${qs}`, {
+  const params = new URLSearchParams({ audience: "driver" });
+  if (unreadOnly) params.set("unread_only", "true");
+  const response = await fetch(`${base}/notifications?${params.toString()}`, {
     method: "GET",
     credentials: "omit",
     headers: bearerHeaders(accessToken),
@@ -964,7 +1080,7 @@ export async function commandNotificationUnreadCount(accessToken) {
   const base = getCommandApiBaseUrl();
   if (!base) return { ok: false, message: "Command API URL is not configured." };
 
-  const response = await fetch(`${base}/notifications/unread-count`, {
+  const response = await fetch(`${base}/notifications/unread-count?audience=driver`, {
     method: "GET",
     credentials: "omit",
     headers: bearerHeaders(accessToken),
@@ -1030,4 +1146,115 @@ export async function commandMarkAllNotificationsRead(accessToken) {
   }
 
   return { ok: true, ...(await response.json().catch(() => ({}))) };
+}
+
+export async function commandCreateVehicleSwapRequest(accessToken, input) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/vehicle-swap-requests`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Swap request could not be sent.") };
+  }
+
+  return { ok: true, request: await response.json() };
+}
+
+export async function commandListDriverVehicleSwapRequests(accessToken) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/vehicle-swap-requests`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Swap requests could not be loaded.") };
+  }
+
+  return { ok: true, requests: await response.json() };
+}
+
+export async function commandSubmitDutyCloseout(accessToken, input) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/duty-closeout`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Duty closeout could not be saved.") };
+  }
+
+  return { ok: true, closeout: await response.json() };
+}
+
+export async function commandGetDutyCloseout(accessToken, { dutyId, jobId } = {}) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const params = new URLSearchParams();
+  if (dutyId) params.set("dutyId", dutyId);
+  if (jobId) params.set("jobId", jobId);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+
+  const response = await fetch(`${base}/driver/duty-closeout${qs}`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (response.status === 404) return { ok: true, closeout: null };
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Closeout could not be loaded.") };
+  }
+
+  return { ok: true, closeout: await response.json() };
+}
+
+export async function commandRecordJobExecution(accessToken, input) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/jobs/execution`, {
+    method: "POST",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Job step could not be recorded on Command.") };
+  }
+
+  return { ok: true, event: await response.json() };
+}
+
+export async function commandGetJobExecution(accessToken, jobId) {
+  const base = getCommandApiBaseUrl();
+  if (!base) return { ok: false, message: "Command API URL is not configured." };
+
+  const response = await fetch(`${base}/driver/jobs/${encodeURIComponent(jobId)}/execution`, {
+    method: "GET",
+    credentials: "omit",
+    headers: bearerHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    return { ok: false, message: await readError(response, "Job execution could not be loaded.") };
+  }
+
+  return { ok: true, snapshot: await response.json() };
 }
