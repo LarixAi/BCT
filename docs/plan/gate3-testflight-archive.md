@@ -5,6 +5,17 @@
 
 ---
 
+## CI path (PROD-6)
+
+Fail-closed workflow: `.github/workflows/driver-ios-ipa.yml`
+
+1. Requires production GitHub Environment vars (same as Android AAB).
+2. Runs `assert-ios-release-ready` + `assert-release-config`.
+3. Requires Apple signing secrets (`VEYVIO_APPLE_*`). Without them the job **fails closed** (no demo IPA).
+4. Archive/export via Xcode remains operator-owned until keychain import is wired; use this runbook for the first TestFlight upload.
+
+Scaffold: `veyvio-driver-App/ios/ExportOptions.plist` (replace team ID + profile name).
+
 ## Archive steps
 
 ```bash

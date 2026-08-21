@@ -13,22 +13,26 @@
 | Driver production build | verify:production-build PASS |
 | Driver pilot API smoke | gate1:pilot-smoke 13/13 |
 | Driver device-exit API | gate1-device-exit-api **10/10** |
-| Driver device-exit mobile web | Playwright Pixel 7 + iPhone 14 **2/2** (`gate1:device-exit --ui`) |
-| iOS Simulator tooling | `gate1:ios-simulator-probe` PASS — physical still required |
-| Hosted re-verify 21 Aug | TI PASS (retry after TI-401); continuity 4/4; device-exit API 10/10 |
-| Driver release AAB fail-closed | assert-release-config + AAB workflow |
-| Admin + Yard release artifact guards | Scripts + **deploy wiring** (`pages-deploy`, `deploy:yard`); units in CI `npm test` |
-| PR-06 supply-chain (PROD-5) | Action SHA pins + `contents: read`; Dependabot; `security:audit` in Yard/Admin/Driver CI |
-| Yard health honesty | `/api/v1/yard/health` → `mode: live` in PROD (not `dev-stub`) |
-| Backup/PITR **status probe** | `npm run test:backup-pitr-status` → evidence JSON |
-| **One release SHA on `main`** | **`b71c9f6`** (merge of PR #2); Gate A tip `a755b5d` (PR #21); docs tip includes PR #23 |
+| Driver device-exit mobile web | Playwright Pixel 7 + iPhone 14 **2/2** |
+| iOS Simulator tooling | `gate1:ios-simulator-probe` PASS |
+| Hosted re-verify | TI PASS; continuity 4/4 |
+| Driver release AAB fail-closed | assert-release-config + AAB workflow + provenance artifact |
+| Admin + Yard release guards | deploy wiring + units (PR #24) |
+| PR-06 / PROD-5 supply-chain | PR #24 — Action pins, Dependabot, audits |
+| Basic observability | health + `VEYVIO_DEPLOYMENT_SHA` + platform probe + `docs/deploy/platform-observability.md` |
+| Platform incident response | `docs/plan/veyvio-platform-incident-response.md` |
+| ADR-PR-001…008 | `docs/adr/ADR-PR-*.md` Accepted |
+| iOS release scaffolding | `assert-ios-release-ready` + `ExportOptions.plist` + fail-closed IPA workflow |
+| Backup/PITR **status probe** | `test:backup-pitr-status` |
+| **One release SHA on `main`** | **`b71c9f6`** (PR #2); tip includes PR #23–#24 |
 
-## Open (true non-code / billing)
+## Open (true non-code / secrets)
 
 | Item | Owner | Status |
 |------|-------|--------|
-| Supabase **Pro + PITR** | Ops / billing | **API-proven OFF** — org plan=`free`, `pitr_enabled=false`, scheduled backups `[]`. See `docs/plan/evidence/gate-a-backup-pitr-status.json`. Cannot enable without paid plan (~Pro + PITR 7d ~$100/mo + Small compute). |
-| Physical Android handset | Mobile | No `adb` device; handset script exits cleanly. API + mobile-web closed. |
-| Physical iOS handset | Mobile | Simulators present; airplane / native push / Cap install still need a phone. |
+| Supabase **Pro + PITR** | Ops / billing | API-proven OFF — Free plan |
+| Physical Android / iOS handset | Mobile | No adb; API + mobile-web closed |
+| Apple signing secrets + first TestFlight upload | Mobile | IPA workflow fail-closed until `VEYVIO_APPLE_*` secrets + xcodebuild keychain wire |
+| Play upload API | Mobile | AAB artifact only |
 
-**Verdict:** Gate A **engineering** remains closed. Gate A **backup/restore** acceptance is **blocked on billing upgrade + PITR enablement** (not a missing screenshot — PITR is objectively off on Free). Device physical rows remain owner walkthrough.
+**Verdict:** Gate A **engineering** closed. Gate A **GO** blocked on billing (backups/PITR) + physical device. PROD-6/8 scaffolding advanced; store upload remains operator secrets.

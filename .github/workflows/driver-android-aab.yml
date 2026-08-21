@@ -161,6 +161,20 @@ jobs:
             echo "supabase_host=${EXPECTED_SUPABASE_HOST}"
             echo "push_enabled=false"
           } >> "$GITHUB_STEP_SUMMARY"
+          node scripts/record-release-provenance.mjs \
+            --platform android \
+            --sha "${GITHUB_SHA}" \
+            --version-name "${VEYVIO_VERSION_NAME}" \
+            --version-code "${VEYVIO_VERSION_CODE}" \
+            --artifact "$aab" \
+            --supabase-host "${EXPECTED_SUPABASE_HOST}" \
+            --out "$RUNNER_TEMP/driver-android-release-provenance.json"
+
+      - name: Upload provenance artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: veyvio-driver-android-provenance
+          path: ${{ runner.temp }}/driver-android-release-provenance.json
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
