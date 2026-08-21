@@ -1,0 +1,43 @@
+{
+  "generated_at": "2026-08-21T07:36:00.000Z",
+  "drill": "gate-a-device-and-hosted-reverify",
+  "release_sha_main_authority": "b71c9f6",
+  "main_tip_at_probe": "9bab71b",
+  "results": {
+    "tenant_isolation": {
+      "status": "PASS",
+      "note": "First attempt 401 getUser (TI-401 class); immediate retry with .gate1-secrets.local.env only PASS"
+    },
+    "command_continuity_drill": {
+      "status": "PASS",
+      "summary": "4/4",
+      "evidence": "docs/plan/evidence/gate-a-command-continuity-drill.json"
+    },
+    "backup_pitr_status": {
+      "status": "PROBED",
+      "verdict": "FREE_OR_NO_SCHEDULED_BACKUPS_PITR_OFF",
+      "gate_a_backup_ready": false,
+      "evidence": "docs/plan/evidence/gate-a-backup-pitr-status.json"
+    },
+    "driver_device_exit_api": {
+      "status": "PASS",
+      "summary": "10/10"
+    },
+    "driver_device_exit_ui": {
+      "status": "PASS",
+      "summary": "Playwright android-pixel + ios-iphone 2/2"
+    },
+    "android_handset_adb": {
+      "status": "BLOCKED",
+      "detail": "no adb device connected"
+    },
+    "ios_simulator_probe": {
+      "status": "PASS",
+      "verdict": "IOS_SIMULATOR_AVAILABLE_PHYSICAL_STILL_REQUIRED",
+      "evidence": "docs/plan/evidence/gate-a-ios-simulator-probe.json"
+    },
+    "admin_assert_release_config_unit": {
+      "status": "PASS"
+    }
+  }
+}

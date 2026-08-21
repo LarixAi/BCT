@@ -13,14 +13,20 @@
 | Driver production build | verify:production-build PASS |
 | Driver pilot API smoke | gate1:pilot-smoke 13/13 |
 | Driver device-exit API | gate1-device-exit-api **10/10** |
+| Driver device-exit mobile web | Playwright Pixel 7 + iPhone 14 **2/2** (`gate1:device-exit --ui`) |
+| iOS Simulator tooling | `gate1:ios-simulator-probe` PASS — physical still required |
+| Hosted re-verify 21 Aug | TI PASS (retry after TI-401); continuity 4/4; device-exit API 10/10 |
 | Driver release AAB fail-closed | assert-release-config + AAB workflow |
-| **One release SHA on `main`** | **`b71c9f6`** (merge of PR #2); includes Gate A tip `a755b5d` (PR #21) |
+| Admin + Yard release artifact guards | `assert-release-config.mjs` (Admin + Yard) |
+| Backup/PITR **status probe** | `npm run test:backup-pitr-status` → evidence JSON |
+| **One release SHA on `main`** | **`b71c9f6`** (merge of PR #2); Gate A tip `a755b5d` (PR #21); docs tip `9bab71b` |
 
-## Open (true non-code)
+## Open (true non-code / billing)
 
-| Item | Owner | Notes |
-|------|-------|-------|
-| PITR dashboard confirmation | Ops | Screenshot residual — see `docs/deploy/command-rollback-continuity.md` |
-| Physical handset (airplane / native push) | Mobile | No adb device; API path closed — `docs/plan/gate1-pilot-exit-test.md` |
+| Item | Owner | Status |
+|------|-------|--------|
+| Supabase **Pro + PITR** | Ops / billing | **API-proven OFF** — org plan=`free`, `pitr_enabled=false`, scheduled backups `[]`. See `docs/plan/evidence/gate-a-backup-pitr-status.json`. Cannot enable without paid plan (~Pro + PITR 7d ~$100/mo + Small compute). |
+| Physical Android handset | Mobile | No `adb` device; handset script exits cleanly. API + mobile-web closed. |
+| Physical iOS handset | Mobile | Simulators present; airplane / native push / Cap install still need a phone. |
 
-**Verdict:** Gate A engineering + release SHA on `main` are closed. Remaining are owner dashboard + physical device only.
+**Verdict:** Gate A **engineering** remains closed. Gate A **backup/restore** acceptance is **blocked on billing upgrade + PITR enablement** (not a missing screenshot — PITR is objectively off on Free). Device physical rows remain owner walkthrough.

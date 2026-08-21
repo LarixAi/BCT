@@ -24,6 +24,7 @@
     "gate1:pilot-smoke": "node scripts/gate1-pilot-exit-smoke.mjs",
     "gate1:device-exit": "node scripts/gate1-device-exit.mjs",
     "gate1:device-handset": "node scripts/gate1-device-handset.mjs",
+    "gate1:ios-simulator-probe": "node scripts/gate1-ios-simulator-probe.mjs",
     "gate3:push-tap": "node scripts/gate3-push-tap-verify.mjs",
     "gate3:cold-start": "node scripts/gate3-cold-start-verify.mjs"
   },
