@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-08-21T08:05:00.000Z",
+  "track": "PR-06 / PROD-5",
+  "branch": "prod1/pr06-supply-chain-observability",
+  "results": {
+    "action_sha_pins": "PASS",
+    "workflow_permissions_contents_read": "PASS",
+    "dependabot_yml": "PASS",
+    "security_audit_yard_admin_driver": "PASS (0 high / 0 critical)",
+    "validate_production_env_ci_not_prod": "PASS (unit)",
+    "assert_release_config_units": "PASS (Admin + Yard)",
+    "yard_health_live_mode": "PASS (unit)",
+    "veyvio_deployment_sha_secret": {
+      "status": "SET",
+      "sha": "0f988756ad53d9e9bda2caa8d6cbb5ea0284a1a0",
+      "health_deploymentSha": "0f988756ad53d9e9bda2caa8d6cbb5ea0284a1a0"
+    }
+  },
+  "still_open_non_code": [
+    "Supabase Free plan — PITR/daily backups",
+    "Physical Android/iOS handset"
+  ]
+}

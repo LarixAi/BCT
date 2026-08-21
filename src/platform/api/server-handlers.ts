@@ -2,8 +2,29 @@ import { buildBootstrapPayload } from "@/data/mocks/bootstrap";
 import type { YardRole } from "@/types/permissions";
 import type { OutboxMutation } from "@/types/sync";
 
+export function buildYardHealthBody(options: {
+  prod: boolean;
+  deploymentSha?: string | null;
+}): { ok: true; mode: "live" | "dev-stub"; deploymentSha: string | null; at: string } {
+  return {
+    ok: true,
+    mode: options.prod ? "live" : "dev-stub",
+    deploymentSha: options.deploymentSha ?? null,
+    at: new Date().toISOString(),
+  };
+}
+
 export function handleHealthRequest(): Response {
-  return Response.json({ ok: true, mode: "dev-stub", at: new Date().toISOString() });
+  const deploymentSha =
+    import.meta.env.VITE_GIT_SHA ||
+    import.meta.env.VITE_DEPLOYMENT_SHA ||
+    null;
+  return Response.json(
+    buildYardHealthBody({
+      prod: Boolean(import.meta.env.PROD),
+      deploymentSha,
+    }),
+  );
 }
 
 export function handleBootstrapRequest(request: Request): Response {

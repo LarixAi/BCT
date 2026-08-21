@@ -17,9 +17,11 @@
 | iOS Simulator tooling | `gate1:ios-simulator-probe` PASS — physical still required |
 | Hosted re-verify 21 Aug | TI PASS (retry after TI-401); continuity 4/4; device-exit API 10/10 |
 | Driver release AAB fail-closed | assert-release-config + AAB workflow |
-| Admin + Yard release artifact guards | `assert-release-config.mjs` (Admin + Yard) |
+| Admin + Yard release artifact guards | Scripts + **deploy wiring** (`pages-deploy`, `deploy:yard`); units in CI `npm test` |
+| PR-06 supply-chain (PROD-5) | Action SHA pins + `contents: read`; Dependabot; `security:audit` in Yard/Admin/Driver CI |
+| Yard health honesty | `/api/v1/yard/health` → `mode: live` in PROD (not `dev-stub`) |
 | Backup/PITR **status probe** | `npm run test:backup-pitr-status` → evidence JSON |
-| **One release SHA on `main`** | **`b71c9f6`** (merge of PR #2); Gate A tip `a755b5d` (PR #21); docs tip `9bab71b` |
+| **One release SHA on `main`** | **`b71c9f6`** (merge of PR #2); Gate A tip `a755b5d` (PR #21); docs tip includes PR #23 |
 
 ## Open (true non-code / billing)
 

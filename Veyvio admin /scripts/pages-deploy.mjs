@@ -20,6 +20,21 @@ if (fs.existsSync(conflict)) {
 }
 
 try {
+  const host =
+    process.env.EXPECTED_SUPABASE_HOST ||
+    process.env.VITE_SUPABASE_URL?.replace(/^https?:\/\//, '').replace(/\/.*$/, '') ||
+    ''
+  if (!host) {
+    console.error('pages-deploy: EXPECTED_SUPABASE_HOST or VITE_SUPABASE_URL required for release assert')
+    process.exit(1)
+  }
+  const assert = spawnSync(
+    process.execPath,
+    [path.join(adminRoot, 'scripts/assert-release-config.mjs'), '--dist', 'dist', '--expected-supabase-host', host],
+    { cwd: adminRoot, stdio: 'inherit' },
+  )
+  if (assert.status !== 0) process.exit(assert.status ?? 1)
+
   const result = spawnSync(
     'npx',
     [

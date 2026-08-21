@@ -20,7 +20,11 @@ cd "Veyvio admin "
 npm run backend:deploy
 ```
 
-## Build-time environment variables
+`backend:deploy` sets Edge secret `VEYVIO_DEPLOYMENT_SHA` to the current git HEAD so `/health` reports an immutable deploy identity.
+
+## Release artifact guard (PR-06)
+
+`npm run deploy:pages` builds with `VALIDATE_PRODUCTION_ENV=true`, then `pages-deploy.mjs` runs `assert-release-config.mjs` against `dist/` (rejects `example.supabase.co`, localhost, service_role patterns) before Wrangler Pages deploy.
 
 Set these **before** `npm run build:ci` (Vite inlines `VITE_*`):
 

@@ -19,6 +19,8 @@ cd "Veyvio admin "
 npm run backend:deploy
 ```
 
+`npm run deploy:yard` runs `assert-yard-deploy.mjs` after build (requires `VITE_SUPABASE_URL` or `EXPECTED_SUPABASE_HOST`) so release assets cannot ship `example.supabase.co` / localhost / mock flags.
+
 Yard-specific backend includes yard layout seeds and realtime (`vehicle_locations`, `parking_bays`) — see `Veyvio admin /supabase/migrations/202607240001_live_yard_map.sql` and related BCT yard migrations.
 
 ## Build-time environment variables
