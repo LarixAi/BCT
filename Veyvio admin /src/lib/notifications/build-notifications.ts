@@ -107,3 +107,23 @@ export function priorityLabel(priority: NotificationItem['priority']): string {
       return 'Information'
   }
 }
+
+/** Client-side page slice for the alert feed (1-based page). */
+export function paginateNotifications<T>(
+  rows: T[],
+  page: number,
+  pageSize: number,
+): { items: T[]; page: number; pageSize: number; total: number; totalPages: number } {
+  const size = Math.max(1, Math.floor(pageSize) || 1)
+  const total = rows.length
+  const totalPages = Math.max(1, Math.ceil(total / size))
+  const safePage = Math.min(Math.max(1, Math.floor(page) || 1), totalPages)
+  const start = (safePage - 1) * size
+  return {
+    items: rows.slice(start, start + size),
+    page: safePage,
+    pageSize: size,
+    total,
+    totalPages,
+  }
+}

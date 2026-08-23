@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionCard } from '@/components/ui'
@@ -9,12 +9,14 @@ import {
   filterNotifications,
   groupNotifications,
   notificationKpis,
+  paginateNotifications,
   priorityLabel,
 } from '@/lib/notifications/build-notifications'
 import { NOTIFICATION_TABS, type NotificationTabId } from '@/lib/notifications/catalog'
 import type { NotificationItem } from '@/lib/types'
 import { tKey } from '@/lib/tenant/tenant-query-scope'
 
+const PAGE_SIZE = 15
 
 type SummaryFocus = 'unread' | 'action' | 'critical' | 'assigned' | null
 
@@ -25,6 +27,7 @@ export function NotificationsPage() {
   const [summaryFocus, setSummaryFocus] = useState<SummaryFocus>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [localRead, setLocalRead] = useState<Record<string, boolean>>({})
+  const [page, setPage] = useState(1)
 
   const { data: apiNotifications = [], isLoading, error, isError, refetch, isFetching } = useQuery({
     queryKey: tKey(['notifications']),
@@ -44,9 +47,18 @@ export function NotificationsPage() {
     [inbox, tab, search, summaryFocus],
   )
 
-  const groups = useMemo(() => groupNotifications(filtered), [filtered])
+  useEffect(() => {
+    setPage(1)
+  }, [tab, search, summaryFocus])
+
+  const paged = useMemo(() => paginateNotifications(filtered, page, PAGE_SIZE), [filtered, page])
+  const groups = useMemo(() => groupNotifications(paged.items), [paged.items])
   const kpis = useMemo(() => notificationKpis(inbox), [inbox])
   const selected = filtered.find((n) => n.id === selectedId) ?? inbox.find((n) => n.id === selectedId) ?? null
+
+  useEffect(() => {
+    if (page !== paged.page) setPage(paged.page)
+  }, [page, paged.page])
 
   const markAllRead = useMutation({
     mutationFn: () => api.markAllNotificationsRead(),
@@ -72,6 +84,13 @@ export function NotificationsPage() {
     setSelectedId(n.id)
     if (!n.read) markRead.mutate(n.id)
   }
+
+  const feedDescription =
+    paged.total === 0
+      ? 'What has happened, and what needs your attention'
+      : `Showing ${paged.items.length} of ${paged.total}${paged.totalPages > 1 ? ` · page ${paged.page} of ${paged.totalPages}` : ''}`
+
+  const showPagination = !isLoading && paged.totalPages > 1
 
   return (
     <div className="flex min-h-[calc(100vh-7rem)] flex-col gap-4">
@@ -193,7 +212,12 @@ export function NotificationsPage() {
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[1fr_340px]">
         <SectionCard
           title="Alert feed"
-          description="What has happened, and what needs your attention"
+          description={feedDescription}
+          action={
+            showPagination ? (
+              <FeedPagination page={paged.page} totalPages={paged.totalPages} onPageChange={setPage} />
+            ) : undefined
+          }
           className="flex min-h-0 flex-col overflow-hidden"
           flush
         >
@@ -250,6 +274,14 @@ export function NotificationsPage() {
               </div>
             ))}
           </div>
+          {showPagination && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2">
+              <p className="text-xs text-muted">
+                Page {paged.page} of {paged.totalPages}
+              </p>
+              <FeedPagination page={paged.page} totalPages={paged.totalPages} onPageChange={setPage} />
+            </div>
+          )}
         </SectionCard>
 
         <NotificationDetailDrawer
@@ -258,6 +290,65 @@ export function NotificationsPage() {
           onAcknowledge={() => selected && setLocalRead((prev) => ({ ...prev, [selected.id]: true }))}
         />
       </div>
+    </div>
+  )
+}
+
+function FeedPagination({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number
+  totalPages: number
+  onPageChange: (page: number) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <button
+        type="button"
+        disabled={page <= 1}
+        onClick={() => onPageChange(Math.max(1, page - 1))}
+        className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium hover:bg-surface-muted disabled:opacity-40"
+      >
+        Previous
+      </button>
+      {Array.from({ length: totalPages }, (_, i) => i + 1)
+        .filter((n) => n === 1 || n === totalPages || Math.abs(n - page) <= 1)
+        .reduce<number[]>((acc, n, idx, arr) => {
+          if (idx > 0 && n - arr[idx - 1]! > 1) acc.push(-n)
+          acc.push(n)
+          return acc
+        }, [])
+        .map((n) =>
+          n < 0 ? (
+            <span key={`gap-${n}`} className="px-1 text-xs text-muted">
+              …
+            </span>
+          ) : (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onPageChange(n)}
+              className={cn(
+                'min-w-7 rounded-lg border px-2 py-1 text-xs font-medium tabular-nums',
+                n === page
+                  ? 'border-command-500 bg-command-50 text-command-800'
+                  : 'border-border hover:bg-surface-muted',
+              )}
+            >
+              {n}
+            </button>
+          ),
+        )}
+      <button
+        type="button"
+        disabled={page >= totalPages}
+        onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+        className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium hover:bg-surface-muted disabled:opacity-40"
+      >
+        Next
+      </button>
     </div>
   )
 }
