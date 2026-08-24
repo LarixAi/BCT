@@ -29,6 +29,7 @@ import {
   projectOperationalTripsByBooking,
   projectAssignmentHistory,
   projectSchoolRouteList,
+  projectSchoolRouteDetail,
   projectSchoolRouteSummary,
   projectVehicleProfile,
   recordDriverVehicleHandbackReport,
@@ -12188,6 +12189,16 @@ async function dispatchCommandApi(request: Request): Promise<Response> {
       return json(await projectSchoolRouteList(context.companyId))
     } catch (error) {
       return apiError(500, error instanceof Error ? error.message : 'School route projection failed')
+    }
+  }
+  if (request.method === 'GET' && segments[0] === 'school-routes' && segments.length === 2 && segments[1] !== 'summary') {
+    const context = await authenticate(request)
+    const routeId = segments[1]
+    try {
+      return json(await projectSchoolRouteDetail(context.companyId, routeId))
+    } catch (error) {
+      if (error instanceof Error && error.message === 'not_found') return apiError(404, 'School route not found', 'not_found')
+      return apiError(500, error instanceof Error ? error.message : 'School route detail failed')
     }
   }
   if (request.method === 'GET' && path === 'school-routes/summary') {

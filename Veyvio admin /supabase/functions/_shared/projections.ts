@@ -2142,6 +2142,92 @@ export async function projectSchoolRouteList(companyId: string) {
   })
 }
 
+export async function projectSchoolRouteDetail(companyId: string, routeId: string) {
+  const { data: booking, error } = await projDb(companyId)
+    .from('bookings')
+    .select('id, booking_reference, status, requested_date, passenger_ids, notes, customers(trading_name, legal_name)')
+    .eq('company_id', companyId)
+    .eq('booking_type', 'school_route')
+    .eq('id', routeId)
+    .single()
+  if (error || !booking) throw new Error('not_found')
+
+  const row = booking as Row
+  const customer = (row.customers as Row | null) ?? {}
+  const passengerIds = (row.passenger_ids as string[] | null) ?? []
+  const notes = String(row.notes ?? '')
+  const directionLabel = /pm|afternoon/i.test(notes) ? 'pm' : 'am'
+  const requestedDate = row.requested_date ? String(row.requested_date).slice(0, 10) : null
+
+  return {
+    id: row.id,
+    reference: row.booking_reference ?? routeId.slice(0, 8).toUpperCase(),
+    version: 1,
+    versionId: String(row.id),
+    status: row.status === 'draft' ? 'draft' : 'published',
+    schoolId: '',
+    schoolName: (customer.trading_name ?? customer.legal_name ?? 'School') as string,
+    schoolAddress: '',
+    transportEntrance: '',
+    schoolContact: '',
+    schoolPhone: '',
+    openingTime: '',
+    startTime: '',
+    finishTime: '',
+    handoverProcedure: '',
+    closureContactProcess: '',
+    contractRef: '',
+    directionMode: directionLabel === 'pm' ? 'pm' : 'am',
+    term: {
+      academicYear: '',
+      termName: 'Term',
+      startDate: requestedDate ?? '',
+      endDate: requestedDate ?? '',
+      operatingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      excludedDates: [],
+      insetDays: [],
+    },
+    pupils: passengerIds.map((id: string) => ({
+      pupilId: String(id),
+      firstName: '',
+      lastName: '',
+      pickupAddress: '',
+      parentContact: '',
+      wheelchairRequired: false,
+      passengerAssistantRequired: false,
+      daysAttending: [],
+      directions: [],
+      safeguardingNotes: '',
+    })),
+    patterns: [],
+    crew: {
+      vehicleType: 'Section 19',
+      seats: 16,
+      wheelchairSpaces: 0,
+      passengerAssistantRequired: false,
+      preferredDriverId: null,
+      preferredVehicleId: null,
+    },
+    safeguarding: {
+      collectWithoutAdult: false,
+      handoverRequired: false,
+      authorisedAdults: '',
+      collectionPassword: '',
+      noAdultPresentProcess: '',
+      restrictedContacts: '',
+      emergencyProcess: '',
+      confidentialDriverNotes: '',
+    },
+    currentStep: 0,
+    warningCount: 0,
+    nextServiceDate: requestedDate,
+    generatedJobCount: 0,
+    jobIds: [],
+    createdAt: '',
+    updatedAt: '',
+  }
+}
+
 export async function projectSchoolRouteSummary(companyId: string) {
   const today = new Date().toISOString().slice(0, 10)
   const routes = await projectSchoolRouteList(companyId)

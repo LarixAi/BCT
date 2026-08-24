@@ -44,7 +44,13 @@ export function SchoolRouteDetailPage() {
 
       <SectionCard title="Route pattern">
         <p className="text-sm">{route.directionMode === 'both' ? 'AM & PM' : route.directionMode.toUpperCase()} · {route.pupils.length} pupils</p>
-        <p className="mt-1 text-sm text-ink-soft">{route.term.termName}: {route.term.startDate} → {route.term.endDate}</p>
+        {route.term ? (
+          <p className="mt-1 text-sm text-ink-soft">
+            {route.term.termName || 'Term'}{route.term.startDate ? `: ${route.term.startDate} → ${route.term.endDate}` : ''}
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-ink-soft">Term dates not set</p>
+        )}
       </SectionCard>
 
       <SectionCard title="Jobs">
